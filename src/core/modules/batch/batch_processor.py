@@ -44,14 +44,12 @@ class BatchProcessor:
             Dictionary with successful and failed artists
 
         """
-        results: dict[str, list[str]] = {"successful": [], "failed": [], "skipped": []}
-
         # Read artist names from the file
         try:
             path = Path(file_path)
             if not path.exists():
                 self.error_logger.error("File not found: %s", file_path)
-                return results
+                return {"successful": [], "failed": [], "skipped": []}
 
             # Use run_in_executor to avoid blocking async operation
             loop = asyncio.get_event_loop()
@@ -64,9 +62,32 @@ class BatchProcessor:
 
         except (OSError, ValueError):
             self.error_logger.exception("Error reading file %s", file_path)
-            return results
+            return {"successful": [], "failed": [], "skipped": []}
 
-        self.console_logger.info("Starting batch processing of %d artists from %s", len(artists), file_path)
+        self.console_logger.info(
+            "Starting batch processing of %d artists from %s",
+            len(artists),
+            file_path,
+        )
+
+        # Process the artists using the dedicated method
+        return await self.process_artists(artists, operation, force)
+
+    async def process_artists(
+        self, artists: list[str], operation: str = "full", force: bool = False
+    ) -> dict[str, list[str]]:
+        """Process a list of artists.
+
+        Args:
+            artists: List of artist names to process
+            operation: Operation to perform (clean, years, full)
+            force: Force processing
+
+        Returns:
+            Dictionary with successful and failed artists
+
+        """
+        results: dict[str, list[str]] = {"successful": [], "failed": [], "skipped": []}
 
         # Process each artist
         for i, artist in enumerate(artists, 1):
@@ -96,10 +117,10 @@ class BatchProcessor:
                 self.error_logger.exception("❌ Failed to process %s", artist)
 
         # Summary
-        self._print_summary(results, len(artists))
+        self.print_summary(results, len(artists))
         return results
 
-    def _print_summary(self, results: dict[str, list[str]], total: int) -> None:
+    def print_summary(self, results: dict[str, list[str]], total: int) -> None:
         """Print batch processing summary.
 
         Args:
