@@ -264,6 +264,8 @@ class AppleScriptClientProtocol(Protocol):
     interchangeably as long as they implement these methods.
     """
 
+    apple_scripts_dir: str | None
+
     async def run_script(
         self,
         script_name: str,

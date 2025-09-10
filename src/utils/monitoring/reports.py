@@ -1040,9 +1040,9 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
 
 def _handle_osascript_error(process_returncode: int, stdout: bytes | None, stderr: bytes | None) -> None:
     """Handle and log osascript execution errors."""
-    error_msg = stderr.decode("utf-8") if stderr else "No error message"
+    error_msg = stderr.decode() if stderr else "No error message"
     print(f"DEBUG: osascript failed with return code {process_returncode}: {error_msg}")
-    print(f"DEBUG: stdout was: {stdout.decode('utf-8') if stdout else 'None'}")
+    print(f"DEBUG: stdout was: {stdout.decode() if stdout else 'None'}")
     logging.getLogger(__name__).warning("osascript failed (return code %d): %s", process_returncode, error_msg)
 
 
@@ -1071,7 +1071,7 @@ async def _fetch_track_fields_direct(script_path: str, artist_filter: str | None
         returncode, stdout, stderr = await _execute_osascript_process(cmd)
 
         if returncode == 0 and stdout:
-            raw_output = stdout.decode("utf-8")
+            raw_output = stdout.decode()
             tracks_cache = _parse_osascript_output(raw_output)
         else:
             _handle_osascript_error(returncode, stdout, stderr)
@@ -1097,7 +1097,14 @@ async def _fetch_missing_track_fields_for_sync(
     if has_missing_fields and applescript_client is not None:
         try:
             console_logger.info("Fetching track fields via direct osascript...")
-            script_path = "/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Apple Scripts/fetch_tracks.applescript"
+
+            # Use applescript_client's configured directory instead of hardcoded path
+            if applescript_client.apple_scripts_dir:
+                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.scpt")
+            else:
+                # Fallback to relative path if apple_scripts_dir is not available
+                script_path = str(Path("applescripts") / "fetch_tracks.scpt")
+
             artist_filter = None  # None means fetch ALL tracks
             console_logger.info("Using osascript with script=%s, filter=%s", script_path, artist_filter or "ALL")
 
@@ -1380,7 +1387,8 @@ def _generate_main_html_template(
         <p class="run-type">Run type: {"Full scan" if force_mode else "Incremental update"}</p>
         <p><strong>Total functions:</strong> {len(call_counts)}</p>
         <p><strong>Total events:</strong> {len(events)}</p>
-        <p><strong>Success rate:</strong> {(
+        <p><strong>Success rate:</strong> {
+        (
             sum(success_counts.values()) / sum(call_counts.values()) * 100
             if sum(call_counts.values()) else 0
         ):.1f}%</p>

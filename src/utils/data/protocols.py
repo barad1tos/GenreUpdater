@@ -353,6 +353,8 @@ class AppleScriptClientProtocol(Protocol):
     interchangeably for executing AppleScript commands.
     """
 
+    apple_scripts_dir: str | None
+
     async def initialize(self) -> None:
         """Initialize the AppleScript client."""
         ...
