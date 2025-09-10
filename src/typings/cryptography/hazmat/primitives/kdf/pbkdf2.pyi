@@ -1,0 +1,6 @@
+# Type stubs for cryptography.hazmat.primitives.kdf.pbkdf2
+from typing import Any
+
+class PBKDF2HMAC:
+    def __init__(self, *, algorithm: Any, length: int, salt: bytes, iterations: int) -> None: ...
+    def derive(self, key_material: bytes) -> bytes: ...
