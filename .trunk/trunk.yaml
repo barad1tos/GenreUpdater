@@ -47,7 +47,7 @@ lint:
   ignore:
     - linters: [ALL]
       paths:
-        - Genres Autoupdater v2.0/_tests/**
+        - tests/**
 actions:
   disabled:
     - trunk-announce

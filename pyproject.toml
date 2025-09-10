@@ -30,14 +30,14 @@ dependencies = [
   # SSL certificates for secure HTTPS connections
   "certifi>=2024.0.0",
   # Cryptography for secure token handling
-  "cryptography>=42.0.0",
+  "cryptography>=45.0.7",
   # File operations
   "aiofiles>=23.0.0",
   "pip>=25.2",
   "rich>=14.1.0",
-  "ruff>=0.12.11",
-  "pytest>=8.4.1",
-  "pytest-cov>=6.2.1",
+  "ruff>=0.12.12",
+  "pytest>=8.4.2",
+  "pytest-cov>=7.0.0",
 ]
 
 [dependency-groups]
@@ -45,10 +45,10 @@ dev = [
   "mypy>=1.8.0",
   "types-pyyaml>=6.0.12.20250822",
   "types-aiofiles>=24.1.0.20250822",
-  "ruff>=0.12.11",
-  "pytest>=8.4.0",
+  "ruff>=0.12.12",
+  "pytest>=8.4.2",
   "pytest-asyncio>=1.1.0",
-  "pytest-cov>=4.0.0",
+  "pytest-cov>=7.0.0",
 ]
 
 [tool.uv]
@@ -62,7 +62,7 @@ index-url = "https://pypi.org/simple"
 line-length = 120
 indent-width = 4
 
-# Assume Python 3.12+
+# Assume Python 3.13+
 target-version = "py313"
 
 [tool.ruff.lint]
@@ -195,7 +195,7 @@ line-ending = "auto"
   # Tests can have many arguments
   "PLR0913",
 ]
-"services/api/orchestrator.py" = [
+"src/services/api/orchestrator.py" = [
   # Allow redundant casts for aiohttp type compatibility  
   # Allow unquoted types in cast() to maintain import usage
   "TC006",
