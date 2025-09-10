@@ -268,7 +268,7 @@ The `config.yaml` file contains all the configuration settings for the Music Gen
 ```yaml
 # my-config.yaml
 music_library_path: /Users/romanborodavkin/Music/Music/Music Library.musiclibrary
-apple_scripts_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Apple Scripts
+apple_scripts_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/applescripts
 
 # Base directory for all logs and reports.
 logs_base_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs
@@ -343,7 +343,7 @@ analytics:
 Parameter Descriptions:
 
 - `music_library_path`: Absolute path to your Apple Music library file.
-- `apple_scripts_dir`: Directory where AppleScript files (fetch_tracks.applescript, update_property.applescript) are located.
+- `apple_scripts_dir`: Directory where AppleScript files (fetch_tracks.scpt, update_property.applescript) are located.
 - `log_file`: File path where logs will be stored.
 - `csv_output_file`: CSV file path to save the list of tracks.
 - `changes_report_file`: CSV file path to save reports of changes made.
@@ -406,7 +406,7 @@ properties.
 
 ### AppleScript Scripts
 
-1. fetch_tracks.applescript:
+1. fetch_tracks.scpt:
    - Purpose: Retrieves information about tracks from Apple Music.
    - Functionality:
      - Fetches track details such as ID, name, artist, album, genre, date added, and status.
@@ -529,7 +529,7 @@ If you encounter issues while setting up or running the Music Genre Updater, con
    - Open the Terminal and run:
 
 ```bash
-osascript /path/to/fetch_tracks.applescript
+osascript /path/to/fetch_tracks.scpt
 ```
 
 2. Python Dependencies:

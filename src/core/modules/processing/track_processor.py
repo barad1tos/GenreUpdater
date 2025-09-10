@@ -165,7 +165,7 @@ class TrackProcessor:
                 args.append(artist)
 
             self.console_logger.info(
-                "Running AppleScript: fetch_tracks.applescript with args: %s",
+                "Running AppleScript: fetch_tracks.scpt with args: %s",
                 artist or "",
             )
 
@@ -224,7 +224,7 @@ class TrackProcessor:
                     continue
 
             self.console_logger.info(
-                "AppleScript fetch_tracks.applescript executed successfully, got %d bytes, validated %d/%d tracks",
+                "AppleScript fetch_tracks.scpt executed successfully, got %d bytes, validated %d/%d tracks",
                 len(raw_output),
                 len(validated_tracks),
                 len(tracks),
