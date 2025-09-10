@@ -1,0 +1,346 @@
+# /GenresAutoUpdater/my-config.yaml
+#
+# -----------------------------------------------------------------------
+# 1. MAIN PATHS AND ENVIRONMENT
+# -----------------------------------------------------------------------
+# Essential paths for the application to function
+music_library_path: /Users/romanborodavkin/Music/Music/Music Library.musiclibrary
+apple_scripts_dir: "/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Apple Scripts"
+# Base directory for all generated files (logs, reports, caches, etc.)
+# RECOMMENDATION: Consider using a local folder instead of iCloud Drive to avoid potential syncing delays or errors.
+logs_base_dir: "/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs"
+
+# Python settings
+python_settings:
+  prevent_bytecode: true # Set to true to prevent __pycache__ generation
+
+# -----------------------------------------------------------------------
+# 2. EXECUTION AND PERFORMANCE
+# -----------------------------------------------------------------------
+# Controls how the script runs and interacts with system resources
+
+# AppleScript interaction settings
+apple_script_concurrency: 2 # Max number of simultaneous AppleScript calls
+applescript_timeout_seconds: 3600 # Timeout for AppleScript execution (60 min)
+
+# AppleScript timeout configurations for different operations
+applescript_timeouts:
+  default: 3600 # Default timeout for most operations (1 hour)
+  full_library_fetch: 3600 # Timeout for fetching entire library (1 hour)
+  single_artist_fetch: 600 # Timeout for single artist fetch (10 min)
+  batch_update: 1800 # Timeout for batch updates (30 min)
+
+# General retry logic for potentially recoverable errors (e.g., AppleScript updates)
+max_retries: 2 # Number of retry attempts for applicable operations
+retry_delay_seconds: 1 # Base delay between retries
+
+# In-memory cache settings (used by CacheService for temporary data like fetched tracks)
+cache_ttl_seconds: 1800 # Default lifetime for in-memory cache items (30 min)
+album_cache_sync_interval: 300 # Interval for syncing in-memory cache with disk (5 min)
+# Incremental update settings
+incremental_interval_minutes: 1 # Interval for incremental updates (1 hour)
+# -----------------------------------------------------------------------
+# 3. FEATURE TOGGLES AND SETTINGS
+# -----------------------------------------------------------------------
+# Enable/disable major features and configure specific behaviors
+
+# Metadata cleaning settings
+cleaning:
+  remaster_keywords:
+    - remaster
+    - remastered
+    - reissue
+    - Re-recording
+    - Redux
+    - Expanded
+    - Special Edition
+    - Deluxe Edition
+    - Anniversary Edition
+    - Bonus Tracks
+    - Digital Version
+  album_suffixes_to_remove:
+    - " - Remaster"
+    - " (Remaster)"
+    - " (Remastered)"
+    - " - EP"
+    - "EP" # trunk-ignore(yamllint/quoted-strings)
+    - " - Single"
+    - "Single" # trunk-ignore(yamllint/quoted-strings)
+
+# Exceptions for cleaning
+exceptions:
+  track_cleaning:
+    - artist: Rabbit Junk
+      album: Xenospheres
+    - artist: Agalloch
+      album: The White EP
+
+# Database verification feature settings
+database_verification:
+  auto_verify_days: 7
+  batch_size: 10
+
+# Development and testing settings
+development:
+  test_artists: [] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  debug_mode: true # 🎛️ GLOBAL DEBUG TOGGLE - Controls all [*_DEBUG] logs throughout the application
+
+# Caching configuration
+caching:
+  # Basic cache settings
+  default_ttl_seconds: 900 # Default TTL for cache entries (15 minutes)
+  negative_result_ttl: 2592000 # TTL for negative results (30 days in seconds)
+
+  # Cache synchronization settings
+  album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
+  cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
+
+  # File paths
+  api_result_cache_path: cache/api_results.json
+
+  # Cache size limits and cleanup settings (TASK-002)
+  cache_size_limits:
+    generic_cache_max_entries: 10000 # Maximum entries in generic cache
+    album_cache_max_entries: 50000 # Maximum entries in album years cache
+    api_cache_max_entries: 25000 # Maximum entries in API results cache
+  cleanup_interval_seconds: 300 # Background cleanup every 5 minutes
+
+  # Advanced cache configuration
+  cache_entry_length: 2 # Number of elements in cache entry tuple (value, timestamp)
+
+# Reporting configuration
+reporting:
+  problematic_albums_path: reports/albums_without_year.csv
+  min_attempts_for_report: 3
+  # Display mode for change reports: "compact" (with yellow highlights) or "table" (rich tables)
+  change_display_mode: compact
+
+# API Cache file
+api_cache_file: cache/cache.json
+
+# -----------------------------------------------------------------------
+# 4. LOGGING AND ANALYTICS CONFIGURATION
+# -----------------------------------------------------------------------
+logging:
+  max_runs: 3
+  main_log_file: main/main.log
+  analytics_log_file: analytics/analytics.log
+  csv_output_file: csv/track_list.csv
+  album_cache_csv: csv/cache_albums.csv
+  changes_report_file: csv/changes_report.csv
+  dry_run_report_file: reports/dry_run_report.html
+  last_incremental_run_file: last_incremental_run.log
+  pending_verification_file: csv/pending_year_verification.csv
+  last_db_verify_log: main/last_db_verify.log
+  year_changes_log_file: main/year_changes.log
+
+  # New: Log levels configuration
+  # Defines logging levels for different loggers/handlers
+  levels:
+    console: DEBUG # Level for console output (RichHandler)
+    main_file: DEBUG # Level for the main log file (main/main.log)
+    analytics_file: INFO # Level for the analytics log file (analytics/analytics.log)
+    year_updates_file: INFO # Level for the year updates log file (main/year_changes.log)
+    # Example: debug_file: DEBUG # You could add a separate file for DEBUG logs if needed
+
+analytics:
+  duration_thresholds:
+    short_max: 5
+    medium_max: 20
+    long_max: 50
+  max_events: 10000
+  compact_time: true
+
+# -----------------------------------------------------------------------
+# 5. YEAR RETRIEVAL CONFIGURATION (Section read by ExternalAPIService)
+# -----------------------------------------------------------------------
+year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('year_retrieval', {})
+  # --- Feature Toggle & Basic Settings ---
+  enabled: true # Master switch to enable/disable year retrieval
+  preferred_api: musicbrainz
+
+  # --- API Authentication & Identification ---
+  api_auth:
+    discogs_token: ${DISCOGS_TOKEN}
+    musicbrainz_app_name: MusicGenreUpdater/2.0
+    contact_email: ${CONTACT_EMAIL}
+    use_lastfm: true
+    lastfm_api_key: ${LASTFM_API_KEY}
+
+  # --- API Rate Limits & Concurrency ---
+  rate_limits:
+    discogs_requests_per_minute: 55
+    musicbrainz_requests_per_second: 1
+    lastfm_requests_per_second: 5
+    concurrent_api_calls: 2
+
+  # --- Processing Control ---
+  processing:
+    batch_size: 25
+    delay_between_batches: 20
+    adaptive_delay: true
+    cache_ttl_days: 36500 # 100 years = effectively forever for immutable album years
+    pending_verification_interval_days: 30
+
+    # Prerelease album handling
+    skip_prerelease: true # Skip year updates for prerelease albums
+    future_year_threshold: 1 # Years ahead to consider as prerelease
+    prerelease_recheck_days: 30 # Days before rechecking prerelease status
+
+  # --- Year Validation & Logic ---
+  logic:
+    min_valid_year: 1900
+    definitive_score_threshold: 50 # Increased from 20 to avoid false positives
+    definitive_score_diff: 15 # Reduced from 15 to handle close scores
+    preferred_countries: [
+        "us", # trunk-ignore(yamllint/quoted-strings)
+        "gb", # trunk-ignore(yamllint/quoted-strings)
+        "de", # trunk-ignore(yamllint/quoted-strings)
+        "fr", # trunk-ignore(yamllint/quoted-strings)
+        "jp", # trunk-ignore(yamllint/quoted-strings)
+        "ca", # trunk-ignore(yamllint/quoted-strings)
+        "au", # trunk-ignore(yamllint/quoted-strings)
+        "se", # trunk-ignore(yamllint/quoted-strings)
+        "fi", # trunk-ignore(yamllint/quoted-strings)
+        "dk", # trunk-ignore(yamllint/quoted-strings)
+        "nl", # trunk-ignore(yamllint/quoted-strings)
+        "be", # trunk-ignore(yamllint/quoted-strings)
+        "es", # trunk-ignore(yamllint/quoted-strings)
+        "it", # trunk-ignore(yamllint/quoted-strings)
+        "ie", # trunk-ignore(yamllint/quoted-strings)
+        "is", # trunk-ignore(yamllint/quoted-strings)
+        "pl", # trunk-ignore(yamllint/quoted-strings)
+        "at", # trunk-ignore(yamllint/quoted-strings)
+        "ch", # trunk-ignore(yamllint/quoted-strings)
+        "gr", # trunk-ignore(yamllint/quoted-strings)
+        "pt", # trunk-ignore(yamllint/quoted-strings)
+        "cz", # trunk-ignore(yamllint/quoted-strings)
+        "ua", # trunk-ignore(yamllint/quoted-strings)
+      ]
+    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"] # trunk-ignore(yamllint/quoted-strings)
+
+  # --- Reissue Detection ---
+  reissue_detection:
+    reissue_keywords:
+      - reissue
+      - remaster
+      - remastered
+      - anniversary
+      - deluxe edition
+      - expanded edition
+      - special edition
+      - legacy edition
+      - definitive edition
+      - collector's edition
+      - bonus tracks
+      - re-release
+      - re-recorded
+      - re-issue
+      - re-press
+      - re-master
+      - redux
+      - revisited
+
+  # --- Script-based API Prioritization ---
+  script_api_priorities:
+    cyrillic:
+      primary: ["itunes", "applemusic"] # Local services for CIS region
+      fallback: ["musicbrainz", "discogs", "lastfm"]
+    chinese:
+      primary: ["musicbrainz"] # Chinese music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    japanese:
+      primary: ["musicbrainz"] # Japanese music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    korean:
+      primary: ["musicbrainz"] # Korean music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    arabic:
+      primary: ["musicbrainz"] # Arabic music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    hebrew:
+      primary: ["musicbrainz"] # Hebrew music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    greek:
+      primary: ["musicbrainz"] # Greek music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    thai:
+      primary: ["musicbrainz"] # Thai music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    devanagari:
+      primary: ["musicbrainz"] # Indian music databases would go here
+      fallback: ["itunes", "discogs", "lastfm"]
+    latin:
+      primary: ["musicbrainz", "discogs", "lastfm"]
+      fallback: ["itunes"]
+    mixed:
+      primary: ["musicbrainz", "discogs"]
+      fallback: ["lastfm", "itunes"]
+    default:
+      primary: ["musicbrainz", "discogs"]
+      fallback: ["lastfm", "itunes"]
+
+  # --- Scoring Parameters ---
+  scoring: # Values adjusted based on previous analysis
+    base_score: 10
+    # Match Quality
+    artist_exact_match_bonus: 20 # Reduced from 25
+    album_exact_match_bonus: 25 # Reduced from 40
+    perfect_match_bonus: 10 # Reduced from 20
+    album_variation_bonus: 10
+    album_substring_penalty: -5 # Reduced from -15 to avoid false negatives for simple album names
+    album_unrelated_penalty: -40 # Reduced from -50
+    # Release Characteristics
+    mb_release_group_match_bonus: 50 # Reduced from 75 to avoid over-weighting compilations
+    type_album_bonus: 15
+    type_ep_single_penalty: -10
+    type_compilation_live_penalty: -35 # Increased penalty for compilations
+    status_official_bonus: 10
+    status_bootleg_penalty: -50
+    status_promo_penalty: -20
+    reissue_penalty: -30
+    # Contextual Factors
+    year_diff_penalty_scale: -5 # NEW: Penalty per year difference from RG date (after 1st year)
+    year_diff_max_penalty: -40 # NEW: Max penalty for year difference
+    year_before_start_penalty: -35
+    year_after_end_penalty: -25
+    year_near_start_bonus: 20
+    country_artist_match_bonus: 10
+    country_major_market_bonus: 5
+    # Source Reliability
+    source_mb_bonus: 25
+    source_discogs_bonus: 2
+    source_lastfm_penalty: -5
+    source_itunes_penalty: -10
+    # Future year penalty (for reissue detection)
+    future_year_penalty: -10
+
+# -----------------------------------------------------------------------
+# 6. GENRE UPDATE CONFIGURATION
+# -----------------------------------------------------------------------
+genre_update:
+  batch_size: 50 # Number of tracks to process in each batch
+  concurrent_limit: 5 # Maximum number of concurrent tasks
+
+  # Smart Update Settings (new)
+  smart_update:
+    enabled: true # Enable smart change detection
+    respect_manual_values: true # Preserve manually set genres unless --force is used
+    normalize_comparisons: true # Normalize genre strings for accurate comparison
+    skip_identical: true # Skip updates when values are identical
+
+  # Change Detection Thresholds
+  change_detection:
+    min_confidence: 0.95 # Minimum confidence for automated changes
+    manual_detection_keywords: # Keywords that indicate manual genre setting
+      - custom
+      - manual
+      - user-defined
+
+  # Reporting Enhancements
+  enhanced_reporting:
+    always_show_summary: true # Always display summary table even with 0 changes
+    use_rich_tables: true # Use rich library for beautiful terminal output
+    compact_mode: true # Default to compact change display
+    show_efficiency_metrics: true # Display skip rate and efficiency stats
+    show_api_statistics: true # Show API call counts in summary

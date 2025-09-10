@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.music.genreautoupdater</string>
+
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/romanborodavkin/.pyenv/shims/python</string>
+            <string>main.py</string>
+            <string>years</string>
+        </array>
+
+        <key>WorkingDirectory</key>
+        <string>/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Python Scripts/Genres Autoupdater v2.0</string>
+
+        <key>StandardOutPath</key>
+        <string>/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/launchctl/stdout.log</string>
+
+        <key>StandardErrorPath</key>
+        <string>/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/launchctl/stderr.log</string>
+
+        <!-- Run daily at 2:00 AM -->
+        <key>StartCalendarInterval</key>
+        <dict>
+            <key>Hour</key>
+            <integer>2</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+
+        <!-- Auto-restart on crashes -->
+        <key>KeepAlive</key>
+        <false/>
+
+        <!-- Only run when a user is logged in -->
+        <key>RunAtLoad</key>
+        <false/>
+
+        <!-- Throttle restarts -->
+        <key>ThrottleInterval</key>
+        <integer>300</integer>
+
+        <!-- Environment variables -->
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>PATH</key>
+            <string>/Users/romanborodavkin/.pyenv/shims:/Users/romanborodavkin/.pyenv/bin:/usr/local/bin:/usr/bin:/bin</string>
+            <key>PYTHONUNBUFFERED</key>
+            <string>1</string>
+            <key>PYTHONDONTWRITEBYTECODE</key>
+            <string>1</string>
+        </dict>
+
+        <!-- Resource limits -->
+        <key>SoftResourceLimits</key>
+        <dict>
+            <key>NumberOfFiles</key>
+            <integer>1024</integer>
+        </dict>
+
+        <!-- Process priority (lower = higher priority) -->
+        <key>Nice</key>
+        <integer>10</integer>
+
+        <!-- Exit timeout -->
+        <key>ExitTimeOut</key>
+        <integer>3600</integer>
+    </dict>
+</plist>

@@ -1,0 +1,272 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "music-genre-updater"
+version = "2.0.0"
+description = "Automated music genre updater for Apple Music"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Roman Borodavkin" }]
+keywords = ["music", "apple-music", "genre", "automation"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: macOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  # Core data validation and models
+  "pydantic>=2.11.0,<3.0.0",
+  # Configuration and environment
+  "python-dotenv>=1.0.0",
+  "PyYAML>=6.0.0",
+  # HTTP client for API requests
+  "aiohttp>=3.12.15",
+  # SSL certificates for secure HTTPS connections
+  "certifi>=2024.0.0",
+  # Cryptography for secure token handling
+  "cryptography>=42.0.0",
+  # File operations
+  "aiofiles>=23.0.0",
+  "pip>=25.2",
+  "rich>=14.1.0",
+  "ruff>=0.12.11",
+  "pytest>=8.4.1",
+  "pytest-cov>=6.2.1",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.8.0",
+  "types-pyyaml>=6.0.12.20250822",
+  "types-aiofiles>=24.1.0.20250822",
+  "ruff>=0.12.11",
+  "pytest>=8.4.0",
+  "pytest-asyncio>=1.1.0",
+  "pytest-cov>=4.0.0",
+]
+
+[tool.uv]
+# uv configuration 
+index-url = "https://pypi.org/simple"
+
+# Development scripts are handled separately - removed invalid config
+
+[tool.ruff]
+# Same as Black.
+line-length = 120
+indent-width = 4
+
+# Assume Python 3.12+
+target-version = "py313"
+
+[tool.ruff.lint]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+select = [
+  "E",
+  "W",
+  "F",
+  "N",
+  "UP",
+  "YTT",
+  "ANN",
+  "S",
+  "BLE",
+  "B",
+  "A",
+  "COM",
+  "C4",
+  "DTZ",
+  "T10",
+  "EM",
+  "EXE",
+  "FA",
+  "ISC",
+  "ICN",
+  "G",
+  "INP",
+  "PIE",
+  "T20",
+  "PYI",
+  "PT",
+  "Q",
+  "RSE",
+  "RET",
+  "SLF",
+  "SIM",
+  "TID",
+  "TCH",
+  "INT",
+  "ARG",
+  "PTH",
+  "ERA",
+  "PD",
+  "PGH",
+  "PL",
+  "TRY",
+  "FLY",
+  "NPY",
+  "PERF",
+  "RUF",
+]
+ignore = [
+  # Allow unused variables when they start with an underscore
+  "F841",
+  # Allow non-lowercase variable names (for compatibility with existing code)  
+  "N806",
+  "N803",
+  "N802",
+  # Allow use of assert statements (common in data validation)
+  "S101",
+  # Allow print statements (for CLI output)
+  "T201",
+  # Ignore line length for now (will be handled separately)
+  "E501",
+  # Allow TODO comments
+  "FIX002",
+  # Allow broad exception catching in some cases
+  "BLE001",
+  # Allow mutable default arguments (a common pattern in some cases)
+  "B006",
+  # Ignore complexity warnings for now
+  "C901",
+  "PLR0912",
+  "PLR0913",
+  "PLR0915",
+  # Allow implicit string concatenation (conflicts with formatter)
+  "ISC001",
+  # Allow trailing comma conflicts with formatter
+  "COM812",
+  "COM819",
+  # Allow magic values in tests and configs
+  "PLR2004",
+  # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
+  "TC006",
+  # Allow redundant casts - needed for cross-environment aiohttp type compatibility  
+  # Note: Most static analysis tools handle this, ruff doesn't have specific rules
+  # Allow Any types in existing code (gradual migration)
+  "ANN401",
+  # Allow f-strings in logging (performance is fine for this use case)
+  "G004",
+  # Allow os.path usage alongside pathlib (gradual migration)
+  "PTH110",
+  # Allow TRY patterns for existing error handling
+  "TRY300",
+  "TRY301",
+  "TRY401",
+  # Allow datetime without timezone for internal timestamps
+  "DTZ006",
+  "DTZ007",
+]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# [tool.ruff.lint.isort] - DISABLED: PyCharm handles import sorting
+# known-first-party = ["core", "utils", "services"]
+# force-single-line = false
+# combine-as-imports = true
+# force-sort-within-sections = true
+# split-on-trailing-comma = true
+# section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  # Tests can use magic values
+  "PLR2004",
+  # Tests can use assertions
+  "S101",
+  # Tests can have many arguments
+  "PLR0913",
+]
+"services/api/orchestrator.py" = [
+  # Allow redundant casts for aiohttp type compatibility  
+  # Allow unquoted types in cast() to maintain import usage
+  "TC006",
+]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = false
+warn_unused_ignores = false
+# Allow redundant casts and unused ignores for cross-environment compatibility
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+# Pydantic plugin disabled - MyPy can't find pydantic in current environment
+# plugins = ["pydantic.mypy"]
+
+# Note: The global settings above handle redundant casts and unused ignores
+
+# Pydantic MyPy configuration disabled - environment issues
+# [[tool.mypy.overrides]]
+# module = "pydantic"
+# ignore_missing_imports = false
+
+# [tool.pydantic-mypy]
+# init_forbid_extra = true
+# init_typed = true
+# warn_required_dynamic_aliases = true
+
+[tool.pyright]
+include = ["src", "main.py"]
+exclude = ["venv", "**/__pycache__", "**/node_modules"]
+venvPath = "."
+venv = "venv"
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = true
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+reportUnusedVariable = "warning"
+reportGeneralTypeIssues = true
+reportOptionalSubscript = true
+reportOptionalMemberAccess = true
+reportOptionalCall = true
+reportOptionalIterable = true
+reportOptionalContextManager = true
+reportOptionalOperand = true
+
+# Disable walrus operator suggestions to avoid conflicts
+reportUnnecessaryComparison = false
+reportUnnecessaryContains = false
+
+# PyCharm compatibility: Allow cast() calls for type clarity even when "unnecessary"
+reportUnnecessaryCast = false
+
+# Pydantic v2: Standard type checking
+reportDeprecated = true
+reportIncompatibleMethodOverride = true
+
+[tool.sourcery]
+# Disable walrus operator rules that conflict with other linters
+rules = ["no-use-named-expression-in-if", "merge-else-if-into-elif"]
+
+# Pydantic v2 - enable all modern suggestions
+python_version = "3.13"
