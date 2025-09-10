@@ -33,9 +33,10 @@ dependencies = [
   "cryptography>=45.0.7",
   # File operations
   "aiofiles>=23.0.0",
-  "pip>=25.2",
+  # Console output formatting
   "rich>=14.1.0",
-  "ruff>=0.12.12",
+  # Development tools
+  "ruff>=0.13.0",
   "pytest>=8.4.2",
   "pytest-cov>=7.0.0",
 ]
@@ -45,8 +46,6 @@ dev = [
   "mypy>=1.8.0",
   "types-pyyaml>=6.0.12.20250822",
   "types-aiofiles>=24.1.0.20250822",
-  "ruff>=0.12.12",
-  "pytest>=8.4.2",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=7.0.0",
 ]
@@ -117,7 +116,7 @@ select = [
 ignore = [
   # Allow unused variables when they start with an underscore
   "F841",
-  # Allow non-lowercase variable names (for compatibility with existing code)  
+  # Allow non-lowercase variable names (for compatibility with existing code)
   "N806",
   "N803",
   "N802",
@@ -147,7 +146,7 @@ ignore = [
   "PLR2004",
   # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
   "TC006",
-  # Allow redundant casts - needed for cross-environment aiohttp type compatibility  
+  # Allow redundant casts - needed for cross-environment aiohttp type compatibility
   # Note: Most static analysis tools handle this, ruff doesn't have specific rules
   # Allow Any types in existing code (gradual migration)
   "ANN401",
@@ -196,7 +195,7 @@ line-ending = "auto"
   "PLR0913",
 ]
 "src/services/api/orchestrator.py" = [
-  # Allow redundant casts for aiohttp type compatibility  
+  # Allow redundant casts for aiohttp type compatibility
   # Allow unquoted types in cast() to maintain import usage
   "TC006",
 ]
