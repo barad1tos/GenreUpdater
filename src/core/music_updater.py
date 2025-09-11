@@ -279,7 +279,7 @@ class MusicUpdater:
             self.deps.cache_service,
             self.console_logger,
             self.error_logger,
-            partial_sync=False,  # Full sync to ensure bidirectional synchronization
+            partial_sync=True,  # Incremental sync - only process new/changed tracks
         )
 
         # Save changes report
@@ -614,5 +614,5 @@ class MusicUpdater:
                 self.deps.cache_service,
                 self.console_logger,
                 self.error_logger,
-                partial_sync=False,  # Full sync to ensure complete synchronization
+                partial_sync=True,  # Incremental sync - only process new/changed tracks
             )

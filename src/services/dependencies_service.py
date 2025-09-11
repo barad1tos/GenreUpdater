@@ -350,6 +350,14 @@ class DependencyContainer:
         """Async cleanup of resources and services."""
         self._console_logger.debug("Closing DependencyContainer...")
 
+        # Save cache before closing
+        if self._cache_service is not None:
+            try:
+                await self._cache_service.save_cache()
+                self._console_logger.debug("Cache saved successfully")
+            except Exception as e:
+                self._console_logger.warning(f"Failed to save cache: {e}")
+
         # Close API Orchestrator's aiohttp session properly
         if self._api_orchestrator is not None:
             try:

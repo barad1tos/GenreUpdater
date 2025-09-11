@@ -340,7 +340,7 @@ class TrackProcessor:
                 raw_output = await self.ap_client.run_script(
                     "fetch_tracks.scpt",
                     args,
-                    timeout=60,  # 60 seconds per batch should be enough
+                    timeout=300,  # 5 minutes per batch should be enough for 1000 tracks
                 )
 
                 if not raw_output:
