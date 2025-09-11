@@ -25,18 +25,14 @@ import csv
 import json
 import logging
 import time
+
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-
-# Enum from enum removed
-# Path from pathlib removed
 from typing import Any, Literal, TypeGuard, TypeVar, cast, overload
 
 from src.services.cache.cache_config import CacheConfigurationFactory, CacheLevel
 from src.services.cache.cache_coordinator import HierarchicalCacheManager
-
-# tenacity imports removed
 from src.services.cache.cache_protocol import CacheProtocol, UnifiedKeyGenerator
 from src.services.cache.cache_utils import (
     BatchOperationOptimizer,
@@ -696,26 +692,56 @@ class CacheService:
         self.cache = await loop.run_in_executor(None, blocking_load)
         self.console_logger.info("Loaded %d cached entries from %s", len(self.cache), self.cache_file)
 
-    async def save_cache(self) -> None:
-        """Persist the generic cache to disk asynchronously."""
-        loop = asyncio.get_event_loop()
+    def blocking_save_both(self) -> None:
+        """Synchronously saves both JSON and CSV caches in a single operation."""
+        json_saved = False
+        csv_saved = False
 
-        def blocking_save() -> None:
-            """Blocking function to save the generic cache to disk."""
+        # Save JSON cache
+        if len(self.cache) > 0:
             try:
-                Path(self.cache_file).parent.mkdir(parents=True, exist_ok=True)
+                cache_path = Path(self.cache_file)
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
                 data: dict[str, list[Any]] = {k: [v, exp] for k, (v, exp) in self.cache.items() if not _is_expired(exp)}
-                with Path(self.cache_file).open("w", encoding="utf-8") as f:
+                with cache_path.open("w", encoding="utf-8") as f:
                     json.dump(data, f)
-            except (asyncio.CancelledError, OSError, RuntimeError):  # pragma: no cover - best effort logging
-                # Use logger instead of print - fallback error handling
-                if hasattr(self, "error_logger"):
-                    self.error_logger.exception("ERROR saving cache to %s", self.cache_file)
-                else:
-                    # Final fallback using logging module directly
-                    logging.getLogger(__name__).exception("ERROR saving cache to %s", self.cache_file)
+                json_saved = True
+                self.console_logger.debug(f"JSON cache saved: {len(self.cache)} entries")
+            except (asyncio.CancelledError, OSError, RuntimeError) as e:
+                self.error_logger.exception(f"Error saving JSON cache: {e}")
 
-        await loop.run_in_executor(None, blocking_save)
+        # Save CSV cache
+        if len(self.album_years_cache) > 0:
+            try:
+                temp_file = f"{self.album_cache_csv}.tmp"
+                Path(self.album_cache_csv).parent.mkdir(parents=True, exist_ok=True)
+                items_to_save = list(self.album_years_cache.values())
+                self._write_csv_data(temp_file, items_to_save)
+                Path(temp_file).replace(self.album_cache_csv)
+                csv_saved = True
+                self.console_logger.debug(f"CSV cache saved: {len(self.album_years_cache)} entries")
+            except (OSError, ValueError) as e:
+                self.error_logger.exception(f"Error saving CSV cache: {e}")
+                self._cleanup_temp_file(temp_file)
+
+        # Summary logging
+        if json_saved and csv_saved:
+            self.console_logger.info("✅ Both caches saved successfully")
+        elif json_saved:
+            self.console_logger.warning("⚠️ Only JSON cache saved")
+        elif csv_saved:
+            self.console_logger.warning("⚠️ Only CSV cache saved")
+        else:
+            self.console_logger.debug("No data to save")
+
+    async def save_cache(self) -> None:
+        """Persist both generic cache and album cache to disk asynchronously."""
+        if len(self.cache) == 0 and len(self.album_years_cache) == 0:
+            self.console_logger.debug("No data to save")
+            return
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.blocking_save_both)  # ✅ SINGLE EXECUTOR ONLY
 
     async def _load_album_years_cache(self) -> None:
         """Load album years cache from CSV file into memory asynchronously.
@@ -902,6 +928,21 @@ class CacheService:
             await loop.run_in_executor(None, blocking_init)
         except (asyncio.CancelledError, OSError, RuntimeError):
             self.error_logger.exception("Error initializing album cache CSV")
+
+    def _save_album_cache_sync(self) -> None:
+        """Alias method for synchronous CSV cache saving with better readability."""
+        temp_file = f"{self.album_cache_csv}.tmp"
+        try:
+            Path(self.album_cache_csv).parent.mkdir(parents=True, exist_ok=True)
+            items_to_save = list(self.album_years_cache.values())
+            self._write_csv_data(temp_file, items_to_save)
+            Path(temp_file).replace(self.album_cache_csv)
+        except Exception:
+            self._log_with_fallback(
+                "exception", "ERROR saving album years cache to %s", self.album_cache_csv
+            )
+            self._cleanup_temp_file(temp_file)
+            raise
 
     def _validate_timestamp_config(self) -> str | None:
         """Validate timestamp configuration and return the file path key.
