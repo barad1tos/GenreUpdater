@@ -24,11 +24,12 @@ from src.utils.debug import init_debug_mode
 from src.utils.monitoring.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
-from .applescript_client import AppleScriptClient, AppleScriptClientProtocol
+from .applescript_client import AppleScriptClient
 from .cache.cache_service import CacheService
 from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
+    from src.utils.data.protocols import AppleScriptClientProtocol
     import logging
     from collections.abc import Awaitable
 

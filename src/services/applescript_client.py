@@ -15,9 +15,10 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from src.utils.monitoring import Analytics
+from src.utils.data.protocols import AppleScriptClientProtocol
 
 RESULT_PREVIEW_LEN = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LEN = 200  # characters shown when previewing long outputs/stderr
@@ -255,39 +256,6 @@ class AppleScriptSanitizer:
         self.logger.debug("Created safe AppleScript command with %d components", len(cmd))
         return cmd
 
-
-@runtime_checkable
-class AppleScriptClientProtocol(Protocol):
-    """Protocol defining the interface for AppleScript clients.
-
-    This allows both AppleScriptClient and DryRunAppleScriptClient to be used
-    interchangeably as long as they implement these methods.
-    """
-
-    apple_scripts_dir: str | None
-
-    async def run_script(
-        self,
-        script_name: str,
-        arguments: list[str] | None = None,
-        *,
-        timeout: float | None = None,
-        context_artist: str | None = None,
-        context_album: str | None = None,
-        context_track: str | None = None,
-    ) -> str | None:
-        """Run an AppleScript by name."""
-
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code."""
-
-    async def initialize(self) -> None:
-        """Initialize the AppleScript client."""
 
 
 class EnhancedRateLimiter:
@@ -671,7 +639,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self,
         script_name: str,
         arguments: list[str] | None = None,
-        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,
