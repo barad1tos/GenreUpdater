@@ -29,7 +29,6 @@ from datetime import datetime as dt
 from typing import Any, NoReturn, TypedDict, cast
 
 import aiohttp
-
 import certifi
 
 from src.services.api.applemusic import AppleMusicClient
@@ -38,10 +37,10 @@ from src.services.api.discogs import DiscogsClient
 from src.services.api.lastfm import LastFmClient
 from src.services.api.musicbrainz import MusicBrainzClient
 from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
-from src.services.cache.cache_service import CacheService
+from src.services.cache.cache_orchestrator import CacheOrchestrator
 from src.services.pending_verification import PendingVerificationService
 from src.typings.cryptography.secure_config import SecureConfig, SecurityConfigError
-from src.utils.data.script_detection import ScriptType, detect_primary_script, has_cyrillic
+from src.utils.data.script_detection import ScriptType, detect_primary_script
 from src.utils.data.validators import is_valid_year
 from src.utils.monitoring import Analytics
 
@@ -124,7 +123,7 @@ class ExternalApiOrchestrator:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: Analytics,
-        cache_service: CacheService,
+        cache_service: CacheOrchestrator,
         pending_verification_service: PendingVerificationService,
     ) -> None:
         """Initialize the API orchestrator with configuration, loggers, and dependencies."""
@@ -1276,7 +1275,7 @@ class ExternalApiOrchestrator:
             ScriptType.DEVANAGARI: "🇮🇳",
             ScriptType.MIXED: "🌍",
         }
-        
+
         emoji = script_emoji_map.get(script_type, "🌍")
         self.console_logger.info(f"{emoji} [SCRIPT_DEBUG] Processing {script_type.value} artist")
         self.console_logger.info(
@@ -1284,10 +1283,10 @@ class ExternalApiOrchestrator:
             "LOADED" if self.discogs_token else "MISSING",
             "LOADED" if self.lastfm_api_key else "MISSING",
         )
-        
+
         # Get script-specific API priorities from config
         script_priorities = self.config.year_retrieval.script_api_priorities.get(
-            script_type.value, 
+            script_type.value,
             self.config.year_retrieval.script_api_priorities.get("default", {})
         )
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
@@ -1393,7 +1392,7 @@ class ExternalApiOrchestrator:
         artist_script = detect_primary_script(log_artist)
         album_script = detect_primary_script(log_album)
         primary_script = artist_script if artist_script != ScriptType.UNKNOWN else album_script
-        
+
         if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
             script_results = await self._try_script_optimized_search(
                 primary_script, artist_norm, album_norm, log_artist, log_album
@@ -1415,11 +1414,11 @@ class ExternalApiOrchestrator:
         self.console_logger.info("[API_DEBUG] Original names: artist='%s', album='%s'", log_artist, log_album)
 
     async def _try_script_optimized_search(
-        self, 
-        script_type: ScriptType, 
-        artist_norm: str, 
-        album_norm: str, 
-        log_artist: str, 
+        self,
+        script_type: ScriptType,
+        artist_norm: str,
+        album_norm: str,
+        log_artist: str,
         log_album: str
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
@@ -1427,13 +1426,13 @@ class ExternalApiOrchestrator:
 
         # Get script-specific API priorities from config
         script_priorities = self.config.year_retrieval.script_api_priorities.get(
-            script_type.value, 
+            script_type.value,
             self.config.year_retrieval.script_api_priorities.get("default", {})
         )
-        
+
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
         fallback_apis = script_priorities.get("fallback", ["lastfm"])
-        
+
         # Try primary APIs first
         for api_name in primary_apis:
             try:
@@ -1441,20 +1440,20 @@ class ExternalApiOrchestrator:
                 if not api_client:
                     self.console_logger.debug(f"[API_DEBUG] {api_name} client not available, skipping")
                     continue
-                    
+
                 self.console_logger.info(f"[API_DEBUG] Trying {api_name} for {script_type.value} text")
                 results = await api_client.get_scored_releases(artist_norm, album_norm)
                 if results:
                     self.console_logger.info(
-                        f"[API_DEBUG] {api_name} found %d results for {script_type.value} - using as primary", 
+                        f"[API_DEBUG] {api_name} found %d results for {script_type.value} - using as primary",
                         len(results)
                     )
                     return results
-                    
+
             except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
                 self.console_logger.warning(f"[API_DEBUG] {api_name} failed for {script_type.value}: %s", e)
                 continue
-        
+
         # Try fallback APIs if primary failed
         self.console_logger.info(f"[API_DEBUG] Primary APIs failed for {script_type.value} - trying fallback")
         for api_name in fallback_apis:
@@ -1462,21 +1461,21 @@ class ExternalApiOrchestrator:
                 api_client = self._get_api_client(api_name)
                 if not api_client:
                     continue
-                    
+
                 results = await api_client.get_scored_releases(artist_norm, album_norm)
                 if results:
                     self.console_logger.info(
-                        f"[API_DEBUG] Fallback {api_name} found %d results for {script_type.value}", 
+                        f"[API_DEBUG] Fallback {api_name} found %d results for {script_type.value}",
                         len(results)
                     )
                     return results
-                    
+
             except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
                 self.console_logger.warning(f"[API_DEBUG] Fallback {api_name} failed for {script_type.value}: %s", e)
                 continue
-        
+
         return None
-    
+
     def _get_api_client(self, api_name: str):
         """Get API client by name."""
         api_mapping = {
@@ -1976,7 +1975,7 @@ def create_external_api_orchestrator(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     analytics: Analytics,
-    cache_service: CacheService,
+    cache_service: CacheOrchestrator,
     pending_verification_service: PendingVerificationService,
 ) -> ExternalApiOrchestrator:
     """Create the configured ExternalApiOrchestrator instance.

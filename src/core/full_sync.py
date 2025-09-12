@@ -36,14 +36,14 @@ from src.utils.monitoring.reports import sync_track_list_with_current  # noqa: E
 
 if TYPE_CHECKING:
     from src.core.modules.processing.track_processor import TrackProcessor
-    from src.services.cache.cache_service import CacheService
+    from src.services.cache.cache_orchestrator import CacheOrchestrator
 
 
 async def run_full_resync(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     config: dict[str, Any],
-    cache_service: "CacheService",
+    cache_service: "CacheOrchestrator",
     track_processor: "TrackProcessor",
 ) -> None:
     """Run complete media library resynchronization.

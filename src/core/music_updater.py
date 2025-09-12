@@ -417,9 +417,12 @@ class MusicUpdater:
         last_run_time = await self._get_last_run_time(force)
 
         # Execute the three main steps
-        await self._clean_all_tracks_metadata(tracks)
-        await self._update_all_genres(tracks, last_run_time, force)
-        await self._update_all_years(tracks, force)
+        cleaned_tracks = await self._clean_all_tracks_metadata(tracks)
+        updated_genre_tracks = await self._update_all_genres(cleaned_tracks, last_run_time, force)
+
+        # Use filtered tracks from genre updates for year updates (incremental optimization)
+        tracks_for_years = updated_genre_tracks if not force and last_run_time and updated_genre_tracks else tracks
+        await self._update_all_years(tracks_for_years, force)
 
         # Save combined results
         await self._save_pipeline_results()
