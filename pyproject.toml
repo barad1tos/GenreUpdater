@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "music-genre-updater"
 version = "2.0.0"
 description = "Automated music genre updater for Apple Music"
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [{ name = "Roman Borodavkin" }]
@@ -39,6 +39,8 @@ dependencies = [
   "ruff>=0.13.0",
   "pytest>=8.4.2",
   "pytest-cov>=7.0.0",
+  "pytest-asyncio>=1.1.0",
+  "mypy>=1.17.1",
 ]
 
 [dependency-groups]
@@ -57,9 +59,21 @@ index-url = "https://pypi.org/simple"
 # Development scripts are handled separately - removed invalid config
 
 [tool.ruff]
-# Same as Black.
 line-length = 120
 indent-width = 4
+exclude = [
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".tox",
+  ".venv",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "__pycache__",
+  "*/__init__.py",
+]
 
 # Assume Python 3.13+
 target-version = "py313"
@@ -176,6 +190,8 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
 
 # [tool.ruff.lint.isort] - DISABLED: PyCharm handles import sorting
 # known-first-party = ["core", "utils", "services"]
@@ -262,6 +278,101 @@ reportUnnecessaryCast = false
 # Pydantic v2: Standard type checking
 reportDeprecated = true
 reportIncompatibleMethodOverride = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Black configuration (for compatibility)
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.black]
+line-length = 150
+target-version = ['py313']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | _legacy
+  | tests
+  | .trunk
+)/
+'''
+
+# ─────────────────────────────────────────────────────────────────────────────
+# pydocstyle - google docstyle
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pydocstyle]
+convention = "google"
+add_ignore = [
+  "D203",
+  "D213",
+  "D215",
+  "D400",
+  "D401",
+  "D404",
+  "D406",
+  "D407",
+  "D408",
+  "D409",
+  "D413",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pytest configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--ignore=venv",
+  "--ignore=.venv",
+  "--ignore=.trunk",
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+  "unit: marks tests as unit tests",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Coverage configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src"]
+omit = [
+  "**/tests/*",
+  "**/test_*.py",
+  "**/__pycache__/*",
+  "**/venv/*",
+  "**/.venv/*",
+  "**/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "if self.debug:",
+  "if settings.DEBUG",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if 0:",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
 
 [tool.sourcery]
 # Disable walrus operator rules that conflict with other linters
