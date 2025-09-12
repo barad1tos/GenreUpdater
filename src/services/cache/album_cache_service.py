@@ -183,7 +183,7 @@ class AlbumCacheService:
         album_data: dict[str, tuple[str, str, str]] = {}
 
         try:
-            with self.album_years_cache_file.open("r", encoding="utf-8") as file:
+            with self.album_years_cache_file.open(encoding="utf-8") as file:
                 reader = csv.DictReader(file)
 
                 # Validate CSV headers
