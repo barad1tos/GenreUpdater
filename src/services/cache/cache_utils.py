@@ -5,7 +5,6 @@ batch optimization, metrics tracking, and hash generation.
 """
 
 import asyncio
-import hashlib
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -228,87 +227,3 @@ class BatchOperationOptimizer:
         # Simulate work proportional to the number of keys
         key_count: int = len(keys)
         await asyncio.sleep(0.001 * key_count)
-
-
-class OptimizedHashGenerator:
-    """Generates optimized hash keys for caching."""
-
-    @staticmethod
-    def generate_key(base_key: str, *args: HashParams, **kwargs: HashParams) -> str:
-        """Generate an optimized hash key.
-
-        Args:
-            base_key: Base key string
-            *args: Additional arguments to include in hash
-            **kwargs: Additional keyword arguments to include in hash
-
-        Returns:
-            Optimized hash key
-
-        """
-        # Create a deterministic string from all inputs
-        key_parts: list[str] = [base_key]
-
-        # Add positional arguments
-        key_parts.extend(str(arg) for arg in args)
-
-        # Add keyword arguments (sorted for determinism)
-        key_parts.extend(f"{key}={value}" for key, value in sorted(kwargs.items()))
-
-        # Create hash using the combined string
-        combined_string: str = "|".join(key_parts)
-        hash_object = hashlib.sha256(combined_string.encode())
-
-        # Use the first 16 characters for a reasonable key length
-        return f"{base_key}:{hash_object.hexdigest()[:16]}"
-
-    @staticmethod
-    def generate_artist_key(artist: str, album: str | None = None) -> str:
-        """Generate a key for artist-related cache entries.
-
-        Args:
-            artist: Artist name
-            album: Optional album name
-
-        Returns:
-            Optimized artist cache key
-
-        """
-        normalized_artist: str = normalize_name(artist)
-
-        if album:
-            normalized_album: str = normalize_name(album)
-            return OptimizedHashGenerator.generate_key("artist_album", normalized_artist, normalized_album)
-        return OptimizedHashGenerator.generate_key("artist", normalized_artist)
-
-    @staticmethod
-    def generate_api_key(source: str, query_type: str, **params: HashParams) -> str:
-        """Generate a key for API response cache entries.
-
-        Args:
-            source: API source name
-            query_type: Type of API query
-            **params: Query parameters
-
-        Returns:
-            Optimized API cache key
-
-        """
-        return OptimizedHashGenerator.generate_key(f"api_{source}_{query_type}", **params)
-
-    @staticmethod
-    def get_algorithm_info() -> dict[str, Any]:
-        """Get information about the hash algorithm used.
-
-        Returns:
-            Dictionary with hash algorithm details
-
-        """
-        return {
-            "algorithm": "SHA-256",
-            "key_length": 16,
-            "hash_prefix": True,
-            "deterministic": True,
-            "collision_resistant": True,
-            "implementation": "hashlib.sha256",
-        }

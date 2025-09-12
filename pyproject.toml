@@ -39,13 +39,13 @@ dependencies = [
   "ruff>=0.13.0",
   "pytest>=8.4.2",
   "pytest-cov>=7.0.0",
-  "pytest-asyncio>=1.1.0",
-  "mypy>=1.17.1",
+  "mypy==1.18.1",
+  "pytest-asyncio==1.2.0",
+  "vulture>=2.14",
 ]
 
 [dependency-groups]
 dev = [
-  "mypy>=1.8.0",
   "types-pyyaml>=6.0.12.20250822",
   "types-aiofiles>=24.1.0.20250822",
   "pytest-asyncio>=1.1.0",
@@ -59,7 +59,7 @@ index-url = "https://pypi.org/simple"
 # Development scripts are handled separately - removed invalid config
 
 [tool.ruff]
-line-length = 120
+line-length = 150
 indent-width = 4
 exclude = [
   ".git",
@@ -138,8 +138,8 @@ ignore = [
   "S101",
   # Allow print statements (for CLI output)
   "T201",
-  # Ignore line length for now (will be handled separately)
-  "E501",
+  # Line length is now enforced at 150 characters
+  # "E501",  # Removed to enable line length checking
   # Allow TODO comments
   "FIX002",
   # Allow broad exception catching in some cases
@@ -283,7 +283,7 @@ reportIncompatibleMethodOverride = true
 # Black configuration (for compatibility)
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.black]
-line-length = 150
+line-length = 120
 target-version = ['py313']
 include = '\.pyi?$'
 extend-exclude = '''
@@ -380,3 +380,34 @@ rules = ["no-use-named-expression-in-if", "merge-else-if-into-elif"]
 
 # Pydantic v2 - enable all modern suggestions
 python_version = "3.13"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vulture configuration - Dead code detection
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+sort_by_size = true
+exclude = ["tests/", ".venv/", "venv/", ".trunk/"]
+ignore_names = ["_*"]                                              # Ignore names starting with underscore
+ignore_decorators = ["@app.route", "@pytest.fixture", "@property"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pylint configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pylint.format]
+max-line-length = 150
+
+[tool.pylint.main]
+py-version = "3.13"
+
+[tool.pylint."messages control"]
+disable = [
+  "C0103", # invalid-name (allow short variable names)
+  "R0903", # too-few-public-methods
+  "W0613", # unused-argument (handled by ruff)
+  "C0301", # line-too-long (handled by format section)
+  "R0913", # too-many-arguments
+  "R0917", # too-many-positional-arguments
+  "W0718", # broad-exception-caught
+]

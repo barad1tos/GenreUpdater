@@ -25,7 +25,7 @@ from src.utils.monitoring.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
 from .applescript_client import AppleScriptClient
-from .cache.cache_service import CacheService
+from .cache.cache_orchestrator import CacheOrchestrator
 from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
@@ -101,7 +101,7 @@ class DependencyContainer:
         self._config: dict[str, Any] = {}
         self._analytics: Analytics | None = None
         self._ap_client: AppleScriptClientProtocol | None = None
-        self._cache_service: CacheService | None = None
+        self._cache_service: CacheOrchestrator | None = None
         self._pending_verification_service: PendingVerificationService | None = None
         self._api_orchestrator: ExternalApiOrchestrator | None = None
         # MusicUpdater removed - created by orchestrator to avoid circular dependency
@@ -134,7 +134,7 @@ class DependencyContainer:
         return self._ap_client
 
     @property
-    def cache_service(self) -> CacheService:
+    def cache_service(self) -> CacheOrchestrator:
         """Get the cache service."""
         if self._cache_service is None:
             msg = "Cache service not initialized"
@@ -291,7 +291,7 @@ class DependencyContainer:
                 loggers,
             )
         if self._cache_service is None:
-            self._cache_service = CacheService(self._config, self._console_logger, self._error_logger)
+            self._cache_service = CacheOrchestrator(self._config, self._console_logger)
         if self._pending_verification_service is None:
             self._pending_verification_service = PendingVerificationService(
                 self._config, self._console_logger, self._error_logger
@@ -353,7 +353,7 @@ class DependencyContainer:
         # Save cache before closing
         if self._cache_service is not None:
             try:
-                await self._cache_service.save_cache()
+                await self._cache_service.save_all_to_disk()
                 self._console_logger.debug("Cache saved successfully")
             except Exception as e:
                 self._console_logger.warning(f"Failed to save cache: {e}")

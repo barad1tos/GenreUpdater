@@ -41,7 +41,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from src.services.cache.cache_protocol import UnifiedKeyGenerator
+from src.services.cache.hash_service import UnifiedHashService
 from src.utils.core.logger import get_full_log_path
 from src.utils.data.metadata import clean_names
 
@@ -151,10 +151,11 @@ class PendingVerificationService:
     def _generate_album_key(artist: str, album: str) -> str:
         """Generate a unique hash key for an album based on artist and album names.
 
-        TASK-004: Consolidated to use UnifiedKeyGenerator for consistent hashing
+        TASK-004: Consolidated to use UnifiedHashService for consistent hashing
         across all services. Use cleaned album names for compatibility.
         """
-        return UnifiedKeyGenerator.pending_key(artist, album)
+        track_id = f"{artist}|{album}"
+        return UnifiedHashService.hash_pending_key(track_id)
 
     def generate_album_key(self, artist: str, album: str) -> str:
         """Public method to generate a unique hash key for an album."""
