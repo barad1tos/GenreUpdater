@@ -71,6 +71,7 @@ on run argv
                     set track_id to (id of currentTrack) as text
                     set track_name to (name of currentTrack) as text
                     set track_artist to (artist of currentTrack) as text
+                    set album_artist to (album artist of currentTrack) as text
                     set track_album to (album of currentTrack) as text
                     set track_genre to (genre of currentTrack) as text
                     set date_added_raw to (date added of currentTrack)
@@ -102,8 +103,8 @@ on run argv
                         set release_year to ""
                     end if
 
-                    -- Output: track_id, track_name, track_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year
-                    set trackFields to {track_id, track_name, track_artist, track_album, track_genre, date_added, track_status, track_year, release_year, ""}
+                    -- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year
+                    set trackFields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, ""}
 
                     set oldDelimiters to AppleScript's text item delimiters
                     set AppleScript's text item delimiters to fieldSeparator
