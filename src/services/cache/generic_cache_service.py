@@ -16,10 +16,11 @@ import logging
 import time
 from typing import Any, TypeGuard
 
+import contextlib
+
 from src.services.cache.cache_config import SmartCacheConfig, CacheContentType
 from src.services.cache.hash_service import UnifiedHashService
 from src.utils.data.protocols import CacheableKey, CacheableValue
-import contextlib
 
 
 def is_generic_cache_entry(value: object) -> TypeGuard[tuple[CacheableValue, float]]:
