@@ -20,28 +20,20 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  # Core data validation and models
-  "pydantic>=2.11.0,<3.0.0",
-  # Configuration and environment
-  "python-dotenv>=1.0.0",
-  "PyYAML>=6.0.0",
-  # HTTP client for API requests
-  "aiohttp>=3.12.15",
-  # SSL certificates for secure HTTPS connections
-  "certifi>=2024.0.0",
-  # Cryptography for secure token handling
-  "cryptography>=45.0.7",
-  # File operations
-  "aiofiles>=23.0.0",
-  # Console output formatting
-  "rich>=14.1.0",
-  # Development tools
-  "ruff>=0.13.0",
-  "pytest>=8.4.2",
-  "pytest-cov>=7.0.0",
-  "mypy==1.18.1",
-  "pytest-asyncio==1.2.0",
-  "vulture>=2.14",
+  "pydantic==2.11.8",      # Core data validation and models
+  "python-dotenv>=1.0.0",  # Configuration and environment
+  "PyYAML>=6.0.0",         # YAML configuration parsing
+  "aiohttp>=3.12.15",      # HTTP client for API requests
+  "certifi>=2024.0.0",     # SSL certificates for secure HTTPS connections
+  "cryptography>=45.0.7",  # Cryptography for secure token handling
+  "aiofiles>=23.0.0",      # File operations
+  "rich>=14.1.0",          # Console output formatting
+  "ruff>=0.13.0",          # Linting and code quality
+  "pytest>=8.4.2",         # Testing framework
+  "pytest-cov>=7.0.0",     # Test coverage
+  "mypy==1.18.1",          # Static type checking
+  "pytest-asyncio==1.2.0", # Async test support
+  "vulture>=2.14",         # Dead code detection
 ]
 
 [dependency-groups]
@@ -128,53 +120,31 @@ select = [
   "RUF",
 ]
 ignore = [
-  # Allow unused variables when they start with an underscore
-  "F841",
-  # Allow non-lowercase variable names (for compatibility with existing code)
-  "N806",
-  "N803",
-  "N802",
-  # Allow use of assert statements (common in data validation)
-  "S101",
-  # Allow print statements (for CLI output)
-  "T201",
-  # Line length is now enforced at 150 characters
-  # "E501",  # Removed to enable line length checking
-  # Allow TODO comments
-  "FIX002",
-  # Allow broad exception catching in some cases
-  "BLE001",
-  # Allow mutable default arguments (a common pattern in some cases)
-  "B006",
-  # Ignore complexity warnings for now
-  "C901",
-  "PLR0912",
-  "PLR0913",
-  "PLR0915",
-  # Allow implicit string concatenation (conflicts with formatter)
-  "ISC001",
-  # Allow trailing comma conflicts with formatter
-  "COM812",
-  "COM819",
-  # Allow magic values in tests and configs
-  "PLR2004",
-  # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
-  "TC006",
-  # Allow redundant casts - needed for cross-environment aiohttp type compatibility
-  # Note: Most static analysis tools handle this, ruff doesn't have specific rules
-  # Allow Any types in existing code (gradual migration)
-  "ANN401",
-  # Allow f-strings in logging (performance is fine for this use case)
-  "G004",
-  # Allow os.path usage alongside pathlib (gradual migration)
-  "PTH110",
-  # Allow TRY patterns for existing error handling
-  "TRY300",
-  "TRY301",
-  "TRY401",
-  # Allow datetime without timezone for internal timestamps
-  "DTZ006",
-  "DTZ007",
+  "F841",    # Allow unused variables when they start with an underscore
+  "N806",    # Allow non-lowercase variable names (for compatibility with existing code)
+  "N803",    # Allow non-snake-case function names (for compatibility with existing code)
+  "S101",    # Allow use of assert statements (common in data validation)
+  "T201",    # Allow print statements (for CLI output)
+  "FIX002",  # Allow TODO comments
+  "BLE001",  # Allow broad exception catching in some cases
+  "B006",    # Allow mutable default arguments (a common pattern in some cases)
+  "C901",    # Ignore complexity warnings for now (refactor later)
+  "PLR0912", # Allow too-many-branches (refactor later)
+  "PLR0913", # Allow too-many-arguments (refactor later)
+  "PLR0915", # Allow too-many-statements (refactor later)
+  "ISC001",  # Allow implicit string concatenation (conflicts with formatter)
+  "COM812",  # Allow trailing comma conflicts with formatter
+  "COM819",  # Allow multiline string in parentheses (conflicts with formatter)
+  "PLR2004", # Allow magic values in tests and configs
+  "TC006",   # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
+  "ANN401",  # Allow Any types in existing code (gradual migration)
+  "G004",    # Allow f-strings in logging (performance is fine for this use case)
+  "PTH110",  # Allow os.path usage alongside pathlib (gradual migration)
+  "TRY300",  # Allow TRY patterns for existing error handling
+  "TRY301",  # Allow TRY patterns for existing error handling
+  "TRY401",  # Allow datetime without timezone for internal timestamps
+  "DTZ006",  # Allow datetime without timezone for internal timestamps
+  "DTZ007",  # Allow datetime without timezone for internal timestamps
 ]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -182,38 +152,21 @@ fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.format]
-# Like Black, use double quotes for strings.
-quote-style = "double"
-# Like Black, indent with spaces, rather than tabs.
-indent-style = "space"
-# Like Black, respect magic trailing commas.
-skip-magic-trailing-comma = false
-# Like Black, automatically detect the appropriate line ending.
-line-ending = "auto"
-docstring-code-format = true
-docstring-code-line-length = "dynamic"
-
-# [tool.ruff.lint.isort] - DISABLED: PyCharm handles import sorting
-# known-first-party = ["core", "utils", "services"]
-# force-single-line = false
-# combine-as-imports = true
-# force-sort-within-sections = true
-# split-on-trailing-comma = true
-# section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+quote-style = "double"                 # Like Black, use double quotes for strings.
+indent-style = "space"                 # Like Black, indent with spaces, rather than tabs.
+skip-magic-trailing-comma = false      # Like Black, respect magic trailing commas.
+line-ending = "auto"                   # Like Black, automatically detect the appropriate line ending.
+docstring-code-format = true           # Reformat code blocks in docstrings.
+docstring-code-line-length = "dynamic" # Like Black, wrap docstring code blocks to the configured line length.
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-  # Tests can use magic values
-  "PLR2004",
-  # Tests can use assertions
-  "S101",
-  # Tests can have many arguments
-  "PLR0913",
+  "PLR2004", # Tests can use magic values
+  "S101",    # Tests can use assertions
+  "PLR0913", # Tests can have many arguments
 ]
 "src/services/api/orchestrator.py" = [
-  # Allow redundant casts for aiohttp type compatibility
-  # Allow unquoted types in cast() to maintain import usage
-  "TC006",
+  "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
 ]
 
 [tool.mypy]
@@ -227,25 +180,10 @@ disallow_untyped_decorators = true
 no_implicit_optional = true
 warn_redundant_casts = false
 warn_unused_ignores = false
-# Allow redundant casts and unused ignores for cross-environment compatibility
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-# Pydantic plugin disabled - MyPy can't find pydantic in current environment
-# plugins = ["pydantic.mypy"]
-
-# Note: The global settings above handle redundant casts and unused ignores
-
-# Pydantic MyPy configuration disabled - environment issues
-# [[tool.mypy.overrides]]
-# module = "pydantic"
-# ignore_missing_imports = false
-
-# [tool.pydantic-mypy]
-# init_forbid_extra = true
-# init_typed = true
-# warn_required_dynamic_aliases = true
 
 [tool.pyright]
 include = ["src", "main.py"]
