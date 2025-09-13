@@ -20,7 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "pydantic==2.11.8",      # Core data validation and models
+  "pydantic==2.11.9",      # Core data validation and models
   "python-dotenv>=1.0.0",  # Configuration and environment
   "PyYAML>=6.0.0",         # YAML configuration parsing
   "aiohttp>=3.12.15",      # HTTP client for API requests
