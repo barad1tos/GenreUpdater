@@ -278,6 +278,7 @@ class SecurityValidator:
             "old_year",
             "release_year",
             "new_year",
+            "album_artist",  # Preserve album-level artist for grouping logic
         ]
         for field in optional_fields:
             if field in track_data and track_data[field] is not None:

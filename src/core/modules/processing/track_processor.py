@@ -210,6 +210,10 @@ class TrackProcessor:
                         "date_added": track.date_added,
                         "track_status": track.track_status,
                     }
+                    # Preserve album_artist if present (extra field on TrackDict)
+                    aa = track.get("album_artist")
+                    if aa is not None:
+                        track_dict["album_artist"] = aa
                     validated_dict = self.security_validator.validate_track_data(track_dict)
                     # ONLY TrackDict, not dict
                     validated_track = TrackDict(**validated_dict)
@@ -282,6 +286,9 @@ class TrackProcessor:
                             "date_added": track.date_added,
                             "track_status": track.track_status,
                         }
+                        aa = track.get("album_artist")
+                        if aa is not None:
+                            track_dict["album_artist"] = aa
                         validated_dict = self.security_validator.validate_track_data(track_dict)
                         # ONLY TrackDict, not dict
                         validated_cached.append(TrackDict(**validated_dict))
@@ -369,6 +376,9 @@ class TrackProcessor:
                             "date_added": track.date_added,
                             "track_status": track.track_status,
                         }
+                        aa = track.get("album_artist")
+                        if aa is not None:
+                            track_dict["album_artist"] = aa
                         validated_dict = self.security_validator.validate_track_data(track_dict)
                         validated_track = TrackDict(**validated_dict)
                         validated_tracks.append(validated_track)
