@@ -11,11 +11,9 @@ import asyncio
 import logging
 import re
 import time
-from datetime import datetime as dt, UTC
+from datetime import UTC
+from datetime import datetime as dt
 from typing import Any, TypedDict
-
-# TODO: Turn on when you need it
-# from src.utils.data.normalization import normalize_name as norm_func
 
 
 class ScoredRelease(TypedDict):
