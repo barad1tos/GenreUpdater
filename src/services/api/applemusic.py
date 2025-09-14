@@ -16,12 +16,9 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 
 import logging
 from collections.abc import Callable, Coroutine
-from typing import Any, cast
+from typing import Any
 
 from src.services.api.base import ScoredRelease
-
-# TODO: Turn on when you need it
-# from src.utils.data.normalization import normalize_name
 
 # Constants for data validation
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")
@@ -267,15 +264,3 @@ class AppleMusicClient:
 
         return scored_release
 
-    @staticmethod
-    def normalize_itunes_name(name: str) -> str:
-        """Normalize iTunes names for comparison.
-
-        Args:
-            name: Raw name from iTunes API
-
-        Returns:
-            Normalized name for comparison
-
-        """
-        return cast(str, normalize_name(name))

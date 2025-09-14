@@ -446,6 +446,29 @@ class GenreManager:
         if not dominant_genre and not force_flag:
             return []
 
+        candidates = self._filter_tracks_for_update(artist_tracks, last_run, force_flag, dominant_genre)
+
+        # De-duplicate by id
+        return self._deduplicate_tracks_by_id(candidates)
+
+    def _filter_tracks_for_update(
+        self,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force_flag: bool,
+        dominant_genre: str | None,
+    ) -> list[TrackDict]:
+        """Filter tracks that need genre updates based on various criteria.
+
+        Args:
+            artist_tracks: List of tracks for the artist
+            last_run: Timestamp of last incremental run
+            force_flag: Whether to force update all tracks
+            dominant_genre: The dominant genre for this artist
+
+        Returns:
+            List of tracks that should be updated
+        """
         candidates: list[TrackDict] = []
         for t in artist_tracks:
             if force_flag or self._is_missing_or_unknown_genre(t):
@@ -461,10 +484,21 @@ class GenreManager:
             if isinstance(genre_val, str) and genre_val.strip() and dominant_genre and (genre_val != dominant_genre):
                 candidates.append(t)
 
-        # De-duplicate by id
+        return candidates
+
+    @staticmethod
+    def _deduplicate_tracks_by_id(tracks: list[TrackDict ]) -> list[TrackDict ]:
+        """Remove duplicate tracks based on track ID.
+
+        Args:
+            tracks: List of tracks that may contain duplicates
+
+        Returns:
+            List of unique tracks without duplicates
+        """
         seen_ids: set[str] = set()
         unique: list[TrackDict] = []
-        for t in candidates:
+        for t in tracks:
             tid = str(t.get("id", ""))
             if not tid or tid in seen_ids:
                 continue

@@ -134,6 +134,64 @@ class TrackProcessor:
 
         return validated_tracks
 
+    def _validate_tracks_security(self, tracks: list[TrackDict]) -> list[TrackDict]:
+        """Validate tracks for security and convert to proper format.
+
+        Args:
+            tracks: List of parsed tracks to validate
+
+        Returns:
+            List of validated TrackDict instances
+        """
+        validated_tracks: list[TrackDict] = []
+        for track in tracks:
+            try:
+                # Convert TrackDict to dict[str, Any] for validation
+                track_dict: dict[str, Any] = {
+                    "id": track.id,
+                    "artist": track.artist,
+                    "name": track.name,
+                    "album": track.album,
+                    "genre": track.genre,
+                    "year": track.year,
+                    "date_added": track.date_added,
+                    "track_status": track.track_status,
+                }
+                # Preserve album_artist if present (extra field on TrackDict)
+                aa = track.get("album_artist")
+                if aa is not None:
+                    track_dict["album_artist"] = aa
+                validated_dict = self.security_validator.validate_track_data(track_dict)
+                # ONLY TrackDict, not dict
+                validated_track = TrackDict(**validated_dict)
+                validated_tracks.append(validated_track)
+            except SecurityValidationError as e:
+                self.error_logger.warning(
+                    "Security validation failed for track %s: %s",
+                    track.get("id", "unknown"),
+                    e,
+                )
+                # Skip this track due to security concerns
+                continue
+        return validated_tracks
+
+    def _get_applescript_timeout(self, is_single_artist: bool) -> int:
+        """Get appropriate timeout for AppleScript execution.
+
+        Args:
+            is_single_artist: Whether this is a single artist fetch or full library
+
+        Returns:
+            Timeout value in seconds
+        """
+        if is_single_artist:
+            # Single artist fetch - shorter timeout (artist was explicitly provided)
+            timeout_value = self.config.get("applescript_timeouts", {}).get("single_artist_fetch", 600)
+            return int(timeout_value) if timeout_value is not None else 600
+        # Full library fetch or test artist scenario - longer timeout
+        timeout_value = self.config.get("applescript_timeouts", {}).get("full_library_fetch", 3600)
+        return int(timeout_value) if timeout_value is not None else 3600
+
     async def _fetch_tracks_from_applescript(
         self, artist: str | None = None, _force_refresh: bool = False, ignore_test_filter: bool = False
     ) -> list[TrackDict]:
@@ -170,12 +228,7 @@ class TrackProcessor:
             )
 
             # Execute AppleScript with appropriate timeout based on operation type
-            if original_artist_provided:
-                # Single artist fetch - shorter timeout (artist was explicitly provided)
-                timeout = self.config.get("applescript_timeouts", {}).get("single_artist_fetch", 600)
-            else:
-                # Full library fetch or test artist scenario - longer timeout
-                timeout = self.config.get("applescript_timeouts", {}).get("full_library_fetch", 3600)
+            timeout = self._get_applescript_timeout(original_artist_provided)
 
             raw_output = await self.ap_client.run_script("fetch_tracks.scpt", args, timeout=timeout)
 
@@ -183,7 +236,9 @@ class TrackProcessor:
             self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
             if raw_output:
                 self.error_logger.info(f"DEBUG: First 200 chars: {raw_output[:200]}")
-                self.error_logger.info(f"DEBUG: Raw output contains separators - field (\\x1E): {'\x1E' in raw_output}, line (\\x1D): {'\x1D' in raw_output}")
+                field_sep_found = "\x1E" in raw_output
+                line_sep_found = "\x1D" in raw_output
+                self.error_logger.info(f"DEBUG: Raw output contains separators - field (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
 
             if not raw_output:
                 self.error_logger.error("AppleScript returned empty output")
@@ -196,36 +251,7 @@ class TrackProcessor:
             # Parsed tracks count (noise reduction)
 
             # Validate each track for security
-            validated_tracks: list[TrackDict] = []
-            for track in tracks:
-                try:
-                    # Convert TrackDict to dict[str, Any] for validation
-                    track_dict: dict[str, Any] = {
-                        "id": track.id,
-                        "artist": track.artist,
-                        "name": track.name,
-                        "album": track.album,
-                        "genre": track.genre,
-                        "year": track.year,
-                        "date_added": track.date_added,
-                        "track_status": track.track_status,
-                    }
-                    # Preserve album_artist if present (extra field on TrackDict)
-                    aa = track.get("album_artist")
-                    if aa is not None:
-                        track_dict["album_artist"] = aa
-                    validated_dict = self.security_validator.validate_track_data(track_dict)
-                    # ONLY TrackDict, not dict
-                    validated_track = TrackDict(**validated_dict)
-                    validated_tracks.append(validated_track)
-                except SecurityValidationError as e:
-                    self.error_logger.warning(
-                        "Security validation failed for track %s: %s",
-                        track.get("id", "unknown"),
-                        e,
-                    )
-                    # Skip this track due to security concerns
-                    continue
+            validated_tracks = self._validate_tracks_security(tracks)
 
             self.console_logger.info(
                 "AppleScript fetch_tracks.scpt executed successfully, got %d bytes, validated %d/%d tracks",
@@ -272,35 +298,7 @@ class TrackProcessor:
             cached_tracks = await self._get_cached_tracks(cache_key)
             if cached_tracks is not None:
                 # Validate cached tracks for security
-                validated_cached: list[TrackDict] = []
-                for track in cached_tracks:
-                    try:
-                        # Convert TrackDict to dict[str, Any] for validation
-                        track_dict: dict[str, Any] = {
-                            "id": track.id,
-                            "artist": track.artist,
-                            "name": track.name,
-                            "album": track.album,
-                            "genre": track.genre,
-                            "year": track.year,
-                            "date_added": track.date_added,
-                            "track_status": track.track_status,
-                        }
-                        aa = track.get("album_artist")
-                        if aa is not None:
-                            track_dict["album_artist"] = aa
-                        validated_dict = self.security_validator.validate_track_data(track_dict)
-                        # ONLY TrackDict, not dict
-                        validated_cached.append(TrackDict(**validated_dict))
-                    except SecurityValidationError as e:
-                        self.error_logger.warning(
-                            "Security validation failed for cached track %s: %s",
-                            track.get("id", "unknown"),
-                            e,
-                        )
-                        # Skip this track due to security concerns
-                        continue
-
+                validated_cached = self._validate_tracks_security(list(cached_tracks))
                 self.console_logger.info(
                     "Using cached data for %s, validated %d/%d tracks",
                     artist or "all artists",
@@ -341,81 +339,19 @@ class TrackProcessor:
             self.console_logger.info("Fetching batch %d (offset=%d, limit=%d)...", batch_count, offset, batch_size)
 
             try:
-                # Call AppleScript with batch parameters
-                args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
-
-                raw_output = await self.ap_client.run_script(
-                    "fetch_tracks.scpt",
-                    args,
-                    timeout=300,  # 5 minutes per batch should be enough for 1000 tracks
-                )
-
-                if not raw_output:
-                    self.console_logger.info("Batch %d returned empty result, assuming end of tracks", batch_count)
+                batch_result = await self._process_single_batch(batch_count, offset, batch_size)
+                if batch_result is None:
+                    # Error occurred or reached end
                     break
 
-                # Parse the batch
-                batch_tracks = parse_tracks(raw_output, self.error_logger)
-
-                if not batch_tracks:
-                    self.console_logger.info("Batch %d contained no valid tracks, assuming end", batch_count)
-                    break
-
-                # Validate each track for security
-                validated_tracks: list[TrackDict] = []
-                for track in batch_tracks:
-                    try:
-                        # Convert TrackDict to dict[str, Any] for validation
-                        track_dict: dict[str, Any] = {
-                            "id": track.id,
-                            "artist": track.artist,
-                            "name": track.name,
-                            "album": track.album,
-                            "genre": track.genre,
-                            "year": track.year,
-                            "date_added": track.date_added,
-                            "track_status": track.track_status,
-                        }
-                        aa = track.get("album_artist")
-                        if aa is not None:
-                            track_dict["album_artist"] = aa
-                        validated_dict = self.security_validator.validate_track_data(track_dict)
-                        validated_track = TrackDict(**validated_dict)
-                        validated_tracks.append(validated_track)
-                    except SecurityValidationError as e:
-                        self.error_logger.warning(
-                            "Security validation failed for track %s: %s",
-                            track.get("id", "unknown"),
-                            e,
-                        )
-                        continue
-
+                validated_tracks, should_continue = batch_result
                 all_tracks.extend(validated_tracks)
 
-                self.console_logger.info(
-                    "Batch %d: fetched %d tracks, validated %d/%d, total so far: %d",
-                    batch_count,
-                    len(batch_tracks),
-                    len(validated_tracks),
-                    len(batch_tracks),
-                    len(all_tracks),
-                )
+                if not should_continue:
+                    break
 
                 # Move to the next batch
                 offset += batch_size
-
-                # Safety check - only stop if we got 0 tracks (actual end of library)
-                # Note: AppleScript may return fewer tracks due to filtering, not end of library
-                if len(batch_tracks) == 0:
-                    self.console_logger.info("Batch %d returned 0 tracks, reached actual end of library", batch_count)
-                    break
-                if len(batch_tracks) < batch_size:
-                    self.console_logger.info(
-                        "Batch %d returned %d < %d tracks (some tracks filtered by AppleScript), continuing...",
-                        batch_count,
-                        len(batch_tracks),
-                        batch_size,
-                    )
 
             except (OSError, ValueError, RuntimeError) as e:
                 self.error_logger.exception("Error in batch %d (offset=%d): %s", batch_count, offset, e)
@@ -424,6 +360,66 @@ class TrackProcessor:
         self.console_logger.info("Batch processing completed: %d batches processed, %d total tracks fetched", batch_count, len(all_tracks))
 
         return all_tracks
+
+    async def _process_single_batch(
+        self, batch_count: int, offset: int, batch_size: int
+    ) -> tuple[list[TrackDict], bool] | None:
+        """Process a single batch of tracks.
+
+        Args:
+            batch_count: Current batch number for logging
+            offset: Starting offset for this batch
+            batch_size: Number of tracks to fetch in this batch
+
+        Returns:
+            Tuple of (validated_tracks, should_continue) or None if error/end
+        """
+        # Call AppleScript with batch parameters
+        args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
+
+        raw_output = await self.ap_client.run_script(
+            "fetch_tracks.scpt",
+            args,
+            timeout=300,  # 5 minutes per batch should be enough for 1000 tracks
+        )
+
+        if not raw_output:
+            self.console_logger.info("Batch %d returned empty result, assuming end of tracks", batch_count)
+            return None
+
+        # Parse the batch
+        batch_tracks = parse_tracks(raw_output, self.error_logger)
+
+        if not batch_tracks:
+            self.console_logger.info("Batch %d contained no valid tracks, assuming end", batch_count)
+            return None
+
+        # Validate each track for security
+        validated_tracks = self._validate_tracks_security(batch_tracks)
+
+        self.console_logger.info(
+            "Batch %d: fetched %d tracks, validated %d/%d",
+            batch_count,
+            len(batch_tracks),
+            len(validated_tracks),
+            len(batch_tracks),
+        )
+
+        # Safety check - only stop if we got 0 tracks (actual end of library)
+        # Note: AppleScript may return fewer tracks due to filtering, not end of library
+        should_continue = True
+        if len(batch_tracks) == 0:
+            self.console_logger.info("Batch %d returned 0 tracks, reached actual end of library", batch_count)
+            should_continue = False
+        elif len(batch_tracks) < batch_size:
+            self.console_logger.info(
+                "Batch %d returned %d < %d tracks (some tracks filtered by AppleScript), continuing...",
+                batch_count,
+                len(batch_tracks),
+                batch_size,
+            )
+
+        return validated_tracks, should_continue
 
     async def _update_property(
         self,
@@ -465,38 +461,54 @@ class TrackProcessor:
             )
 
             # Check result - distinguish between actual changes and no-ops
-            if result:
-                if "Success" in result:
-                    self.console_logger.debug(
-                        "Updated %s for track %s: %s",
-                        property_name,
-                        track_id,
-                        result,
-                    )
-                    return True, True  # Success and actual change made
-                if "No Change" in result:
-                    self.console_logger.debug(
-                        "No change needed for %s track %s: %s",
-                        property_name,
-                        track_id,
-                        result,
-                    )
-                    return True, False  # Success but no change needed
-                self.error_logger.warning(
-                    "Failed to update %s for track %s: %s",
+            return self._process_update_result(result, property_name, track_id)
+        except (OSError, ValueError, RuntimeError):
+            self.error_logger.exception(
+                "Error updating property %s for track %s",
+                property_name,
+                track_id,
+            )
+        return False, False  # Failed operation
+
+    def _process_update_result(self, result: str | None, property_name: str, track_id: str) -> tuple[bool, bool]:
+        """Process the result of an AppleScript update operation.
+
+        Args:
+            result: Result string from AppleScript execution
+            property_name: Name of the property that was updated
+            track_id: ID of the track that was updated
+
+        Returns:
+            Tuple of (success, changed) where:
+            - success: True if operation completed successfully
+            - changed: True if actual change was made to track metadata
+        """
+        if result:
+            if "Success" in result:
+                self.console_logger.debug(
+                    "Updated %s for track %s: %s",
                     property_name,
                     track_id,
                     result,
                 )
-            else:
-                self.error_logger.warning(
-                    "No response when updating %s for track %s",
+                return True, True  # Success and actual change made
+            if "No Change" in result:
+                self.console_logger.debug(
+                    "No change needed for %s track %s: %s",
                     property_name,
                     track_id,
+                    result,
                 )
-        except (OSError, ValueError, RuntimeError):
-            self.error_logger.exception(
-                "Error updating property %s for track %s",
+                return True, False  # Success but no change needed
+            self.error_logger.warning(
+                "Failed to update %s for track %s: %s",
+                property_name,
+                track_id,
+                result,
+            )
+        else:
+            self.error_logger.warning(
+                "No response when updating %s for track %s",
                 property_name,
                 track_id,
             )
