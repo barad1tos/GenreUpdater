@@ -5,6 +5,7 @@ This module handles fetching and updating album years from external APIs.
 
 import asyncio
 import logging
+
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -23,6 +24,18 @@ from src.utils.data.protocols import (
 from src.utils.data.validators import is_valid_year
 from src.utils.monitoring import Analytics
 from src.utils.monitoring.reports import save_changes_report
+
+
+def is_empty_year(year_value: Any) -> bool:
+    """Check if a year value is considered empty.
+
+    Args:
+        year_value: Year value to check
+
+    Returns:
+        True if the year is empty (None, empty string, or whitespace-only)
+    """
+    return not year_value or not str(year_value).strip()
 
 
 def _is_reasonable_year(year: str) -> bool:
@@ -354,23 +367,59 @@ class YearRetriever:
         return successful, failed
 
     @staticmethod
+    def normalize_collaboration_artist(artist: str) -> str:
+        """Normalize collaboration artists to main artist.
+
+        For collaborations like "Main Artist & Other" or "Main Artist feat. Other",
+        extract the main artist to group all tracks together.
+
+        Args:
+            artist: Artist name potentially containing collaborations
+
+        Returns:
+            Main artist name for grouping
+        """
+        # Common collaboration separators
+        separators = [" & ", " feat. ", " feat ", " ft. ", " ft ", " vs. ", " vs ", " with ", " and ", " x ", " X "]
+
+        return next(
+            (
+                artist.split(separator)[0].strip()
+                for separator in separators
+                if separator in artist
+            ),
+            artist,
+        )
+
+    @staticmethod
     def _group_tracks_by_album(
         tracks: list[TrackDict],
     ) -> dict[tuple[str, str], list[TrackDict]]:
-        """Group tracks by album (artist, album) key.
+        """Group tracks by album (album_artist, album) key.
+
+        Uses album_artist instead of artist to properly handle collaboration tracks
+        where multiple artists appear on the same album.
 
         Args:
             tracks: List of tracks to group
 
         Returns:
-            Dictionary mapping (artist, album) tuples to lists of tracks
+            Dictionary mapping (album_artist, album) tuples to lists of tracks
 
         """
         albums: dict[tuple[str, str], list[TrackDict]] = defaultdict(list)
         for track in tracks:
-            artist = str(track.get("artist", ""))
+            # Use album_artist instead of artist for grouping to handle collaborations properly
+            # This ensures tracks with different artists but same album_artist are grouped together
+            album_artist = str(track.get("album_artist", ""))
             album = str(track.get("album", ""))
-            album_key = (artist, album)
+
+            # Fallback to normalized artist if album_artist is empty
+            if not album_artist or not album_artist.strip():
+                raw_artist = str(track.get("artist", ""))
+                album_artist = YearRetriever.normalize_collaboration_artist(raw_artist)
+
+            album_key = (album_artist, album)
             albums[album_key].append(track)
         return albums
 
@@ -389,7 +438,7 @@ class YearRetriever:
             True if the album should be skipped, False otherwise
 
         """
-        if tracks_with_empty_year := [track for track in album_tracks if not track.get("year") or not str(track.get("year", "")).strip()]:
+        if tracks_with_empty_year := [track for track in album_tracks if is_empty_year(track.get("year"))]:
             self.console_logger.info(
                 "Album '%s - %s' has %d tracks with empty/null year - will process",
                 artist,
@@ -409,20 +458,42 @@ class YearRetriever:
             self.console_logger.debug("Album '%s - %s' has no valid years - will process", artist, album)
             return False
 
-        # 3. Check for year consistency - ONLY skip if ALL tracks have SAME year
+        # 3. Check for year consistency - ONLY skip if ALL tracks have SAME year AND SAME release_year
         unique_years = set(non_empty_years)
 
-        if len(unique_years) == 1:
-            # All tracks have the same valid year - skip
+        # Also check release_year consistency
+        non_empty_release_years = [
+            str(track.get("release_year"))
+            for track in album_tracks
+            if track.get("release_year") and str(track.get("release_year")).strip() and is_valid_year(track.get("release_year"))
+        ]
+        unique_release_years = set(non_empty_release_years) if non_empty_release_years else set()
+
+        if len(unique_years) == 1 and len(unique_release_years) <= 1:
+            # All tracks have the same valid year AND consistent release_year - skip
             year = next(iter(unique_years))
+            release_year = next(iter(unique_release_years)) if unique_release_years else "N/A"
             self.console_logger.debug(
-                "Skipping '%s - %s' (all %d tracks have same year: %s)",
+                "Skipping '%s - %s' (all %d tracks have same year: %s, release_year: %s)",
                 artist,
                 album,
                 len(non_empty_years),
                 year,
+                release_year,
             )
             return True
+
+        # Check if we need to process due to release_year inconsistency
+        if len(unique_years) == 1:
+            self.console_logger.info(
+                "Album '%s - %s' has consistent year (%s) but inconsistent release_years: %s - will process",
+                artist,
+                album,
+                next(iter(unique_years)),
+                ", ".join(f"{ry}" for ry in unique_release_years),
+            )
+            return False
+
 
         # Multiple different years - process for dominant year logic
         year_counts = Counter(non_empty_years)
@@ -582,7 +653,7 @@ class YearRetriever:
 
         """
         # Treat empty/null year as needing update
-        if not current_year or not str(current_year).strip():
+        if is_empty_year(current_year):
             return True
         # Update if year is different
         return str(current_year) != target_year
@@ -732,8 +803,11 @@ class YearRetriever:
             changes_log: List to append change entries to
 
         """
+        self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
+
         # Check if all tracks are prerelease (read-only)
         if await self._check_album_prerelease_status(artist, album, album_tracks):
+            self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks prerelease", artist, album)
             return
 
         # Check for prerelease albums (future years)
@@ -743,7 +817,50 @@ class YearRetriever:
 
         # Check if we should skip this album due to existing years
         if self._should_skip_album_due_to_existing_years(album_tracks, artist, album):
+            self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks have same year", artist, album)
             return
+
+        if dominant_year := self._get_dominant_year(album_tracks):
+            # Check for inconsistent years in the album
+            non_empty_years = [
+                str(track.get("year"))
+                for track in album_tracks
+                if track.get("year") and str(track.get("year")).strip()
+            ]
+            unique_years = set(non_empty_years) if non_empty_years else set()
+
+            # Apply dominant year if there are empty tracks OR inconsistent years
+            tracks_needing_update = [
+                track for track in album_tracks if is_empty_year(track.get("year"))
+            ]
+
+            # Add tracks with inconsistent years (if album has multiple different years)
+            if len(unique_years) > 1:
+                tracks_needing_update.extend([
+                    track for track in album_tracks
+                    if track.get("year") and str(track.get("year")).strip() != dominant_year
+                ])
+
+            if tracks_needing_update := list(
+                {
+                    track.get("id"): track for track in tracks_needing_update
+                }.values()
+            ):
+                empty_count = len([t for t in tracks_needing_update if is_empty_year(t.get("year"))])
+                inconsistent_count = len(tracks_needing_update) - empty_count
+
+                self.console_logger.info(
+                    "Applying dominant year %s to %d tracks (%d empty, %d inconsistent) in '%s - %s'",
+                    dominant_year,
+                    len(tracks_needing_update),
+                    empty_count,
+                    inconsistent_count,
+                    artist,
+                    album
+                )
+                # Apply dominant year directly to tracks and update Music.app
+                await self._update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
+                return
 
         # Determine the year for this album
         year = await self._determine_album_year(artist, album, album_tracks)
@@ -814,7 +931,9 @@ class YearRetriever:
             )
 
             # Process each album in the batch
+            # Note: artist is actually album_artist due to grouping logic change
             for (artist, album), album_tracks in batch:
+                self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist, album)
                 await self._process_single_album(artist, album, album_tracks, updated_tracks, changes_log)
 
             # Delay between batches to respect rate limits
@@ -858,7 +977,7 @@ class YearRetriever:
 
             # Summary with detailed statistics
             albums_processed = len({f"{t.get('artist', '')} - {t.get('album', '')}" for t in tracks if t.get("album")})
-            albums_with_empty_year = len([t for t in tracks if not t.get("year")])
+            albums_with_empty_year = len([t for t in tracks if is_empty_year(t.get("year"))])
 
             self.console_logger.info(
                 "Album year update complete: %d tracks updated from %d albums processed (%d had empty years)",
@@ -921,6 +1040,40 @@ class YearRetriever:
         # Could be extended to use Discogs-specific features
         return await self._update_album_years_logic(tracks)
 
+    def _check_release_year_inconsistency(self, tracks: list[TrackDict], years: list[str], most_common_year: str) -> str | None:
+        """Check if all tracks have same year but different release_years."""
+        if len(set(years)) != 1:  # Not all tracks have same year
+            return None
+
+        release_years = [
+            str(track.get("release_year"))
+            for track in tracks
+            if track.get("release_year") and str(track.get("release_year")).strip()
+        ]
+        if len(set(release_years)) > 1:
+            self.console_logger.info(
+                "All tracks have same year %s but inconsistent release_years %s - using consistent track year",
+                most_common_year,
+                ", ".join(sorted(set(release_years)))
+            )
+            return most_common_year
+        return None
+
+    def _check_year_parity(self, year_counts: Counter[str]) -> bool:
+        """Check if there's parity between top years."""
+        top_two: list[tuple[str, int]] = year_counts.most_common(self.TOP_YEARS_COUNT)
+        if len(top_two) != self.TOP_YEARS_COUNT:
+            return False
+
+        diff = abs(top_two[0][1] - top_two[1][1])
+        if diff <= self.PARITY_THRESHOLD:
+            self.console_logger.info(
+                "Year parity detected: %s (%d) vs %s (%d) - need API",
+                top_two[0][0], top_two[0][1], top_two[1][0], top_two[1][1]
+            )
+            return True
+        return False
+
     def _get_dominant_year(self, tracks: list[TrackDict]) -> str | None:
         """Find dominant year among tracks using majority rule.
 
@@ -946,10 +1099,18 @@ class YearRetriever:
 
         # Count frequency
         year_counts: Counter[str] = Counter(years)
-        total_album_tracks = len(tracks)  # Use ALL album tracks for percentage calculation
+        total_album_tracks = len(tracks)
+        most_common: tuple[str, int] = year_counts.most_common(1)[0]
+        tracks_with_empty_year = [
+            track for track in tracks
+            if is_empty_year(track.get("year"))
+        ]
+
+        # Check for release_year inconsistency case
+        if result := self._check_release_year_inconsistency(tracks, years, most_common[0]):
+            return result
 
         # Check for clear majority (>50% of ALL album tracks)
-        most_common: tuple[str, int] = year_counts.most_common(1)[0]
         if most_common[1] > total_album_tracks / 2:
             self.console_logger.info(
                 "Dominant year %s found (%d/%d tracks - %.1f%%)",
@@ -960,17 +1121,34 @@ class YearRetriever:
             )
             return most_common[0]
 
-        # Check for parity or close competition among tracks WITH years
-        top_two: list[tuple[str, int]] = year_counts.most_common(self.TOP_YEARS_COUNT)
-        if len(top_two) == self.TOP_YEARS_COUNT:
-            diff = abs(top_two[0][1] - top_two[1][1])
-            if diff <= self.PARITY_THRESHOLD:  # Parity detection threshold
-                self.console_logger.info(
-                    "Year parity detected: %s (%d) vs %s (%d) - need API", top_two[0][0], top_two[0][1], top_two[1][0], top_two[1][1]
-                )
-                return None  # Need API to resolve
+        # Handle albums with inconsistent years or collaboration albums
+        result_year = None
+        if len(year_counts) > 1:  # Album has inconsistent years
+            self.console_logger.info(
+                "Inconsistent album years detected: %s - using most common year %s (%d/%d tracks - %.1f%%)",
+                dict(year_counts),
+                most_common[0],
+                most_common[1],
+                total_album_tracks,
+                (most_common[1] / total_album_tracks) * 100,
+            )
+            result_year = most_common[0]
+        elif tracks_with_empty_year and years:  # COLLABORATION FIX
+            self.console_logger.info(
+                "Using available year %s for %d tracks without years (collaboration album pattern)",
+                most_common[0],
+                len(tracks_with_empty_year)
+            )
+            result_year = most_common[0]
 
-        # Most frequent year but not the majority of album - log with album context
+        if result_year:
+            return result_year
+
+        # Check for parity
+        if self._check_year_parity(year_counts):
+            return None
+
+        # Most frequent year but not the majority of album
         self.console_logger.info(
             "No dominant year: %s has %d/%d album tracks (%.1f%%) - need API",
             most_common[0],
@@ -978,7 +1156,7 @@ class YearRetriever:
             total_album_tracks,
             (most_common[1] / total_album_tracks) * 100,
         )
-        return None  # Changed: Don't return plurality winner, go to API instead
+        return None
 
     def _get_consensus_release_year(self, tracks: list[TrackDict]) -> str | None:
         """Get release_year if all tracks agree (consensus).

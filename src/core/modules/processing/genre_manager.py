@@ -51,6 +51,21 @@ class GenreManager:
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
 
+    @staticmethod
+    def _is_missing_or_unknown_genre(track: TrackDict) -> bool:
+        genre_val = track.get("genre", "")
+        return not isinstance(genre_val, str) or not genre_val.strip() or genre_val.strip().lower() in {"unknown", ""}
+
+    @staticmethod
+    def _parse_date_added(track: TrackDict) -> datetime | None:
+        try:
+            date_added_str = track.get("date_added", "")
+            if isinstance(date_added_str, str) and date_added_str:
+                return datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+        except (ValueError, TypeError):
+            return None
+        return None
+
     def _filter_tracks_for_incremental_update(
         self,
         tracks: list[TrackDict],
@@ -71,34 +86,36 @@ class GenreManager:
             return tracks
 
         new_tracks: list[TrackDict] = []
+        missing_genre_tracks: list[TrackDict] = []
+
         for track in tracks:
-            try:
-                # Parse the date_added field
-                date_added_str = track.get("date_added", "")
-                if not date_added_str or not isinstance(date_added_str, str):
-                    continue
+            # Always include tracks with empty/unknown genre to repair metadata
+            if self._is_missing_or_unknown_genre(track):
+                missing_genre_tracks.append(track)
 
-                # Parse datetime from string format "YYYY-MM-DD HH:MM:SS"
-                date_added = datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+            # Include if added after last run
+            date_added = self._parse_date_added(track)
+            if date_added and date_added > last_run_time:
+                new_tracks.append(track)
 
-                # Compare with the last run time
-                if date_added > last_run_time:
-                    new_tracks.append(track)
-
-            except (ValueError, TypeError) as e:
-                self.error_logger.warning(
-                    "Error parsing date_added for track %s: %s",
-                    track.get("id", "unknown"),
-                    e,
-                )
+        # Deduplicate by track id, prioritizing new_tracks entries
+        seen: set[str] = set()
+        combined: list[TrackDict] = []
+        for t in new_tracks + missing_genre_tracks:
+            tid = str(t.get("id", ""))
+            if not tid or tid in seen:
                 continue
+            seen.add(tid)
+            combined.append(t)
 
         self.console_logger.info(
-            "Found %d new tracks added since %s",
+            "Found %d new tracks since %s; including %d with missing/unknown genre (combined %d)",
             len(new_tracks),
             last_run_time.strftime("%Y-%m-%d %H:%M:%S"),
+            len(missing_genre_tracks),
+            len(combined),
         )
-        return new_tracks
+        return combined
 
     async def _update_track_genre(
         self,
@@ -260,14 +277,15 @@ class GenreManager:
     async def _process_artist_genres(
         self,
         artist_name: str,
-        artist_tracks: list[TrackDict],
+        all_artist_tracks: list[TrackDict],
         force_update: bool,
+        tracks_to_update: list[TrackDict] | None = None,
     ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
         """Process all tracks for a single artist.
 
         Args:
             artist_name: Name of the artist
-            artist_tracks: All tracks by this artist
+            all_artist_tracks: All tracks by this artist
             force_update: Whether to force update all tracks
 
         Returns:
@@ -276,7 +294,7 @@ class GenreManager:
         """
         # Determine dominant genre
         dominant_genre = determine_dominant_genre_for_artist(
-            artist_tracks,
+            all_artist_tracks,
             self.error_logger,
         )
 
@@ -288,11 +306,14 @@ class GenreManager:
         # Dominant genre determined, but individual track updates will be logged separately if needed
 
         # DEBUG: Log track details for specific artists
-        self._log_artist_debug_info(artist_name, artist_tracks)
+        self._log_artist_debug_info(artist_name, all_artist_tracks)
 
         # Create update tasks
+        # Decide which tracks to update
+        target_tracks = tracks_to_update if tracks_to_update is not None else all_artist_tracks
+
         update_tasks: list[Any] = []
-        for track in artist_tracks:
+        for track in target_tracks:
             task = asyncio.create_task(self._update_track_genre(track, dominant_genre, force_update))
             update_tasks.append(task)
 
@@ -328,22 +349,18 @@ class GenreManager:
             Tuple of (all_updated_tracks, all_change_logs)
 
         """
-        # Filter tracks for incremental update if not forcing
-        tracks_to_process = self._filter_tracks_for_incremental_update(tracks, last_run_time) if not force and last_run_time else tracks
+        # Group all tracks by artist (we will compute per-artist dominant on full set,
+        # and then choose per-track updates incrementally)
+        grouped_tracks = group_tracks_by_artist(tracks)
 
-        if not tracks_to_process:
+        if not grouped_tracks:
             self.console_logger.info("No tracks to process for genre updates")
             return [], []
-
-        # Group tracks by artist
-        grouped_tracks = group_tracks_by_artist(
-            tracks_to_process,
-        )
 
         self.console_logger.info(
             "Processing genres for %d artists with %d total tracks",
             len(grouped_tracks),
-            len(tracks_to_process),
+            len(tracks),
         )
 
         # Process each artist
@@ -354,28 +371,18 @@ class GenreManager:
         concurrent_limit = self.config.get("genre_update", {}).get("concurrent_limit", 5)
         semaphore = asyncio.Semaphore(concurrent_limit)
 
-        async def process_artist_with_semaphore(
-            current_artist_name: str, current_artist_tracks: list[TrackDict]
-        ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
-            """Process all tracks for a single artist using semaphore for concurrency control.
-
-            This function ensures that only a limited number of artists are processed concurrently.
-
-            Args:
-                current_artist_name: Name of the artist.
-                current_artist_tracks: List of tracks by the artist.
-
-            Returns:
-                Tuple containing a list of updated tracks and a list of change log entries.
-
-            """
-            async with semaphore:
-                return await self._process_artist_genres(current_artist_name, current_artist_tracks, force)
-
-        # Create tasks for all artists
+        # Create tasks for all artists via a thin wrapper to reduce complexity here
         artist_tasks: list[Any] = []
         for artist_name, artist_tracks in grouped_tracks.items():
-            task = asyncio.create_task(process_artist_with_semaphore(artist_name, artist_tracks))
+            task = asyncio.create_task(
+                self._process_single_artist_wrapper(
+                    artist_name=artist_name,
+                    artist_tracks=artist_tracks,
+                    last_run=last_run_time,
+                    force=force,
+                    semaphore=semaphore,
+                )
+            )
             artist_tasks.append(task)
 
         # Process all artists
@@ -394,6 +401,76 @@ class GenreManager:
         )
 
         return all_updated_tracks, all_change_logs
+
+    async def _process_single_artist_wrapper(
+        self,
+        artist_name: str,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force: bool,
+        semaphore: asyncio.Semaphore,
+    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+        """Select tracks for update and process a single artist under a semaphore.
+
+        Args:
+            artist_name: The artist name.
+            artist_tracks: All tracks for the artist.
+            last_run: Last run timestamp for incremental logic.
+            force: Force updates regardless of filters.
+            semaphore: Concurrency guard for processing.
+
+        Returns:
+            Tuple of (updated_tracks, change_logs) for this artist.
+        """
+        dominant = determine_dominant_genre_for_artist(artist_tracks, self.error_logger)
+        to_update = self._select_tracks_to_update_for_artist(artist_tracks, last_run, force, dominant)
+        if not to_update:
+            return [], []
+        async with semaphore:
+            return await self._process_artist_genres(artist_name, artist_tracks, force, to_update)
+
+    def _select_tracks_to_update_for_artist(
+        self,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force_flag: bool,
+        dominant_genre: str | None,
+    ) -> list[TrackDict]:
+        """Build list of tracks for update based on incremental rules and dominance.
+
+        - Always include tracks with missing/unknown genre.
+        - Include tracks added after last_run.
+        - Include tracks whose genre differs from dominant_genre.
+        - If force_flag is True, include all tracks.
+        """
+        if not dominant_genre and not force_flag:
+            return []
+
+        candidates: list[TrackDict] = []
+        for t in artist_tracks:
+            if force_flag or self._is_missing_or_unknown_genre(t):
+                candidates.append(t)
+                continue
+
+            added_dt = self._parse_date_added(t)
+            if last_run is not None and added_dt and added_dt > last_run:
+                candidates.append(t)
+                continue
+
+            genre_val = t.get("genre", "")
+            if isinstance(genre_val, str) and genre_val.strip() and dominant_genre and (genre_val != dominant_genre):
+                candidates.append(t)
+
+        # De-duplicate by id
+        seen_ids: set[str] = set()
+        unique: list[TrackDict] = []
+        for t in candidates:
+            tid = str(t.get("id", ""))
+            if not tid or tid in seen_ids:
+                continue
+            seen_ids.add(tid)
+            unique.append(t)
+        return unique
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Get the list of dry-run actions recorded.

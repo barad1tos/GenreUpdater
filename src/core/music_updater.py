@@ -293,6 +293,41 @@ class MusicUpdater:
                 compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
             )
 
+    @staticmethod
+    async def _filter_tracks_for_artist(all_tracks: list[ "TrackDict" ], artist: str) -> list[ "TrackDict" ]:
+        """Filter tracks to include main artist and collaborations."""
+        filtered_tracks = []
+        for track in all_tracks:
+            track_artist = str(track.get("artist", ""))
+            normalized_artist = YearRetriever.normalize_collaboration_artist(track_artist)
+            if normalized_artist == artist:
+                filtered_tracks.append(track)
+        return filtered_tracks
+
+    async def _get_tracks_for_year_update(self, artist: str | None) -> list["TrackDict"] | None:
+        """Get tracks for year update based on artist filter."""
+        if artist:
+            # Get all tracks (no AppleScript filter)
+            all_tracks = await self.track_processor.fetch_tracks_async()
+            if not all_tracks:
+                self.console_logger.warning("No tracks found")
+                return None
+
+            # Filter tracks to include main artist and collaborations
+            filtered_tracks = await self._filter_tracks_for_artist(all_tracks, artist)
+            if not filtered_tracks:
+                self.console_logger.warning(f"No tracks found for artist: {artist} (including collaborations)")
+                return None
+
+            self.console_logger.info(f"Found {len(filtered_tracks)} tracks for artist '{artist}' (including collaborations)")
+            return filtered_tracks
+        # Fetch all tracks normally
+        fetched_tracks: list[TrackDict] = await self.track_processor.fetch_tracks_async(artist=artist)
+        if not fetched_tracks:
+            self.console_logger.warning("No tracks found")
+            return None
+        return fetched_tracks
+
     async def run_update_years(self, artist: str | None, force: bool) -> None:
         """Update album years for all or specific artist.
 
@@ -306,10 +341,8 @@ class MusicUpdater:
             f" for artist: {artist}" if artist else " for all artists",
         )
 
-        # Fetch tracks
-        tracks = await self.track_processor.fetch_tracks_async(artist=artist)
+        tracks = await self._get_tracks_for_year_update(artist)
         if not tracks:
-            self.console_logger.warning("No tracks found")
             return
 
         # Process album years
@@ -418,11 +451,12 @@ class MusicUpdater:
 
         # Execute the three main steps
         cleaned_tracks = await self._clean_all_tracks_metadata(tracks)
-        updated_genre_tracks = await self._update_all_genres(cleaned_tracks, last_run_time, force)
+        # Use the full track set for genre updates; cleaning returns only changed items
+        await self._update_all_genres(tracks, last_run_time, force)
 
-        # Use filtered tracks from genre updates for year updates (incremental optimization)
-        tracks_for_years = updated_genre_tracks if not force and last_run_time and updated_genre_tracks else tracks
-        await self._update_all_years(tracks_for_years, force)
+        # Always use all tracks for year updates to ensure dominant year logic runs
+        # This ensures albums with inconsistent years are processed properly
+        await self._update_all_years(tracks, force)
 
         # Save combined results
         await self._save_pipeline_results()

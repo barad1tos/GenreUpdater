@@ -32,6 +32,7 @@ class TrackField(IntEnum):
     ID = 0
     NAME = auto()
     ARTIST = auto()
+    ALBUM_ARTIST = auto()  # Album artist field from AppleScript
     ALBUM = auto()
     GENRE = auto()
     DATE_ADDED = auto()
@@ -94,7 +95,8 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     # Extract optional track_status field if available
     track_status = _extract_optional_field(fields, TrackField.TRACK_STATUS)
 
-    return TrackDict(
+    # Build base TrackDict
+    track = TrackDict(
         id=fields[TrackField.ID].strip(),
         name=fields[TrackField.NAME].strip(),
         artist=fields[TrackField.ARTIST].strip(),
@@ -107,6 +109,13 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         new_year=new_year,
         year=old_year,  # Add current year field for year_retriever to access
     )
+
+    if album_artist_value := _extract_optional_field(
+        fields, TrackField.ALBUM_ARTIST
+    ):
+        track.__dict__["album_artist"] = album_artist_value
+
+    return track
 
 
 def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]:
@@ -572,6 +581,7 @@ def clean_names(
     return cleaned_track, cleaned_album
 
 
+# noinspection PyArgumentEqualDefault
 def _check_osascript_availability(error_logger: logging.Logger) -> bool:
     """Check if osascript is available and execute Music app status check.
 
@@ -599,9 +609,9 @@ def _check_osascript_availability(error_logger: logging.Logger) -> bool:
         [osascript_path, "-e", apple_script],
         capture_output=True,
         text=True,
-        check=False,  # Explicit for security - we handle errors explicitly
-        timeout=10,  # 10 second timeout to prevent hanging
-        shell=False,  # SECURITY: Never use shell=True to prevent injection
+        check=False,
+        timeout=10,
+        shell=False,
     )
     # Log stderr from osascript if any
     if result.stderr:
