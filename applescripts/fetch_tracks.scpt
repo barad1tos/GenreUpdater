@@ -32,7 +32,8 @@ on run argv
     tell application "Music"
         -- Get a reference to all tracks to be processed
         if selectedArtist is not "" then
-            set trackObjects to (every track of library playlist 1 whose artist is selectedArtist)
+            -- Include tracks where either track artist or album artist matches the filter
+            set trackObjects to (every track of library playlist 1 whose (artist contains selectedArtist) or (album artist contains selectedArtist))
         else if batchLimit > 0 then
             -- Batch mode: get tracks from offset to offset+limit-1
             set allTracks to (every track of library playlist 1)
@@ -79,8 +80,12 @@ on run argv
                     set track_status to statusText -- Already a clean string
 
                     set raw_year to (year of currentTrack)
-                    if class of raw_year is integer and raw_year is not 0 then
-                        set track_year to raw_year as text
+                    if class of raw_year is integer then
+                        if raw_year is 0 then
+                            set track_year to ""
+                        else
+                            set track_year to raw_year as text
+                        end if
                     else
                         set track_year to ""
                     end if
