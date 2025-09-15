@@ -158,10 +158,7 @@ async def test_apply_year_reverts_matches_by_id_and_album_name(monkeypatch: pyte
 
     updated, missing, change_log = await repair_utils.apply_year_reverts(
         track_processor=tp,
-        console_logger=None,
-        error_logger=None,
         artist="Otep",
-        album=None,
         targets=targets,
     )
 
@@ -169,4 +166,3 @@ async def test_apply_year_reverts_matches_by_id_and_album_name(monkeypatch: pyte
     assert missing == 0
     assert sorted(tp.updated) == [("1", "2013"), ("2", "2016")]
     assert len(change_log) == 2
-
