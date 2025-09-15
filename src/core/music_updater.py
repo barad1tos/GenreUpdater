@@ -178,6 +178,8 @@ class MusicUpdater:
         if not track_id:
             return None, None
 
+
+
         # Clean names using the existing utility
         cleaned_track_name, cleaned_album_name = clean_names(
             artist=artist_name,
@@ -222,6 +224,56 @@ class MusicUpdater:
         )
 
         return updated_track, change_entry
+
+    async def run_revert_years(self, artist: str, album: str | None, backup_csv: str | None = None) -> None:
+        """Revert year updates for an artist (optionally per album).
+
+        Uses backup CSV if provided; otherwise uses the latest changes_report.csv.
+        """
+        from src.utils.data import repair as repair_utils
+
+        self.console_logger.info(
+            "Starting revert of year changes for '%s'%s",
+            artist,
+            f" - {album}" if album else " (all albums)",
+        )
+
+        targets = repair_utils.build_revert_targets(
+            config=self.config,
+            artist=artist,
+            album=album,
+            backup_csv_path=backup_csv,
+        )
+
+        if not targets:
+            self.console_logger.warning(
+                "No revert targets found for '%s'%s",
+                artist,
+                f" - {album}" if album else "",
+            )
+            return
+
+        updated, missing, changes_log = await repair_utils.apply_year_reverts(
+            track_processor=self.track_processor,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+            artist=artist,
+            album=album,
+            targets=targets,
+        )
+
+        self.console_logger.info("Revert complete: %d tracks updated, %d not found", updated, missing)
+
+        if changes_log:
+            revert_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_revert.csv")
+            save_changes_report(
+                changes=changes_log,
+                file_path=revert_path,
+                console_logger=self.console_logger,
+                error_logger=self.error_logger,
+                compact_mode=True,
+            )
+            self.console_logger.info("Revert changes report saved to %s", revert_path)
 
     @staticmethod
     def _create_change_log_entry(
@@ -303,6 +355,8 @@ class MusicUpdater:
             if normalized_artist == artist:
                 filtered_tracks.append(track)
         return filtered_tracks
+
+    # Otep-specific album repair removed. Use generic tools in utils.data.repair if needed.
 
     async def _get_tracks_for_year_update(self, artist: str | None) -> list["TrackDict"] | None:
         """Get tracks for year update based on artist filter."""
