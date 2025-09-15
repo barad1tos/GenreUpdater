@@ -6,10 +6,10 @@ or a backup CSV of the track list. Designed to be artist/album agnostic.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import csv
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.utils.core.logger import get_full_log_path
 

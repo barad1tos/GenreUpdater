@@ -5,7 +5,6 @@ This module handles fetching and updating album years from external APIs.
 
 import asyncio
 import logging
-
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
