@@ -22,6 +22,7 @@ import os
 import ssl
 import time
 import urllib.parse
+
 from collections import defaultdict
 from collections.abc import Coroutine
 from datetime import UTC
@@ -551,6 +552,7 @@ class ExternalApiOrchestrator:
         await self.session.close()
         self.console_logger.info("External API session closed")
 
+    # noinspection PyTypeChecker
     @staticmethod
     def _create_client_response_error(
         response: aiohttp.ClientResponse,
@@ -1247,7 +1249,7 @@ class ExternalApiOrchestrator:
 
         # Debug mode for script-specific text processing
         script_type = detect_primary_script(artist)
-        if script_type != ScriptType.LATIN and script_type != ScriptType.UNKNOWN:
+        if script_type not in {ScriptType.LATIN, ScriptType.UNKNOWN}:
             self._log_script_debug(script_type)
 
         # Normalize inputs
@@ -1285,9 +1287,11 @@ class ExternalApiOrchestrator:
         )
 
         # Get script-specific API priorities from config
-        script_priorities = self.config.year_retrieval.script_api_priorities.get(
+        year_config = self.config.get("year_retrieval", {})
+        script_api_priorities = year_config.get("script_api_priorities", {})
+        script_priorities = script_api_priorities.get(
             script_type.value,
-            self.config.year_retrieval.script_api_priorities.get("default", {})
+            script_api_priorities.get("default", {})
         )
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
         self.console_logger.info(f"{emoji} [SCRIPT_DEBUG] Primary APIs for {script_type.value}: {primary_apis}")
@@ -1395,7 +1399,7 @@ class ExternalApiOrchestrator:
 
         if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
             script_results = await self._try_script_optimized_search(
-                primary_script, artist_norm, album_norm, log_artist, log_album
+                primary_script, artist_norm, album_norm
             )
             if script_results:
                 return script_results
@@ -1418,16 +1422,16 @@ class ExternalApiOrchestrator:
         script_type: ScriptType,
         artist_norm: str,
         album_norm: str,
-        log_artist: str,
-        log_album: str
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
         self.console_logger.info(f"[API_DEBUG] {script_type.value} detected - trying script-optimized search")
 
         # Get script-specific API priorities from config
-        script_priorities = self.config.year_retrieval.script_api_priorities.get(
+        year_config = self.config.get("year_retrieval", {})
+        script_api_priorities = year_config.get("script_api_priorities", {})
+        script_priorities = script_api_priorities.get(
             script_type.value,
-            self.config.year_retrieval.script_api_priorities.get("default", {})
+            script_api_priorities.get("default", {})
         )
 
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
@@ -1476,9 +1480,9 @@ class ExternalApiOrchestrator:
 
         return None
 
-    def _get_api_client(self, api_name: str):
+    def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
         """Get API client by name."""
-        api_mapping = {
+        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient] = {
             "musicbrainz": self.musicbrainz_client,
             "discogs": self.discogs_client,
             "lastfm": self.lastfm_client,
