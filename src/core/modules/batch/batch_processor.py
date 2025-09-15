@@ -30,6 +30,7 @@ class BatchProcessor:
         self.console_logger = console_logger
         self.error_logger = error_logger
 
+    # noinspection PyTypeChecker
     async def process_from_file(
         self, file_path: str, operation: str = "full", force: bool = False
     ) -> dict[str, list[str]]:

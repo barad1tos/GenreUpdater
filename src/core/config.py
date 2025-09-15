@@ -14,6 +14,7 @@ except ImportError:
 T = TypeVar("T")
 
 
+# noinspection PyMissingOrEmptyDocstring
 class Config:
     """Configuration manager for the application."""
 
