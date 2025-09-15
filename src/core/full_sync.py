@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from src.services.cache.cache_orchestrator import CacheOrchestrator
 
 
+# noinspection PyArgumentEqualDefault
 async def run_full_resync(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
@@ -91,8 +92,8 @@ async def run_full_resync(
             cast(CacheServiceProtocol, cache_service),
             console_logger,
             error_logger,
-            partial_sync=False,  # Full sync to ensure complete synchronization
-            applescript_client=track_processor.ap_client,  # Pass AppleScript client for missing fields
+            partial_sync=False,
+            applescript_client=track_processor.ap_client,
         )
 
         console_logger.info("✨ Full resync completed successfully!")

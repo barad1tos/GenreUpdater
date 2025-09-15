@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from src.utils.data.models import TrackDict
 
 
+# noinspection PyArgumentEqualDefault,PyTypeChecker
 class MusicUpdater:
     """Orchestrates music library updates using modular components."""
 
@@ -230,7 +231,7 @@ class MusicUpdater:
 
         Uses backup CSV if provided; otherwise uses the latest changes_report.csv.
         """
-        from src.utils.data import repair as repair_utils
+        from src.utils.data import repair as repair_utils  # noqa: PLC0415
 
         self.console_logger.info(
             "Starting revert of year changes for '%s'%s",
@@ -255,10 +256,7 @@ class MusicUpdater:
 
         updated, missing, changes_log = await repair_utils.apply_year_reverts(
             track_processor=self.track_processor,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
             artist=artist,
-            album=album,
             targets=targets,
         )
 
@@ -477,6 +475,7 @@ class MusicUpdater:
             removed_count,
         )
 
+    # noinspection PyUnusedLocal
     async def run_main_pipeline(self, force: bool = False) -> None:
         """Run the main update pipeline: clean names, update genres, update years.
 

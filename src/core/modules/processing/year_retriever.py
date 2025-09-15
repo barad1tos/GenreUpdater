@@ -790,6 +790,100 @@ class YearRetriever:
                 album,
             )
 
+    async def _check_suspicious_album(self, artist: str, album: str, album_tracks: list[TrackDict]) -> bool:
+        """Check if album is suspicious and should be skipped.
+
+        Returns:
+            True if album should be skipped, False otherwise
+        """
+        try:
+            album_str = album or ""
+            non_empty_years = [
+                str(track.get("year"))
+                for track in album_tracks
+                if track.get("year") and str(track.get("year")).strip()
+            ]
+            unique_years = set(non_empty_years) if non_empty_years else set()
+            if len(album_str) <= self.SUSPICIOUS_ALBUM_MIN_LEN and len(unique_years) >= self.SUSPICIOUS_MANY_YEARS:
+                self.console_logger.warning(
+                    "Safety check: Suspicious album '%s - %s' detected (%d unique years, name length=%d). "
+                    "Skipping automatic updates and marking for verification.",
+                    artist,
+                    album,
+                    len(unique_years),
+                    len(album_str),
+                )
+                await self.pending_verification.mark_for_verification(
+                    artist,
+                    album,
+                    reason="suspicious_album_name",
+                    metadata={
+                        "unique_years": str(len(unique_years)),
+                        "album_name_length": str(len(album_str)),
+                    },
+                )
+                return True
+        except (AttributeError, TypeError, ValueError) as e:
+            # Do not fail album processing because of guard logic errors
+            self.error_logger.exception("Error during suspicious album safety check for '%s - %s': %s", artist, album, e)
+        return False
+
+    async def _process_dominant_year(
+        self,
+        artist: str,
+        album: str,
+        album_tracks: list[TrackDict],
+        dominant_year: str,
+        updated_tracks: list[TrackDict],
+        changes_log: list[dict[str, Any]],
+    ) -> bool:
+        """Process album using dominant year logic.
+
+        Returns:
+            True if processing was completed, False if should continue with regular year determination
+        """
+        # Check for inconsistent years in the album
+        non_empty_years = [
+            str(track.get("year"))
+            for track in album_tracks
+            if track.get("year") and str(track.get("year")).strip()
+        ]
+        unique_years = set(non_empty_years) if non_empty_years else set()
+
+        # Apply dominant year if there are empty tracks OR inconsistent years
+        tracks_needing_update = [
+            track for track in album_tracks if is_empty_year(track.get("year"))
+        ]
+
+        # Add tracks with inconsistent years (if album has multiple different years)
+        if len(unique_years) > 1:
+            tracks_needing_update.extend([
+                track for track in album_tracks
+                if track.get("year") and str(track.get("year")).strip() != dominant_year
+            ])
+
+        if tracks_needing_update := list(
+            {
+                track.get("id"): track for track in tracks_needing_update
+            }.values()
+        ):
+            empty_count = len([t for t in tracks_needing_update if is_empty_year(t.get("year"))])
+            inconsistent_count = len(tracks_needing_update) - empty_count
+
+            self.console_logger.info(
+                "Applying dominant year %s to %d tracks (%d empty, %d inconsistent) in '%s - %s'",
+                dominant_year,
+                len(tracks_needing_update),
+                empty_count,
+                inconsistent_count,
+                artist,
+                album
+            )
+            # Apply dominant year directly to tracks and update Music.app
+            await self._update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
+            return True
+        return False
+
     async def _process_single_album(
         self,
         artist: str,
@@ -810,36 +904,9 @@ class YearRetriever:
         """
         self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
-        # Safety guard: suspicious album names with many unique years (e.g., truncated names like 'Ot')
-        try:
-            album_str = album or ""
-            non_empty_years = [
-                str(track.get("year"))
-                for track in album_tracks
-                if track.get("year") and str(track.get("year")).strip()
-            ]
-            unique_years = set(non_empty_years) if non_empty_years else set()
-            if len(album_str) <= self.SUSPICIOUS_ALBUM_MIN_LEN and len(unique_years) >= self.SUSPICIOUS_MANY_YEARS:
-                self.console_logger.warning(
-                    "Safety check: Suspicious album '%s - %s' detected (%d unique years, name length=%d). Skipping automatic updates and marking for verification.",
-                    artist,
-                    album,
-                    len(unique_years),
-                    len(album_str),
-                )
-                await self.pending_verification.mark_for_verification(
-                    artist,
-                    album,
-                    reason="suspicious_album_name",
-                    metadata={
-                        "unique_years": str(len(unique_years)),
-                        "album_name_length": str(len(album_str)),
-                    },
-                )
-                return
-        except Exception:
-            # Do not fail album processing because of guard logic errors
-            self.error_logger.exception("Error during suspicious album safety check for '%s - %s'", artist, album)
+        # Safety guard: suspicious album names with many unique years
+        if await self._check_suspicious_album(artist, album, album_tracks):
+            return
 
         # Check if all tracks are prerelease (read-only)
         if await self._check_album_prerelease_status(artist, album, album_tracks):
@@ -856,60 +923,21 @@ class YearRetriever:
             self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks have same year", artist, album)
             return
 
-        if dominant_year := self._get_dominant_year(album_tracks):
-            # Check for inconsistent years in the album
-            non_empty_years = [
-                str(track.get("year"))
-                for track in album_tracks
-                if track.get("year") and str(track.get("year")).strip()
-            ]
-            unique_years = set(non_empty_years) if non_empty_years else set()
-
-            # Apply dominant year if there are empty tracks OR inconsistent years
-            tracks_needing_update = [
-                track for track in album_tracks if is_empty_year(track.get("year"))
-            ]
-
-            # Add tracks with inconsistent years (if album has multiple different years)
-            if len(unique_years) > 1:
-                tracks_needing_update.extend([
-                    track for track in album_tracks
-                    if track.get("year") and str(track.get("year")).strip() != dominant_year
-                ])
-
-            if tracks_needing_update := list(
-                {
-                    track.get("id"): track for track in tracks_needing_update
-                }.values()
-            ):
-                empty_count = len([t for t in tracks_needing_update if is_empty_year(t.get("year"))])
-                inconsistent_count = len(tracks_needing_update) - empty_count
-
-                self.console_logger.info(
-                    "Applying dominant year %s to %d tracks (%d empty, %d inconsistent) in '%s - %s'",
-                    dominant_year,
-                    len(tracks_needing_update),
-                    empty_count,
-                    inconsistent_count,
-                    artist,
-                    album
-                )
-                # Apply dominant year directly to tracks and update Music.app
-                await self._update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
-                return
+        # Try dominant year processing first
+        if (dominant_year := self._get_dominant_year(album_tracks)) and await self._process_dominant_year(
+            artist, album, album_tracks, dominant_year, updated_tracks, changes_log
+        ):
+            return
 
         # Determine the year for this album
         year = await self._determine_album_year(artist, album, album_tracks)
-        # Final year determination (noise reduction)
 
         # Handle case where no year was found
         if not year:
             self._handle_no_year_found(artist, album, album_tracks)
             return
 
-        # Update tracks for this album - NO FUTURE YEAR BLOCKING!
-        # Trust the year determination logic - if we found it, use it
-        # About to update tracks for album (noise reduction)
+        # Update tracks for this album
         await self._update_tracks_for_album(artist, album, album_tracks, year, updated_tracks, changes_log)
 
     async def _update_album_years_logic(
