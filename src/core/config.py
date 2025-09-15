@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, TypeVar, overload, cast
+from typing import Any, TypeVar, cast, overload
 
 from src.utils.core.config import load_config as load_yaml_config
 
