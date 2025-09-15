@@ -64,6 +64,8 @@ class Orchestrator:
                 await self._run_clean_artist(args)
             case "update_years" | "years":
                 await self._run_update_years(args)
+            case "revert_years" | "revert":
+                await self._run_revert_years(args)
             case "verify_database" | "verify-db":
                 await self._run_verify_database(args)
             case "verify_pending" | "pending":
@@ -82,6 +84,14 @@ class Orchestrator:
     async def _run_update_years(self, args: argparse.Namespace) -> None:
         """Run the update years command."""
         await self.music_updater.run_update_years(artist=getattr(args, "artist", None), force=args.force)
+
+    async def _run_revert_years(self, args: argparse.Namespace) -> None:
+        """Run the revert years command."""
+        await self.music_updater.run_revert_years(
+            artist=args.artist,
+            album=getattr(args, "album", None),
+            backup_csv=getattr(args, "backup_csv", None),
+        )
 
     async def _run_verify_database(self, args: argparse.Namespace) -> None:
         """Run the verify database command."""

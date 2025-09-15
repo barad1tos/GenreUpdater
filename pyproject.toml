@@ -20,20 +20,21 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "pydantic==2.11.9",      # Core data validation and models
-  "python-dotenv>=1.0.0",  # Configuration and environment
-  "PyYAML>=6.0.0",         # YAML configuration parsing
-  "aiohttp>=3.12.15",      # HTTP client for API requests
-  "certifi>=2024.0.0",     # SSL certificates for secure HTTPS connections
-  "cryptography>=45.0.7",  # Cryptography for secure token handling
-  "aiofiles>=23.0.0",      # File operations
-  "rich>=14.1.0",          # Console output formatting
-  "ruff>=0.13.0",          # Linting and code quality
-  "pytest>=8.4.2",         # Testing framework
-  "pytest-cov>=7.0.0",     # Test coverage
-  "mypy==1.18.1",          # Static type checking
-  "pytest-asyncio==1.2.0", # Async test support
-  "vulture>=2.14",         # Dead code detection
+  "pydantic==2.11.9",              # Core data validation and models
+  "python-dotenv>=1.0.0",          # Configuration and environment
+  "PyYAML>=6.0.0",                 # YAML configuration parsing
+  "aiohttp>=3.12.15",              # HTTP client for API requests
+  "certifi>=2024.0.0",             # SSL certificates for secure HTTPS connections
+  "cryptography>=45.0.7",          # Cryptography for secure token handling
+  "aiofiles>=23.0.0",              # File operations
+  "rich>=14.1.0",                  # Console output formatting
+  "ruff>=0.13.0",                  # Linting and code quality
+  "pytest>=8.4.2",                 # Testing framework
+  "pytest-cov>=7.0.0",             # Test coverage
+  "mypy==1.18.1",                  # Static type checking
+  "pytest-asyncio==1.2.0",         # Async test support
+  "vulture>=2.14",                 # Dead code detection
+  "types-pyyaml==6.0.12.20250915",
 ]
 
 [dependency-groups]
@@ -218,10 +219,30 @@ reportDeprecated = true
 reportIncompatibleMethodOverride = true
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests/unit"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--ignore=venv",
+  "--ignore=.venv",
+  "--ignore=.trunk",
+]
+asyncio_mode = "auto"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+  "unit: marks tests as unit tests",
+]
 # Black configuration (for compatibility)
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.black]
-line-length = 120
+line-length = 150
 target-version = ['py313']
 include = '\.pyi?$'
 extend-exclude = '''
@@ -261,28 +282,6 @@ add_ignore = [
   "D408",
   "D409",
   "D413",
-]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pytest configuration
-# ─────────────────────────────────────────────────────────────────────────────
-[tool.pytest.ini_options]
-minversion = "7.0"
-testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-  "-ra",
-  "--strict-markers",
-  "--ignore=venv",
-  "--ignore=.venv",
-  "--ignore=.trunk",
-]
-markers = [
-  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-  "integration: marks tests as integration tests",
-  "unit: marks tests as unit tests",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────

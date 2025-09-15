@@ -426,6 +426,7 @@ def calculate_memory_usage(cache_dict: dict[str, Any]) -> int:
 # ==================== NEW ARCHITECTURE INTEGRATION ====================
 # Bridge to new orchestrator-based architecture
 
+# noinspection PyUnusedImports
 class CacheBridge:
     """Bridge between legacy foundation components and new orchestrator architecture.
 

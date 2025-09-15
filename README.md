@@ -30,6 +30,7 @@ batch processing for large libraries, and comprehensive contextual logging for b
     - [Running the Script Manually](#running-the-script-manually)
     - [Command-Line Arguments](#command-line-arguments)
     - [Examples](#examples)
+    - [Revert and Repair](#revert-and-repair)
   - [Configuration Details](#configuration-details)
     - [config.yaml](#configyaml)
   - [Logging](#logging)
@@ -222,6 +223,7 @@ The script supports several command-Line arguments to customize its behavior:
 - `--dry-run`: Preview changes without actually modifying your music library.
 - `--test-mode`: Use test artists from configuration for safe testing.
 - `clean_artist --artist "Artist Name"`: Clean track and album names for a specified artist.
+- `revert_years --artist "Artist" [--album "Album"] [--backup-csv "/path/to/track_list.csv"]`: Revert year changes for an artist (optionally a single album). If `--backup-csv` is provided, years are taken from that CSV; otherwise, the latest `changes_report.csv` is used.
 
 ### Examples
 
@@ -258,6 +260,34 @@ uv run python main.py --force
 # Using standard Python
 python3 main.py --dry-run
 ```
+
+### Revert and Repair
+
+Use the built‑in revert tool to safely roll back year changes.
+
+- Revert a single album using the latest changes report:
+
+```bash
+uv run python main.py revert_years --artist "Otep" --album "The God Slayer"
+```
+
+- Revert all albums for an artist using the latest changes report:
+
+```bash
+uv run python main.py revert_years --artist "Otep"
+```
+
+- Revert from a backup CSV (global or per‑album). The tool reads `year` if present, otherwise falls back to `old_year` or `new_year` columns.
+
+```bash
+uv run python main.py revert_years --artist "Otep" --backup-csv "/path/to/backup/track_list.csv"
+uv run python main.py revert_years --artist "Otep" --album "Hydra" --backup-csv "/path/to/backup/track_list.csv"
+```
+
+Notes:
+
+- Revert matches tracks primarily by track ID (when reverting from backup CSV) or by track name within the artist/album scope (from `changes_report.csv`).
+- A CSV report is saved to `<logs_base_dir>/csv/changes_revert.csv` with applied changes.
 
 ## Configuration Details
 
@@ -507,6 +537,8 @@ your Apple Music library.
 - **Smart Filtering**: Properly handles AppleScript's "modifiable cloud status" filtering without premature termination
 - **Contextual Logging**: Enhanced monitoring with detailed track information in logs
 - **Protocol Updates**: Updated all AppleScript client protocols to support contextual parameters
+- **Revert/Repair Module**: Added a generic revert facility (`revert_years`) with support for per‑album or full‑artist rollback, using `changes_report.csv` or a user‑provided backup CSV.
+- **Safer Year Logic**: Dominant year application now requires a strong majority and includes safety checks for suspicious album groupings.
 
 ### Performance Benefits
 

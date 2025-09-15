@@ -65,6 +65,11 @@ class YearRetriever:
     MIN_VALID_YEAR = 1900  # Minimum reasonable year for music releases
     PARITY_THRESHOLD = 2  # Maximum track difference for year parity detection
     TOP_YEARS_COUNT = 2  # Number of top years to compare for parity detection
+    # Require a strong majority before applying dominant year to all tracks
+    DOMINANCE_MIN_SHARE = 0.6  # 60% of ALL album tracks must share the year
+    # Safety guard for suspicious album names (e.g., overly short, likely truncated)
+    SUSPICIOUS_ALBUM_MIN_LEN = 3  # album names with length <= 3 are suspicious
+    SUSPICIOUS_MANY_YEARS = 3  # if >= 3 unique years present, skip auto updates
 
     def __init__(
         self,
@@ -805,6 +810,37 @@ class YearRetriever:
         """
         self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
+        # Safety guard: suspicious album names with many unique years (e.g., truncated names like 'Ot')
+        try:
+            album_str = album or ""
+            non_empty_years = [
+                str(track.get("year"))
+                for track in album_tracks
+                if track.get("year") and str(track.get("year")).strip()
+            ]
+            unique_years = set(non_empty_years) if non_empty_years else set()
+            if len(album_str) <= self.SUSPICIOUS_ALBUM_MIN_LEN and len(unique_years) >= self.SUSPICIOUS_MANY_YEARS:
+                self.console_logger.warning(
+                    "Safety check: Suspicious album '%s - %s' detected (%d unique years, name length=%d). Skipping automatic updates and marking for verification.",
+                    artist,
+                    album,
+                    len(unique_years),
+                    len(album_str),
+                )
+                await self.pending_verification.mark_for_verification(
+                    artist,
+                    album,
+                    reason="suspicious_album_name",
+                    metadata={
+                        "unique_years": str(len(unique_years)),
+                        "album_name_length": str(len(album_str)),
+                    },
+                )
+                return
+        except Exception:
+            # Do not fail album processing because of guard logic errors
+            self.error_logger.exception("Error during suspicious album safety check for '%s - %s'", artist, album)
+
         # Check if all tracks are prerelease (read-only)
         if await self._check_album_prerelease_status(artist, album, album_tracks):
             self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks prerelease", artist, album)
@@ -1110,8 +1146,8 @@ class YearRetriever:
         if result := self._check_release_year_inconsistency(tracks, years, most_common[0]):
             return result
 
-        # Check for clear majority (>50% of ALL album tracks)
-        if most_common[1] > total_album_tracks / 2:
+        # Check for clear majority by configured threshold of ALL album tracks
+        if most_common[1] >= total_album_tracks * self.DOMINANCE_MIN_SHARE:
             self.console_logger.info(
                 "Dominant year %s found (%d/%d tracks - %.1f%%)",
                 most_common[0],
@@ -1121,19 +1157,9 @@ class YearRetriever:
             )
             return most_common[0]
 
-        # Handle albums with inconsistent years or collaboration albums
+        # Handle collaboration albums: some empty years but otherwise consistent
         result_year = None
-        if len(year_counts) > 1:  # Album has inconsistent years
-            self.console_logger.info(
-                "Inconsistent album years detected: %s - using most common year %s (%d/%d tracks - %.1f%%)",
-                dict(year_counts),
-                most_common[0],
-                most_common[1],
-                total_album_tracks,
-                (most_common[1] / total_album_tracks) * 100,
-            )
-            result_year = most_common[0]
-        elif tracks_with_empty_year and years:  # COLLABORATION FIX
+        if len(year_counts) == 1 and tracks_with_empty_year and years:  # COLLABORATION FIX
             self.console_logger.info(
                 "Using available year %s for %d tracks without years (collaboration album pattern)",
                 most_common[0],
@@ -1148,9 +1174,10 @@ class YearRetriever:
         if self._check_year_parity(year_counts):
             return None
 
-        # Most frequent year but not the majority of album
+        # Most frequent year but not a strong majority of album
         self.console_logger.info(
-            "No dominant year: %s has %d/%d album tracks (%.1f%%) - need API",
+            "No dominant year (below %.0f%%): %s has %d/%d album tracks (%.1f%%) - need API",
+            self.DOMINANCE_MIN_SHARE * 100,
             most_common[0],
             most_common[1],
             total_album_tracks,
