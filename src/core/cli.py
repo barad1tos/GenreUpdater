@@ -32,6 +32,33 @@ def _add_update_years_command(subparsers: Any) -> None:
         help="Artist name (optional, processes all if not specified)",
     )
 
+def _add_revert_years_command(subparsers: Any) -> None:
+    """Add revert years command."""
+    parser = subparsers.add_parser(
+        "revert_years",
+        aliases=["revert"],
+        help="Revert year changes for an artist (optionally per album)",
+        description=(
+            "Revert previously applied year updates. By default uses the latest changes_report.csv; "
+            "you can also provide a backup CSV path."
+        ),
+    )
+    parser.add_argument(
+        "--artist",
+        required=True,
+        help="Artist name to revert",
+    )
+    parser.add_argument(
+        "--album",
+        required=False,
+        help="Album name to revert (if omitted, reverts all albums for the artist)",
+    )
+    parser.add_argument(
+        "--backup-csv",
+        required=False,
+        help="Path to backup track_list.csv to use as the source of truth for years",
+    )
+
 
 class CLI:
     """Command-line interface handler."""
@@ -118,6 +145,9 @@ Examples:
 
         # Update years command
         _add_update_years_command(subparsers)
+
+        # Revert years command
+        _add_revert_years_command(subparsers)
 
         # Verify database command
         CLI._add_verify_database_command(subparsers)
