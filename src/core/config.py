@@ -13,8 +13,9 @@ except ImportError:
 
 T = TypeVar("T")
 
+# Prioritize standard config name, fallback to legacy name for compatibility
+DEFAULT_CONFIG_FILES = ["config.yaml", "my-config.yaml"]
 
-# noinspection PyMissingOrEmptyDocstring
 class Config:
     """Configuration manager for the application."""
 
@@ -29,10 +30,37 @@ class Config:
             # Load .env file if not already loaded
             if load_dotenv is not None:
                 load_dotenv()
-            config_path = os.getenv("CONFIG_PATH", "config.yaml")
+
+            # Try environment variable first, then try each default config file
+            config_path = os.getenv("CONFIG_PATH")
+            if config_path is None:
+                for default_file in DEFAULT_CONFIG_FILES:
+                    if Path(default_file).exists():
+                        config_path = default_file
+                        break
+                else:
+                    # If none exist, use the first default (standard name)
+                    config_path = DEFAULT_CONFIG_FILES[0]
+
+        # config_path is guaranteed to be not None at this point
         self.config_path = config_path
+        self._resolved_path: str | None = None
         self._config: dict[str, Any] = {}
         self._loaded = False
+
+    def _resolve_config_path(self) -> str:
+        """Resolve the configuration file path to an absolute path.
+
+        Returns:
+            Absolute path to the configuration file
+
+        """
+        load_path = Path(os.path.expandvars(self.config_path)).expanduser()
+        try:
+            return str(load_path.resolve())
+        except (OSError, ValueError):
+            # If resolve fails, use absolute path as fallback
+            return str(load_path.absolute())
 
     def load(self) -> dict[str, Any]:
         """Load configuration from the file.
@@ -42,15 +70,37 @@ class Config:
 
         """
         if not self._loaded:
-            self._config = load_yaml_config(self.config_path)
+            load_path = Path(os.path.expandvars(self.config_path)).expanduser()
+            self._config = load_yaml_config(str(load_path))
+            self._resolved_path = self._resolve_config_path()
             self._loaded = True
         return self._config
 
-    @overload
-    def get(self, key: str, default: None = None) -> Any: ...
+    @property
+    def resolved_path(self) -> str:
+        """Get the resolved absolute path to the configuration file.
+
+        Returns:
+            Absolute path to the configuration file
+
+        """
+        if self._resolved_path is None:
+            # Ensure config is loaded first
+            self.load()
+
+        # If still None after load (should not happen), resolve manually as fallback
+        if self._resolved_path is None:
+            return self._resolve_config_path()
+
+        return self._resolved_path
 
     @overload
-    def get(self, key: str, default: T) -> Any | T: ...
+    def get(self, key: str, default: None = None) -> Any:
+        """Get configuration value with None default."""
+
+    @overload
+    def get(self, key: str, default: T) -> Any | T:
+        """Get configuration value with typed default."""
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value.

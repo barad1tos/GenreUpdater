@@ -46,7 +46,7 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
 
     # Create dependency container
     deps = DependencyContainer(
-        config_path=config_manager.config_path,
+        config_path=config_manager.resolved_path,
         console_logger=logger_console,
         error_logger=logger_error,
         analytics_logger=analytics_logger,

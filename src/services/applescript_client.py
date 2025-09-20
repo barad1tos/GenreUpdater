@@ -350,7 +350,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
     Semaphore initialization is done in the async initialize method.
 
     Attributes:
-        config (dict): Configuration dictionary loaded from my-config.yaml.
+        config (dict): Configuration dictionary loaded from config.yaml or my-config.yaml.
         apple_scripts_dir (str): Directory containing AppleScript files.
         console_logger (logging.Logger): Logger for console output.
         error_logger (logging.Logger): Logger for error output.

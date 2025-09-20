@@ -110,7 +110,14 @@ async def main() -> None:
     print("=" * 55)
 
     # Determine config path - look for it in the current project directory
-    config_path = project_root / "my-config.yaml"
+    # Try standard config names in order of preference
+    for config_name in ["config.yaml", "my-config.yaml"]:
+        config_path = project_root / config_name
+        if config_path.exists():
+            break
+    else:
+        # If neither exists, use default naming
+        config_path = project_root / "config.yaml"
 
     if not config_path.exists():
         print(f"❌ Configuration file not found: {config_path}")
