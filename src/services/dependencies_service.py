@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
 
@@ -29,11 +28,11 @@ from .cache.cache_orchestrator import CacheOrchestrator
 from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
-    from src.utils.data.protocols import AppleScriptClientProtocol
     import logging
     from collections.abc import Awaitable
 
     from src.utils.core.logger import SafeQueueListener
+    from src.utils.data.protocols import AppleScriptClientProtocol
 
 T = TypeVar("T")
 
