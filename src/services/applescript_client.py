@@ -17,8 +17,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from src.utils.monitoring import Analytics
 from src.utils.data.protocols import AppleScriptClientProtocol
+from src.utils.monitoring import Analytics
 
 RESULT_PREVIEW_LEN = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LEN = 200  # characters shown when previewing long outputs/stderr
