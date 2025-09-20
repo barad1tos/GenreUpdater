@@ -6,7 +6,7 @@ This module handles the high-level coordination of all operations.
 import argparse
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import yaml
 
@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 class Orchestrator:
     """Orchestrates the entire music update workflow."""
+
+    COMMANDS_BYPASSING_MUSIC_CHECK: ClassVar[set[str]] = {"rotate_keys", "rotate-keys"}
 
     def __init__(self, deps: "DependencyContainer") -> None:
         """Initialize the orchestrator with dependencies.
@@ -42,8 +44,10 @@ class Orchestrator:
             args: Parsed command-line arguments
 
         """
-        # Check if Music app is running
-        if not is_music_app_running(self.error_logger):
+        command = getattr(args, "command", None)
+
+        # Check if Music app is running for commands that depend on it
+        if self._requires_music_app(command) and not is_music_app_running(self.error_logger):
             self.console_logger.error("Music app is not running! Please start Music.app before running this script.")
             return
 
@@ -76,6 +80,10 @@ class Orchestrator:
                 self._run_rotate_encryption_keys(args)
             case _:
                 await self._run_main_workflow(args)
+
+    def _requires_music_app(self, command: str | None) -> bool:
+        """Determine whether the given command depends on Music.app being available."""
+        return command not in self.COMMANDS_BYPASSING_MUSIC_CHECK
 
     async def _run_clean_artist(self, args: argparse.Namespace) -> None:
         """Run the clean artist command."""
@@ -266,7 +274,7 @@ class Orchestrator:
             secure_config = SecureConfig(self.error_logger)
 
             # Get current configuration
-            config_path = Path(self.config.get("config_file", "config.yaml"))
+            config_path = self.deps.config_path
             if not config_path.exists():
                 self.error_logger.error("Configuration file not found: %s", config_path)
                 return

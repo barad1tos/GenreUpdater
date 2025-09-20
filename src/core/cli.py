@@ -129,7 +129,7 @@ Examples:
         parser.add_argument(
             "--config",
             type=str,
-            help="Path to configuration file (default: my-config.yaml)",
+            help="Path to configuration file (default: config.yaml or my-config.yaml)",
         )
 
         # Subcommands

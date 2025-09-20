@@ -118,6 +118,11 @@ class DependencyContainer:
         return self._config
 
     @property
+    def config_path(self) -> Path:
+        """Get the resolved configuration file path."""
+        return Path(self._config_path)
+
+    @property
     def analytics(self) -> Analytics:
         """Get the analytics service."""
         if self._analytics is None:
