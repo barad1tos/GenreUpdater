@@ -12,7 +12,8 @@ across different API providers while preserving the sophisticated scoring logic.
 import contextlib
 import logging
 import re
-from datetime import datetime as dt, UTC
+from datetime import UTC
+from datetime import datetime as dt
 from typing import Any, TypedDict
 
 
