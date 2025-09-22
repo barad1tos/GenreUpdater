@@ -5,6 +5,7 @@ updating track genres accordingly.
 """
 
 import asyncio
+import itertools
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -50,7 +51,11 @@ class GenreManager(BaseProcessor):
     @staticmethod
     def _is_missing_or_unknown_genre(track: TrackDict) -> bool:
         genre_val = track.get("genre", "")
-        return not isinstance(genre_val, str) or not genre_val.strip() or genre_val.strip().lower() in {"unknown", ""}
+        if not isinstance(genre_val, str):
+            return True
+
+        genre_stripped = genre_val.strip()
+        return not genre_stripped or genre_stripped.lower() in {"unknown", ""}
 
     @staticmethod
     def _parse_date_added(track: TrackDict) -> datetime | None:
@@ -95,11 +100,13 @@ class GenreManager(BaseProcessor):
                 new_tracks.append(track)
 
         # Deduplicate by track id, prioritizing new_tracks entries
+        # Use itertools.chain to avoid memory overhead of list concatenation
         seen: set[str] = set()
         combined: list[TrackDict] = []
-        for t in new_tracks + missing_genre_tracks:
+        for t in itertools.chain(new_tracks, missing_genre_tracks):
             tid = str(t.get("id", ""))
-            if not tid or tid in seen:
+            # Check for missing or empty ID (but allow '0' which is falsy but valid)
+            if tid == "" or tid in seen:
                 continue
             seen.add(tid)
             combined.append(t)
