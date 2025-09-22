@@ -62,7 +62,7 @@ class GenreManager(BaseProcessor):
             return None
         return None
 
-    def _filter_tracks_for_incremental_update(
+    def filter_tracks_for_incremental_update(
         self,
         tracks: list[TrackDict],
         last_run_time: datetime | None,

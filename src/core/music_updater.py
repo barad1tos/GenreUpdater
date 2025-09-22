@@ -15,6 +15,7 @@ from src.utils.monitoring.reports import (
 )
 
 from .modules.processing.genre_manager import GenreManager
+from .modules.processing.incremental_filter import IncrementalFilterService
 from .modules.processing.track_processor import TrackProcessor
 from .modules.processing.year_retriever import YearRetriever
 from .modules.verification.database_verifier import DatabaseVerifier
@@ -75,6 +76,14 @@ class MusicUpdater:
 
         self.database_verifier = DatabaseVerifier(
             ap_client=deps.ap_client,
+            console_logger=deps.console_logger,
+            error_logger=deps.error_logger,
+            analytics=deps.analytics,
+            config=deps.config,
+            dry_run=deps.dry_run,
+        )
+
+        self.incremental_filter = IncrementalFilterService(
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,
@@ -482,12 +491,6 @@ class MusicUpdater:
             force: Force all operations
 
         """
-        # Check if it can run incremental
-        if not force:
-            can_run = await self.database_verifier.can_run_incremental()
-            if not can_run:
-                return
-
         self.console_logger.info("Starting main update pipeline")
 
         # Fetch tracks based on mode (test or normal)
@@ -498,25 +501,54 @@ class MusicUpdater:
 
         self.console_logger.info("Found %d tracks in Music.app", len(tracks))
 
+        # Compute incremental scope - filter tracks that need processing
+        incremental_tracks, should_skip_pipeline = await self._compute_incremental_scope(tracks, force)
+
+        if should_skip_pipeline:
+            self.console_logger.info("No new tracks to process, skipping pipeline")
+            return
+
+        self.console_logger.info("Processing %d tracks (%s mode)",
+                               len(incremental_tracks),
+                               "full" if force else "incremental")
+
         # Get last run time for incremental updates
         last_run_time = await self._get_last_run_time(force)
 
-        # Execute the three main steps
-        await self._clean_all_tracks_metadata(tracks)
-        # Use the full track set for genre updates; cleaning returns only changed items
+        # Execute the three main steps with incremental scope
+        await self._clean_all_tracks_metadata(incremental_tracks)
+        # Use ALL tracks for genre updates (GenreManager handles incremental logic internally)
         await self._update_all_genres(tracks, last_run_time, force)
 
-        # Always use all tracks for year updates to ensure dominant year logic runs
-        # This ensures albums with inconsistent years are processed properly
-        await self._update_all_years(tracks, force)
+        # Use incremental tracks for year updates - the year retriever handles album-level logic
+        await self._update_all_years(incremental_tracks, force)
 
         # Save combined results
         await self._save_pipeline_results()
 
-        # Update last run timestamp
-        await self.database_verifier.update_last_incremental_run()
+        # Update last run timestamp if pipeline completed successfully
+        if self._should_update_run_timestamp(force, incremental_tracks):
+            await self.database_verifier.update_last_incremental_run()
 
         self.console_logger.info("Main update pipeline completed successfully")
+
+    @staticmethod
+    def _should_update_run_timestamp(force: bool, incremental_tracks: list["TrackDict"]) -> bool:
+        """Determine whether to update the last run timestamp.
+
+        Args:
+            force: Whether the pipeline ran in force mode
+            incremental_tracks: List of tracks processed in incremental mode
+
+        Returns:
+            True if timestamp should be updated
+
+        Logic:
+            - Force mode: Always update timestamp because the full pipeline ran
+            - Incremental mode: Only update if tracks were actually processed
+            - This prevents marking empty runs as successful in incremental mode
+        """
+        return force or bool(incremental_tracks)
 
     def _should_apply_test_filter(self) -> bool:
         """Check if the test artist filter should be applied."""
@@ -633,8 +665,13 @@ class MusicUpdater:
     async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list["TrackDict"]:
         """Update genres for all tracks (Step 2 of pipeline).
 
+        Note: This method receives ALL tracks, not just incremental ones.
+        This is required for correct dominant genre calculation which needs
+        the full discography of each artist. GenreManager handles internal
+        filtering to determine which tracks actually need updating.
+
         Args:
-            tracks: List of tracks to process
+            tracks: List of ALL tracks (for accurate genre calculation)
             last_run_time: Last run time for incremental updates
             force: Force all operations
 
@@ -686,3 +723,38 @@ class MusicUpdater:
                 self.error_logger,
                 partial_sync=True,  # Incremental sync - only process new/changed tracks
             )
+
+    async def _compute_incremental_scope(self, tracks: list["TrackDict"], force: bool) -> tuple[list["TrackDict"], bool]:
+        """Compute which tracks need processing in incremental mode.
+
+        Args:
+            tracks: All tracks from Music.app
+            force: If True, process all tracks
+
+        Returns:
+            Tuple of (filtered_tracks, should_skip_pipeline)
+            - filtered_tracks: Tracks that need processing
+            - should_skip_pipeline: True if pipeline should be skipped (no work needed)
+
+        """
+        if force:
+            # Force mode - process all tracks
+            return tracks, False
+
+        # Check if enough time has passed for any processing
+        can_run = await self.database_verifier.can_run_incremental()
+        if not can_run:
+            return [], True
+
+        # Get last run time for filtering
+        last_run_time = await self._get_last_run_time(force=False)
+
+        # Use dedicated incremental filter service
+        incremental_tracks = self.incremental_filter.filter_tracks_for_incremental_update(tracks, last_run_time)
+
+        # Early exit if no tracks need processing
+        if not incremental_tracks:
+            self.console_logger.info("No new tracks since last run, skipping pipeline")
+            return [], True
+
+        return incremental_tracks, False
