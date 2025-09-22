@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.utils.core.logger import get_full_log_path
+from src.utils.core.run_tracking import IncrementalRunTracker
 from src.utils.data.types import TrackDict
 from src.utils.monitoring.reports import load_track_list, save_to_csv
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from src.utils.monitoring import Analytics
 
 
+# noinspection PyTypeChecker
 class DatabaseVerifier:
     """Manages database verification and incremental run tracking."""
 
@@ -144,33 +146,13 @@ class DatabaseVerifier:
 
     async def update_last_incremental_run(self) -> None:
         """Update the timestamp of the last incremental run."""
-        last_run_file = get_full_log_path(
-            self.config,
-            "last_incremental_run_file",
-            "last_incremental_run.log",
+        tracker = IncrementalRunTracker(self.config)
+        await tracker.update_last_run_timestamp()
+
+        self.console_logger.info(
+            "Updated last incremental run timestamp in %s",
+            tracker.get_last_run_file_path(),
         )
-
-        try:
-            # Ensure directory exists
-            last_run_path = Path(last_run_file)
-            last_run_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Write the current timestamp using async file operation
-            loop = asyncio.get_event_loop()
-
-            def _write_file() -> None:
-                with last_run_path.open("w", encoding="utf-8") as f:
-                    f.write(datetime.now(tz=UTC).isoformat())
-
-            await loop.run_in_executor(None, _write_file)
-
-            self.console_logger.info(
-                "Updated last incremental run timestamp in %s",
-                last_run_file,
-            )
-
-        except (OSError, ValueError):
-            self.error_logger.exception("Error updating last incremental run timestamp")
 
     async def _verify_track_exists(self, track_id: str) -> bool:
         """Verify if a track exists in Music.app.

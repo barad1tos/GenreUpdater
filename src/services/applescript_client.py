@@ -824,7 +824,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         async with self.semaphore:
             return await self._handle_subprocess_execution(cmd, label, timeout)
 
-    async def _cleanup_process(self, proc: asyncio.subprocess.Process, label: str) -> None:
+    async def _cleanup_process(self, proc: "asyncio.subprocess.Process", label: str) -> None:
         """Clean up process resources.
 
         Args:

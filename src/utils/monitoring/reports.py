@@ -763,7 +763,7 @@ def _get_expected_track_fieldnames() -> list[str]:
 
 
 def _validate_csv_header(
-    reader: csv.DictReader[str], expected_fieldnames: list[str], csv_path: str, logger: logging.Logger
+    reader: "csv.DictReader[str]", expected_fieldnames: list[str], csv_path: str, logger: logging.Logger
 ) -> list[str]:
     """Validate CSV header and return fields to read."""
     if reader.fieldnames is None:

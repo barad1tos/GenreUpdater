@@ -15,9 +15,6 @@ import re
 from datetime import datetime as dt, UTC
 from typing import Any, TypedDict
 
-# TODO: Turn on when you need it
-# from src.utils.data.normalization import normalize_name as norm_func
-
 
 # Type definitions for scoring context
 class ArtistPeriodContext(TypedDict, total=False):

@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypeVar, TypedDict, cast
+from src.utils.core.exceptions import ConfigurationError
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")
@@ -356,17 +357,6 @@ class DatabaseRetryHandler:
             retry_policy.operation_timeout_seconds,
         )
         raise timeout_error
-
-
-# Configuration-specific errors and retry handling
-
-
-class ConfigurationError(Exception):
-    """Configuration-specific error for retry operations.
-
-    Raised when configuration operations fail and need retry handling.
-    Used in fallback configuration loading mechanisms.
-    """
 
 
 class ConfigurationRetryHandler:

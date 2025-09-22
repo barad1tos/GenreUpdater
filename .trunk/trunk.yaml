@@ -14,30 +14,31 @@ runtimes:
   enabled:
     - go@1.21.0
     - node@22.16.0
-    - python@3.12.2
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   enabled:
+    - actionlint@1.7.7
     - pyright@1.1.405:
         config: pyproject.toml
-    - mypy@1.17.1:
+    - mypy@1.18.2:
         config: pyproject.toml
     - shellcheck@0.11.0
     - shfmt@3.6.0
     - tflint@0.59.1
-    - bandit@1.8.6
+    - bandit@1.8.6:
+        config: pyproject.toml
     - pylint@3.3.8:
         config: pyproject.toml
     - taplo@0.10.0
     - markdownlint@0.45.0
-    - checkov@3.2.470
+    - checkov@3.2.471
     - git-diff-check
     - osv-scanner@2.2.2
     - oxipng@9.1.5
     - prettier@3.6.2
-    - ruff@0.12.12:
+    - ruff@0.13.1:
         config: pyproject.toml
-    - trufflehog@3.90.6
+    - trufflehog@3.90.8
     - yamllint@1.37.1
   disabled:
     - black

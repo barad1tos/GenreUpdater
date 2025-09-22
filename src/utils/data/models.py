@@ -334,7 +334,7 @@ class TrackDict(BaseModel):
     release_year: str | None = None  # Year from Music.app release date field
     original_pos: int | None = None  # Original position in the track list
 
-    model_config = ConfigDict(extra="allow")  # type: ignore
+    model_config = ConfigDict(extra="allow")
 
     def get(self, key: str, default: TrackFieldValue = None) -> TrackFieldValue:
         """Get attribute value with default, mimicking dict.get() behavior.
@@ -372,7 +372,7 @@ class TrackDict(BaseModel):
         """
         # Get current data as dict (including extra fields from Config.extra="allow")
         # Use Pydantic v2 model_dump
-        data = self.model_dump()  # type: ignore
+        data = self.model_dump()
 
         # Include any extra fields that might be stored directly in __dict__
         for key, value in self.__dict__.items():

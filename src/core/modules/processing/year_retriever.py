@@ -9,9 +9,6 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from collections.abc import Coroutine
-
 from src.core.modules.processing.track_processor import TrackProcessor
 from src.utils.core.logger import get_full_log_path
 from src.utils.data.models import TrackDict
@@ -23,6 +20,9 @@ from src.utils.data.protocols import (
 from src.utils.data.validators import is_valid_year
 from src.utils.monitoring import Analytics
 from src.utils.monitoring.reports import save_changes_report
+
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
 
 
 def is_empty_year(year_value: Any) -> bool:

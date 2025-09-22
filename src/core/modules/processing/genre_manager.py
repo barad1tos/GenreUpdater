@@ -9,6 +9,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from src.core.modules.processing.base_processor import BaseProcessor
 from src.utils.data.metadata import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from src.utils.monitoring import Analytics
 
 
-class GenreManager:
+class GenreManager(BaseProcessor):
     """Manages genre determination and updates for tracks."""
 
     def __init__(
@@ -43,13 +44,8 @@ class GenreManager:
             dry_run: Whether to run in dry-run mode
 
         """
+        super().__init__(console_logger, error_logger, analytics, config, dry_run)
         self.track_processor = track_processor
-        self.console_logger = console_logger
-        self.error_logger = error_logger
-        self.analytics = analytics
-        self.config = config
-        self.dry_run = dry_run
-        self._dry_run_actions: list[dict[str, Any]] = []
 
     @staticmethod
     def _is_missing_or_unknown_genre(track: TrackDict) -> bool:
