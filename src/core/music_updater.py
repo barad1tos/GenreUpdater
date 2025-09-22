@@ -15,7 +15,6 @@ from src.utils.monitoring.reports import (
 )
 
 from .modules.processing.genre_manager import GenreManager
-from .modules.processing.incremental_filter import IncrementalFilterService
 from .modules.processing.track_processor import TrackProcessor
 from .modules.processing.year_retriever import YearRetriever
 from .modules.verification.database_verifier import DatabaseVerifier
@@ -76,14 +75,6 @@ class MusicUpdater:
 
         self.database_verifier = DatabaseVerifier(
             ap_client=deps.ap_client,
-            console_logger=deps.console_logger,
-            error_logger=deps.error_logger,
-            analytics=deps.analytics,
-            config=deps.config,
-            dry_run=deps.dry_run,
-        )
-
-        self.incremental_filter = IncrementalFilterService(
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,
@@ -749,8 +740,8 @@ class MusicUpdater:
         # Get last run time for filtering
         last_run_time = await self._get_last_run_time(force=False)
 
-        # Use dedicated incremental filter service
-        incremental_tracks = self.incremental_filter.filter_tracks_for_incremental_update(tracks, last_run_time)
+        # Use genre manager's existing filter logic (avoiding duplication)
+        incremental_tracks = self.genre_manager.filter_tracks_for_incremental_update(tracks, last_run_time)
 
         # Early exit if no tracks need processing
         if not incremental_tracks:
