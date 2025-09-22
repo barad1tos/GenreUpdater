@@ -31,10 +31,11 @@ dependencies = [
   "ruff>=0.13.0",                  # Linting and code quality
   "pytest>=8.4.2",                 # Testing framework
   "pytest-cov>=7.0.0",             # Test coverage
-  "mypy==1.18.1",                  # Static type checking
+  "mypy==1.18.2",                  # Static type checking
   "pytest-asyncio==1.2.0",         # Async test support
   "vulture>=2.14",                 # Dead code detection
   "types-pyyaml==6.0.12.20250915",
+  "coverage==7.10.7",
 ]
 
 [dependency-groups]
@@ -337,14 +338,29 @@ max-line-length = 150
 
 [tool.pylint.main]
 py-version = "3.13"
+init-hook = "import sys; sys.path.append('/Users/romanborodavkin/.pyenv/versions/3.13.5/lib/python3.13/site-packages')"
 
 [tool.pylint."messages control"]
 disable = [
-  "C0103", # invalid-name (allow short variable names)
-  "R0903", # too-few-public-methods
-  "W0613", # unused-argument (handled by ruff)
-  "C0301", # line-too-long (handled by format section)
-  "R0913", # too-many-arguments
-  "R0917", # too-many-positional-arguments
-  "W0718", # broad-exception-caught
+  "C0103",   # invalid-name (allow short variable names)
+  "R0903",   # too-few-public-methods
+  "W0613",   # unused-argument (handled by ruff)
+  "C0301",   # line-too-long (handled by format section)
+  "R0913",   # too-many-arguments
+  "R0917",   # too-many-positional-arguments
+  "W0718",   # broad-exception-caught
+  "W2301",   # unnecessary-ellipsis (valid in Protocol definitions)
+  "E0611",   # no-name-in-module (UTC is available in Python 3.13+ datetime)
+  "R0914",   # too-many-locals (complex reporting function)
+  "R0801",   # duplicate-code (shared patterns in processing modules)
+  "R0401",   # cyclic-import (resolved with exceptions module)
+  "PLC0415", # import-outside-toplevel (needed for lazy imports in specific functions)
+  "R0902",   # too-many-instance-attributes (orchestrator classes naturally need many components)
+  "C0302",   # too-many-lines (complex processing modules)
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bandit configuration - Security linting
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.bandit]
+skips = ["B404"]

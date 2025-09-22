@@ -3,12 +3,11 @@
 This is a streamlined version that uses the new modular components.
 """
 
-import asyncio
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from src.utils.core.logger import get_full_log_path
+from src.utils.core.run_tracking import IncrementalRunTracker
 from src.utils.data.metadata import clean_names, is_music_app_running
 from src.utils.monitoring.reports import (
     save_changes_report,
@@ -503,7 +502,7 @@ class MusicUpdater:
         last_run_time = await self._get_last_run_time(force)
 
         # Execute the three main steps
-        cleaned_tracks = await self._clean_all_tracks_metadata(tracks)
+        await self._clean_all_tracks_metadata(tracks)
         # Use the full track set for genre updates; cleaning returns only changed items
         await self._update_all_genres(tracks, last_run_time, force)
 
@@ -561,27 +560,8 @@ class MusicUpdater:
         if force:
             return None
 
-        last_run_file = get_full_log_path(
-            self.config,
-            "last_incremental_run_file",
-            "last_incremental_run.log",
-        )
-        try:
-            last_run_path = Path(last_run_file)
-            if last_run_path.exists():
-                # Read the last run time using an async file operation
-                loop = asyncio.get_event_loop()
-
-                def _read_last_run() -> str:
-                    with last_run_path.open(encoding="utf-8") as f:
-                        return f.read().strip()
-
-                last_run_str = await loop.run_in_executor(None, _read_last_run)
-                return datetime.fromisoformat(last_run_str)
-        except (OSError, ValueError) as e:
-            self.error_logger.warning("Could not read last run time: %s", e)
-
-        return None
+        tracker = IncrementalRunTracker(self.config)
+        return await tracker.get_last_run_timestamp()
 
     async def _clean_all_tracks_metadata(self, tracks: list["TrackDict"]) -> list["TrackDict"]:
         """Clean metadata for all tracks (Step 1 of pipeline).

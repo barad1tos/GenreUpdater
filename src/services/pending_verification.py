@@ -640,9 +640,9 @@ class PendingVerificationService:
                         artist,
                         "",
                         album,
-                        self.config,
-                        self.console_logger,
-                        self.error_logger,
+                        config=self.config,
+                        console_logger=self.console_logger,
+                        error_logger=self.error_logger,
                     )
                     # Move to the new key, preserving reason and metadata
                     self.pending_albums[new_key] = (

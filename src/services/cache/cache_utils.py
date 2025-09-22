@@ -10,8 +10,6 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-# TODO: Turn on when you need it
-
 # Cache value type
 CacheValue = str | int | float | bool | dict[str, Any] | list[Any] | None
 HashParams = str | int | float | bool | None

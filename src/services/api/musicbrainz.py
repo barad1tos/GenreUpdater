@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict, cast
 
+from src.utils.data.models import MBArtist
 from src.utils.monitoring import Analytics
 
 from .base import BaseApiClient, ScoredRelease
@@ -45,19 +46,8 @@ class Alias(TypedDict, total=False):
     locale: str | None
 
 
-class Artist(TypedDict, total=False):
-    """Type definition for artist data from MusicBrainz."""
-
-    id: str
-    name: str
-    sort_name: str | None
-    type: str | None
-    disambiguation: str | None
-    area: Area | None
-    begin_area: Area | None
-    end_area: Area | None
-    life_span: LifeSpan | None
-    aliases: list[Alias] | None
+# Use unified artist type from models
+Artist = MBArtist
 
 
 class ArtistCredit(TypedDict, total=False):
