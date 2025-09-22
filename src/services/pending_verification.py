@@ -36,7 +36,6 @@ import csv
 import logging
 import os
 import sys
-
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
