@@ -40,6 +40,7 @@ CacheableValue = str | int | float | bool | dict[str, Any] | list[Any] | list[Tr
 CacheableKey = str | int
 
 
+# noinspection PyMissingOrEmptyDocstring
 @runtime_checkable
 class CacheServiceProtocol(Protocol):
     """Protocol defining the interface for cache services.

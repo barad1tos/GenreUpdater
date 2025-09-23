@@ -66,6 +66,7 @@ class Logger(Protocol):
         """Log a debug message."""
 
 
+# noinspection PyTypeChecker
 class PendingVerificationService:
     """Service to track albums needing future verification of their release year.
 
@@ -308,9 +309,7 @@ class PendingVerificationService:
             self._ensure_pending_file_directory()
 
             if not os.path.exists(self.pending_file_path):
-                self.console_logger.info(
-                    f"Pending verification file not found, will create at: {self.pending_file_path}"
-                )
+                self.console_logger.info(f"Pending verification file not found, will create at: {self.pending_file_path}")
                 return {}
 
             print(
@@ -325,13 +324,9 @@ class PendingVerificationService:
 
         # Log success/failure after the executor task is complete
         if self.pending_albums:
-            self.console_logger.info(
-                f"Loaded {len(self.pending_albums)} pending albums for verification from {self.pending_file_path}"
-            )
+            self.console_logger.info(f"Loaded {len(self.pending_albums)} pending albums for verification from {self.pending_file_path}")
         else:
-            self.console_logger.info(
-                f"No pending albums loaded from {self.pending_file_path} (file not found or empty/corrupt)."
-            )
+            self.console_logger.info(f"No pending albums loaded from {self.pending_file_path} (file not found or empty/corrupt).")
 
     async def _save_pending_albums(self) -> None:
         """Save the current list of pending albums to the CSV file asynchronously.

@@ -68,7 +68,7 @@ class UnifiedHashService:
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod
-    def hash_custom_key(cls, *args: Any, **kwargs: dict[str, Any]) -> str:
+    def hash_custom_key(cls, *args: Any, **kwargs: Any) -> str:
         """Generate SHA256 hash for custom cache key with multiple components.
 
         Args:

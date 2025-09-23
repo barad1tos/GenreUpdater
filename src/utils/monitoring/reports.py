@@ -190,6 +190,7 @@ def save_to_csv(
         "album",
         "genre",
         "date_added",
+        "last_modified",
         "track_status",
         "old_year",
         "new_year",
@@ -306,9 +307,7 @@ def _determine_if_changed(header: str, value: str, record: dict[str, str]) -> bo
         old_genre = record.get(Key.OLD_GENRE, "")
         return old_genre != value
     if "name" in header.lower():
-        old_name = (
-            record.get(Key.OLD_TRACK_NAME, "") if "track" in header.lower() else record.get(Key.OLD_ALBUM_NAME, "")
-        )
+        old_name = record.get(Key.OLD_TRACK_NAME, "") if "track" in header.lower() else record.get(Key.OLD_ALBUM_NAME, "")
         return old_name != value
     return True  # Default to highlight for other types
 
@@ -755,15 +754,14 @@ def _get_expected_track_fieldnames() -> list[str]:
         "album",
         "genre",
         "date_added",
+        "last_modified",
         "track_status",
         "old_year",
         "new_year",
     ]
 
 
-def _validate_csv_header(
-    reader: "csv.DictReader[str]", expected_fieldnames: list[str], csv_path: str, logger: logging.Logger
-) -> list[str]:
+def _validate_csv_header(reader: "csv.DictReader[str]", expected_fieldnames: list[str], csv_path: str, logger: logging.Logger) -> list[str]:
     """Validate CSV header and return fields to read."""
     if reader.fieldnames is None:
         logger.warning("CSV file %s is empty or has no header.", csv_path)
@@ -783,9 +781,7 @@ def _validate_csv_header(
     return expected_fieldnames
 
 
-def _create_track_from_row(
-    row: dict[str, str], fields_to_read: list[str], expected_fieldnames: list[str]
-) -> TrackDict | None:
+def _create_track_from_row(row: dict[str, str], fields_to_read: list[str], expected_fieldnames: list[str]) -> TrackDict | None:
     """Create TrackDict from CSV row data."""
     if not row.get("id", "").strip():
         return None
@@ -804,6 +800,7 @@ def _create_track_from_row(
         album=track_data["album"],
         genre=track_data["genre"] or None,
         date_added=track_data["date_added"] or None,
+        last_modified=track_data.get("last_modified", "") or None,
         track_status=track_data["track_status"] or None,
         old_year=track_data["old_year"] or None,
         new_year=track_data["new_year"] or None,
@@ -890,9 +887,7 @@ async def _build_current_map(
 
         # Handle partial sync with cache coordination
         if partial_sync:
-            await _handle_partial_sync_cache(
-                tr, processed_albums, cache_service, album_key, artist, album, error_logger
-            )
+            await _handle_partial_sync_cache(tr, processed_albums, cache_service, album_key, artist, album, error_logger)
 
         # Create normalized track dictionary
         current[tid] = _create_normalized_track_dict(tr, tid, artist, album)
@@ -1089,9 +1084,7 @@ async def _fetch_missing_track_fields_for_sync(
     """Fetch missing track fields via AppleScript if needed for sync operation."""
     tracks_cache: dict[str, dict[str, str]] = {}
 
-    has_missing_fields = any(
-        not track.date_added or not track.track_status or not track.old_year for track in final_list if track.id
-    )
+    has_missing_fields = any(not track.date_added or not track.track_status or not track.old_year for track in final_list if track.id)
 
     if has_missing_fields and applescript_client is not None:
         try:
@@ -1119,15 +1112,18 @@ async def _fetch_missing_track_fields_for_sync(
 
 def _update_track_with_cached_fields_for_sync(track: TrackDict, tracks_cache: dict[str, dict[str, str]]) -> None:
     """Update track with cached fields if they were empty for sync operation."""
-    if track.id and track.id in tracks_cache:
-        cached_fields = tracks_cache[track.id]
+    if not track.id or track.id not in tracks_cache:
+        return
+    cached_fields = tracks_cache[track.id]
 
-        if not track.date_added and cached_fields["date_added"]:
-            track.date_added = cached_fields["date_added"]
-        if not track.track_status and cached_fields["track_status"]:
-            track.track_status = cached_fields["track_status"]
-        if not track.old_year and cached_fields["old_year"]:
-            track.old_year = cached_fields["old_year"]
+    if not track.date_added and cached_fields["date_added"]:
+        track.date_added = cached_fields["date_added"]
+    if not getattr(track, "last_modified", "") and cached_fields.get("last_modified"):
+        track.__dict__["last_modified"] = cached_fields["last_modified"]
+    if not track.track_status and cached_fields["track_status"]:
+        track.track_status = cached_fields["track_status"]
+    if not track.old_year and cached_fields["old_year"]:
+        track.old_year = cached_fields["old_year"]
 
 
 def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
@@ -1139,12 +1135,14 @@ def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
         "album": track.album or "",
         "genre": track.genre or "",
         "date_added": track.date_added or "",
+        "last_modified": getattr(track, "last_modified", "") or "",
         "track_status": track.track_status or "",
         "old_year": track.old_year or "",
         "new_year": track.new_year or "",
     }
 
 
+# noinspection PyUnusedLocal
 async def sync_track_list_with_current(
     all_tracks: Sequence[TrackDict],
     csv_path: str,
@@ -1203,6 +1201,7 @@ async def sync_track_list_with_current(
         "album",
         "genre",
         "date_added",
+        "last_modified",
         "track_status",
         "old_year",
         "new_year",
@@ -1231,9 +1230,21 @@ async def sync_track_list_with_current(
     _save_csv(track_dicts, fieldnames, csv_path, console_logger, error_logger, "tracks")
 
 
-def _generate_empty_html_template(
-    date_str: str, report_file: str, console_logger: logging.Logger, error_logger: logging.Logger
+def save_track_map_to_csv(
+    track_map: dict[str, TrackDict],
+    csv_path: str,
+    console_logger: logging.Logger,
+    error_logger: logging.Logger,
 ) -> None:
+    """Persist the provided track map to CSV using standard field ordering."""
+
+    sorted_tracks = sorted(track_map.values(), key=lambda t: t.id)
+    track_dicts = [_convert_track_to_csv_dict(track) for track in sorted_tracks]
+    fieldnames = _get_expected_track_fieldnames()
+    _save_csv(track_dicts, fieldnames, csv_path, console_logger, error_logger, "tracks")
+
+
+def _generate_empty_html_template(date_str: str, report_file: str, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
     """Generate and save an empty HTML template when no data is available."""
     html_content = f"""<!DOCTYPE html>
 <html>
@@ -1387,10 +1398,7 @@ def _generate_main_html_template(
         <p><strong>Total functions:</strong> {len(call_counts)}</p>
         <p><strong>Total events:</strong> {len(events)}</p>
         <p><strong>Success rate:</strong> {
-        (
-            sum(success_counts.values()) / sum(call_counts.values()) * 100
-            if sum(call_counts.values()) else 0
-        ):.1f}%</p>
+        (sum(success_counts.values()) / sum(call_counts.values()) * 100 if sum(call_counts.values()) else 0):.1f}%</p>
     </div>"""
 
 

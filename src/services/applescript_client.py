@@ -257,7 +257,6 @@ class AppleScriptSanitizer:
         return cmd
 
 
-
 class EnhancedRateLimiter:
     """Advanced rate limiter using a moving window approach."""
 
@@ -344,6 +343,7 @@ class EnhancedRateLimiter:
         }
 
 
+# noinspection PyUnboundLocalVariable
 class AppleScriptClient(AppleScriptClientProtocol):
     """A client to run AppleScript commands asynchronously using the osascript command.
 
@@ -415,11 +415,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 "update_property.applescript",
                 "fetch_tracks.scpt",
             ]
-            if missing_scripts := [
-                script
-                for script in required_scripts
-                if not (Path(self.apple_scripts_dir) / script).exists()
-            ]:
+            if missing_scripts := [script for script in required_scripts if not (Path(self.apple_scripts_dir) / script).exists()]:
                 self.error_logger.warning("⚠️ Missing required AppleScripts: %s", "', '".join(missing_scripts))
 
         except OSError as e:
@@ -437,9 +433,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 self.semaphore = asyncio.Semaphore(concurrent_limit)
                 self.console_logger.info("✅ AppleScriptClient semaphore initialized with concurrency: %d", concurrent_limit)
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
-                self.error_logger.exception(
-                    "❌ Error initializing AppleScriptClient semaphore: %s", e
-                )
+                self.error_logger.exception("❌ Error initializing AppleScriptClient semaphore: %s", e)
                 raise
         else:
             self.console_logger.debug("INFO: Semaphore already initialized")

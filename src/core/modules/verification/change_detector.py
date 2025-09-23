@@ -230,6 +230,7 @@ class YearChangeStrategy(ChangeStrategy):
         )
 
 
+# noinspection PyUnboundLocalVariable
 class ChangeDetector:
     """Main change detection coordinator."""
 
