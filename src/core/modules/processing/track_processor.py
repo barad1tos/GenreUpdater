@@ -8,6 +8,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from src.services.track_delta_service import TrackSummary, parse_track_summaries
 from src.utils.data.metadata import parse_tracks
 from src.utils.data.models import TrackDict
 from src.utils.data.validators import SecurityValidationError, SecurityValidator, is_valid_track_item
@@ -236,8 +237,8 @@ class TrackProcessor:
             self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
             if raw_output:
                 self.error_logger.info(f"DEBUG: First 200 chars: {raw_output[:200]}")
-                field_sep_found = "\x1E" in raw_output
-                line_sep_found = "\x1D" in raw_output
+                field_sep_found = "\x1e" in raw_output
+                line_sep_found = "\x1d" in raw_output
                 self.error_logger.info(f"DEBUG: Raw output contains separators - field (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
 
             if not raw_output:
@@ -264,6 +265,52 @@ class TrackProcessor:
             return []
 
         return validated_tracks
+
+    @Analytics.track_instance_method("track_fetch_summary")
+    async def fetch_track_summaries(self) -> list[TrackSummary]:
+        """Fetch lightweight track summaries for incremental comparisons."""
+
+        raw_output = await self.ap_client.run_script(
+            "fetch_track_summaries.scpt",
+            [],
+            timeout=self._get_applescript_timeout(False),
+        )
+
+        if not raw_output:
+            self.console_logger.warning("Track summary script returned no data")
+            return []
+
+        return parse_track_summaries(raw_output)
+
+    @Analytics.track_instance_method("track_fetch_by_ids")
+    async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
+        """Fetch detailed track metadata for the provided track IDs."""
+
+        if not track_ids:
+            return []
+
+        batch_size = int(self.config.get("batch_processing", {}).get("ids_batch_size", 200))
+        batch_size = max(batch_size, 1)
+
+        collected: list[TrackDict] = []
+        for i in range(0, len(track_ids), batch_size):
+            batch = track_ids[i : i + batch_size]
+            ids_param = ",".join(batch)
+
+            raw_output = await self.ap_client.run_script(
+                "fetch_tracks_by_ids.scpt",
+                [ids_param],
+                timeout=self._get_applescript_timeout(False),
+            )
+
+            if not raw_output:
+                continue
+
+            parsed_tracks = parse_tracks(raw_output, self.error_logger)
+            validated_tracks = self._validate_tracks_security(parsed_tracks)
+            collected.extend(validated_tracks)
+
+        return collected
 
     @Analytics.track_instance_method("track_fetch_all")
     async def fetch_tracks_async(
@@ -361,9 +408,7 @@ class TrackProcessor:
 
         return all_tracks
 
-    async def _process_single_batch(
-        self, batch_count: int, offset: int, batch_size: int
-    ) -> tuple[list[TrackDict], bool] | None:
+    async def _process_single_batch(self, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool] | None:
         """Process a single batch of tracks.
 
         Args:

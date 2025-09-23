@@ -3,14 +3,24 @@
 This is a streamlined version that uses the new modular components.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from src.services.track_delta_service import (
+    TrackDelta,
+    TrackSummary,
+    apply_track_delta_to_map,
+    compute_track_delta,
+)
 from src.utils.core.logger import get_full_log_path
 from src.utils.core.run_tracking import IncrementalRunTracker
 from src.utils.data.metadata import clean_names, is_music_app_running
+from src.utils.data.models import TrackDict
 from src.utils.monitoring.reports import (
+    load_track_list,
     save_changes_report,
+    save_track_map_to_csv,
     sync_track_list_with_current,
 )
 
@@ -19,9 +29,23 @@ from .modules.processing.track_processor import TrackProcessor
 from .modules.processing.year_retriever import YearRetriever
 from .modules.verification.database_verifier import DatabaseVerifier
 
+TRACK_LIST_REL_PATH = "csv/track_list.csv"
+
 if TYPE_CHECKING:
     from src.services.dependencies_service import DependencyContainer
-    from src.utils.data.models import TrackDict
+
+
+@dataclass(slots=True)
+class IncrementalPreparationResult:
+    """Container for incremental processing data."""
+
+    csv_map: dict[str, "TrackDict"]
+    summary_map: dict[str, TrackSummary]
+    delta: TrackDelta
+    tracks_for_processing: list["TrackDict"]
+    affected_artists: set[str]
+    changed_tracks: list["TrackDict"]
+    fallback_required: bool = False
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -178,8 +202,6 @@ class MusicUpdater:
         if not track_id:
             return None, None
 
-
-
         # Clean names using the existing utility
         cleaned_track_name, cleaned_album_name = clean_names(
             artist=artist_name,
@@ -324,7 +346,7 @@ class MusicUpdater:
             return
 
         # Sync with the database
-        csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
+        csv_path = self._get_track_list_path()
         # Fetch ALL current tracks for complete synchronization
         all_current_tracks = await self.track_processor.fetch_tracks_async()
 
@@ -349,7 +371,7 @@ class MusicUpdater:
             )
 
     @staticmethod
-    async def _filter_tracks_for_artist(all_tracks: list[ "TrackDict" ], artist: str) -> list[ "TrackDict" ]:
+    async def _filter_tracks_for_artist(all_tracks: list["TrackDict"], artist: str) -> list["TrackDict"]:
         """Filter tracks to include main artist and collaborations."""
         filtered_tracks = []
         for track in all_tracks:
@@ -490,62 +512,48 @@ class MusicUpdater:
         """
         self.console_logger.info("Starting main update pipeline")
 
-        # Fetch tracks based on mode (test or normal)
-        tracks = await self._fetch_tracks_for_pipeline_mode()
+        if force:
+            await self._run_full_pipeline()
+            return
+
+        prep = await self._prepare_incremental_plan()
+        if prep.fallback_required:
+            self.console_logger.warning("Falling back to full pipeline run")
+            await self._run_full_pipeline()
+            return
+
+        self.console_logger.info(
+            "Incremental delta: %d new, %d updated, %d removed", len(prep.delta.new_ids), len(prep.delta.updated_ids), len(prep.delta.removed_ids)
+        )
+
+        if not prep.delta.has_updates() and prep.delta.has_removals():
+            await self._finalize_incremental_without_pipeline(prep)
+            return
+
+        if prep.delta.is_empty():
+            await self._finalize_incremental_without_pipeline(prep)
+            return
+
+        tracks = prep.tracks_for_processing
         if not tracks:
-            self.console_logger.warning("No tracks found in Music.app")
+            self.console_logger.warning("Incremental preparation produced no tracks; running full pipeline")
+            await self._run_full_pipeline()
             return
 
-        self.console_logger.info("Found %d tracks in Music.app", len(tracks))
+        self.console_logger.info(
+            "Processing %d tracks across %d artists (incremental)",
+            len(tracks),
+            len(prep.affected_artists),
+        )
 
-        # Compute incremental scope - filter tracks that need processing
-        incremental_tracks, should_skip_pipeline = await self._compute_incremental_scope(tracks, force)
+        last_run_time = await self._get_last_run_time(force=False)
+        await self._clean_all_tracks_metadata(tracks)
+        await self._update_all_genres(tracks, last_run_time, force=False)
+        await self._update_all_years(tracks, force=False)
+        await self._save_incremental_results(prep)
+        await self.database_verifier.update_last_incremental_run()
 
-        if should_skip_pipeline:
-            self.console_logger.info("No new tracks to process, skipping pipeline")
-            return
-
-        self.console_logger.info("Processing %d tracks (%s mode)",
-                               len(incremental_tracks),
-                               "full" if force else "incremental")
-
-        # Get last run time for incremental updates
-        last_run_time = await self._get_last_run_time(force)
-
-        # Execute the three main steps with incremental scope
-        await self._clean_all_tracks_metadata(incremental_tracks)
-        # Use ALL tracks for genre updates (GenreManager handles incremental logic internally)
-        await self._update_all_genres(tracks, last_run_time, force)
-
-        # Use incremental tracks for year updates - the year retriever handles album-level logic
-        await self._update_all_years(incremental_tracks, force)
-
-        # Save combined results
-        await self._save_pipeline_results()
-
-        # Update last run timestamp if pipeline completed successfully
-        if self._should_update_run_timestamp(force, incremental_tracks):
-            await self.database_verifier.update_last_incremental_run()
-
-        self.console_logger.info("Main update pipeline completed successfully")
-
-    @staticmethod
-    def _should_update_run_timestamp(force: bool, incremental_tracks: list["TrackDict"]) -> bool:
-        """Determine whether to update the last run timestamp.
-
-        Args:
-            force: Whether the pipeline ran in force mode
-            incremental_tracks: List of tracks processed in incremental mode
-
-        Returns:
-            True if timestamp should be updated
-
-        Logic:
-            - Force mode: Always update timestamp because the full pipeline ran
-            - Incremental mode: Only update if tracks were actually processed
-            - This prevents marking empty runs as successful in incremental mode
-        """
-        return force or bool(incremental_tracks)
+        self.console_logger.info("Main update pipeline completed successfully (incremental)")
 
     def _should_apply_test_filter(self) -> bool:
         """Check if the test artist filter should be applied."""
@@ -599,7 +607,185 @@ class MusicUpdater:
         tracker = IncrementalRunTracker(self.config)
         return await tracker.get_last_run_timestamp()
 
-    async def _clean_all_tracks_metadata(self, tracks: list["TrackDict"]) -> list["TrackDict"]:
+    def _get_track_list_path(self) -> str:
+        """Return the absolute path to the track list CSV."""
+
+        return get_full_log_path(self.config, "csv_output_file", TRACK_LIST_REL_PATH)
+
+    async def _run_full_pipeline(self) -> None:
+        """Execute the full pipeline across the entire library."""
+
+        tracks = await self._fetch_tracks_for_pipeline_mode()
+        if not tracks:
+            self.console_logger.warning("No tracks found in Music.app")
+            return
+
+        self.console_logger.info("Found %d tracks in Music.app (full run)", len(tracks))
+
+        last_run_time = await self._get_last_run_time(force=True)
+        await self._clean_all_tracks_metadata(tracks)
+        await self._update_all_genres(tracks, last_run_time, True)
+        await self._update_all_years(tracks, True)
+        await self._save_pipeline_results()
+        await self.database_verifier.update_last_incremental_run()
+        self.console_logger.info("Main update pipeline completed successfully (full run)")
+
+    async def _prepare_incremental_plan(self) -> IncrementalPreparationResult:
+        """Prepare incremental processing context by comparing CSV snapshot with Music.app."""
+
+        csv_path = self._get_track_list_path()
+        csv_map = load_track_list(csv_path)
+
+        summaries = await self.track_processor.fetch_track_summaries()
+        if not summaries:
+            self.console_logger.warning("Track summary retrieval failed; falling back to full run")
+            return IncrementalPreparationResult(
+                csv_map=csv_map,
+                summary_map={},
+                delta=TrackDelta([], [], []),
+                tracks_for_processing=[],
+                affected_artists=set(),
+                changed_tracks=[],
+                fallback_required=True,
+            )
+
+        summary_map = {summary.track_id: summary for summary in summaries}
+        delta = compute_track_delta(summaries, csv_map)
+
+        if not delta.has_updates():
+            return IncrementalPreparationResult(
+                csv_map=csv_map,
+                summary_map=summary_map,
+                delta=delta,
+                tracks_for_processing=[],
+                affected_artists=set(),
+                changed_tracks=[],
+                fallback_required=False,
+            )
+
+        changed_tracks, fallback_required = await self._fetch_changed_track_details(delta)
+        if fallback_required:
+            return IncrementalPreparationResult(
+                csv_map=csv_map,
+                summary_map=summary_map,
+                delta=delta,
+                tracks_for_processing=[],
+                affected_artists=set(),
+                changed_tracks=[],
+                fallback_required=True,
+            )
+
+        affected_artists = self._extract_affected_artists(changed_tracks)
+        track_scope = await self._collect_tracks_for_artists(changed_tracks, affected_artists)
+
+        return IncrementalPreparationResult(
+            csv_map=csv_map,
+            summary_map=summary_map,
+            delta=delta,
+            tracks_for_processing=list(track_scope.values()),
+            affected_artists=affected_artists,
+            changed_tracks=changed_tracks,
+        )
+
+    async def _fetch_changed_track_details(self, delta: TrackDelta) -> tuple[list[TrackDict], bool]:
+        """Return detailed metadata for changed tracks and whether a fallback is required."""
+
+        if not delta.has_updates():
+            return [], False
+
+        changed_ids = delta.new_ids + delta.updated_ids
+        changed_tracks = await self.track_processor.fetch_tracks_by_ids(changed_ids)
+        if not changed_tracks or len(changed_tracks) < len(changed_ids):
+            return [], True
+        return changed_tracks, False
+
+    @staticmethod
+    def _extract_affected_artists(tracks: list[TrackDict]) -> set[str]:
+        """Collect artists impacted by the incremental change set."""
+
+        return {str(getattr(track, "artist", "")) for track in tracks if getattr(track, "artist", "")}
+
+    async def _collect_tracks_for_artists(
+        self,
+        base_tracks: list[TrackDict],
+        artists: set[str],
+    ) -> dict[str, TrackDict]:
+        """Collect track metadata for changed tracks and their artists."""
+
+        track_map: dict[str, TrackDict] = {track.id: track for track in base_tracks if track.id}
+        for artist in artists:
+            if not artist:
+                continue
+            artist_tracks = await self.track_processor.fetch_tracks_async(
+                artist=artist,
+                force_refresh=True,
+            )
+            for artist_track in artist_tracks:
+                if artist_track.id:
+                    track_map[artist_track.id] = artist_track
+        return track_map
+
+    async def _build_summary_lookup(self, fallback: dict[str, TrackSummary]) -> dict[str, TrackSummary]:
+        """Build a summary lookup, falling back when latest summaries are unavailable."""
+
+        latest = await self.track_processor.fetch_track_summaries()
+        if latest:
+            return {summary.track_id: summary for summary in latest}
+        return fallback
+
+    @staticmethod
+    def _update_snapshot_dates(
+        track_map: dict[str, TrackDict],
+        summary_lookup: dict[str, TrackSummary],
+    ) -> None:
+        """Update date fields in the CSV snapshot using latest summaries."""
+
+        for track_id, summary in summary_lookup.items():
+            track = track_map.get(track_id)
+            if track is None:
+                continue
+            track.last_modified = summary.last_modified or None
+            if summary.date_added:
+                track.date_added = summary.date_added
+
+    async def _finalize_incremental_without_pipeline(self, prep: IncrementalPreparationResult) -> None:
+        """Handle incremental execution when no pipeline work is required."""
+
+        if not prep.delta.has_removals():
+            self.console_logger.info("No library changes detected; incremental pipeline skipped")
+            await self.database_verifier.update_last_incremental_run()
+            return
+
+        csv_path = self._get_track_list_path()
+        apply_track_delta_to_map(
+            prep.csv_map,
+            [],
+            prep.summary_map,
+            prep.delta.removed_ids,
+        )
+        self._update_snapshot_dates(prep.csv_map, prep.summary_map)
+        save_track_map_to_csv(prep.csv_map, csv_path, self.console_logger, self.error_logger)
+        self.console_logger.info("Incremental removal sync complete: %d removed", len(prep.delta.removed_ids))
+        await self.database_verifier.update_last_incremental_run()
+
+    async def _save_incremental_results(self, prep: IncrementalPreparationResult) -> None:
+        """Persist results of an incremental pipeline run."""
+
+        csv_path = self._get_track_list_path()
+        final_tracks = await self._collect_tracks_for_artists(prep.changed_tracks, prep.affected_artists)
+        summary_lookup = await self._build_summary_lookup(prep.summary_map)
+
+        apply_track_delta_to_map(
+            prep.csv_map,
+            final_tracks.values(),
+            summary_lookup,
+            prep.delta.removed_ids,
+        )
+        self._update_snapshot_dates(prep.csv_map, summary_lookup)
+        save_track_map_to_csv(prep.csv_map, csv_path, self.console_logger, self.error_logger)
+        self.console_logger.info("Sync complete: %d tracks updated, %d removed", len(final_tracks), len(prep.delta.removed_ids))
+
+    async def _clean_all_tracks_metadata(self, tracks: list[TrackDict]) -> list[TrackDict]:
         """Clean metadata for all tracks (Step 1 of pipeline).
 
         Args:
@@ -709,58 +895,49 @@ class MusicUpdater:
 
     async def _save_pipeline_results(self) -> None:
         """Save the combined results of the pipeline with full track synchronization."""
-        # Skip full library sync when using test artists for performance
         if self.dry_run_test_artists:
             self.console_logger.info("Skipping full library sync (using test artists)")
             return
 
-        # Fetch ALL current tracks from Music.app for complete synchronization
-        # Respect test artist filter when in test mode
         all_current_tracks = await self.track_processor.fetch_tracks_async()
+        if not all_current_tracks:
+            return
 
-        if all_current_tracks:
-            csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
-            # Use sync function instead of save_to_csv for bidirectional sync
-            await sync_track_list_with_current(
-                all_current_tracks,
-                csv_path,
-                self.deps.cache_service,
-                self.console_logger,
-                self.error_logger,
-                partial_sync=True,  # Incremental sync - only process new/changed tracks
-            )
+        await self._update_tracks_with_summaries(all_current_tracks)
+        await self._sync_tracks_to_csv(all_current_tracks)
 
-    async def _compute_incremental_scope(self, tracks: list["TrackDict"], force: bool) -> tuple[list["TrackDict"], bool]:
-        """Compute which tracks need processing in incremental mode.
+    async def _update_tracks_with_summaries(self, tracks: list["TrackDict"]) -> None:
+        """Update tracks with their summary information."""
+        summaries = await self.track_processor.fetch_track_summaries()
+        if not summaries:
+            return
 
-        Args:
-            tracks: All tracks from Music.app
-            force: If True, process all tracks
+        summary_lookup = {summary.track_id: summary for summary in summaries}
+        for track in tracks:
+            self._apply_summary_to_track(track, summary_lookup)
 
-        Returns:
-            Tuple of (filtered_tracks, should_skip_pipeline)
-            - filtered_tracks: Tracks that need processing
-            - should_skip_pipeline: True if pipeline should be skipped (no work needed)
+    @staticmethod
+    def _apply_summary_to_track(track: "TrackDict", summary_lookup: dict[str, Any]) -> None:
+        """Apply summary data to a single track."""
+        if not track.id:
+            return
 
-        """
-        if force:
-            # Force mode - process all tracks
-            return tracks, False
+        summary = summary_lookup.get(track.id)
+        if summary is None:
+            return
 
-        # Check if enough time has passed for any processing
-        can_run = await self.database_verifier.can_run_incremental()
-        if not can_run:
-            return [], True
+        track.last_modified = summary.last_modified or None
+        if summary.date_added:
+            track.date_added = summary.date_added
 
-        # Get last run time for filtering
-        last_run_time = await self._get_last_run_time(force=False)
-
-        # Use genre manager's existing filter logic (avoiding duplication)
-        incremental_tracks = self.genre_manager.filter_tracks_for_incremental_update(tracks, last_run_time)
-
-        # Early exit if no tracks need processing
-        if not incremental_tracks:
-            self.console_logger.info("No new tracks since last run, skipping pipeline")
-            return [], True
-
-        return incremental_tracks, False
+    async def _sync_tracks_to_csv(self, tracks: list["TrackDict"]) -> None:
+        """Synchronize tracks to CSV file."""
+        csv_path = self._get_track_list_path()
+        await sync_track_list_with_current(
+            tracks,
+            csv_path,
+            self.deps.cache_service,
+            self.console_logger,
+            self.error_logger,
+            partial_sync=True,  # Incremental sync - only process new/changed tracks
+        )

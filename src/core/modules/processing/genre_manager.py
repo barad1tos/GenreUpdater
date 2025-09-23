@@ -106,7 +106,7 @@ class GenreManager(BaseProcessor):
         for t in itertools.chain(new_tracks, missing_genre_tracks):
             tid = str(t.get("id", ""))
             # Check for missing or empty ID (but allow '0' which is falsy but valid)
-            if tid == "" or tid in seen:
+            if not tid or tid in seen:
                 continue
             seen.add(tid)
             combined.append(t)

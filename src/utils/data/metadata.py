@@ -544,6 +544,9 @@ def clean_names(
     cleaned_track = clean_string(track_name, remaster_keywords)
     cleaned_album = clean_string(album_name, remaster_keywords)
 
+    # Ensure cleaned_album is always a string (type hint for linters)
+    cleaned_album = str(cleaned_album)
+
     # Remove specified album suffixes in a case-insensitive manner
     # and ensure leftover punctuation/whitespace is stripped
     removed = True

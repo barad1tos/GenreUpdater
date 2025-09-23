@@ -326,6 +326,7 @@ class TrackDict(BaseModel):
     genre: str | None = None
     year: str | None = None  # Year as string
     date_added: str | None = None
+    last_modified: str | None = None
     track_status: str | None = None
     original_artist: str | None = None
     original_album: str | None = None
