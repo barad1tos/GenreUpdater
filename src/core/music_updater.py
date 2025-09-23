@@ -317,6 +317,12 @@ class MusicUpdater:
             self.console_logger.info("Skipping full library sync in _save_clean_results (using test artists)")
             return
 
+        # Skip full library sync in incremental mode for performance
+        # Full sync will happen at the end of main pipeline
+        if getattr(self, "_incremental_mode", False):
+            self.console_logger.info("Skipping full library sync in _save_clean_results (incremental mode)")
+            return
+
         # Sync with the database
         csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
         # Fetch ALL current tracks for complete synchronization
@@ -557,7 +563,14 @@ class MusicUpdater:
             # Use batch processing for full library to avoid timeout
             self.console_logger.info("Using batch processing for full library fetch")
             batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
-            return cast(list["TrackDict"], await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size))
+            batch_tracks = cast(list["TrackDict"], await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size))
+
+            # Store the freshly fetched library in cache so later sync operations can reuse it
+            if batch_tracks:
+                cache_ttl = int(self.config.get("caching", {}).get("library_cache_ttl_seconds", 7200))
+                await self.track_processor.cache_service.set_async("tracks_all", batch_tracks, ttl=cache_ttl)
+
+            return batch_tracks
 
         # In test artist mode, fetch tracks only for test artists
         self.console_logger.info(
@@ -648,6 +661,8 @@ class MusicUpdater:
             return None
 
         # Create updated track record by copying the model and updating fields
+        track.name = cleaned_track_name
+        track.album = cleaned_album_name
         updated_track = track.copy()
         updated_track.name = cleaned_track_name
         updated_track.album = cleaned_album_name

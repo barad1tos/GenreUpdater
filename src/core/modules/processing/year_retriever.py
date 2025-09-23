@@ -743,6 +743,10 @@ class YearRetriever:
                 change_entry = YearRetriever._create_change_entry(track, artist, album, year)
                 changes_log.append(change_entry)
 
+                # Keep the in-memory snapshot aligned with Music.app for downstream sync
+                track.year = year
+                track.new_year = year
+
     @staticmethod
     def _get_available_tracks(album_tracks: list[TrackDict]) -> list[TrackDict]:
         """Get tracks that are available for processing (exclude prerelease).

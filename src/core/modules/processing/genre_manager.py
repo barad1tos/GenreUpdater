@@ -190,6 +190,7 @@ class GenreManager(BaseProcessor):
 
         if success:
             # Create an updated track record by copying the Pydantic model and updating the genre
+            track.genre = new_genre
             updated_track = track.copy(genre=new_genre)
 
             # Create change log entry with explicit string conversion
