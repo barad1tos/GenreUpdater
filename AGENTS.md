@@ -52,3 +52,4 @@
 
 - Place new features in domain folders (`core/modules/...`, `services/...`).
 - Do not change public APIs without deprecation notes; avoid network calls in unit tests; keep changes minimal and focused.
+- Add full type annotations for all new code, including tests and helper functions.
