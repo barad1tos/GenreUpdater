@@ -15,23 +15,21 @@ Test Categories:
 7. Statistics tracking and recovery strategies
 """
 
-import pytest
-import time
-from typing import Any, Dict, List, Set
-from unittest.mock import Mock, patch
-from pathlib import Path
-
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
+from unittest.mock import patch
+
+import pytest
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.services.cache.edge_case_handler import (
+from src.infrastructure.cache.edge_case_handler import (
     EdgeCaseHandler,
-    EdgeCaseResult,
     EdgeCaseHandlerError,
+    EdgeCaseResult,
     EdgeCaseType,
     RecoveryStrategy,
 )
@@ -86,6 +84,7 @@ class TestEdgeCaseHandler:
 
     def test_applescript_timeout_success_first_try(self, handler: EdgeCaseHandler) -> None:
         """Test successful AppleScript operation on first try."""
+
         def mock_operation():
             return {"result": "success", "tracks": 100}
 
@@ -109,7 +108,7 @@ class TestEdgeCaseHandler:
                 raise Exception("Timeout error")
             return {"result": "success", "tracks": 100}
 
-        with patch('time.sleep'):  # Speed up test by skipping sleep
+        with patch("time.sleep"):  # Speed up test by skipping sleep
             result = handler.handle_applescript_timeout(mock_operation)
 
         assert result.success is True
@@ -120,10 +119,11 @@ class TestEdgeCaseHandler:
 
     def test_applescript_timeout_complete_failure(self, handler: EdgeCaseHandler) -> None:
         """Test AppleScript operation that fails all retries."""
+
         def mock_operation():
             raise Exception("Persistent timeout error")
 
-        with patch('time.sleep'):  # Speed up test
+        with patch("time.sleep"):  # Speed up test
             result = handler.handle_applescript_timeout(mock_operation)
 
         assert result.success is False
@@ -149,7 +149,7 @@ class TestEdgeCaseHandler:
     def test_detect_partial_scan_low_count(self, handler: EdgeCaseHandler) -> None:
         """Test partial scan detection with suspiciously low count."""
         result = handler.detect_partial_scan(track_count=5)
-        
+
         assert result.success is True
         assert result.strategy_used == RecoveryStrategy.PARTIAL_PROCEED
         assert "Low track count" in result.error_message
@@ -158,7 +158,7 @@ class TestEdgeCaseHandler:
     def test_detect_partial_scan_normal_count(self, handler: EdgeCaseHandler) -> None:
         """Test normal scan with reasonable track count."""
         result = handler.detect_partial_scan(track_count=500)
-        
+
         assert result.success is True
         assert result.strategy_used == RecoveryStrategy.SKIP_AND_CONTINUE
         assert result.error_message == ""
@@ -192,9 +192,9 @@ class TestEdgeCaseHandler:
         # Create extreme case: no overlap at all (100% change rate > 90% threshold)
         old_track_ids = {"track_1", "track_2", "track_3", "track_4", "track_5"}
         new_track_ids = {"new_track_1", "new_track_2", "new_track_3", "new_track_4", "new_track_5"}  # 0% overlap
-        
+
         result = handler.detect_library_corruption(old_track_ids, new_track_ids)
-        
+
         assert result.success is True
         assert result.strategy_used == RecoveryStrategy.REBUILD_FROM_SCRATCH  # Same size suggests rebuild
         assert result.edge_case_type == EdgeCaseType.LIBRARY_REBUILD
@@ -214,7 +214,7 @@ class TestEdgeCaseHandler:
 
     def test_handle_missing_files_all_valid(self, handler: EdgeCaseHandler, sample_track_data: List[Dict[str, Any]]) -> None:
         """Test missing file handling with all valid files."""
-        with patch('pathlib.Path.exists', return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             result = handler.handle_missing_files(sample_track_data)
 
         assert result.success is True
@@ -226,16 +226,13 @@ class TestEdgeCaseHandler:
     def test_handle_missing_files_some_missing(self, handler: EdgeCaseHandler) -> None:
         """Test missing file handling with some missing files under threshold."""
         # Create larger sample with low missing rate (20% = 2/10 files missing)
-        track_data = [
-            {"persistent_id": f"track_{i}", "location": f"/path/to/song{i}.mp3"}
-            for i in range(1, 11)
-        ]
-        
+        track_data = [{"persistent_id": f"track_{i}", "location": f"/path/to/song{i}.mp3"} for i in range(1, 11)]
+
         def mock_exists(self):
             # Only tracks 1-8 exist (80% success rate)
             return str(self) in [f"/path/to/song{i}.mp3" for i in range(1, 9)]
 
-        with patch('pathlib.Path.exists', mock_exists):
+        with patch("pathlib.Path.exists", mock_exists):
             result = handler.handle_missing_files(track_data)
 
         assert result.success is True
@@ -246,7 +243,7 @@ class TestEdgeCaseHandler:
 
     def test_handle_missing_files_high_missing_rate(self, handler: EdgeCaseHandler, sample_track_data: List[Dict[str, Any]]) -> None:
         """Test missing file handling with high missing file rate."""
-        with patch('pathlib.Path.exists', return_value=False):
+        with patch("pathlib.Path.exists", return_value=False):
             result = handler.handle_missing_files(sample_track_data)
 
         assert result.success is False
@@ -279,7 +276,7 @@ class TestEdgeCaseHandler:
             {"persistent_id": "track_3", "location": "/local/path/song3.mp3"},
         ]
 
-        with patch('pathlib.Path.exists', return_value=False):  # Local file doesn't exist
+        with patch("pathlib.Path.exists", return_value=False):  # Local file doesn't exist
             result = handler.handle_missing_files(track_data)
 
         assert result.success is True
@@ -346,8 +343,8 @@ class TestEdgeCaseHandler:
         """Test track data validation with invalid data types."""
         track_data = {
             "persistent_id": "",  # Empty string
-            "file_size": -1000,   # Negative size
-            "duration": "invalid", # Wrong type
+            "file_size": -1000,  # Negative size
+            "duration": "invalid",  # Wrong type
         }
 
         result = handler.validate_track_data(track_data)
@@ -361,7 +358,7 @@ class TestEdgeCaseHandler:
         track_data = {
             "persistent_id": "track_123",
             "file_size": 0,  # Zero size (warning)
-            "duration": 0.0, # Zero duration (warning)
+            "duration": 0.0,  # Zero duration (warning)
         }
 
         result = handler.validate_track_data(track_data)
@@ -395,7 +392,7 @@ class TestEdgeCaseHandler:
         # Run some operations to generate statistics
         # Both operations should update stats, regardless of whether edge case detected
         handler.detect_partial_scan(track_count=100)  # Normal scan - should still update stats
-        handler.detect_partial_scan(track_count=5)    # Low count - should trigger partial scan
+        handler.detect_partial_scan(track_count=5)  # Low count - should trigger partial scan
 
         stats = handler.get_edge_case_statistics()
         assert stats["total_cases"] == 2
@@ -424,10 +421,7 @@ class TestEdgeCaseHandler:
     def test_edge_case_result_post_init(self) -> None:
         """Test EdgeCaseResult post_init sets empty warnings."""
         result = EdgeCaseResult(
-            success=True,
-            strategy_used=RecoveryStrategy.SKIP_AND_CONTINUE,
-            edge_case_type=EdgeCaseType.PARTIAL_SCAN,
-            error_message=""
+            success=True, strategy_used=RecoveryStrategy.SKIP_AND_CONTINUE, edge_case_type=EdgeCaseType.PARTIAL_SCAN, error_message=""
         )
         assert result.warnings == []
 
@@ -436,18 +430,14 @@ class TestEdgeCaseHandler:
             strategy_used=RecoveryStrategy.SKIP_AND_CONTINUE,
             edge_case_type=EdgeCaseType.PARTIAL_SCAN,
             error_message="",
-            warnings=["test warning"]
+            warnings=["test warning"],
         )
         assert result_with_warnings.warnings == ["test warning"]
 
     def test_edge_case_handler_error_initialization(self) -> None:
         """Test EdgeCaseHandlerError initialization."""
         original_error = ValueError("Original error")
-        error = EdgeCaseHandlerError(
-            "Handler error",
-            EdgeCaseType.APPLESCRIPT_TIMEOUT,
-            original_error
-        )
+        error = EdgeCaseHandlerError("Handler error", EdgeCaseType.APPLESCRIPT_TIMEOUT, original_error)
 
         assert str(error) == "Handler error"
         assert error.edge_case_type == EdgeCaseType.APPLESCRIPT_TIMEOUT
@@ -459,7 +449,7 @@ class TestEdgeCaseHandler:
 
         # Use operation that definitely triggers statistics update
         handler.detect_partial_scan(track_count=5)  # Low count triggers partial scan
-        
+
         stats_after_success = handler.get_edge_case_statistics()
         assert stats_after_success["successful_recoveries"] == initial_stats["successful_recoveries"] + 1
         assert stats_after_success["total_cases"] == initial_stats["total_cases"] + 1
@@ -468,5 +458,8 @@ class TestEdgeCaseHandler:
         handler_stats = handler._edge_case_stats
         assert "partial_scan" in handler_stats["retry_counts"]
         assert "partial_scan" in handler_stats["recovery_times"]
+
+
 import pytest
+
 pytestmark = pytest.mark.integration

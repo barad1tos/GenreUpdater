@@ -10,8 +10,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.core.modules.processing.year_retriever import YearRetriever
-from src.utils.data.models import TrackDict
+from src.domain.tracks.year_retriever import YearRetriever
+from src.shared.data.models import TrackDict
 
 def test_dominant_year_scenario() -> None:
     """Test scenario where collaborations should get dominant year."""
@@ -23,8 +23,8 @@ def test_dominant_year_scenario() -> None:
         # Track with year - should provide dominant year
         TrackDict(
             id="1",
-            artist="Жадан і с�баки", 
-            album="Радіопр�мінь", 
+            artist="Жадан і сбаки", 
+            album="Радіопрмінь", 
             name="Основний трек",
             year="2018"  # This should be the dominant year
         ),
@@ -33,14 +33,14 @@ def test_dominant_year_scenario() -> None:
         TrackDict(
             id="2",
             artist="Жадан і собаки & Khrystya Soloviy", 
-            album="Радіопр�мінь", 
+            album="Радіопрмінь", 
             name="Радіопромінь",
             year=""  # Empty year - should get 2018
         ),
         TrackDict(
             id="3",
-            artist="Жадан і собак� & Qarpa", 
-            album="Радіопр�мінь", 
+            artist="Жадан і собак & Qarpa", 
+            album="Радіопрмінь", 
             name="Другий трек",
             year=""  # Empty year - should get 2018
         ),

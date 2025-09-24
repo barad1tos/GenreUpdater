@@ -95,8 +95,8 @@ caching:
   album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
   cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
 
-  # File paths
-  api_result_cache_path: cache/api_results.json
+  # API result cache file path
+  api_result_cache_path: "/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/api_results.json"
 
   # Cache size limits and cleanup settings (TASK-002)
   cache_size_limits:
@@ -116,7 +116,7 @@ reporting:
   change_display_mode: compact
 
 # API Cache file
-api_cache_file: cache/cache.json
+api_cache_file: "/Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/cache.json"
 
 # Album years cache file (moved to logs directory)
 album_years_cache_file: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/album_years.csv
