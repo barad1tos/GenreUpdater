@@ -3,6 +3,7 @@
 This is a streamlined version that uses the new modular components.
 """
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
