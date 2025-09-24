@@ -3,9 +3,9 @@
 This is a streamlined version that uses the new modular components.
 """
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
-from collections.abc import Iterable
 
 from src.utils.core.logger import get_full_log_path
 from src.utils.core.run_tracking import IncrementalRunTracker

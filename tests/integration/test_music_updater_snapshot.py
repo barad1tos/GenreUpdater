@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-
 from src.core.music_updater import MusicUpdater
 from src.utils.data.models import TrackDict
 from src.utils.monitoring.analytics import Analytics, LoggerContainer
