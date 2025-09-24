@@ -5,6 +5,7 @@ This is a streamlined version that uses the new modular components.
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Iterable
 
 from src.utils.core.logger import get_full_log_path
 from src.utils.core.run_tracking import IncrementalRunTracker
@@ -94,6 +95,8 @@ class MusicUpdater:
         # Dry run context
         self.dry_run_mode = ""
         self.dry_run_test_artists: set[str] = set()
+        self._pipeline_tracks_snapshot: list[TrackDict] | None = None
+        self._pipeline_tracks_index: dict[str, TrackDict] = {}
 
     def set_dry_run_context(self, mode: str, test_artists: set[str]) -> None:
         """Set the dry-run context for the updater.
@@ -107,6 +110,48 @@ class MusicUpdater:
         self.dry_run_test_artists = test_artists
         # Also set context on track_processor
         self.track_processor.set_dry_run_context(mode, test_artists)
+
+    def _reset_pipeline_snapshot(self) -> None:
+        """Reset cached pipeline tracks before a fresh run."""
+        self._pipeline_tracks_snapshot = None
+        self._pipeline_tracks_index = {}
+
+    def _set_pipeline_snapshot(self, tracks: list["TrackDict"]) -> None:
+        """Store the current pipeline track snapshot for downstream reuse."""
+        self._pipeline_tracks_snapshot = tracks
+        self._pipeline_tracks_index = {}
+        for track in tracks:
+            if track_id := str(track.get("id", "")):
+                self._pipeline_tracks_index[track_id] = track
+
+    def _update_snapshot_tracks(self, updated_tracks: Iterable["TrackDict"]) -> None:
+        """Apply field updates from processed tracks to the cached snapshot."""
+        if not self._pipeline_tracks_index:
+            return
+
+        for updated in updated_tracks:
+            track_id = str(updated.get("id", ""))
+            if not track_id:
+                continue
+
+            current_track = self._pipeline_tracks_index.get(track_id)
+            if current_track is None:
+                continue
+
+            for field, value in updated.model_dump().items():
+                try:
+                    setattr(current_track, field, value)
+                except (AttributeError, TypeError, ValueError):
+                    current_track.__dict__[field] = value
+
+    def _get_pipeline_snapshot(self) -> list["TrackDict"] | None:
+        """Return the currently cached pipeline track snapshot."""
+        return self._pipeline_tracks_snapshot
+
+    def _clear_pipeline_snapshot(self) -> None:
+        """Release cached pipeline track data after finishing the run."""
+        self._pipeline_tracks_snapshot = None
+        self._pipeline_tracks_index = {}
 
     async def run_clean_artist(self, artist: str, _force: bool) -> None:
         """Clean track names for a specific artist.
@@ -186,8 +231,6 @@ class MusicUpdater:
 
         if not track_id:
             return None, None
-
-
 
         # Clean names using the existing utility
         cleaned_track_name, cleaned_album_name = clean_names(
@@ -352,7 +395,7 @@ class MusicUpdater:
             )
 
     @staticmethod
-    async def _filter_tracks_for_artist(all_tracks: list[ "TrackDict" ], artist: str) -> list[ "TrackDict" ]:
+    async def _filter_tracks_for_artist(all_tracks: list["TrackDict"], artist: str) -> list["TrackDict"]:
         """Filter tracks to include main artist and collaborations."""
         filtered_tracks = []
         for track in all_tracks:
@@ -492,6 +535,7 @@ class MusicUpdater:
 
         """
         self.console_logger.info("Starting main update pipeline")
+        self._reset_pipeline_snapshot()
 
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode()
@@ -508,9 +552,7 @@ class MusicUpdater:
             self.console_logger.info("No new tracks to process, skipping pipeline")
             return
 
-        self.console_logger.info("Processing %d tracks (%s mode)",
-                               len(incremental_tracks),
-                               "full" if force else "incremental")
+        self.console_logger.info("Processing %d tracks (%s mode)", len(incremental_tracks), "full" if force else "incremental")
 
         # Get last run time for incremental updates
         last_run_time = await self._get_last_run_time(force)
@@ -530,6 +572,7 @@ class MusicUpdater:
         if self._should_update_run_timestamp(force, incremental_tracks):
             await self.database_verifier.update_last_incremental_run()
 
+        self._clear_pipeline_snapshot()
         self.console_logger.info("Main update pipeline completed successfully")
 
     @staticmethod
@@ -566,18 +609,21 @@ class MusicUpdater:
             # Use batch processing for full library to avoid timeout
             self.console_logger.info("Using batch processing for full library fetch")
             batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
-            return cast(list["TrackDict"], await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size))
+            tracks = cast(list["TrackDict"], await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size))
+            self._set_pipeline_snapshot(tracks)
+            return tracks
 
         # In test artist mode, fetch tracks only for test artists
         self.console_logger.info(
             "Test mode: fetching tracks only for test artists: %s",
             list(self.dry_run_test_artists),
         )
-        tracks: list[TrackDict] = []
+        collected_tracks: list[TrackDict] = []
         for artist in self.dry_run_test_artists:
             artist_tracks = await self.track_processor.fetch_tracks_async(artist=artist)
-            tracks.extend(artist_tracks)
-        return tracks
+            collected_tracks.extend(artist_tracks)
+        self._set_pipeline_snapshot(collected_tracks)
+        return collected_tracks
 
     async def _get_last_run_time(self, force: bool) -> datetime | None:
         """Get the last run time for incremental updates.
@@ -660,6 +706,7 @@ class MusicUpdater:
         updated_track = track.copy()
         updated_track.name = cleaned_track_name
         updated_track.album = cleaned_album_name
+        self._update_snapshot_tracks([updated_track])
         return updated_track
 
     async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list["TrackDict"]:
@@ -681,6 +728,7 @@ class MusicUpdater:
         """
         self.console_logger.info("Step 2/3: Updating genres")
         updated_genre_tracks, _ = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
+        self._update_snapshot_tracks(updated_genre_tracks)
         self.console_logger.info("Updated genres for %d tracks", len(updated_genre_tracks))
         return updated_genre_tracks
 
@@ -696,6 +744,7 @@ class MusicUpdater:
         self.console_logger.info("Step 3/3: Updating album years")
         try:
             await self.year_retriever.process_album_years(tracks, force=force)
+            self._update_snapshot_tracks(self.year_retriever.get_last_updated_tracks())
             self.console_logger.info("=== AFTER Step 3 completed successfully ===")
         except Exception:
             self.error_logger.exception("=== ERROR in Step 3 ===")
@@ -708,9 +757,13 @@ class MusicUpdater:
             self.console_logger.info("Skipping full library sync (using test artists)")
             return
 
-        # Fetch ALL current tracks from Music.app for complete synchronization
-        # Respect test artist filter when in test mode
-        all_current_tracks = await self.track_processor.fetch_tracks_async()
+        # Use cached snapshot when available to avoid a second AppleScript fetch
+        snapshot_tracks = self._get_pipeline_snapshot()
+        if snapshot_tracks is not None:
+            all_current_tracks = snapshot_tracks
+        else:
+            # Fetch ALL current tracks from Music.app for complete synchronization
+            all_current_tracks = await self.track_processor.fetch_tracks_async()
 
         if all_current_tracks:
             csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")

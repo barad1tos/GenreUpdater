@@ -106,6 +106,7 @@ class YearRetriever:
         self.config = config
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
+        self._last_updated_tracks: list[TrackDict] = []
 
     @staticmethod
     def _extract_future_years(album_tracks: list[TrackDict]) -> list[int]:
@@ -1028,6 +1029,7 @@ class YearRetriever:
 
         try:
             self.console_logger.info("Starting album year updates (force=%s)", force)
+            self._last_updated_tracks = []
 
             # Initialize external API service if needed
             if not hasattr(self.external_api, "_initialized"):
@@ -1037,6 +1039,7 @@ class YearRetriever:
 
             # Run the update logic
             updated_tracks, changes_log = await self._update_album_years_logic(tracks)
+            self._last_updated_tracks = updated_tracks
 
             # Summary with detailed statistics
             albums_processed = len({f"{t.get('artist', '')} - {t.get('album', '')}" for t in tracks if t.get("album")})
@@ -1273,3 +1276,7 @@ class YearRetriever:
 
         """
         return self._dry_run_actions
+
+    def get_last_updated_tracks(self) -> list[TrackDict]:
+        """Return the tracks updated during the most recent processing run."""
+        return self._last_updated_tracks

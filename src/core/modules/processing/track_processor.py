@@ -359,6 +359,10 @@ class TrackProcessor:
 
         self.console_logger.info("Batch processing completed: %d batches processed, %d total tracks fetched", batch_count, len(all_tracks))
 
+        # Populate cache so subsequent fetches can reuse the same snapshot without hitting AppleScript again
+        await self.cache_service.set_async("tracks_all", all_tracks)
+        self.console_logger.info("Cached %d tracks for key: tracks_all", len(all_tracks))
+
         return all_tracks
 
     async def _process_single_batch(
