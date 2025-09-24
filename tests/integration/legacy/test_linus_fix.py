@@ -7,7 +7,7 @@ import logging
 import time
 from pathlib import Path
 
-from src.services.dependencies_service import DependencyContainer
+from src.infrastructure.dependencies_service import DependencyContainer
 
 
 async def test_race_condition() -> bool | None:
@@ -31,7 +31,7 @@ async def test_race_condition() -> bool | None:
             year_updates_logger=year_updates_logger,
             db_verify_logger=db_verify_logger,
             logging_listener=None,
-            dry_run=True
+            dry_run=True,
         )
 
         await deps.initialize()
@@ -48,7 +48,7 @@ async def test_race_condition() -> bool | None:
         # Виконуємо збереження декілька разів підряд
         start_time = time.time()
         for i in range(3):
-            print(f"🔄 Збереження #{i+1}...")
+            print(f"🔄 Збереження #{i + 1}...")
             await cache_service.save_cache()
 
         end_time = time.time()
@@ -77,6 +77,7 @@ async def test_race_condition() -> bool | None:
     except Exception as e:
         print(f"❌ Помилка тесту: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -85,4 +86,5 @@ if __name__ == "__main__":
     result = asyncio.run(test_race_condition())
     print(f"\n{'✅ Test passed' if result else '❌ Test failed'}")
 import pytest
+
 pytestmark = pytest.mark.integration
