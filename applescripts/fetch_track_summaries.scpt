@@ -1,7 +1,15 @@
 (*
     Lightweight track summary extractor.
-    Returns track id, date added, and modification date for all tracks
+    Returns track id, date added, modification date, and cloud status for all tracks
     using ASCII 30 (field) and ASCII 29 (line) separators.
+
+    Cloud status represents the Apple Music/iTunes cloud storage state:
+    - "subscription" - Track from Apple Music subscription
+    - "purchased" - Track bought from iTunes Store
+    - "matched" - Local track matched to Apple Music catalog
+    - "uploaded" - User-uploaded track to iCloud Music Library
+    - "ineligible" - Track not eligible for cloud services
+    - "" (empty) - No cloud status or error retrieving status
 *)
 
 on run argv
@@ -18,8 +26,9 @@ on run argv
 
                 set date_added_value to my formatDate(date added of currentTrack)
                 set modification_value to my formatDate(my resolveModificationDate(currentTrack))
+                set track_status to my resolveCloudStatus(currentTrack)
 
-                set trackLine to my joinFields({track_id, date_added_value, modification_value}, fieldSeparator)
+                set trackLine to my joinFields({track_id, date_added_value, modification_value, track_status}, fieldSeparator)
                 set end of finalResult to trackLine
             on error
                 -- Skip tracks that raise errors
@@ -41,6 +50,15 @@ on resolveModificationDate(aTrack)
         end try
     end try
 end resolveModificationDate
+
+on resolveCloudStatus(aTrack)
+    try
+        set rawCloudStatus to (|cloud status| of aTrack)
+        return (rawCloudStatus as text)
+    on error
+        return ""
+    end try
+end resolveCloudStatus
 
 on joinFields(fieldList, fieldSeparator)
     set oldDelims to AppleScript's text item delimiters
