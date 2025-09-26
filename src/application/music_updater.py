@@ -801,8 +801,11 @@ class MusicUpdater:
         # Get last run time for filtering
         last_run_time = await self._get_last_run_time(force=False)
 
+        # Fetch track summaries for status change detection
+        track_summaries = await self.track_processor.fetch_track_summaries()
+
         # Use dedicated incremental filter service
-        incremental_tracks = self.incremental_filter.filter_tracks_for_incremental_update(tracks, last_run_time)
+        incremental_tracks = self.incremental_filter.filter_tracks_for_incremental_update(tracks, last_run_time, track_summaries)
 
         # Early exit if no tracks need processing
         if not incremental_tracks:

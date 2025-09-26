@@ -7,14 +7,17 @@ responsibility separate from genre-specific logic.
 from __future__ import annotations
 
 import itertools
-import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.base_processor import BaseProcessor
-from src.shared.data.models import TrackDict
+from src.infrastructure.track_delta_service import TrackSummary, compute_track_delta
+from src.shared.monitoring.reports import load_track_list
+from src.shared.core.logger import get_full_log_path
 
 if TYPE_CHECKING:
+    import logging
+    from src.shared.data.models import TrackDict
     from src.shared.monitoring import Analytics
 
 
@@ -36,12 +39,14 @@ class IncrementalFilterService(BaseProcessor):
         self,
         tracks: list[TrackDict],
         last_run_time: datetime | None,
+        track_summaries: list[TrackSummary] | None = None,
     ) -> list[TrackDict]:
         """Return the subset of tracks that require processing.
 
         Args:
             tracks: All tracks from the music library.
             last_run_time: Timestamp of the last successful incremental run.
+            track_summaries: Optional track summaries for status change detection.
 
         """
         if last_run_time is None:
@@ -59,9 +64,14 @@ class IncrementalFilterService(BaseProcessor):
             if date_added and date_added > last_run_time:
                 new_tracks.append(track)
 
+        # Check for tracks with changed status (e.g., prerelease -> subscription)
+        status_changed_tracks: list[TrackDict] = []
+        if track_summaries:
+            status_changed_tracks = self._find_status_changed_tracks(tracks, track_summaries)
+
         seen: set[str] = set()
         combined: list[TrackDict] = []
-        for candidate in itertools.chain(new_tracks, missing_genre_tracks):
+        for candidate in itertools.chain(new_tracks, missing_genre_tracks, status_changed_tracks):
             track_id = str(candidate.get("id", ""))
             if not track_id or track_id in seen:
                 continue
@@ -69,10 +79,11 @@ class IncrementalFilterService(BaseProcessor):
             combined.append(candidate)
 
         self.console_logger.info(
-            "Found %d new tracks since %s; including %d with missing/unknown genre (combined %d)",
+            "Found %d new tracks since %s; including %d with missing/unknown genre and %d with changed status (combined %d)",
             len(new_tracks),
             last_run_time.strftime("%Y-%m-%d %H:%M:%S"),
             len(missing_genre_tracks),
+            len(status_changed_tracks),
             len(combined),
         )
         return combined
@@ -93,6 +104,41 @@ class IncrementalFilterService(BaseProcessor):
         except (ValueError, TypeError):
             return None
         return None
+
+    def _find_status_changed_tracks(
+        self,
+        tracks: list[TrackDict],
+        summaries: list[TrackSummary],
+    ) -> list[TrackDict]:
+        """Find tracks that have changed status since last run."""
+        try:
+            # Load previous track state from CSV
+            csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
+            existing_tracks = load_track_list(csv_path)
+
+            if not existing_tracks:
+                return []
+
+            # Compute delta
+            delta = compute_track_delta(summaries, existing_tracks)
+
+            if not delta.updated_ids:
+                return []
+
+            # Filter tracks that have updated status
+            status_changed_tracks: list[TrackDict] = []
+            tracks_by_id = {str(t.get("id", "")): t for t in tracks}
+
+            for track_id in delta.updated_ids:
+                if track_id in tracks_by_id:
+                    track = tracks_by_id[track_id]
+                    status_changed_tracks.append(track)
+
+            return status_changed_tracks
+
+        except Exception as e:
+            self.console_logger.warning("Failed to check status changes: %s", e)
+            return []
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Return recorded dry-run actions."""

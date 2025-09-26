@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 FIELD_SEPARATOR = "\x1e"  # ASCII 30
 LINE_SEPARATOR = "\x1d"  # ASCII 29
+EXPECTED_FIELD_COUNT = 4  # track_id, date_added, last_modified, track_status
 
 
 @dataclass(slots=True)
@@ -21,6 +22,7 @@ class TrackSummary:
     track_id: str
     date_added: str
     last_modified: str
+    track_status: str
 
 
 @dataclass(slots=True)
@@ -59,7 +61,7 @@ def parse_track_summaries(raw_output: str) -> list[TrackSummary]:
             continue
         parts = line.split(FIELD_SEPARATOR)
         # Normalise length
-        while len(parts) < 3:
+        while len(parts) < EXPECTED_FIELD_COUNT:
             parts.append("")
         if track_id := parts[0].strip():
             summaries.append(
@@ -67,6 +69,7 @@ def parse_track_summaries(raw_output: str) -> list[TrackSummary]:
                     track_id=track_id,
                     date_added=parts[1].strip(),
                     last_modified=parts[2].strip(),
+                    track_status=parts[3].strip(),
                 )
             )
     return summaries
@@ -95,9 +98,19 @@ def compute_track_delta(
         stored_date_added = stored.date_added or ""
         summary_date_added = summary.date_added or ""
 
+        stored_track_status = getattr(stored, "track_status", "")
+        summary_track_status = summary.track_status or ""
+
+        # Only consider track_status change if both stored and summary have meaningful values
+        # This prevents mass updates on first run after adding track_status field
+        track_status_changed = (
+            stored_track_status and summary_track_status and
+            summary_track_status != stored_track_status
+        )
+
         if (summary_last_modified and summary_last_modified != stored_last_modified) or (
             summary_date_added and summary_date_added != stored_date_added
-        ):
+        ) or track_status_changed:
             updated_ids.append(track_id)
 
     return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
@@ -123,4 +136,6 @@ def apply_track_delta_to_map(
             track.last_modified = summary.last_modified or None
             if summary.date_added:
                 track.date_added = summary.date_added
+            if summary.track_status:
+                track.track_status = summary.track_status
         track_map[track_id] = track
