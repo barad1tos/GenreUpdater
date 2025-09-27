@@ -122,7 +122,7 @@ class FakeGenreManager:
     ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
         """Mock update_genres_by_artist_async method."""
         assert last_run_time is None
-        assert force is True
+        assert force
         updated_tracks = [track.copy(genre="UpdatedGenre") for track in tracks]
         return updated_tracks, []
 
@@ -136,7 +136,7 @@ class FakeYearRetriever:
 
     async def process_album_years(self, tracks: list[TrackDict], force: bool = False) -> bool:
         """Mock process_album_years method."""
-        assert force is True
+        assert force
         self._updated_tracks = [track.copy(year="2024") for track in tracks]
         return True
 

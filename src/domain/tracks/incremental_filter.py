@@ -12,11 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.base_processor import BaseProcessor
 from src.infrastructure.track_delta_service import TrackSummary, compute_track_delta
-from src.shared.monitoring.reports import load_track_list
 from src.shared.core.logger import get_full_log_path
+from src.shared.monitoring.reports import load_track_list
 
 if TYPE_CHECKING:
     import logging
+
     from src.shared.data.models import TrackDict
     from src.shared.monitoring import Analytics
 
@@ -127,7 +128,7 @@ class IncrementalFilterService(BaseProcessor):
 
             # Filter tracks that have updated status
             status_changed_tracks: list[TrackDict] = []
-            tracks_by_id = {str(t.get("id", "")): t for t in tracks}
+            tracks_by_id = {str(t.id): t for t in tracks}
 
             for track_id in delta.updated_ids:
                 if track_id in tracks_by_id:
