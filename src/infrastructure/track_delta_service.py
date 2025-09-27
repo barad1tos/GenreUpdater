@@ -98,7 +98,7 @@ def compute_track_delta(
         stored_date_added = stored.date_added or ""
         summary_date_added = summary.date_added or ""
 
-        stored_track_status = getattr(stored, "track_status", "")
+        stored_track_status = stored.track_status or ""
         summary_track_status = summary.track_status or ""
 
         # Only consider track_status change if both stored and summary have meaningful values

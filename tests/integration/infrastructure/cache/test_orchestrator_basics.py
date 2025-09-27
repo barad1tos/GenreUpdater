@@ -6,15 +6,18 @@ import asyncio
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import pytest
 from src.infrastructure.cache.cache_orchestrator import CacheOrchestrator
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture()
+@pytest.fixture
 def cache_config() -> dict[str, Any]:
     """Return a minimal cache configuration for testing."""
     temp_dir = tempfile.mkdtemp()
@@ -32,7 +35,7 @@ def cache_config() -> dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def cache_logger() -> logging.Logger:
     """Provide a quiet logger instance for cache tests."""
     logger = logging.getLogger("test.cache_orchestrator")
@@ -42,8 +45,8 @@ def cache_logger() -> logging.Logger:
     return logger
 
 
-@pytest.fixture()
-async def orchestrator(cache_config: dict[str, Any], cache_logger: logging.Logger) -> CacheOrchestrator:
+@pytest.fixture
+async def orchestrator(cache_config: dict[str, Any], cache_logger: logging.Logger) -> AsyncGenerator[CacheOrchestrator]:
     """Yield an initialized CacheOrchestrator instance."""
     orchestrator = CacheOrchestrator(cache_config, cache_logger)
     await orchestrator.initialize()
@@ -62,9 +65,12 @@ async def test_generic_set_and_get(orchestrator: CacheOrchestrator) -> None:
 async def test_async_compute_on_miss(orchestrator: CacheOrchestrator) -> None:
     """When a key is missing, compute callback is evaluated and cached."""
 
-    async def compute() -> str:
-        await asyncio.sleep(0)
-        return "computed"
+    def compute() -> asyncio.Future[str]:
+        """Compute function that returns a test value."""
+        async def _compute() -> str:
+            await asyncio.sleep(0)
+            return "computed"
+        return asyncio.create_task(_compute())
 
     result = await orchestrator.get_async("missing", compute)
     assert result == "computed"

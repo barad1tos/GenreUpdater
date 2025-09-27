@@ -51,8 +51,16 @@ class GenreManager(BaseProcessor):
         self.track_processor = track_processor
 
     @staticmethod
-    def _is_missing_or_unknown_genre(track: TrackDict) -> bool:
-        genre_val = track.get("genre", "")
+    def is_missing_or_unknown_genre(track: TrackDict) -> bool:
+        """Check if track has missing or unknown genre.
+
+        Args:
+            track: Track to check
+
+        Returns:
+            True if genre is missing, empty, or 'unknown'
+        """
+        genre_val = track.genre or ""
         if not isinstance(genre_val, str):
             return True
 
@@ -60,9 +68,17 @@ class GenreManager(BaseProcessor):
         return not genre_stripped or genre_stripped.lower() in {"unknown", ""}
 
     @staticmethod
-    def _parse_date_added(track: TrackDict) -> datetime | None:
+    def parse_date_added(track: TrackDict) -> datetime | None:
+        """Parse track's date_added field to datetime.
+
+        Args:
+            track: Track with date_added field
+
+        Returns:
+            Parsed datetime with UTC timezone, or None if parsing fails
+        """
         try:
-            date_added_str = track.get("date_added", "")
+            date_added_str = track.date_added or ""
             if isinstance(date_added_str, str) and date_added_str:
                 return datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
         except (ValueError, TypeError):
@@ -93,11 +109,11 @@ class GenreManager(BaseProcessor):
 
         for track in tracks:
             # Always include tracks with empty/unknown genre to repair metadata
-            if self._is_missing_or_unknown_genre(track):
+            if self.is_missing_or_unknown_genre(track):
                 missing_genre_tracks.append(track)
 
             # Include if added after last run
-            date_added = self._parse_date_added(track)
+            date_added = self.parse_date_added(track)
             if date_added and date_added > last_run_time:
                 new_tracks.append(track)
 
@@ -106,7 +122,7 @@ class GenreManager(BaseProcessor):
         seen: set[str] = set()
         combined: list[TrackDict] = []
         for t in itertools.chain(new_tracks, missing_genre_tracks):
-            tid = str(t.get("id", ""))
+            tid = str(t.id or "")
             # Check for missing or empty ID (but allow '0' which is falsy but valid)
             if not tid or tid in seen:
                 continue
@@ -139,10 +155,10 @@ class GenreManager(BaseProcessor):
             Tuple of (updated_track, change_log_entry) or (None, None) if no update
 
         """
-        track_id = track.get("id", "")
-        track_name = track.get("name", "Unknown")
-        current_genre = track.get("genre", "")
-        track_status = track.get("track_status", "")
+        track_id = track.id or ""
+        track_name = track.name or "Unknown"
+        current_genre = track.genre or ""
+        track_status = track.track_status or ""
 
         if not track_id:
             self.error_logger.error("Track missing 'id' field")
@@ -185,8 +201,8 @@ class GenreManager(BaseProcessor):
         success = await self.track_processor.update_track_async(
             track_id=track_id,
             new_genre=new_genre,
-            original_artist=str(track.get("artist", "")),
-            original_album=str(track.get("album", "")),
+            original_artist=str(track.artist or ""),
+            original_album=str(track.album or ""),
             original_track=track_name,
         )
 
@@ -200,9 +216,9 @@ class GenreManager(BaseProcessor):
                 timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
                 change_type="genre_update",
                 track_id=str(track_id),
-                artist=str(track.get("artist", "")),
-                track_name=str(track.get("name", "")),
-                album_name=str(track.get("album", "")),
+                artist=str(track.artist or ""),
+                track_name=str(track.name or ""),
+                album_name=str(track.album or ""),
                 old_genre=str(current_genre),
                 new_genre=new_genre,
             )
@@ -255,17 +271,17 @@ class GenreManager(BaseProcessor):
         if artist_name == "Green Carnation":
             self.console_logger.info("DEBUG: Green Carnation tracks details:")
             for track in artist_tracks:
-                track_id = track.get("id", "")
-                track_name = track.get("name", "")
-                current_genre = track.get("genre", "")
-                track_status = track.get("track_status", "")
-                album = track.get("album", "")
+                track_id = track.id or ""
+                track_name = track.name or ""
+                current_genre = track.genre or ""
+                track_status = track.track_status or ""
+                album = track.album or ""
                 self.console_logger.info(
                     "  Track %s: %s | Album: %s | Genre: %s | Status: %s", track_id, track_name, album, current_genre, track_status
                 )
 
     @staticmethod
-    def _process_batch_results(batch_results: list[Any], updated_tracks: list[TrackDict], change_logs: list[dict[str, Any]]) -> None:
+    def process_batch_results(batch_results: list[Any], updated_tracks: list[TrackDict], change_logs: list[dict[str, Any]]) -> None:
         """Process batch results and update collections.
 
         Args:
@@ -332,7 +348,7 @@ class GenreManager(BaseProcessor):
             batch = update_tasks[i : i + batch_size]
             batch_results = await self._gather_with_error_handling(batch, f"Genre update for {artist_name}")
 
-            self._process_batch_results(batch_results, updated_tracks, change_logs)
+            self.process_batch_results(batch_results, updated_tracks, change_logs)
 
             # Reduced noise - only log if significant updates occurred
 
@@ -455,7 +471,7 @@ class GenreManager(BaseProcessor):
         candidates = self._filter_tracks_for_update(artist_tracks, last_run, force_flag, dominant_genre)
 
         # De-duplicate by id
-        return self._deduplicate_tracks_by_id(candidates)
+        return self.deduplicate_tracks_by_id(candidates)
 
     def _filter_tracks_for_update(
         self,
@@ -477,23 +493,23 @@ class GenreManager(BaseProcessor):
         """
         candidates: list[TrackDict] = []
         for t in artist_tracks:
-            if force_flag or self._is_missing_or_unknown_genre(t):
+            if force_flag or self.is_missing_or_unknown_genre(t):
                 candidates.append(t)
                 continue
 
-            added_dt = self._parse_date_added(t)
+            added_dt = self.parse_date_added(t)
             if last_run is not None and added_dt and added_dt > last_run:
                 candidates.append(t)
                 continue
 
-            genre_val = t.get("genre", "")
+            genre_val = t.genre or ""
             if isinstance(genre_val, str) and genre_val.strip() and dominant_genre and (genre_val != dominant_genre):
                 candidates.append(t)
 
         return candidates
 
     @staticmethod
-    def _deduplicate_tracks_by_id(tracks: list[TrackDict]) -> list[TrackDict]:
+    def deduplicate_tracks_by_id(tracks: list[TrackDict]) -> list[TrackDict]:
         """Remove duplicate tracks based on track ID.
 
         Args:
@@ -505,7 +521,7 @@ class GenreManager(BaseProcessor):
         seen_ids: set[str] = set()
         unique: list[TrackDict] = []
         for t in tracks:
-            tid = str(t.get("id", ""))
+            tid = str(t.id or "")
             if not tid or tid in seen_ids:
                 continue
             seen_ids.add(tid)
@@ -520,3 +536,66 @@ class GenreManager(BaseProcessor):
 
         """
         return self._dry_run_actions
+
+    # Test-only methods for accessing private functionality
+    async def test_update_track_genre(
+        self,
+        track: TrackDict,
+        new_genre: str,
+        force_update: bool,
+    ) -> tuple[TrackDict | None, ChangeLogEntry | None]:
+        """Test-only access to _update_track_genre method."""
+        return await self._update_track_genre(track, new_genre, force_update)
+
+    async def test_gather_with_error_handling(
+        self,
+        tasks: list[Any],
+        operation_name: str,
+    ) -> list[Any]:
+        """Test-only access to _gather_with_error_handling method."""
+        return await self._gather_with_error_handling(tasks, operation_name)
+
+    def test_log_artist_debug_info(self, artist_name: str, artist_tracks: list[TrackDict]) -> None:
+        """Test-only access to _log_artist_debug_info method."""
+        return self._log_artist_debug_info(artist_name, artist_tracks)
+
+    def test_filter_tracks_for_update(
+        self,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force_flag: bool,
+        dominant_genre: str | None,
+    ) -> list[TrackDict]:
+        """Test-only access to _filter_tracks_for_update method."""
+        return self._filter_tracks_for_update(artist_tracks, last_run, force_flag, dominant_genre)
+
+    def test_select_tracks_to_update_for_artist(
+        self,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force_flag: bool,
+        dominant_genre: str | None,
+    ) -> list[TrackDict]:
+        """Test-only access to _select_tracks_to_update_for_artist method."""
+        return self._select_tracks_to_update_for_artist(artist_tracks, last_run, force_flag, dominant_genre)
+
+    async def test_process_artist_genres(
+        self,
+        artist_name: str,
+        all_artist_tracks: list[TrackDict],
+        force_update: bool,
+        tracks_to_update: list[TrackDict] | None = None,
+    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+        """Test-only access to _process_artist_genres method."""
+        return await self._process_artist_genres(artist_name, all_artist_tracks, force_update, tracks_to_update)
+
+    async def test_process_single_artist_wrapper(
+        self,
+        artist_name: str,
+        artist_tracks: list[TrackDict],
+        last_run: datetime | None,
+        force: bool,
+        semaphore: Any,
+    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+        """Test-only access to _process_single_artist_wrapper method."""
+        return await self._process_single_artist_wrapper(artist_name, artist_tracks, last_run, force, semaphore)
