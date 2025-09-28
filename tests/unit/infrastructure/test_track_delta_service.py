@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from typing import TYPE_CHECKING
 
 from src.infrastructure.track_delta_service import (
-    EXPECTED_FIELD_COUNT,
     FIELD_SEPARATOR,
     LINE_SEPARATOR,
     TrackDelta,
@@ -15,6 +13,7 @@ from src.infrastructure.track_delta_service import (
     compute_track_delta,
     parse_track_summaries,
 )
+
 from tests.mocks.track_data import DummyTrackData, DummyTrackSummary, FakeTrackMap
 
 if TYPE_CHECKING:
@@ -206,7 +205,7 @@ class TestComputeTrackDelta:
         summaries = [
             DummyTrackSummary.create(
                 track_id="1",
-                last_modified="2024-01-02 12:00:00"  # Updated
+                last_modified="2024-01-02 12:00:00",  # Updated
             ),
         ]
 
@@ -256,7 +255,7 @@ class TestComputeTrackDelta:
         summaries = [
             DummyTrackSummary.create(
                 track_id="1",
-                track_status="subscription"  # New field value
+                track_status="subscription",  # New field value
             ),
         ]
 
@@ -277,7 +276,7 @@ class TestComputeTrackDelta:
         summaries = [
             DummyTrackSummary.create(
                 track_id="1",
-                date_added="2024-01-02 12:00:00"  # Updated
+                date_added="2024-01-02 12:00:00",  # Updated
             ),
         ]
 
@@ -298,10 +297,7 @@ class TestComputeTrackDelta:
 
         # Identical existing track
         existing_track = DummyTrackData.create(
-            track_id="1",
-            last_modified="2024-01-01 12:00:00",
-            date_added="2024-01-01 12:00:00",
-            track_status="subscription"
+            track_id="1", last_modified="2024-01-01 12:00:00", date_added="2024-01-01 12:00:00", track_status="subscription"
         )
         existing_map = {"1": existing_track}
 
@@ -341,11 +337,13 @@ class TestApplyTrackDeltaToMap:
 
     def test_apply_track_delta_to_map_remove_tracks(self) -> None:
         """Test removing tracks from map."""
-        track_map = FakeTrackMap([
-            DummyTrackData.create(track_id="1"),
-            DummyTrackData.create(track_id="2"),
-            DummyTrackData.create(track_id="3"),
-        ]).to_dict()
+        track_map = FakeTrackMap(
+            [
+                DummyTrackData.create(track_id="1"),
+                DummyTrackData.create(track_id="2"),
+                DummyTrackData.create(track_id="3"),
+            ]
+        ).to_dict()
 
         # Remove tracks 2 and 3
         removed_ids = ["2", "3"]
@@ -361,9 +359,11 @@ class TestApplyTrackDeltaToMap:
 
     def test_apply_track_delta_to_map_update_tracks(self) -> None:
         """Test updating tracks with summary data."""
-        track_map = FakeTrackMap([
-            DummyTrackData.create(track_id="1"),
-        ]).to_dict()
+        track_map = FakeTrackMap(
+            [
+                DummyTrackData.create(track_id="1"),
+            ]
+        ).to_dict()
 
         # Update track 1 with new summary data
         updated_track = DummyTrackData.create(track_id="1", name="Updated Track")
