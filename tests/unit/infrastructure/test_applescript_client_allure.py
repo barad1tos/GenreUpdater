@@ -8,15 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
 import pytest
-
 from src.infrastructure.applescript_client import (
+    MAX_SCRIPT_SIZE,
+    MAX_TRACK_ID_LENGTH,
     AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
-    DANGEROUS_APPLESCRIPT_PATTERNS,
-    MAX_SCRIPT_SIZE,
-    MAX_TRACK_ID_LENGTH,
 )
+
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
@@ -34,14 +33,17 @@ class TestAppleScriptSanitizerAllure:
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Should detect dangerous AppleScript patterns")
     @allure.description("Test detection of potentially dangerous AppleScript code patterns")
-    @pytest.mark.parametrize("dangerous_code,expected_pattern", [
-        ("do shell script \"rm -rf /\"", "do shell script"),
-        ("tell application \"Finder\" to delete", "tell application \"Finder\""),
-        ("tell application \"System Events\" to keystroke", "keystroke"),
-        ("load script file \"malicious.scpt\"", "load script"),
-        ("choose file with prompt \"Select file\"", "choose file"),
-        ("open location \"http://malicious.com\"", "open location"),
-    ])
+    @pytest.mark.parametrize(
+        "dangerous_code,expected_pattern",
+        [
+            ('do shell script "rm -rf /"', "do shell script"),
+            ('tell application "Finder" to delete', 'tell application "Finder"'),
+            ('tell application "System Events" to keystroke', "keystroke"),
+            ('load script file "malicious.scpt"', "load script"),
+            ('choose file with prompt "Select file"', "choose file"),
+            ('open location "http://malicious.com"', "open location"),
+        ],
+    )
     def test_detect_dangerous_patterns(self, dangerous_code: str, expected_pattern: str) -> None:
         """Test detection of dangerous AppleScript patterns."""
         sanitizer = self.create_sanitizer()
@@ -63,13 +65,16 @@ class TestAppleScriptSanitizerAllure:
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Should allow safe AppleScript code")
     @allure.description("Test that safe AppleScript code passes validation")
-    @pytest.mark.parametrize("safe_code", [
-        'tell application "Music" to get name of current track',
-        'tell application "Music" to set genre of track id "123" to "Rock"',
-        'tell application "Music" to get properties of playlist "Library"',
-        'set trackName to "My Song"',
-        'set genreValue to "Jazz"',
-    ])
+    @pytest.mark.parametrize(
+        "safe_code",
+        [
+            'tell application "Music" to get name of current track',
+            'tell application "Music" to set genre of track id "123" to "Rock"',
+            'tell application "Music" to get properties of playlist "Library"',
+            'set trackName to "My Song"',
+            'set genreValue to "Jazz"',
+        ],
+    )
     def test_allow_safe_applescript_code(self, safe_code: str) -> None:
         """Test that safe AppleScript code passes validation."""
         sanitizer = self.create_sanitizer()
@@ -94,17 +99,20 @@ class TestAppleScriptSanitizerAllure:
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Should sanitize track IDs properly")
     @allure.description("Test sanitization of track IDs to prevent injection")
-    @pytest.mark.parametrize("track_id,should_pass", [
-        ("normal_track_123", True),
-        ("track-with-hyphens", True),
-        ("track_with_underscores", True),
-        ("123456789", True),
-        ("track; rm -rf /", False),  # Command injection attempt
-        ("track && malicious", False),  # Command chaining
-        ("track`command`", False),  # Command substitution
-        ("track$injection", False),  # Variable injection
-        ("a" * (MAX_TRACK_ID_LENGTH + 1), False),  # Too long
-    ])
+    @pytest.mark.parametrize(
+        "track_id,should_pass",
+        [
+            ("normal_track_123", True),
+            ("track-with-hyphens", True),
+            ("track_with_underscores", True),
+            ("123456789", True),
+            ("track; rm -rf /", False),  # Command injection attempt
+            ("track && malicious", False),  # Command chaining
+            ("track`command`", False),  # Command substitution
+            ("track$injection", False),  # Variable injection
+            ("a" * (MAX_TRACK_ID_LENGTH + 1), False),  # Too long
+        ],
+    )
     def test_sanitize_track_id(self, track_id: str, should_pass: bool) -> None:
         """Test track ID sanitization."""
         sanitizer = self.create_sanitizer()
@@ -163,7 +171,7 @@ class TestAppleScriptSanitizerAllure:
         sanitizer = self.create_sanitizer()
 
         with allure.step("Create script with multiple tell blocks"):
-            complex_script = '''
+            complex_script = """
             tell application "Music"
                 get name of current track
             end tell
@@ -173,7 +181,7 @@ class TestAppleScriptSanitizerAllure:
             tell application "System Events"
                 get processes
             end tell
-            '''
+            """
 
         with allure.step("Analyze script complexity"):
             # This would be used internally to determine temp file usage
@@ -202,13 +210,7 @@ class TestAppleScriptClientAllure:
         analytics: Any = None,
     ) -> AppleScriptClient:
         """Create an AppleScriptClient instance for testing."""
-        test_config = config or {
-            "apple_script": {
-                "timeout": 30,
-                "concurrency": 5,
-                "script_directory": "applescripts/"
-            }
-        }
+        test_config = config or {"apple_script": {"timeout": 30, "concurrency": 5, "script_directory": "applescripts/"}}
 
         console_logger = MockLogger()
         error_logger = MockLogger()
@@ -228,26 +230,19 @@ class TestAppleScriptClientAllure:
     def test_client_initialization_comprehensive(self) -> None:
         """Test comprehensive AppleScript client initialization."""
         with allure.step("Setup client configuration"):
-            config = {
-                "apple_script": {
-                    "timeout": 45,
-                    "concurrency": 10,
-                    "script_directory": "custom_scripts/",
-                    "max_retries": 3
-                }
-            }
+            config = {"apple_script": {"timeout": 45, "concurrency": 10, "script_directory": "custom_scripts/", "max_retries": 3}}
 
         with allure.step("Initialize AppleScript client"):
             client = self.create_client(config=config)
 
         with allure.step("Verify initialization"):
             assert client.config == config
-            assert hasattr(client, 'console_logger')
-            assert hasattr(client, 'error_logger')
-            assert hasattr(client, 'analytics')
+            assert hasattr(client, "console_logger")
+            assert hasattr(client, "error_logger")
+            assert hasattr(client, "analytics")
 
             # Verify sanitizer is initialized
-            assert hasattr(client, 'sanitizer')
+            assert hasattr(client, "sanitizer")
             assert isinstance(client.sanitizer, AppleScriptSanitizer)
 
             allure.attach("AppleScript client initialized successfully", "Initialization Result", allure.attachment_type.TEXT)
@@ -264,7 +259,7 @@ class TestAppleScriptClientAllure:
         client = self.create_client()
 
         with allure.step("Setup mock subprocess execution"):
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 # Mock successful script execution
                 mock_process = MagicMock()
                 mock_process.communicate = AsyncMock(return_value=(b"Success result", b""))
@@ -317,11 +312,11 @@ class TestAppleScriptClientAllure:
         client = self.create_client()
 
         with allure.step("Setup mock Music.app response"):
-            mock_tracks_data = '''Track 1|Artist 1|Album 1|2020|Rock
+            mock_tracks_data = """Track 1|Artist 1|Album 1|2020|Rock
 Track 2|Artist 2|Album 2|2021|Jazz
-Track 3|Artist 3|Album 3|2022|Pop'''
+Track 3|Artist 3|Album 3|2022|Pop"""
 
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 mock_process = MagicMock()
                 mock_process.communicate = AsyncMock(return_value=(mock_tracks_data.encode(), b""))
                 mock_process.returncode = 0
@@ -351,7 +346,7 @@ Track 3|Artist 3|Album 3|2022|Pop'''
         client = self.create_client()
 
         with allure.step("Setup mock track update response"):
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 mock_process = MagicMock()
                 mock_process.communicate = AsyncMock(return_value=(b"Success: Genre updated", b""))
                 mock_process.returncode = 0
@@ -363,7 +358,7 @@ Track 3|Artist 3|Album 3|2022|Pop'''
                         new_genre="Electronic",
                         original_artist="Test Artist",
                         original_album="Test Album",
-                        original_track="Test Track"
+                        original_track="Test Track",
                     )
 
         with allure.step("Verify track update"):
@@ -387,7 +382,7 @@ Track 3|Artist 3|Album 3|2022|Pop'''
         client = self.create_client()
 
         with allure.step("Setup failing AppleScript execution"):
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 mock_process = MagicMock()
                 mock_process.communicate = AsyncMock(return_value=(b"", b"AppleScript Error: syntax error"))
                 mock_process.returncode = 1  # Error exit code
@@ -421,13 +416,13 @@ Track 3|Artist 3|Album 3|2022|Pop'''
         config = {
             "apple_script": {
                 "timeout": 30,
-                "concurrency": 2  # Limited concurrency for testing
+                "concurrency": 2,  # Limited concurrency for testing
             }
         }
         client = self.create_client(config=config)
 
         with allure.step("Setup multiple concurrent script executions"):
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 mock_process = MagicMock()
                 mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
                 mock_process.returncode = 0
@@ -441,10 +436,7 @@ Track 3|Artist 3|Album 3|2022|Pop'''
                 ]
 
                 with allure.step("Execute concurrent scripts"):
-                    tasks = [
-                        client.execute_applescript_async(script)
-                        for script in scripts
-                    ]
+                    tasks = [client.execute_applescript_async(script) for script in scripts]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
         with allure.step("Verify concurrency control"):

@@ -212,7 +212,7 @@ disallow_untyped_decorators = false
 include = ["src", "main.py"]
 exclude = ["venv", "**/__pycache__", "**/node_modules"]
 venvPath = "."
-venv = "venv"
+venv = ".venv"
 pythonVersion = "3.13"
 typeCheckingMode = "basic"
 reportMissingImports = true
@@ -244,7 +244,7 @@ reportIncompatibleMethodOverride = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["tests/unit"]
+testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -271,6 +271,7 @@ markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
   "integration: marks tests as integration tests",
   "unit: marks tests as unit tests",
+  "e2e: marks tests as end-to-end tests",
 ]
 # Black configuration (for compatibility)
 # ─────────────────────────────────────────────────────────────────────────────
