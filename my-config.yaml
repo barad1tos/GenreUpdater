@@ -193,32 +193,33 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     min_valid_year: 1900
     definitive_score_threshold: 50 # Increased from 20 to avoid false positives
     definitive_score_diff: 15 # Reduced from 15 to handle close scores
-    preferred_countries: [
-        "us", # trunk-ignore(yamllint/quoted-strings)
-        "gb", # trunk-ignore(yamllint/quoted-strings)
-        "de", # trunk-ignore(yamllint/quoted-strings)
-        "fr", # trunk-ignore(yamllint/quoted-strings)
-        "jp", # trunk-ignore(yamllint/quoted-strings)
-        "ca", # trunk-ignore(yamllint/quoted-strings)
-        "au", # trunk-ignore(yamllint/quoted-strings)
-        "se", # trunk-ignore(yamllint/quoted-strings)
-        "fi", # trunk-ignore(yamllint/quoted-strings)
-        "dk", # trunk-ignore(yamllint/quoted-strings)
-        "nl", # trunk-ignore(yamllint/quoted-strings)
-        "be", # trunk-ignore(yamllint/quoted-strings)
-        "es", # trunk-ignore(yamllint/quoted-strings)
-        "it", # trunk-ignore(yamllint/quoted-strings)
-        "ie", # trunk-ignore(yamllint/quoted-strings)
-        "is", # trunk-ignore(yamllint/quoted-strings)
-        "pl", # trunk-ignore(yamllint/quoted-strings)
-        "at", # trunk-ignore(yamllint/quoted-strings)
-        "ch", # trunk-ignore(yamllint/quoted-strings)
-        "gr", # trunk-ignore(yamllint/quoted-strings)
-        "pt", # trunk-ignore(yamllint/quoted-strings)
-        "cz", # trunk-ignore(yamllint/quoted-strings)
-        "ua", # trunk-ignore(yamllint/quoted-strings)
+    preferred_countries:
+      [
+        "us",
+        "gb",
+        "de",
+        "fr",
+        "jp",
+        "ca",
+        "au",
+        "se",
+        "fi",
+        "dk",
+        "nl",
+        "be",
+        "es",
+        "it",
+        "ie",
+        "is",
+        "pl",
+        "at",
+        "ch",
+        "gr",
+        "pt",
+        "cz",
+        "ua",
       ]
-    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"] # trunk-ignore(yamllint/quoted-strings)
+    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"]
 
   # --- Reissue Detection ---
   reissue_detection:
