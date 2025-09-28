@@ -3,11 +3,12 @@
 # -----------------------------------------------------------------------
 # 1. MAIN PATHS AND ENVIRONMENT
 # -----------------------------------------------------------------------
+
 # Essential paths for the application to function
 music_library_path: /Users/romanborodavkin/Music/Music/Music Library.musiclibrary
 apple_scripts_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/applescripts
+
 # Base directory for all generated files (logs, reports, caches, etc.)
-# RECOMMENDATION: Consider using a local folder instead of iCloud Drive to avoid potential syncing delays or errors.
 logs_base_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs
 
 # Python settings
@@ -95,9 +96,6 @@ caching:
   album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
   cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
 
-  # API result cache file path
-  api_result_cache_path: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/api_results.json
-
   # Cache size limits and cleanup settings (TASK-002)
   cache_size_limits:
     generic_cache_max_entries: 10000 # Maximum entries in generic cache
@@ -116,10 +114,10 @@ reporting:
   change_display_mode: compact
 
 # API Cache file
-api_cache_file: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/cache.json
+api_cache_file: cache/cache.json
 
-# Album years cache file (moved to logs directory)
-album_years_cache_file: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/cache/album_years.csv
+# Album years cache file
+album_years_cache_file: cache/album_years.csv
 
 # -----------------------------------------------------------------------
 # 4. LOGGING AND ANALYTICS CONFIGURATION
