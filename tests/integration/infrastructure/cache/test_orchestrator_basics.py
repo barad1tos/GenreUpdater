@@ -6,7 +6,7 @@ import asyncio
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from src.infrastructure.cache.cache_orchestrator import CacheOrchestrator
@@ -67,9 +67,11 @@ async def test_async_compute_on_miss(orchestrator: CacheOrchestrator) -> None:
 
     def compute() -> asyncio.Future[str]:
         """Compute function that returns a test value."""
+
         async def _compute() -> str:
             await asyncio.sleep(0)
             return "computed"
+
         return asyncio.create_task(_compute())
 
     result = await orchestrator.get_async("missing", compute)
