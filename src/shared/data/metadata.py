@@ -110,9 +110,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         year=old_year,  # Add current year field for year_retriever to access
     )
 
-    if album_artist_value := _extract_optional_field(
-        fields, TrackField.ALBUM_ARTIST
-    ):
+    if album_artist_value := _extract_optional_field(fields, TrackField.ALBUM_ARTIST):
         track.__dict__["album_artist"] = album_artist_value
 
     return track
@@ -469,17 +467,19 @@ def clean_names(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> tuple[str, str]:
-    """Clean the track name and album name based on the configuration settings.
+    """Clean track and album names per config: remove remaster segments & suffixes.
 
-    Requires config and loggers.
+    Skips artist+album pairs in exceptions; collapses whitespace.
 
-    :param artist: Artist name.
-    :param track_name: Current track name.
-    :param album_name: Current album name.
-    :param config: Application configuration dictionary.
-    :param console_logger: Logger for console output.
-    :param error_logger: Logger for error output.
-    :return: Tuple containing the cleaned track name and cleaned album name.
+    Args:
+        error_logger ():
+        artist: Artist name.
+        track_name: Raw track title.
+        album_name: Raw album title.
+        config: Dict with exceptions.track_cleaning, cleaning.remaster_keywords, cleaning.album_suffixes_to_remove.
+        console_logger: Logger for debug/info output. error_logger: Logger for error reporting.
+    Returns:
+        Tuple (cleaned_track_name, cleaned_album_name).
     """
     # Only log at debug level to reduce noise, especially for empty values
     if track_name or album_name:
