@@ -20,7 +20,7 @@ from typing import Any
 
 from src.infrastructure.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from src.infrastructure.cache.hash_service import UnifiedHashService
-from src.shared.core.logger import ensure_directory
+from src.shared.core.logger import ensure_directory, get_full_log_path
 from src.shared.data.models import CachedApiResult
 
 
@@ -46,7 +46,7 @@ class ApiCacheService:
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # Cache file path
-        self.api_cache_file = Path(config.get("api_cache_file", "cache/api_responses.json"))
+        self.api_cache_file = Path(get_full_log_path(config, "api_cache_file", "cache/cache.json"))
 
         # Register for cache events
         self._register_event_handlers()

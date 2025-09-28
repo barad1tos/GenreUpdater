@@ -19,7 +19,7 @@ from typing import Any
 
 from src.infrastructure.cache.cache_config import CacheContentType
 from src.infrastructure.cache.hash_service import UnifiedHashService
-from src.shared.core.logger import ensure_directory
+from src.shared.core.logger import ensure_directory, get_full_log_path
 
 
 class AlbumCacheService:
@@ -40,8 +40,8 @@ class AlbumCacheService:
         # Album years cache: {hash_key: (artist, album, year)}
         self.album_years_cache: dict[str, tuple[str, str, str]] = {}
 
-        # Cache file paths
-        self.album_years_cache_file = Path(config.get("album_years_cache_file", "cache/album_years.csv"))
+        # Cache file paths - use get_full_log_path to ensure proper logs_base_dir integration
+        self.album_years_cache_file = Path(get_full_log_path(config, "album_years_cache_file", "cache/album_years.csv"))
 
     async def initialize(self) -> None:
         """Initialize album cache by loading data from disk."""

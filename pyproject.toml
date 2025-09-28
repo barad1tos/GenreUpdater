@@ -50,7 +50,7 @@ dev = [
 ]
 
 [tool.uv]
-# uv configuration 
+# uv configuration
 index-url = "https://pypi.org/simple"
 
 # Development scripts are handled separately - removed invalid config
