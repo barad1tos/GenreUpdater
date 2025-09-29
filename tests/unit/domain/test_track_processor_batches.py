@@ -93,3 +93,142 @@ async def test_fetch_tracks_in_batches_populates_cache() -> None:
 
     cached_result = await track_processor.fetch_tracks_async()
     assert [track.id for track in cached_result] == [track.id for track in sample_tracks]
+
+
+@pytest.mark.asyncio
+async def test_apply_track_updates_individual_fallback() -> None:
+    """Test that _apply_track_updates falls back to individual updates when batch is disabled."""
+    logger = logging.getLogger("test.track_processor.batch_fallback")
+    logger.addHandler(logging.NullHandler())
+
+    config: dict[str, Any] = {
+        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
+        "development": {"test_artists": []},
+        "experimental": {"batch_updates_enabled": False},  # Disabled
+    }
+    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    cache_service = DummyCacheService()
+
+    # Mock AppleScript client for individual updates
+    mock_ap_client = DummyAppleScriptClient()
+    update_calls = []
+
+    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+        """Mock individual update script calls."""
+        if script_name == "update_property.applescript":
+            update_calls.append((script_name, args))
+            return "Success: Property updated"
+        raise AssertionError(f"Unexpected script call: {script_name}")
+
+    mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
+
+    track_processor = TrackProcessor(
+        ap_client=mock_ap_client,  # type: ignore[arg-type]
+        cache_service=cache_service,  # type: ignore[arg-type]
+        console_logger=logger,
+        error_logger=logger,
+        config=config,
+        analytics=analytics,
+    )
+
+    # Test multiple updates on single track
+    updates = [("genre", "Rock"), ("year", "2020")]
+    result = await track_processor._apply_track_updates("123", updates)  # type: ignore[attr-defined] # noqa: SLF001
+
+    assert result is True
+    assert len(update_calls) == 2  # Should make individual calls
+    assert update_calls[0] == ("update_property.applescript", ["123", "genre", "Rock"])
+    assert update_calls[1] == ("update_property.applescript", ["123", "year", "2020"])
+
+
+@pytest.mark.asyncio
+async def test_apply_track_updates_batch_success() -> None:
+    """Test successful batch update when enabled."""
+    logger = logging.getLogger("test.track_processor.batch_success")
+    logger.addHandler(logging.NullHandler())
+
+    config: dict[str, Any] = {
+        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
+        "development": {"test_artists": []},
+        "experimental": {"batch_updates_enabled": True, "max_batch_size": 5},
+    }
+    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    cache_service = DummyCacheService()
+
+    mock_ap_client = DummyAppleScriptClient()
+    batch_calls = []
+
+    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+        """Mock batch update script call."""
+        if script_name == "batch_update_tracks.applescript":
+            batch_calls.append((script_name, args))
+            return "Success: Batch update process completed."
+        raise AssertionError(f"Unexpected script call: {script_name}")
+
+    mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
+
+    track_processor = TrackProcessor(
+        ap_client=mock_ap_client,  # type: ignore[arg-type]
+        cache_service=cache_service,  # type: ignore[arg-type]
+        console_logger=logger,
+        error_logger=logger,
+        config=config,
+        analytics=analytics,
+    )
+
+    # Test batch updates
+    updates = [("genre", "Rock"), ("year", "2020")]
+    result = await track_processor._apply_track_updates("123", updates)  # type: ignore[attr-defined] # noqa: SLF001
+
+    assert result is True
+    assert len(batch_calls) == 1
+    batch_command = batch_calls[0][1][0]
+    assert "123:genre:Rock;123:year:2020" == batch_command
+
+
+@pytest.mark.asyncio
+async def test_apply_track_updates_batch_fallback() -> None:
+    """Test fallback to individual updates when batch fails."""
+    logger = logging.getLogger("test.track_processor.batch_fallback")
+    logger.addHandler(logging.NullHandler())
+
+    config: dict[str, Any] = {
+        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
+        "development": {"test_artists": []},
+        "experimental": {"batch_updates_enabled": True, "max_batch_size": 5},
+    }
+    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    cache_service = DummyCacheService()
+
+    mock_ap_client = DummyAppleScriptClient()
+    script_calls = []
+
+    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+        """Mock script calls with batch failure."""
+        script_calls.append((script_name, args))
+        if script_name == "batch_update_tracks.applescript":
+            return "Error: Track not found"  # Batch fails
+        elif script_name == "update_property.applescript":
+            return "Success: Property updated"  # Individual succeeds
+        raise AssertionError(f"Unexpected script call: {script_name}")
+
+    mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
+
+    track_processor = TrackProcessor(
+        ap_client=mock_ap_client,  # type: ignore[arg-type]
+        cache_service=cache_service,  # type: ignore[arg-type]
+        console_logger=logger,
+        error_logger=logger,
+        config=config,
+        analytics=analytics,
+    )
+
+    updates = [("genre", "Rock"), ("year", "2020")]
+    result = await track_processor._apply_track_updates("123", updates)  # type: ignore[attr-defined] # noqa: SLF001
+
+    assert result is True
+    # Should have tried batch first, then fallen back to individual calls
+    assert len(script_calls) == 3  # 1 batch + 2 individual
+    assert script_calls[0][0] == "batch_update_tracks.applescript"
+    assert script_calls[1][0] == "update_property.applescript"
+    assert script_calls[2][0] == "update_property.applescript"

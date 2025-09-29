@@ -57,7 +57,7 @@ class TestYearRetrieverAllure:
         error_logger = MockLogger()  # type: ignore[assignment]
         analytics = MockAnalytics()  # type: ignore[assignment]
 
-        test_config = config or {"year_retrieval": {"api_timeout": 30, "batch_size": 50, "retry_attempts": 3}}
+        test_config = config or {"year_retrieval": {"api_timeout": 30, "processing": {"batch_size": 50}, "retry_attempts": 3}}
 
         return YearRetriever(
             track_processor=track_processor,
@@ -144,7 +144,7 @@ class TestYearRetrieverAllure:
             mock_external_api = MagicMock()
             mock_pending_verification = MagicMock()
 
-            config = {"year_retrieval": {"api_timeout": 45, "batch_size": 100, "retry_attempts": 5}}
+            config = {"year_retrieval": {"api_timeout": 45, "processing": {"batch_size": 100}, "retry_attempts": 5}}
 
         with allure.step("Initialize YearRetriever"):
             retriever = YearRetriever(
