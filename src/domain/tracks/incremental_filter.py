@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.base_processor import BaseProcessor
-from src.infrastructure.track_delta_service import TrackSummary, compute_track_delta
+from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
 from src.shared.core.logger import get_full_log_path
 from src.shared.monitoring.reports import load_track_list
 
@@ -40,14 +40,12 @@ class IncrementalFilterService(BaseProcessor):
         self,
         tracks: list[TrackDict],
         last_run_time: datetime | None,
-        track_summaries: list[TrackSummary] | None = None,
     ) -> list[TrackDict]:
         """Return the subset of tracks that require processing.
 
         Args:
             tracks: All tracks from the music library.
             last_run_time: Timestamp of the last successful incremental run.
-            track_summaries: Optional track summaries for status change detection.
 
         """
         if last_run_time is None:
@@ -66,9 +64,8 @@ class IncrementalFilterService(BaseProcessor):
                 new_tracks.append(track)
 
         # Check for tracks with changed status (e.g., prerelease -> subscription)
-        status_changed_tracks: list[TrackDict] = []
-        if track_summaries:
-            status_changed_tracks = self._find_status_changed_tracks(tracks, track_summaries)
+        # Now works directly with TrackDict objects, no need for separate fetch
+        status_changed_tracks = self._find_status_changed_tracks(tracks)
 
         seen: set[str] = set()
         combined: list[TrackDict] = []
@@ -109,9 +106,11 @@ class IncrementalFilterService(BaseProcessor):
     def _find_status_changed_tracks(
         self,
         tracks: list[TrackDict],
-        summaries: list[TrackSummary],
     ) -> list[TrackDict]:
-        """Find tracks that have changed status since last run."""
+        """Find tracks that have changed status since last run.
+
+        Uses TrackDict objects directly, eliminating need for separate TrackSummary fetch.
+        """
         try:
             # Load previous track state from CSV
             csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
@@ -120,8 +119,8 @@ class IncrementalFilterService(BaseProcessor):
             if not existing_tracks:
                 return []
 
-            # Compute delta
-            delta = compute_track_delta(summaries, existing_tracks)
+            # Compute delta using TrackDict objects directly
+            delta = compute_track_delta_from_tracks(tracks, existing_tracks)
 
             if not delta.updated_ids:
                 return []
