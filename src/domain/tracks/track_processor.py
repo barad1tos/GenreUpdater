@@ -268,7 +268,12 @@ class TrackProcessor:
 
     @Analytics.track_instance_method("track_fetch_summary")
     async def fetch_track_summaries(self) -> list[TrackSummary]:
-        """Fetch lightweight track summaries for incremental comparisons."""
+        """Fetch lightweight track summaries for incremental comparisons.
+
+        DEPRECATED: This method is no longer used. IncrementalFilterService
+        now works directly with TrackDict objects, eliminating the 35-minute
+        duplicate data fetch. This method is kept for compatibility.
+        """
 
         raw_output = await self.ap_client.run_script(
             "fetch_track_summaries.scpt",
@@ -744,15 +749,120 @@ class TrackProcessor:
         if sanitized_year is not None:
             updates.append(("year", sanitized_year))
 
-        # Perform all updates
+        return await self._apply_track_updates(
+            sanitized_track_id,
+            updates,
+            original_artist,
+            original_album,
+            original_track,
+        )
+
+    async def _apply_track_updates(
+        self,
+        track_id: str,
+        updates: list[tuple[str, Any]],
+        artist: str | None = None,
+        album: str | None = None,
+        track: str | None = None,
+    ) -> bool:
+        """Apply multiple property updates to a track with batch fallback.
+
+        First attempts batch update for efficiency. If batch fails or is disabled,
+        falls back to individual property updates to maintain reliability.
+
+        Args:
+            track_id: Sanitized track ID
+            updates: List of (property_name, value) tuples to apply
+            artist: Artist name for contextual logging
+            album: Album name for contextual logging
+            track: Track name for contextual logging
+
+        Returns:
+            True if all updates succeeded, False otherwise
+        """
+        if not updates:
+            return True
+
+        # Check if batch updates are enabled (default: disabled for safety)
+        batch_enabled = self.config.get("experimental", {}).get("batch_updates_enabled", False)
+        max_batch_size = self.config.get("experimental", {}).get("max_batch_size", 5)
+
+        # Only try batch for multiple updates and if explicitly enabled
+        updates_count = len(updates)
+        if batch_enabled and 1 < updates_count <= max_batch_size:
+            try:
+                return await self._try_batch_update(track_id, updates, artist, album, track)
+            except Exception as e:
+                self.console_logger.warning(
+                    "Batch update failed for track %s, falling back to individual updates: %s",
+                    track_id, str(e)
+                )
+                # Fall through to individual updates
+
+        # Individual updates (current reliable method)
         all_success = True
         for property_name, property_value in updates:
             success = await self._update_single_property(
-                sanitized_track_id, property_name, property_value, original_artist, original_album, original_track
+                track_id, property_name, property_value, artist, album, track
             )
             all_success = all_success and success
 
         return all_success
+
+    async def _try_batch_update(
+        self,
+        track_id: str,
+        updates: list[tuple[str, Any]],
+        artist: str | None = None,
+        album: str | None = None,
+        track: str | None = None,
+    ) -> bool:
+        """Attempt batch update using batch_update_tracks.applescript.
+
+        This is experimental and may fail. Caller should handle exceptions
+        and fall back to individual updates.
+
+        Args:
+            track_id: Sanitized track ID
+            updates: List of (property_name, value) tuples
+            artist: Artist name for logging
+            album: Album name for logging
+            track: Track name for logging
+
+        Returns:
+            True if batch update succeeded
+
+        Raises:
+            Exception: If batch update fails for any reason
+        """
+        # Build batch command string: "trackID:property:value;trackID:property:value"
+        commands = []
+        for property_name, property_value in updates:
+            value_str = str(property_value)
+            commands.append(f"{track_id}:{property_name}:{value_str}")
+
+        batch_command = ";".join(commands)
+
+        # Execute batch update with short timeout (batch should be fast)
+        result = await self.ap_client.run_script(
+            "batch_update_tracks.applescript",
+            [batch_command],
+            timeout=60,  # Shorter timeout for batch operations
+            context_artist=artist,
+            context_album=album,
+            context_track=track,
+        )
+
+        # Check if batch operation succeeded
+        if result and "Success" in result:
+            self.console_logger.debug(
+                "✅ Batch updated %d properties for track %s",
+                len(updates), track_id
+            )
+            return True
+
+        error_msg = f"Batch update script returned: {result}"
+        raise RuntimeError(error_msg)
 
     @Analytics.track_instance_method("track_update")
     async def update_track_async(

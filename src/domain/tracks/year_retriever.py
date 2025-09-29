@@ -963,8 +963,21 @@ class YearRetriever:
             changes_log: List to append change entries to
 
         """
-        batch_size = self.config.get("year_retrieval", {}).get("batch_size", 10)
-        delay_between_batches = self.config.get("year_retrieval", {}).get("delay_between_batches", 60)
+        # Check for old config format and warn user
+        year_config = self.config.get("year_retrieval", {})
+        if "batch_size" in year_config and "processing" not in year_config:
+            self.console_logger.warning(
+                "⚠️ Legacy config detected: 'year_retrieval.batch_size' should be 'year_retrieval.processing.batch_size'. "
+                "Update your config file for optimal performance."
+            )
+        if "delay_between_batches" in year_config and "processing" not in year_config:
+            self.console_logger.warning(
+                "⚠️ Legacy config detected: 'year_retrieval.delay_between_batches' should be 'year_retrieval.processing.delay_between_batches'. "
+                "Update your config file for optimal performance."
+            )
+
+        batch_size = year_config.get("processing", {}).get("batch_size", 10)
+        delay_between_batches = year_config.get("processing", {}).get("delay_between_batches", 60)
 
         album_items = list(albums.items())
         for batch_start in range(0, len(album_items), batch_size):
