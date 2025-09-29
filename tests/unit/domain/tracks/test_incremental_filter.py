@@ -96,21 +96,16 @@ class TestIncrementalFilterService:
         service = TestIncrementalFilterService.create_service()
         last_run_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
 
-        # Track summaries showing current status
-        track_summaries = [
-            DummyTrackSummary.create(track_id="1", track_status="subscription"),
-            DummyTrackSummary.create(track_id="2", track_status="subscription"),
-        ]
-
         # Mock CSV data showing old status
         old_tracks = [
-            DummyTrackData.create(track_id="1", track_status="prerelease"),  # Status changed
-            DummyTrackData.create(track_id="2", track_status="subscription"),  # Status unchanged
+            DummyTrackData.create(track_id="1", track_status="prerelease", genre="Jazz", date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"),  # Status changed
+            DummyTrackData.create(track_id="2", track_status="subscription", genre="Blues", date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"),  # Status unchanged
         ]
 
+        # Current tracks with new status
         tracks = [
-            DummyTrackData.create(track_id="1", date_added="2023-12-31 12:00:00"),  # Old date
-            DummyTrackData.create(track_id="2", date_added="2023-12-31 12:00:00"),  # Old date
+            DummyTrackData.create(track_id="1", date_added="2023-12-31 12:00:00", track_status="subscription", genre="Jazz"),  # Status changed
+            DummyTrackData.create(track_id="2", date_added="2023-12-31 12:00:00", track_status="subscription", genre="Blues"),  # Status unchanged
         ]
 
         mock_load_track_list = MockLoadTrackList(old_tracks)
@@ -123,7 +118,6 @@ class TestIncrementalFilterService:
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,
-                track_summaries=track_summaries,
             )
 
         # Should return track 1 (status changed from prerelease to subscription)
@@ -139,18 +133,12 @@ class TestIncrementalFilterService:
         service = TestIncrementalFilterService.create_service()
         last_run_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
 
-        track_summaries = [
-            DummyTrackSummary.create(track_id="1", track_status="subscription"),
-            DummyTrackSummary.create(track_id="2", track_status="subscription"),
-            DummyTrackSummary.create(track_id="3", track_status="subscription"),
-        ]
-
         old_tracks = [
             DummyTrackData.create(track_id="1", track_status="prerelease"),  # Status changed
         ]
 
         tracks = [
-            DummyTrackData.create(track_id="1", date_added="2023-12-31 12:00:00"),  # Old, status changed
+            DummyTrackData.create(track_id="1", date_added="2023-12-31 12:00:00", track_status="subscription"),  # Old, status changed
             DummyTrackData.create(track_id="2", date_added="2024-01-02 12:00:00", genre="Rock"),  # New
             DummyTrackData.create(track_id="3", date_added="2023-12-31 12:00:00", genre=""),  # Old, missing genre
             DummyTrackData.create(track_id="4", date_added="2023-12-31 12:00:00", genre="Pop"),  # Old, has genre
@@ -166,7 +154,6 @@ class TestIncrementalFilterService:
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,
-                track_summaries=track_summaries,
             )
 
         # Should return tracks 1 (status changed), 2 (new), and 3 (missing genre)
@@ -178,91 +165,7 @@ class TestIncrementalFilterService:
         # Verify no duplicates by checking length matches unique IDs
         assert len(result) == len({track.id for track in result})
 
-    def test_find_status_changed_tracks_success(self) -> None:
-        """Test successful status change detection."""
-        service = TestIncrementalFilterService.create_service()
 
-        tracks = [
-            DummyTrackData.create(track_id="1"),
-            DummyTrackData.create(track_id="2"),
-        ]
-
-        track_summaries = [
-            DummyTrackSummary.create(track_id="1", track_status="subscription"),
-            DummyTrackSummary.create(track_id="2", track_status="subscription"),
-        ]
-
-        old_tracks = [
-            DummyTrackData.create(
-                track_id="1", track_status="prerelease", last_modified="2024-01-01 12:00:00", date_added="2024-01-01 12:00:00"
-            ),  # Status changed
-            DummyTrackData.create(
-                track_id="2", track_status="subscription", last_modified="2024-01-01 12:00:00", date_added="2024-01-01 12:00:00"
-            ),  # Status unchanged
-        ]
-
-        mock_load_track_list = MockLoadTrackList(old_tracks)
-        mock_get_full_log_path = MockGetFullLogPath()
-
-        with (
-            patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
-            result = service._find_status_changed_tracks(tracks, track_summaries)  # noqa: SLF001
-
-        # Should return track 1 (status changed from prerelease to subscription)
-        assert len(result) == 1
-        assert result[0].id == "1"
-
-        # Verify mocks were called
-        assert mock_load_track_list.load_called
-        assert mock_get_full_log_path.get_called
-
-    def test_find_status_changed_tracks_no_csv(self) -> None:
-        """Test status change detection when CSV doesn't exist."""
-        service = TestIncrementalFilterService.create_service()
-
-        tracks = [DummyTrackData.create(track_id="1")]
-        track_summaries = [DummyTrackSummary.create(track_id="1")]
-
-        # Mock empty CSV load (simulating no existing file)
-        mock_load_track_list = MockLoadTrackList([])
-        mock_get_full_log_path = MockGetFullLogPath()
-
-        with (
-            patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
-            result = service._find_status_changed_tracks(tracks, track_summaries)  # noqa: SLF001
-
-        assert len(result) == 0
-
-    def test_find_status_changed_tracks_error(self) -> None:
-        """Test status change detection with error handling."""
-        service = TestIncrementalFilterService.create_service()
-
-        tracks = [DummyTrackData.create(track_id="1")]
-        track_summaries = [DummyTrackSummary.create(track_id="1")]
-
-        # Mock exception during CSV loading
-        def mock_load_exception(_path: str) -> None:
-            """Mock function that raises FileNotFoundError."""
-            error_message = "CSV file not found"
-            raise FileNotFoundError(error_message)
-
-        mock_get_full_log_path = MockGetFullLogPath()
-
-        with (
-            patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_exception),
-            patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
-            result = service._find_status_changed_tracks(tracks, track_summaries)  # noqa: SLF001
-
-        assert len(result) == 0
-
-        # Check warning was logged
-        console_logger = service.console_logger
-        assert any("Failed to check status changes" in msg for msg in console_logger.warning_messages)  # type: ignore[attr-defined]
 
     def test_parse_date_added_valid(self) -> None:
         """Test parsing valid date_added values."""

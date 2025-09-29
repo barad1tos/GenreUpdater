@@ -375,21 +375,20 @@ init-hook = "import sys; sys.path.append('/Users/romanborodavkin/.pyenv/versions
 
 [tool.pylint."messages control"]
 disable = [
-  "C0103",   # invalid-name (allow short variable names)
-  "R0903",   # too-few-public-methods
-  "W0613",   # unused-argument (handled by ruff)
-  "C0301",   # line-too-long (handled by format section)
-  "R0913",   # too-many-arguments
-  "R0917",   # too-many-positional-arguments
-  "W0718",   # broad-exception-caught
-  "W2301",   # unnecessary-ellipsis (valid in Protocol definitions)
-  "E0611",   # no-name-in-module (UTC is available in Python 3.13+ datetime)
-  "R0914",   # too-many-locals (complex reporting function)
-  "R0801",   # duplicate-code (shared patterns in processing modules)
-  "R0401",   # cyclic-import (resolved with exceptions module)
-  "PLC0415", # import-outside-toplevel (needed for lazy imports in specific functions)
-  "R0902",   # too-many-instance-attributes (orchestrator classes naturally need many components)
-  "C0302",   # too-many-lines (complex processing modules)
+  "C0103", # invalid-name (allow short variable names)
+  "R0903", # too-few-public-methods
+  "W0613", # unused-argument (handled by ruff)
+  "C0301", # line-too-long (handled by format section)
+  "R0913", # too-many-arguments
+  "R0917", # too-many-positional-arguments
+  "W0718", # broad-exception-caught
+  "W2301", # unnecessary-ellipsis (valid in Protocol definitions)
+  "E0611", # no-name-in-module (UTC is available in Python 3.13+ datetime)
+  "R0914", # too-many-locals (complex reporting function)
+  "R0801", # duplicate-code (shared patterns in processing modules)
+  "R0401", # cyclic-import (resolved with exceptions module)
+  "R0902", # too-many-instance-attributes (orchestrator classes naturally need many components)
+  "C0302", # too-many-lines (complex processing modules)
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────

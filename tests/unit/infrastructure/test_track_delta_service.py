@@ -430,3 +430,136 @@ class TestApplyTrackDeltaToMap:
 
         # Track with empty ID should be skipped
         assert len(track_map) == 0
+
+    def test_compute_track_delta_from_tracks_new_tracks(self) -> None:
+        """Test compute_track_delta_from_tracks identifies new tracks correctly."""
+        current_tracks = [
+            DummyTrackData.create(track_id="1", name="Track 1"),
+            DummyTrackData.create(track_id="2", name="Track 2"),
+        ]
+
+        existing_map: dict[str, TrackDict] = {
+            "1": DummyTrackData.create(track_id="1", name="Track 1"),
+        }
+
+        from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+
+        delta = compute_track_delta_from_tracks(current_tracks, existing_map)
+
+        assert len(delta.new_ids) == 1
+        assert "2" in delta.new_ids
+        assert len(delta.updated_ids) == 0
+        assert len(delta.removed_ids) == 0
+
+    def test_compute_track_delta_from_tracks_removed_tracks(self) -> None:
+        """Test compute_track_delta_from_tracks identifies removed tracks correctly."""
+        current_tracks = [
+            DummyTrackData.create(track_id="1", name="Track 1"),
+        ]
+
+        existing_map: dict[str, TrackDict] = {
+            "1": DummyTrackData.create(track_id="1", name="Track 1"),
+            "2": DummyTrackData.create(track_id="2", name="Track 2"),
+        }
+
+        from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+
+        delta = compute_track_delta_from_tracks(current_tracks, existing_map)
+
+        assert len(delta.new_ids) == 0
+        assert len(delta.updated_ids) == 0
+        assert len(delta.removed_ids) == 1
+        assert "2" in delta.removed_ids
+
+    def test_compute_track_delta_from_tracks_updated_tracks(self) -> None:
+        """Test compute_track_delta_from_tracks identifies updated tracks correctly."""
+        current_tracks = [
+            DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-02 12:00:00",
+                date_added="2024-01-01 12:00:00",
+                track_status="subscription",
+            ),
+        ]
+
+        existing_map: dict[str, TrackDict] = {
+            "1": DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-01 12:00:00",  # Different
+                date_added="2024-01-01 12:00:00",
+                track_status="subscription",
+            ),
+        }
+
+        from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+
+        delta = compute_track_delta_from_tracks(current_tracks, existing_map)
+
+        assert len(delta.new_ids) == 0
+        assert len(delta.updated_ids) == 1
+        assert "1" in delta.updated_ids
+        assert len(delta.removed_ids) == 0
+
+    def test_compute_track_delta_from_tracks_status_change(self) -> None:
+        """Test compute_track_delta_from_tracks detects status changes correctly."""
+        current_tracks = [
+            DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-01 12:00:00",
+                date_added="2024-01-01 12:00:00",
+                track_status="subscription",
+            ),
+        ]
+
+        existing_map: dict[str, TrackDict] = {
+            "1": DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-01 12:00:00",
+                date_added="2024-01-01 12:00:00",
+                track_status="prerelease",  # Status changed
+            ),
+        }
+
+        from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+
+        delta = compute_track_delta_from_tracks(current_tracks, existing_map)
+
+        assert len(delta.new_ids) == 0
+        assert len(delta.updated_ids) == 1
+        assert "1" in delta.updated_ids
+        assert len(delta.removed_ids) == 0
+
+    def test_compute_track_delta_from_tracks_no_changes(self) -> None:
+        """Test compute_track_delta_from_tracks returns empty delta when no changes."""
+        tracks = [
+            DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-01 12:00:00",
+                date_added="2024-01-01 12:00:00",
+                track_status="subscription",
+            ),
+        ]
+
+        existing_map: dict[str, TrackDict] = {
+            "1": DummyTrackData.create(
+                track_id="1",
+                name="Track 1",
+                last_modified="2024-01-01 12:00:00",
+                date_added="2024-01-01 12:00:00",
+                track_status="subscription",
+            ),
+        }
+
+        from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+
+        delta = compute_track_delta_from_tracks(tracks, existing_map)
+
+        assert len(delta.new_ids) == 0
+        assert len(delta.updated_ids) == 0
+        assert len(delta.removed_ids) == 0
+        assert delta.is_empty() is True

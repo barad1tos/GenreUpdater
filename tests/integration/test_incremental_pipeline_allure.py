@@ -258,7 +258,7 @@ class TestIncrementalPipelineIntegration:
             patch("src.shared.monitoring.reports.load_track_list", return_value=[]),
         ):
             # Mock the CSV loading to return empty list (for simplicity)
-            filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run, summaries)
+            filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run)
 
         with allure.step("Verify status change detection"):
             # Should process tracks appropriately
@@ -369,7 +369,7 @@ class TestIncrementalPipelineIntegration:
             allure.step("Execute incremental filtering with mixed scenarios"),
             patch("src.shared.monitoring.reports.load_track_list", return_value=[]),
         ):
-            filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run, summaries)
+            filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run)
 
         with allure.step("Verify mixed update handling"):
             # Should handle all types of updates appropriately

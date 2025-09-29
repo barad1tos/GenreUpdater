@@ -346,3 +346,13 @@ genre_update:
     compact_mode: true # Default to compact change display
     show_efficiency_metrics: true # Display skip rate and efficiency stats
     show_api_statistics: true # Show API call counts in summary
+
+# -----------------------------------------------------------------------
+# 7. EXPERIMENTAL FEATURES (Use with caution)
+# -----------------------------------------------------------------------
+experimental:
+  # Batch Updates - RISKY OPTIMIZATION
+  # WARNING: May cause Music.app stability issues or data corruption
+  # Only enable after thorough testing with small batch sizes
+  batch_updates_enabled: false # Default: disabled for safety
+  max_batch_size: 5 # Start small (5-10 tracks), increase gradually if stable
