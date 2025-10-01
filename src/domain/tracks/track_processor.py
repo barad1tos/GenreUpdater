@@ -8,7 +8,6 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from src.infrastructure.track_delta_service import TrackSummary, parse_track_summaries
 from src.shared.data.metadata import parse_tracks
 from src.shared.data.models import TrackDict
 from src.shared.data.validators import SecurityValidationError, SecurityValidator, is_valid_track_item
@@ -266,26 +265,6 @@ class TrackProcessor:
 
         return validated_tracks
 
-    @Analytics.track_instance_method("track_fetch_summary")
-    async def fetch_track_summaries(self) -> list[TrackSummary]:
-        """Fetch lightweight track summaries for incremental comparisons.
-
-        DEPRECATED: This method is no longer used. IncrementalFilterService
-        now works directly with TrackDict objects, eliminating the 35-minute
-        duplicate data fetch. This method is kept for compatibility.
-        """
-
-        raw_output = await self.ap_client.run_script(
-            "fetch_track_summaries.scpt",
-            [],
-            timeout=self._get_applescript_timeout(False),
-        )
-
-        if not raw_output:
-            self.console_logger.warning("Track summary script returned no data")
-            return []
-
-        return parse_track_summaries(raw_output)
 
     @Analytics.track_instance_method("track_fetch_by_ids")
     async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:

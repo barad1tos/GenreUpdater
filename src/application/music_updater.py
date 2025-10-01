@@ -15,6 +15,7 @@ from src.domain.tracks.year_retriever import YearRetriever
 from src.shared.core.logger import get_full_log_path
 from src.shared.core.run_tracking import IncrementalRunTracker
 from src.shared.data.metadata import clean_names, is_music_app_running
+from src.shared.data.models import ChangeLogEntry
 from src.shared.monitoring.reports import (
     save_changes_report,
     sync_track_list_with_current,
@@ -188,7 +189,7 @@ class MusicUpdater:
             artist,
         )
 
-    async def _process_all_tracks_for_cleaning(self, tracks: list["TrackDict"], artist: str) -> tuple[list[Any], list[dict[str, Any]]]:
+    async def _process_all_tracks_for_cleaning(self, tracks: list["TrackDict"], artist: str) -> tuple[list[Any], list[ChangeLogEntry]]:
         """Process all tracks for cleaning and return updated tracks and changes log.
 
         Args:
@@ -200,7 +201,7 @@ class MusicUpdater:
 
         """
         updated_tracks: list[Any] = []
-        changes_log: list[dict[str, Any]] = []
+        changes_log: list[ChangeLogEntry] = []
 
         for track in tracks:
             updated_track, change_entry = await self._process_single_track_cleaning(track, artist)
@@ -211,7 +212,7 @@ class MusicUpdater:
 
         return updated_tracks, changes_log
 
-    async def _process_single_track_cleaning(self, track: "TrackDict", artist: str) -> tuple[Any | None, dict[str, Any] | None]:
+    async def _process_single_track_cleaning(self, track: "TrackDict", artist: str) -> tuple[Any | None, ChangeLogEntry | None]:
         """Process a single track for cleaning.
 
         Args:
@@ -330,7 +331,7 @@ class MusicUpdater:
         original_album_name: str,
         cleaned_track_name: str,
         cleaned_album_name: str,
-    ) -> dict[str, Any]:
+    ) -> ChangeLogEntry:
         """Create a change log entry for metadata cleaning.
 
         Args:
@@ -341,22 +342,23 @@ class MusicUpdater:
             cleaned_album_name: Cleaned album name
 
         Returns:
-            Change log entry dictionary
+            Change log entry object
 
         """
-        return {
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-            "change_type": "metadata_cleaning",
-            "artist": artist,
-            "track_name": original_track_name,
-            "album_name": original_album_name,
-            "old_track_name": original_track_name,
-            "new_track_name": cleaned_track_name,
-            "old_album_name": original_album_name,
-            "new_album_name": cleaned_album_name,
-        }
+        return ChangeLogEntry(
+            timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+            change_type="metadata_cleaning",
+            track_id="",  # Not available in cleaning context
+            artist=artist,
+            track_name=original_track_name,
+            album_name=original_album_name,
+            old_track_name=original_track_name,
+            new_track_name=cleaned_track_name,
+            old_album_name=original_album_name,
+            new_album_name=cleaned_album_name,
+        )
 
-    async def _save_clean_results(self, changes_log: list[dict[str, Any]]) -> None:
+    async def _save_clean_results(self, changes_log: list[ChangeLogEntry]) -> None:
         """Save cleaning results to CSV and changes report.
 
         Args:
@@ -556,16 +558,22 @@ class MusicUpdater:
         # Get last run time for incremental updates
         last_run_time = await self._get_last_run_time(force)
 
-        # Execute the three main steps with incremental scope
-        await self._clean_all_tracks_metadata(incremental_tracks)
+        # Execute the three main steps with incremental scope and collect changes
+        all_changes: list[ChangeLogEntry] = []
+
+        cleaning_changes = await self._clean_all_tracks_metadata_with_logs(incremental_tracks)
+        all_changes.extend(cleaning_changes)
+
         # Use ALL tracks for genre updates (GenreManager handles incremental logic internally)
-        await self._update_all_genres(tracks, last_run_time, force)
+        genre_changes = await self._update_all_genres(tracks, last_run_time, force)
+        all_changes.extend(genre_changes)
 
         # Use incremental tracks for year updates - the year retriever handles album-level logic
-        await self._update_all_years(incremental_tracks, force)
+        year_changes = await self._update_all_years_with_logs(incremental_tracks, force)
+        all_changes.extend(year_changes)
 
-        # Save combined results
-        await self._save_pipeline_results()
+        # Save combined results including all changes
+        await self._save_pipeline_results(all_changes)
 
         # Update last run timestamp if pipeline completed successfully
         if self._should_update_run_timestamp(force, incremental_tracks):
@@ -661,6 +669,89 @@ class MusicUpdater:
         self.console_logger.info("Cleaned %d tracks", len(cleaned_tracks))
         return cleaned_tracks
 
+    async def _clean_all_tracks_metadata_with_logs(self, tracks: list["TrackDict"]) -> list[ChangeLogEntry]:
+        """Clean metadata for all tracks and return change logs (Step 1 of pipeline).
+
+        Args:
+            tracks: List of tracks to process
+
+        Returns:
+            List of change log entries
+
+        """
+        self.console_logger.info("Step 1/3: Cleaning metadata")
+        changes_log: list[ChangeLogEntry] = []
+
+        for track in tracks:
+            cleaned_track, change_entry = await self._process_single_track_cleaning_with_log(track)
+            if cleaned_track is not None and change_entry is not None:
+                self._update_snapshot_tracks([cleaned_track])
+                changes_log.append(change_entry)
+
+        self.console_logger.info("Cleaned %d tracks with %d changes", len(changes_log), len(changes_log))
+        return changes_log
+
+    async def _process_single_track_cleaning_with_log(self, track: "TrackDict") -> tuple["TrackDict | None", ChangeLogEntry | None]:
+        """Process a single track for pipeline cleaning with change logging.
+
+        Args:
+            track: Track data to process
+
+        Returns:
+            Tuple of (updated_track, change_entry) or (None, None) if no update needed
+
+        """
+        artist_name = str(track.get("artist", ""))
+        track_name = track.get("name", "")
+        album_name = track.get("album", "")
+        track_id = track.get("id", "")
+
+        if not track_id:
+            return None, None
+
+        # Clean names
+        cleaned_track_name, cleaned_album_name = clean_names(
+            artist=artist_name,
+            track_name=str(track_name),
+            album_name=str(album_name),
+            config=self.config,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+        )
+
+        # Check if update needed
+        if cleaned_track_name == track_name and cleaned_album_name == album_name:
+            return None, None
+
+        # Update track
+        success = await self.track_processor.update_track_async(
+            track_id=track_id,
+            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
+            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
+            original_artist=artist_name,
+            original_album=str(album_name),
+            original_track=str(track_name),
+        )
+
+        if not success:
+            return None, None
+
+        # Create updated track
+        updated_track = track.copy()
+        updated_track.name = cleaned_track_name
+        updated_track.album = cleaned_album_name
+
+        # Create change entry
+        change_entry = self._create_change_log_entry(
+            artist=artist_name,
+            original_track_name=str(track_name),
+            original_album_name=str(album_name),
+            cleaned_track_name=cleaned_track_name,
+            cleaned_album_name=cleaned_album_name,
+        )
+
+        return updated_track, change_entry
+
     async def _process_single_track_for_pipeline_cleaning(self, track: "TrackDict") -> "TrackDict | None":
         """Process a single track for pipeline cleaning.
 
@@ -708,7 +799,7 @@ class MusicUpdater:
         self._update_snapshot_tracks([updated_track])
         return updated_track
 
-    async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list["TrackDict"]:
+    async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list[ChangeLogEntry]:
         """Update genres for all tracks (Step 2 of pipeline).
 
         Note: This method receives ALL tracks, not just incremental ones.
@@ -722,14 +813,14 @@ class MusicUpdater:
             force: Force all operations
 
         Returns:
-            List of updated genre tracks
+            List of genre change log entries
 
         """
         self.console_logger.info("Step 2/3: Updating genres")
-        updated_genre_tracks, _ = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
+        updated_genre_tracks, genre_changes = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
         self._update_snapshot_tracks(updated_genre_tracks)
-        self.console_logger.info("Updated genres for %d tracks", len(updated_genre_tracks))
-        return updated_genre_tracks
+        self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
+        return genre_changes
 
     async def _update_all_years(self, tracks: list["TrackDict"], force: bool) -> None:
         """Update years for all tracks (Step 3 of pipeline).
@@ -749,12 +840,79 @@ class MusicUpdater:
             self.error_logger.exception("=== ERROR in Step 3 ===")
             raise
 
-    async def _save_pipeline_results(self) -> None:
-        """Save the combined results of the pipeline with full track synchronization."""
+    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], _force: bool) -> list[ChangeLogEntry]:
+        """Update years for all tracks and return change logs (Step 3 of pipeline).
+
+        Args:
+            tracks: List of tracks to process
+            _force: Force all operations (unused, kept for API compatibility)
+
+        Returns:
+            List of change log entries
+
+        """
+        self.console_logger.info("=== BEFORE Step 3/3: Updating album years ===")
+        self.console_logger.info("Step 3/3: Updating album years")
+        changes_log: list[ChangeLogEntry] = []
+
+        try:
+            # Call the public API that returns changes
+            updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)
+            # Store updated tracks for snapshot tracking
+            self.year_retriever._last_updated_tracks = updated_tracks  # noqa: SLF001
+            self._update_snapshot_tracks(updated_tracks)
+            changes_log = year_changes
+            self.console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))
+        except Exception as e:
+            self.error_logger.exception("=== ERROR in Step 3 ===")
+            # Add error marker to ensure data consistency
+            now = datetime.now(UTC)
+            changes_log.append(ChangeLogEntry(
+                timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
+                change_type="year_update_error",
+                track_id="",
+                artist="ERROR",
+                album_name=f"Year update failed: {type(e).__name__}",
+                track_name=str(e)[:100],
+                old_year="",
+                new_year="",
+            ))
+
+        return changes_log
+
+    async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
+        """Save the combined results of the pipeline with full track synchronization and changes report.
+
+        Args:
+            changes: List of all changes collected during pipeline execution
+        """
         # Skip full library sync when using test artists for performance
         if self.dry_run_test_artists:
             self.console_logger.info("Skipping full library sync (using test artists)")
             return
+
+        # Save changes report if there are any changes
+        if changes:
+            changes_report_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
+
+            save_changes_report(
+                changes=changes,
+                file_path=changes_report_path,
+                console_logger=self.console_logger,
+                error_logger=self.error_logger,
+                compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
+            )
+            self.console_logger.info("✅ Saved %d changes to changes report", len(changes))
+
+            # Validation: log change breakdown by type
+            change_types: dict[str, int] = {}
+            for change in changes:
+                change_type = change.change_type
+                change_types[change_type] = change_types.get(change_type, 0) + 1
+
+            self.console_logger.info("Change breakdown: %s", ", ".join(f"{k}: {v}" for k, v in sorted(change_types.items())))
+        else:
+            self.console_logger.info("No changes to record in this pipeline run")
 
         # Use cached snapshot when available to avoid a second AppleScript fetch
         snapshot_tracks = self._get_pipeline_snapshot()

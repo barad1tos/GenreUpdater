@@ -281,7 +281,7 @@ class GenreManager(BaseProcessor):
                 )
 
     @staticmethod
-    def process_batch_results(batch_results: list[Any], updated_tracks: list[TrackDict], change_logs: list[dict[str, Any]]) -> None:
+    def process_batch_results(batch_results: list[Any], updated_tracks: list[TrackDict], change_logs: list[ChangeLogEntry]) -> None:
         """Process batch results and update collections.
 
         Args:
@@ -302,7 +302,7 @@ class GenreManager(BaseProcessor):
         all_artist_tracks: list[TrackDict],
         force_update: bool,
         tracks_to_update: list[TrackDict] | None = None,
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Process all tracks for a single artist.
 
         Args:
@@ -342,7 +342,7 @@ class GenreManager(BaseProcessor):
         # Process in batches
         batch_size = self.config.get("genre_update", {}).get("batch_size", 50)
         updated_tracks: list[TrackDict] = []
-        change_logs: list[dict[str, Any]] = []
+        change_logs: list[ChangeLogEntry] = []
 
         for i in range(0, len(update_tasks), batch_size):
             batch = update_tasks[i : i + batch_size]
@@ -359,7 +359,7 @@ class GenreManager(BaseProcessor):
         tracks: list[TrackDict],
         last_run_time: datetime | None = None,
         force: bool = False,
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Update genres for all tracks, grouped by artist.
 
         Args:
@@ -387,7 +387,7 @@ class GenreManager(BaseProcessor):
 
         # Process each artist
         all_updated_tracks: list[TrackDict] = []
-        all_change_logs: list[dict[str, Any]] = []
+        all_change_logs: list[ChangeLogEntry] = []
 
         # Use a semaphore to limit concurrent artists
         concurrent_limit = self.config.get("genre_update", {}).get("concurrent_limit", 5)
@@ -431,7 +431,7 @@ class GenreManager(BaseProcessor):
         last_run: datetime | None,
         force: bool,
         semaphore: asyncio.Semaphore,
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Select tracks for update and process a single artist under a semaphore.
 
         Args:
@@ -585,7 +585,7 @@ class GenreManager(BaseProcessor):
         all_artist_tracks: list[TrackDict],
         force_update: bool,
         tracks_to_update: list[TrackDict] | None = None,
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Test-only access to _process_artist_genres method."""
         return await self._process_artist_genres(artist_name, all_artist_tracks, force_update, tracks_to_update)
 
@@ -596,6 +596,6 @@ class GenreManager(BaseProcessor):
         last_run: datetime | None,
         force: bool,
         semaphore: Any,
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Test-only access to _process_single_artist_wrapper method."""
         return await self._process_single_artist_wrapper(artist_name, artist_tracks, last_run, force, semaphore)
