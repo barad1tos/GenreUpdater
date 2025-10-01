@@ -25,7 +25,7 @@ dependencies = [
   "pyyaml==6.0.3",                 # YAML configuration parsing
   "aiohttp>=3.12.15",              # HTTP client for API requests
   "certifi>=2024.0.0",             # SSL certificates for secure HTTPS connections
-  "cryptography>=45.0.7",          # Cryptography for secure token handling
+  "cryptography==46.0.2",          # Cryptography for secure token handling
   "aiofiles>=23.0.0",              # File operations
   "rich>=14.1.0",                  # Console output formatting
   "ruff==0.13.2",                  # Linting and code quality
