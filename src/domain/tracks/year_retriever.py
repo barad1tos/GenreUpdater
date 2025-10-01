@@ -9,8 +9,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.shared.core.logger import get_full_log_path
-from src.shared.data.models import TrackDict
+from src.shared.data.models import ChangeLogEntry, TrackDict
 from src.shared.data.protocols import (
     CacheServiceProtocol,
     ExternalApiServiceProtocol,
@@ -18,7 +17,6 @@ from src.shared.data.protocols import (
 )
 from src.shared.data.validators import is_valid_year
 from src.shared.monitoring import Analytics
-from src.shared.monitoring.reports import save_changes_report
 
 from .track_processor import TrackProcessor
 
@@ -675,7 +673,7 @@ class YearRetriever:
         return track.copy(year=year)
 
     @staticmethod
-    def _create_change_entry(track: TrackDict, artist: str, album: str, year: str) -> dict[str, str]:
+    def _create_change_entry(track: TrackDict, artist: str, album: str, year: str) -> ChangeLogEntry:
         """Create a change log entry for the track update.
 
         Args:
@@ -685,19 +683,19 @@ class YearRetriever:
             year: New year value
 
         Returns:
-            Change log entry dictionary
+            Change log entry object
 
         """
-        return {
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-            "change_type": "year_update",
-            "artist": artist,
-            "album": album,
-            "album_name": album,
-            "track_name": str(track.get("name", "")),
-            "old_year": str(track.get("year") or "None"),
-            "new_year": year,
-        }
+        return ChangeLogEntry(
+            timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+            change_type="year_update",
+            track_id=str(track.get("id", "")),
+            artist=artist,
+            album_name=album,
+            track_name=str(track.get("name", "")),
+            old_year=str(track.get("year") or "None"),
+            new_year=year,
+        )
 
     async def _update_tracks_for_album(
         self,
@@ -706,7 +704,7 @@ class YearRetriever:
         album_tracks: list[TrackDict],
         year: str,
         updated_tracks: list[TrackDict],
-        changes_log: list[dict[str, Any]],
+        changes_log: list[ChangeLogEntry],
     ) -> None:
         """Update tracks for a specific album and record changes.
 
@@ -831,7 +829,7 @@ class YearRetriever:
         album_tracks: list[TrackDict],
         dominant_year: str,
         updated_tracks: list[TrackDict],
-        changes_log: list[dict[str, Any]],
+        changes_log: list[ChangeLogEntry],
     ) -> bool:
         """Process album using dominant year logic.
 
@@ -873,7 +871,7 @@ class YearRetriever:
         album: str,
         album_tracks: list[TrackDict],
         updated_tracks: list[TrackDict],
-        changes_log: list[dict[str, Any]],
+        changes_log: list[ChangeLogEntry],
     ) -> None:
         """Process a single album for year updates.
 
@@ -926,7 +924,7 @@ class YearRetriever:
     async def _update_album_years_logic(
         self,
         tracks: list[TrackDict],
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Core logic for updating album years.
 
         Args:
@@ -942,7 +940,7 @@ class YearRetriever:
 
         # Initialize result containers
         updated_tracks: list[TrackDict] = []
-        changes_log: list[dict[str, Any]] = []
+        changes_log: list[ChangeLogEntry] = []
 
         # Process albums in batches
         await self._process_albums_in_batches(albums, updated_tracks, changes_log)
@@ -953,7 +951,7 @@ class YearRetriever:
         self,
         albums: dict[tuple[str, str], list[TrackDict]],
         updated_tracks: list[TrackDict],
-        changes_log: list[dict[str, Any]],
+        changes_log: list[ChangeLogEntry],
     ) -> None:
         """Process albums in batches with rate limiting.
 
@@ -1004,6 +1002,21 @@ class YearRetriever:
                 )
                 await asyncio.sleep(delay_between_batches)
 
+    async def get_album_years_with_logs(
+        self,
+        tracks: list[TrackDict],
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
+        """Get album year updates with change logs (public API for pipeline integration).
+
+        Args:
+            tracks: Tracks to process
+
+        Returns:
+            Tuple of (updated_tracks, change_logs)
+
+        """
+        return await self._update_album_years_logic(tracks)
+
     async def process_album_years(
         self,
         tracks: list[TrackDict],
@@ -1034,7 +1047,7 @@ class YearRetriever:
                 # External API service initialized (noise reduction)
 
             # Run the update logic
-            updated_tracks, changes_log = await self._update_album_years_logic(tracks)
+            updated_tracks, _changes_log = await self._update_album_years_logic(tracks)
             self._last_updated_tracks = updated_tracks
 
             # Summary with detailed statistics
@@ -1054,18 +1067,6 @@ class YearRetriever:
                     "No album years were updated despite %d albums having empty years. "
                     "This likely means APIs could not find release information for these albums.",
                     albums_with_empty_year,
-                )
-
-            # Display changes report if there are any changes
-            if changes_log:
-                changes_report_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
-
-                save_changes_report(
-                    changes=changes_log,
-                    file_path=changes_report_path,
-                    console_logger=self.console_logger,
-                    error_logger=self.error_logger,
-                    compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
                 )
 
             # Generate report for problematic albums
@@ -1088,7 +1089,7 @@ class YearRetriever:
     async def update_years_from_discogs(
         self,
         tracks: list[TrackDict],
-    ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Update years specifically from Discogs API.
 
         Args:

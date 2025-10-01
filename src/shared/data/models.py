@@ -386,16 +386,25 @@ class TrackDict(BaseModel):
 
 
 class ChangeLogEntry(BaseModel):
-    """Change log entry for track updates."""
+    """Change log entry for track updates.
+
+    Supports genre updates, year updates, and metadata cleaning with optional fields.
+    """
 
     timestamp: str
     change_type: str
     track_id: str
     artist: str
-    track_name: str
-    album_name: str
-    old_genre: str
-    new_genre: str
+    track_name: str = ""
+    album_name: str = ""
+    old_genre: str | None = None
+    new_genre: str | None = None
+    old_year: str | None = None
+    new_year: str | None = None
+    old_track_name: str | None = None
+    new_track_name: str | None = None
+    old_album_name: str | None = None
+    new_album_name: str | None = None
 
 
 class CachedApiResult(BaseModel):

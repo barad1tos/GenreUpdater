@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.base_processor import BaseProcessor
-from src.infrastructure.track_delta_service import compute_track_delta_from_tracks
+from src.infrastructure.track_delta_service import compute_track_delta
 from src.shared.core.logger import get_full_log_path
 from src.shared.monitoring.reports import load_track_list
 
@@ -120,7 +120,7 @@ class IncrementalFilterService(BaseProcessor):
                 return []
 
             # Compute delta using TrackDict objects directly
-            delta = compute_track_delta_from_tracks(tracks, existing_tracks)
+            delta = compute_track_delta(tracks, existing_tracks)
 
             if not delta.updated_ids:
                 return []
