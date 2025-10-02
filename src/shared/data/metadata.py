@@ -211,7 +211,7 @@ def determine_dominant_genre_for_artist(
 
         for track in album_earliest.values():
             date_str = track.get("date_added", "9999-12-31 00:00:00")
-            if isinstance(date_str, str):
+            if isinstance(date_str, str) and date_str.strip():
                 try:
                     track_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
                     if earliest_date is None or track_date < earliest_date:
@@ -220,6 +220,8 @@ def determine_dominant_genre_for_artist(
                 except ValueError as e:
                     error_logger.warning("Invalid date_added format '%s': %s", date_str, e)
                     continue
+            else:
+                error_logger.warning("Track %s has empty or invalid date_added, skipping from dominant genre calculation", track.get("id", "unknown"))
 
         if not earliest_album_track:
             return "Unknown"
@@ -270,6 +272,10 @@ def _is_track_earlier(track: TrackDict, existing_track: TrackDict, error_logger:
     existing_date_str = existing_track.get("date_added", "9999-12-31 00:00:00")
 
     if not isinstance(track_date_str, str) or not isinstance(existing_date_str, str):
+        return False
+
+    # Skip tracks with empty dates
+    if not track_date_str.strip() or not existing_date_str.strip():
         return False
 
     track_date = _parse_track_date(track_date_str, error_logger)

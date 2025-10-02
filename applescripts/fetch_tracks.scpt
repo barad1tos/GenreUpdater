@@ -159,10 +159,10 @@ on formatDate(theDate)
 
             return (y as string) & "-" & mStr & "-" & dStr & " " & hhStr & ":" & mmStr & ":" & ssStr
         else
-            return "1970-01-01 00:00:00"
+            return ""
         end if
     on error
-        return "1970-01-01 00:00:00"
+        return ""
     end try
 end formatDate
 
