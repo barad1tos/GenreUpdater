@@ -5,50 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.infrastructure.track_delta_service import TrackSummary
     from src.shared.data.models import TrackDict
 
 
-class DummyTrackSummary:
-    """Simple factory for TrackSummary test data."""
-
-    @staticmethod
-    def create(
-        track_id: str = "12345",
-        date_added: str = "2024-01-01 12:00:00",
-        last_modified: str = "2024-01-01 12:00:00",
-        track_status: str = "subscription",
-    ) -> TrackSummary:
-        """Create a basic TrackSummary with sensible defaults."""
-        from src.infrastructure.track_delta_service import TrackSummary
-
-        return TrackSummary(
-            track_id=track_id,
-            date_added=date_added,
-            last_modified=last_modified,
-            track_status=track_status,
-        )
-
-    @staticmethod
-    def prerelease_to_subscription_pair() -> tuple[TrackSummary, TrackSummary]:
-        """Create a pair showing prerelease → subscription status change."""
-        from src.infrastructure.track_delta_service import TrackSummary
-
-        old = TrackSummary(
-            track_id="54321",
-            date_added="2024-01-01 12:00:00",
-            last_modified="2024-01-01 12:00:00",
-            track_status="prerelease",
-        )
-
-        new = TrackSummary(
-            track_id="54321",
-            date_added="2024-01-01 12:00:00",
-            last_modified="2024-01-02 12:00:00",
-            track_status="subscription",
-        )
-
-        return old, new
+# NOTE: DummyTrackSummary class removed after track_delta_service.py refactoring
+# TrackSummary no longer exists - using TrackDict directly now
 
 
 class DummyTrackData:

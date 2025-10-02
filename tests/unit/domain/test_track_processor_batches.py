@@ -113,12 +113,13 @@ async def test_apply_track_updates_individual_fallback() -> None:
     mock_ap_client = DummyAppleScriptClient()
     update_calls = []
 
-    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+    async def mock_run_script(script_name: str, args: list[str], **_kwargs: Any) -> str:
         """Mock individual update script calls."""
         if script_name == "update_property.applescript":
             update_calls.append((script_name, args))
             return "Success: Property updated"
-        raise AssertionError(f"Unexpected script call: {script_name}")
+        msg = f"Unexpected script call: {script_name}"
+        raise AssertionError(msg)
 
     mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
 
@@ -158,12 +159,13 @@ async def test_apply_track_updates_batch_success() -> None:
     mock_ap_client = DummyAppleScriptClient()
     batch_calls = []
 
-    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+    async def mock_run_script(script_name: str, args: list[str], **_kwargs: Any) -> str:
         """Mock batch update script call."""
         if script_name == "batch_update_tracks.applescript":
             batch_calls.append((script_name, args))
             return "Success: Batch update process completed."
-        raise AssertionError(f"Unexpected script call: {script_name}")
+        msg = f"Unexpected script call: {script_name}"
+        raise AssertionError(msg)
 
     mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
 
@@ -183,7 +185,7 @@ async def test_apply_track_updates_batch_success() -> None:
     assert result is True
     assert len(batch_calls) == 1
     batch_command = batch_calls[0][1][0]
-    assert "123:genre:Rock;123:year:2020" == batch_command
+    assert batch_command == "123:genre:Rock;123:year:2020"
 
 
 @pytest.mark.asyncio
@@ -203,14 +205,15 @@ async def test_apply_track_updates_batch_fallback() -> None:
     mock_ap_client = DummyAppleScriptClient()
     script_calls = []
 
-    async def mock_run_script(script_name: str, args: list[str], **kwargs: Any) -> str:
+    async def mock_run_script(script_name: str, args: list[str], **_kwargs: Any) -> str:
         """Mock script calls with batch failure."""
         script_calls.append((script_name, args))
         if script_name == "batch_update_tracks.applescript":
             return "Error: Track not found"  # Batch fails
-        elif script_name == "update_property.applescript":
+        if script_name == "update_property.applescript":
             return "Success: Property updated"  # Individual succeeds
-        raise AssertionError(f"Unexpected script call: {script_name}")
+        msg = f"Unexpected script call: {script_name}"
+        raise AssertionError(msg)
 
     mock_ap_client.run_script = mock_run_script  # type: ignore[method-assign]
 

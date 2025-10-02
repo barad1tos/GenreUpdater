@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+from src.shared.monitoring import Analytics
+from src.shared.monitoring.analytics import LoggerContainer
 
 if TYPE_CHECKING:
     from src.shared.data.models import TrackDict
@@ -52,12 +56,12 @@ class MockGetFullLogPath:
 
 
 # noinspection PyPep8Naming
-class MockLogger:
+class MockLogger(logging.Logger):
     """Mock logger for testing with full logging.Logger compatibility."""
 
     def __init__(self, name: str = "mock") -> None:
         """Initialize mock logger."""
-        self.name = name
+        super().__init__(name)
         self.level = 0
         self.handlers: list[Any] = []
         self.parent = None
@@ -72,68 +76,82 @@ class MockLogger:
         self.exception_messages: list[str] = []
 
     @staticmethod
-    def _format_message(message: str, *args: Any) -> str:
+    def _format_message(message: str, *args: object) -> str:
         """Format message with args."""
         if args:
             try:
                 return message % args
             except (TypeError, ValueError):
-                return message
+                # If formatting fails, just append args
+                return f"{message} {args}"
         return message
 
-    def info(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def info(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock info logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.info_messages.append(formatted)
 
-    def warning(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def warning(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock warning logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.warning_messages.append(formatted)
 
-    def error(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def error(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock error logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.error_messages.append(formatted)
 
-    def debug(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def debug(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock debug logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.debug_messages.append(formatted)
 
-    def critical(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def critical(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock critical logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.critical_messages.append(formatted)
 
-    def exception(self, message: str, *args: Any, **_kwargs: Any) -> None:
+    def exception(self, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock exception logging."""
+        message = str(msg)
         formatted = self._format_message(message, *args)
         self.exception_messages.append(formatted)
         self.error_messages.append(formatted)  # Exception also goes to error
 
-    def log(self, level: int, message: str, *args: Any, **_kwargs: Any) -> None:
+    def log(self, level: int, msg: object, *args: object, **kwargs: Any) -> None:
         """Mock general log method."""
+        message = str(msg)
         # Map numeric levels to method calls
         if level >= 50:  # CRITICAL
-            self.critical(message, *args, **_kwargs)
+            self.critical(message, *args, **kwargs)
         elif level >= 40:  # ERROR
-            self.error(message, *args, **_kwargs)
+            self.error(message, *args, **kwargs)
         elif level >= 30:  # WARNING
-            self.warning(message, *args, **_kwargs)
+            self.warning(message, *args, **kwargs)
         elif level >= 20:  # INFO
-            self.info(message, *args, **_kwargs)
-        else:  # DEBUG
-            self.debug(message, *args, **_kwargs)
+            self.info(message, *args, **kwargs)
+        else:  # DEBUG or lower
+            self.debug(message, *args, **kwargs)
 
-    def set_level(self, level: int) -> None:
-        """Mock set_level method."""
-        self.level = level
-
-    # Keep compatibility with logging.Logger API
-    def setLevel(self, level: int) -> None:  # noqa: N802
-        """Mock setLevel method for logging.Logger compatibility."""
-        self.set_level(level)
+    def setLevel(self, level: int | str) -> None:
+        """Mock setLevel method."""
+        if isinstance(level, str):
+            # Convert string levels to numeric
+            level_map = {
+                "DEBUG": 10,
+                "INFO": 20,
+                "WARNING": 30,
+                "ERROR": 40,
+                "CRITICAL": 50,
+            }
+            self.level = level_map.get(level.upper(), 0)
+        else:
+            self.level = level
 
     def add_handler(self, handler: Any) -> None:
         """Mock add_handler method."""
@@ -173,13 +191,23 @@ class MockLogger:
         return self.get_effective_level()
 
 
-class MockAnalytics:
+class MockAnalytics(Analytics):
     """Mock analytics for testing."""
 
     def __init__(self) -> None:
         """Initialize mock analytics."""
+        # Create mock loggers for Analytics parent class
+        mock_console = MockLogger("console")
+        mock_error = MockLogger("error")
+        mock_analytics = MockLogger("analytics")
+        loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
+
+        # Initialize parent class with minimal config
+        super().__init__(config={}, loggers=loggers, max_events=1000)
+
+        # Override events list for testing
         self.events: list[dict[str, Any]] = []
 
     def track_event(self, event: dict[str, Any]) -> None:
-        """Mock event tracking."""
+        """Mock event tracking - override parent method."""
         self.events.append(event)

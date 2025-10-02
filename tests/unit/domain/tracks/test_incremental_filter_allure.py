@@ -10,10 +10,10 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 from src.domain.tracks.incremental_filter import IncrementalFilterService
-from src.infrastructure.track_delta_service import TrackDelta, TrackSummary
+from src.infrastructure.track_delta_service import TrackDelta
 from src.shared.data.models import TrackDict
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -70,7 +70,7 @@ class TestIncrementalFilterServiceAllure:
         with allure.step("Setup service and test data"):
             service = self.create_service()
             tracks = [
-                self.create_dummy_track("1", "Rock"),
+                self.create_dummy_track("1"),
                 self.create_dummy_track("2", "Pop"),
                 self.create_dummy_track("3", ""),  # Missing genre
             ]
@@ -111,12 +111,12 @@ class TestIncrementalFilterServiceAllure:
     def test_filter_tracks_with_new_tracks(self) -> None:
         """Test filtering for tracks added after the last run."""
         with allure.step("Setup timeline and test data"):
-            last_run = datetime(2024, 1, 10, 12, 0, 0, tzinfo=UTC)
+            last_run = datetime(2024, 1, 10, 12, tzinfo=UTC)
             before_run = last_run - timedelta(days=1)
             after_run = last_run + timedelta(days=1)
 
             tracks = [
-                self.create_dummy_track("1", "Rock", before_run.strftime("%Y-%m-%d %H:%M:%S")),  # Before run
+                self.create_dummy_track("1", date_added=before_run.strftime("%Y-%m-%d %H:%M:%S")),  # Before run
                 self.create_dummy_track("2", "Pop", after_run.strftime("%Y-%m-%d %H:%M:%S")),  # After run
                 self.create_dummy_track("3", "", before_run.strftime("%Y-%m-%d %H:%M:%S")),  # Missing genre, old date
             ]
@@ -142,10 +142,19 @@ class TestIncrementalFilterServiceAllure:
 
         with allure.step("Filter tracks for incremental update"):
             service = self.create_service()
-            result = service.filter_tracks_for_incremental_update(
-                tracks=tracks,
-                last_run_time=last_run,
-            )
+
+            # Mock empty CSV data so no status changes are detected
+            mock_load_track_list = MockLoadTrackList([])
+            mock_get_full_log_path = MockGetFullLogPath()
+
+            with (
+                patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_track_list),
+                patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
+            ):
+                result = service.filter_tracks_for_incremental_update(
+                    tracks=tracks,
+                    last_run_time=last_run,
+                )
 
         with allure.step("Verify correct tracks are included"):
             # Should include: track 2 (new) + track 3 (missing genre)
@@ -178,7 +187,7 @@ class TestIncrementalFilterServiceAllure:
         """Test filtering behavior for tracks with missing or unknown genres."""
         with allure.step(f"Testing genre filtering for: '{genre}'"):
             service = self.create_service()
-            last_run = datetime(2024, 1, 10, 12, 0, 0, tzinfo=UTC)
+            last_run = datetime(2024, 1, 10, 12, tzinfo=UTC)
             before_run = last_run - timedelta(days=1)
 
             # Create track with old date but specific genre
@@ -231,31 +240,26 @@ class TestIncrementalFilterServiceAllure:
 
         with allure.step("Setup service and test data"):
             service = self.create_service()
-            last_run = datetime(2024, 1, 10, 12, 0, 0, tzinfo=UTC)
+            last_run = datetime(2024, 1, 10, 12, tzinfo=UTC)
             before_run = last_run - timedelta(days=1)
 
             tracks = [
-                self.create_dummy_track("123", "Rock", before_run.strftime("%Y-%m-%d %H:%M:%S")),
+                self.create_dummy_track("123", date_added=before_run.strftime("%Y-%m-%d %H:%M:%S")),
                 self.create_dummy_track("456", "Pop", before_run.strftime("%Y-%m-%d %H:%M:%S")),
-            ]
-
-            track_summaries = [
-                TrackSummary(track_id="123", date_added="2024-01-01", last_modified="2024-01-01", track_status="subscription"),
-                TrackSummary(track_id="456", date_added="2024-01-01", last_modified="2024-01-01", track_status="subscription"),
             ]
 
             allure.attach(
                 json.dumps(
                     [
                         {
-                            "track_id": s.track_id,
-                            "track_status": s.track_status,
+                            "track_id": track.id,
+                            "track_status": track.track_status,
                         }
-                        for s in track_summaries
+                        for track in tracks
                     ],
                     indent=2,
                 ),
-                "Track Summaries",
+                "Current Tracks",
                 allure.attachment_type.JSON,
             )
 
@@ -263,7 +267,6 @@ class TestIncrementalFilterServiceAllure:
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run,
-                track_summaries=track_summaries,
             )
 
         with allure.step("Verify status change detection"):
@@ -286,7 +289,7 @@ class TestIncrementalFilterServiceAllure:
         """Test filtering with multiple criteria and deduplication."""
         with allure.step("Setup complex test scenario"):
             service = self.create_service()
-            last_run = datetime(2024, 1, 10, 12, 0, 0, tzinfo=UTC)
+            last_run = datetime(2024, 1, 10, 12, tzinfo=UTC)
             after_run = last_run + timedelta(days=1)
 
             # Track that meets multiple criteria
@@ -341,20 +344,15 @@ class TestIncrementalFilterServiceAllure:
             mock_compute_delta.return_value = mock_delta
 
             tracks = [
-                self.create_dummy_track("123", "Rock"),
+                self.create_dummy_track("123"),
                 self.create_dummy_track("456", "Pop"),
                 self.create_dummy_track("789", "Jazz"),  # Not in updated_ids
             ]
 
-            summaries = [
-                TrackSummary(track_id="123", date_added="2024-01-01", last_modified="2024-01-01", track_status="subscription"),
-                TrackSummary(track_id="456", date_added="2024-01-01", last_modified="2024-01-01", track_status="prerelease"),
-            ]
-
-            allure.attach("2 tracks with status changes", "Expected Updates", allure.attachment_type.TEXT)
+            allure.attach("3 tracks to check for status changes", "Input Tracks", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks, summaries)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
 
         with allure.step("Verify successful detection"):
             assert len(result) == 2
@@ -383,13 +381,12 @@ class TestIncrementalFilterServiceAllure:
             mock_get_path.return_value = "/fake/path/track_list.csv"
             mock_load_track_list.return_value = {}
 
-            tracks = [self.create_dummy_track("123", "Rock")]
-            summaries = [TrackSummary(track_id="123", date_added="2024-01-01", last_modified="2024-01-01", track_status="subscription")]
+            tracks = [self.create_dummy_track("123")]
 
             allure.attach("Empty CSV (file missing)", "Error Scenario", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks, summaries)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
 
         with allure.step("Verify graceful handling"):
             assert result == []
@@ -416,13 +413,12 @@ class TestIncrementalFilterServiceAllure:
             mock_get_path.return_value = "/fake/path/track_list.csv"
             mock_load_track_list.side_effect = Exception("CSV loading failed")
 
-            tracks = [self.create_dummy_track("123", "Rock")]
-            summaries = [TrackSummary(track_id="123", date_added="2024-01-01", last_modified="2024-01-01", track_status="subscription")]
+            tracks = [self.create_dummy_track("123")]
 
             allure.attach("CSV loading exception", "Error Scenario", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks, summaries)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
 
         with allure.step("Verify error handling"):
             assert result == []
@@ -486,11 +482,7 @@ class TestIncrementalFilterServiceAllure:
         """Test parsing of invalid date strings."""
         with allure.step(f"Testing invalid date parsing for: '{invalid_date}'"):
             track = self.create_dummy_track()
-            if invalid_date is not None:
-                track.date_added = invalid_date
-            else:
-                track.date_added = None
-
+            track.date_added = invalid_date if invalid_date is not None else None
             allure.attach(str(invalid_date), "Invalid Date Input", allure.attachment_type.TEXT)
 
         with allure.step("Attempt to parse invalid date"):

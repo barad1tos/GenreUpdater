@@ -8,7 +8,7 @@ from unittest.mock import patch
 from src.domain.tracks.incremental_filter import IncrementalFilterService
 
 from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger
-from tests.mocks.track_data import DummyTrackData, DummyTrackSummary
+from tests.mocks.track_data import DummyTrackData
 
 
 class TestIncrementalFilterService:
@@ -61,10 +61,18 @@ class TestIncrementalFilterService:
             DummyTrackData.create(track_id="2", date_added="2024-01-02 12:00:00"),  # Newer
         ]
 
-        result = service.filter_tracks_for_incremental_update(
-            tracks=tracks,
-            last_run_time=last_run_time,
-        )
+        # Mock empty CSV data so no status changes are detected
+        mock_load_track_list = MockLoadTrackList([])
+        mock_get_full_log_path = MockGetFullLogPath()
+
+        with (
+            patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
+        ):
+            result = service.filter_tracks_for_incremental_update(
+                tracks=tracks,
+                last_run_time=last_run_time,
+            )
 
         # Should only return the newer track
         assert len(result) == 1
@@ -81,10 +89,18 @@ class TestIncrementalFilterService:
             DummyTrackData.create(track_id="3", genre="Unknown", date_added="2023-12-31 12:00:00"),  # Old, unknown genre
         ]
 
-        result = service.filter_tracks_for_incremental_update(
-            tracks=tracks,
-            last_run_time=last_run_time,
-        )
+        # Mock empty CSV data so no status changes are detected
+        mock_load_track_list = MockLoadTrackList([])
+        mock_get_full_log_path = MockGetFullLogPath()
+
+        with (
+            patch("src.domain.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.domain.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
+        ):
+            result = service.filter_tracks_for_incremental_update(
+                tracks=tracks,
+                last_run_time=last_run_time,
+            )
 
         # Should return tracks 2 and 3 (missing/unknown genre)
         assert len(result) == 2
@@ -98,8 +114,14 @@ class TestIncrementalFilterService:
 
         # Mock CSV data showing old status
         old_tracks = [
-            DummyTrackData.create(track_id="1", track_status="prerelease", genre="Jazz", date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"),  # Status changed
-            DummyTrackData.create(track_id="2", track_status="subscription", genre="Blues", date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"),  # Status unchanged
+            DummyTrackData.create(
+                track_id="1", track_status="prerelease", genre="Jazz",
+                date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"
+            ),  # Status changed
+            DummyTrackData.create(
+                track_id="2", track_status="subscription", genre="Blues",
+                date_added="2023-12-31 12:00:00", last_modified="2024-01-01 12:00:00"
+            ),  # Status unchanged
         ]
 
         # Current tracks with new status
@@ -179,19 +201,14 @@ class TestIncrementalFilterService:
 
     def test_parse_date_added_invalid(self) -> None:
         """Test parsing invalid date_added formats."""
-        # Invalid format
-        track_invalid = DummyTrackData.create(date_added="invalid-date")
+        # Test various invalid date formats
+        for invalid_date in ["invalid-date", None, ""]:
+            self._test_invalid_date_parsing(invalid_date)
+
+    def _test_invalid_date_parsing(self, date_added: str | None) -> None:
+        """Helper to test invalid date parsing."""
+        track_invalid = DummyTrackData.create(date_added=date_added)
         result = IncrementalFilterService._parse_date_added(track_invalid)  # noqa: SLF001
-        assert result is None
-
-        # None value
-        track_none = DummyTrackData.create(date_added=None)
-        result = IncrementalFilterService._parse_date_added(track_none)  # noqa: SLF001
-        assert result is None
-
-        # Empty string
-        track_empty = DummyTrackData.create(date_added="")
-        result = IncrementalFilterService._parse_date_added(track_empty)  # noqa: SLF001
         assert result is None
 
     def test_is_missing_or_unknown_genre(self) -> None:

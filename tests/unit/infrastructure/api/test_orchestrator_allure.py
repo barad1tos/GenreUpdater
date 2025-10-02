@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 from src.infrastructure.api.orchestrator import ExternalApiOrchestrator, normalize_name
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -17,19 +18,58 @@ from tests.mocks.csv_mock import MockAnalytics, MockLogger
 class TestExternalApiOrchestratorAllure:
     """Enhanced tests for ExternalApiOrchestrator with Allure reporting."""
 
+    @staticmethod
     def create_orchestrator(
-        self,
         config: dict[str, Any] | None = None,
-        cache_orchestrator: Any = None,
+        cache_service: Any = None,
+        pending_verification_service: Any = None,
         analytics: Any = None,
     ) -> ExternalApiOrchestrator:
         """Create an ExternalApiOrchestrator instance for testing."""
-        if cache_orchestrator is None:
-            cache_orchestrator = MagicMock()
-            cache_orchestrator.get_album_year_async = AsyncMock(return_value=None)
-            cache_orchestrator.set_album_year_async = AsyncMock()
+        if cache_service is None:
+            cache_service = MagicMock()
+            cache_service.get_album_year_async = AsyncMock(return_value=None)
+            cache_service.set_album_year_async = AsyncMock()
+            cache_service.get_async = AsyncMock(return_value=None)
+            cache_service.set_async = AsyncMock()
+            cache_service.invalidate = MagicMock()
 
+        if pending_verification_service is None:
+            pending_verification_service = MagicMock()
+            pending_verification_service.add_track_async = AsyncMock()
+            pending_verification_service.get_track_async = AsyncMock(return_value=None)
+            pending_verification_service.mark_for_verification = AsyncMock()
+            pending_verification_service.remove_from_pending = AsyncMock()
+
+        # Create full configuration with year_retrieval section
         test_config = config or {
+            "year_retrieval": {
+                "api_auth": {
+                    "discogs_token": "test_token",
+                    "lastfm_api_key": "test_key",
+                    "musicbrainz_app_name": "TestApp",
+                    "contact_email": "test@example.com",
+                },
+                "rate_limits": {
+                    "discogs_requests_per_minute": 25,
+                    "musicbrainz_requests_per_second": 1,
+                    "lastfm_requests_per_second": 5,
+                    "itunes_requests_per_second": 10,
+                },
+                "processing": {
+                    "cache_ttl_days": 30,
+                },
+                "logic": {
+                    "min_valid_year": 1900,
+                    "definitive_score_threshold": 85,
+                    "definitive_score_diff": 15,
+                },
+                "scoring": {
+                    "base_score": 50,
+                    "exact_match_bonus": 30,
+                },
+                "use_lastfm": True,
+            },
             "external_apis": {
                 "timeout": 30,
                 "max_concurrent_requests": 10,
@@ -37,7 +77,7 @@ class TestExternalApiOrchestratorAllure:
                 "discogs": {"enabled": True},
                 "lastfm": {"enabled": True},
                 "applemusic": {"enabled": False},
-            }
+            },
         }
 
         console_logger = MockLogger()
@@ -46,10 +86,11 @@ class TestExternalApiOrchestratorAllure:
 
         return ExternalApiOrchestrator(
             config=test_config,
-            console_logger=console_logger,
-            error_logger=error_logger,
-            cache_orchestrator=cache_orchestrator,
-            analytics=test_analytics,
+            console_logger=console_logger,  # type: ignore[arg-type]
+            error_logger=error_logger,  # type: ignore[arg-type]
+            analytics=test_analytics,  # type: ignore[arg-type]
+            cache_service=cache_service,
+            pending_verification_service=pending_verification_service,
         )
 
     @allure.story("Initialization")
@@ -60,6 +101,18 @@ class TestExternalApiOrchestratorAllure:
         """Test comprehensive API orchestrator initialization."""
         with allure.step("Setup configuration with all API providers"):
             config = {
+                "year_retrieval": {
+                    "api_auth": {
+                        "discogs_token": "test_token",
+                        "lastfm_api_key": "test_key",
+                        "musicbrainz_app_name": "TestApp",
+                        "contact_email": "test@example.com",
+                    },
+                    "rate_limits": {},
+                    "processing": {},
+                    "logic": {},
+                    "scoring": {},
+                },
                 "external_apis": {
                     "timeout": 45,
                     "max_concurrent_requests": 15,
@@ -67,7 +120,7 @@ class TestExternalApiOrchestratorAllure:
                     "discogs": {"enabled": True, "rate_limit": 0.5, "token": "test_token"},
                     "lastfm": {"enabled": True, "api_key": "test_key"},
                     "applemusic": {"enabled": False},
-                }
+                },
             }
 
             allure.attach(json.dumps(config, indent=2), "Configuration", allure.attachment_type.JSON)
@@ -78,15 +131,16 @@ class TestExternalApiOrchestratorAllure:
 
             orchestrator = ExternalApiOrchestrator(
                 config=config,
-                console_logger=MockLogger(),
-                error_logger=MockLogger(),
-                cache_orchestrator=mock_cache,
-                analytics=mock_analytics,
+                console_logger=MockLogger(),  # type: ignore[arg-type]
+                error_logger=MockLogger(),  # type: ignore[arg-type]
+                cache_service=mock_cache,
+                analytics=mock_analytics,  # type: ignore[arg-type]
+                pending_verification_service=MagicMock(),
             )
 
         with allure.step("Verify initialization"):
             assert orchestrator.config == config
-            assert orchestrator.cache_orchestrator is mock_cache
+            assert orchestrator.cache_service is mock_cache
             assert orchestrator.analytics is mock_analytics
 
             # Verify logger setup
@@ -100,7 +154,7 @@ class TestExternalApiOrchestratorAllure:
     @allure.title("Should normalize artist and album names for API queries")
     @allure.description("Test name normalization for consistent API queries")
     @pytest.mark.parametrize(
-        "input_name,expected",
+        ("input_name", "expected"),
         [
             ("The Beatles", "The Beatles"),  # Currently returns unchanged
             ("Led Zeppelin", "Led Zeppelin"),
@@ -129,16 +183,28 @@ class TestExternalApiOrchestratorAllure:
         """Test API provider configuration and enablement."""
         with allure.step("Create configuration with mixed provider settings"):
             config = {
+                "year_retrieval": {
+                    "api_auth": {
+                        "discogs_token": "",  # Empty token effectively disables it
+                        "lastfm_api_key": "test_key",
+                        "musicbrainz_app_name": "TestApp",
+                        "contact_email": "test@example.com",
+                    },
+                    "rate_limits": {},
+                    "processing": {},
+                    "logic": {},
+                    "scoring": {},
+                },
                 "external_apis": {
                     "musicbrainz": {"enabled": True},
                     "discogs": {"enabled": False},  # Disabled
                     "lastfm": {"enabled": True},
                     "applemusic": {"enabled": False},
-                }
+                },
             }
 
         with allure.step("Initialize orchestrator with provider configuration"):
-            orchestrator = self.create_orchestrator(config=config)
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
 
         with allure.step("Verify provider configuration"):
             # Verify configuration is stored
@@ -172,19 +238,19 @@ class TestExternalApiOrchestratorAllure:
             mock_cache.set_album_year_async = AsyncMock()
 
         with allure.step("Create orchestrator with cache"):
-            orchestrator = self.create_orchestrator(cache_orchestrator=mock_cache)
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(cache_service=mock_cache)
 
         with allure.step("Simulate cache hit scenario"):
             # The actual cache interaction would be tested in integration tests
-            # Here we verify the cache orchestrator is properly configured
-            assert orchestrator.cache_orchestrator is mock_cache
+            # Here we verify the cache service is properly configured
+            assert orchestrator.cache_service is mock_cache
 
             # Verify cache methods are available
-            assert hasattr(orchestrator.cache_orchestrator, "get_album_year_async")
-            assert hasattr(orchestrator.cache_orchestrator, "set_album_year_async")
+            assert hasattr(orchestrator.cache_service, "get_album_year_async")
+            assert hasattr(orchestrator.cache_service, "set_album_year_async")
 
             allure.attach(cached_year, "Cached Year", allure.attachment_type.TEXT)
-            allure.attach("Cache orchestrator configured", "Cache Status", allure.attachment_type.TEXT)
+            allure.attach("Cache service configured", "Cache Status", allure.attachment_type.TEXT)
 
     @allure.story("Error Handling")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -194,7 +260,7 @@ class TestExternalApiOrchestratorAllure:
     async def test_api_error_handling_comprehensive(self) -> None:
         """Test comprehensive API error handling."""
         with allure.step("Setup orchestrator with error handling"):
-            orchestrator = self.create_orchestrator()
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
 
             # Verify error logger is configured
             assert hasattr(orchestrator, "error_logger")
@@ -210,7 +276,7 @@ class TestExternalApiOrchestratorAllure:
             ]
 
             for scenario in error_scenarios:
-                allure.attach(scenario, f"Error Scenario", allure.attachment_type.TEXT)
+                allure.attach(scenario, "Error Scenario", allure.attachment_type.TEXT)
 
         with allure.step("Verify error handling capabilities"):
             # The orchestrator should have error handling mechanisms
@@ -233,7 +299,7 @@ class TestExternalApiOrchestratorAllure:
             mock_analytics = MockAnalytics()
 
         with allure.step("Create orchestrator with analytics"):
-            orchestrator = self.create_orchestrator(analytics=mock_analytics)
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(analytics=mock_analytics)
 
         with allure.step("Verify analytics configuration"):
             assert orchestrator.analytics is mock_analytics
@@ -267,7 +333,7 @@ class TestExternalApiOrchestratorAllure:
     @allure.title("Should validate configuration parameters")
     @allure.description("Test validation of API orchestrator configuration")
     @pytest.mark.parametrize(
-        "config_key,config_value,expected_valid",
+        ("config_key", "config_value", "expected_valid"),
         [
             ("timeout", 30, True),
             ("timeout", -1, False),  # Invalid negative timeout
@@ -279,17 +345,29 @@ class TestExternalApiOrchestratorAllure:
         """Test configuration parameter validation."""
         with allure.step(f"Testing configuration: {config_key}={config_value}"):
             config = {
+                "year_retrieval": {
+                    "api_auth": {
+                        "discogs_token": "test_token",
+                        "lastfm_api_key": "test_key",
+                        "musicbrainz_app_name": "TestApp",
+                        "contact_email": "test@example.com",
+                    },
+                    "rate_limits": {},
+                    "processing": {},
+                    "logic": {},
+                    "scoring": {},
+                },
                 "external_apis": {
                     config_key: config_value,
                     "musicbrainz": {"enabled": True},
                     "discogs": {"enabled": True},
                     "lastfm": {"enabled": True},
-                }
+                },
             }
 
         with allure.step("Create orchestrator with test configuration"):
             try:
-                orchestrator = self.create_orchestrator(config=config)
+                orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
                 configuration_valid = True
             except (ValueError, KeyError):
                 configuration_valid = False
@@ -299,10 +377,8 @@ class TestExternalApiOrchestratorAllure:
                 assert configuration_valid, f"Expected valid configuration for {config_key}={config_value}"
                 if configuration_valid:
                     assert orchestrator.config["external_apis"][config_key] == config_value
-            else:
-                # Note: Current implementation may not validate all parameters
-                # This test establishes the expectation for future validation
-                pass
+            # Note: Current implementation may not validate all parameters when expected_valid=False
+            # This test establishes the expectation for future validation
 
             allure.attach(str(config_value), f"Config Value ({config_key})", allure.attachment_type.TEXT)
             allure.attach(str(configuration_valid), "Configuration Valid", allure.attachment_type.TEXT)
@@ -315,7 +391,7 @@ class TestExternalApiOrchestratorAllure:
     def test_http_session_management(self) -> None:
         """Test HTTP session management capabilities."""
         with allure.step("Create orchestrator for session management testing"):
-            orchestrator = self.create_orchestrator()
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
 
         with allure.step("Verify session management capabilities"):
             # The orchestrator should be designed to handle HTTP sessions
@@ -341,6 +417,22 @@ class TestExternalApiOrchestratorAllure:
         """Test rate limiting configuration and setup."""
         with allure.step("Setup configuration with rate limiting"):
             config = {
+                "year_retrieval": {
+                    "api_auth": {
+                        "discogs_token": "test_token",
+                        "lastfm_api_key": "test_key",
+                        "musicbrainz_app_name": "TestApp",
+                        "contact_email": "test@example.com",
+                    },
+                    "rate_limits": {
+                        "discogs_requests_per_minute": 30,  # 30 requests per minute
+                        "musicbrainz_requests_per_second": 1,  # 1 request per second
+                        "lastfm_requests_per_second": 2,  # 2 requests per second
+                    },
+                    "processing": {},
+                    "logic": {},
+                    "scoring": {},
+                },
                 "external_apis": {
                     "musicbrainz": {
                         "enabled": True,
@@ -354,11 +446,11 @@ class TestExternalApiOrchestratorAllure:
                         "enabled": True,
                         "rate_limit": 2.0,  # 2 requests per second
                     },
-                }
+                },
             }
 
         with allure.step("Create orchestrator with rate limiting config"):
-            orchestrator = self.create_orchestrator(config=config)
+            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
 
         with allure.step("Verify rate limiting configuration"):
             api_config = orchestrator.config["external_apis"]

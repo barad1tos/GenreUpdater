@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 from src.infrastructure.api.lastfm import LastFmClient
-from tests.mocks.csv_mock import MockLogger
+
+from tests.mocks.csv_mock import MockLogger  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -18,8 +19,8 @@ from tests.mocks.csv_mock import MockLogger
 class TestLastFmClientAllure:
     """Enhanced tests for LastFmClient with Allure reporting."""
 
+    @staticmethod
     def create_lastfm_client(
-        self,
         mock_api_request: AsyncMock | None = None,
         mock_score_release: MagicMock | None = None,
         use_lastfm: bool = True,
@@ -33,14 +34,15 @@ class TestLastFmClientAllure:
 
         return LastFmClient(
             api_key="test_api_key",
-            console_logger=MockLogger(),
-            error_logger=MockLogger(),
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
             use_lastfm=use_lastfm,
         )
 
-    def create_mock_artist_response(self, artist_name: str = "Test Artist") -> dict[str, Any]:
+    @staticmethod
+    def create_mock_artist_response(artist_name: str = "Test Artist") -> dict[str, Any]:
         """Create a mock Last.fm artist.getInfo response."""
         return {
             "artist": {
@@ -67,7 +69,8 @@ class TestLastFmClientAllure:
             }
         }
 
-    def create_mock_album_response(self, artist_name: str = "Test Artist", album_name: str = "Test Album") -> dict[str, Any]:
+    @staticmethod
+    def create_mock_album_response(artist_name: str = "Test Artist", album_name: str = "Test Album") -> dict[str, Any]:
         """Create a mock Last.fm album.getInfo response."""
         return {
             "album": {
@@ -97,7 +100,9 @@ class TestLastFmClientAllure:
                 "wiki": {
                     "published": "01 Jan 2020, 10:00",
                     "summary": f"{album_name} is a test album by {artist_name}.",
-                    "content": f"{album_name} is a comprehensive test album released in 2020 by {artist_name}. Originally released on January 15, 2020.",
+                    "content": (
+                        f"{album_name} is a comprehensive test album released in 2020 by {artist_name}. Originally released on January 15, 2020."
+                    ),
                 },
             }
         }
@@ -110,9 +115,9 @@ class TestLastFmClientAllure:
     async def test_get_artist_info(self) -> None:
         """Test successful artist information retrieval."""
         with allure.step("Setup successful artist info response"):
-            mock_response = self.create_mock_artist_response("The Beatles")
+            mock_response = TestLastFmClientAllure.create_mock_artist_response("The Beatles")
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_lastfm_client(mock_api_request=mock_api_request)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Mock API Response", allure.attachment_type.JSON)
 
@@ -145,9 +150,9 @@ class TestLastFmClientAllure:
     async def test_get_album_info(self) -> None:
         """Test successful album information retrieval."""
         with allure.step("Setup successful album info response"):
-            mock_response = self.create_mock_album_response("The Beatles", "Abbey Road")
+            mock_response = TestLastFmClientAllure.create_mock_album_response("The Beatles", "Abbey Road")
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_lastfm_client(mock_api_request=mock_api_request)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Mock API Response", allure.attachment_type.JSON)
 
@@ -181,12 +186,12 @@ class TestLastFmClientAllure:
     async def test_get_top_tags(self) -> None:
         """Test top tags retrieval from artist and album responses."""
         with allure.step("Setup responses with tag information"):
-            artist_response = self.create_mock_artist_response("Test Artist")
-            album_response = self.create_mock_album_response("Test Artist", "Test Album")
+            artist_response = TestLastFmClientAllure.create_mock_artist_response()
+            album_response = TestLastFmClientAllure.create_mock_album_response()
 
             mock_api_request = AsyncMock()
             mock_api_request.side_effect = [artist_response, album_response]
-            client = self.create_lastfm_client(mock_api_request=mock_api_request)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(artist_response["artist"]["tags"], indent=2), "Artist Tags", allure.attachment_type.JSON)
             allure.attach(json.dumps(album_response["album"]["tags"], indent=2), "Album Tags", allure.attachment_type.JSON)
@@ -228,7 +233,7 @@ class TestLastFmClientAllure:
             invalid_key_response = {"error": 10, "message": "Invalid API key - You must be granted a valid key by last.fm"}
 
             mock_api_request = AsyncMock(return_value=invalid_key_response)
-            client = self.create_lastfm_client(mock_api_request=mock_api_request)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(invalid_key_response, indent=2), "Invalid API Key Response", allure.attachment_type.JSON)
 
@@ -257,7 +262,7 @@ class TestLastFmClientAllure:
         with allure.step("Setup service unavailable scenarios"):
             # Test when API request returns None (network/service issue)
             mock_api_request = AsyncMock(return_value=None)
-            client = self.create_lastfm_client(mock_api_request=mock_api_request)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request)
 
             allure.attach("API returns None (service unavailable)", "Service Unavailable Scenario", allure.attachment_type.TEXT)
 
@@ -286,7 +291,7 @@ class TestLastFmClientAllure:
         """Test behavior when use_lastfm is disabled."""
         with allure.step("Setup client with use_lastfm=False"):
             mock_api_request = AsyncMock()
-            client = self.create_lastfm_client(mock_api_request=mock_api_request, use_lastfm=False)
+            client = TestLastFmClientAllure.create_lastfm_client(mock_api_request=mock_api_request, use_lastfm=False)
 
             allure.attach("False", "use_lastfm Setting", allure.attachment_type.TEXT)
 
