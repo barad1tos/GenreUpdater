@@ -251,7 +251,7 @@ class DiscogsClient(BaseApiClient):
         album_norm: str,
         artist_orig: str | None = None,
         album_orig: str | None = None,
-    ) -> DiscogsSearchResponse | None:
+    ) -> dict[str, Any] | None:
         """Make search request to Discogs API.
 
         Args:
@@ -261,7 +261,7 @@ class DiscogsClient(BaseApiClient):
             album_orig: Original album name (for logging)
 
         Returns:
-            Discogs search response or None if failed
+            Discogs search response dict or None if failed
 
         """
         self.console_logger.debug(
@@ -289,15 +289,15 @@ class DiscogsClient(BaseApiClient):
             self.console_logger.warning(f"[discogs] Search failed or no results for query: '{search_query}'")
             return None
 
-        discogs_response = cast("DiscogsSearchResponse", data)
-        results = discogs_response.get("results", [])
+        # data is already checked to be dict with "results" key
+        results = data.get("results", [])
 
         if not results:
             self.console_logger.info(f"[discogs] No results found for query: '{search_query}'")
             return None
 
         self.console_logger.debug(f"Found {len(results)} potential Discogs matches for query: '{search_query}'")
-        return discogs_response
+        return data
 
     def _should_fetch_details(self, year_str: str, detail_fetch_count: int, detail_fetch_limit: int) -> bool:
         """Check if details should be fetched based on year validity and fetch limits."""

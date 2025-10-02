@@ -167,7 +167,7 @@ class LastFmClient(BaseApiClient):
 
         """
         wiki = album_data.get("wiki")
-        wiki_content_raw = cast("LastFmWiki", wiki).get("content") if isinstance(wiki, dict) else None
+        wiki_content_raw = wiki.get("content") if isinstance(wiki, dict) else None
 
         if not (wiki and isinstance(wiki, dict) and isinstance(wiki_content_raw, str) and wiki_content_raw.strip()):
             return None
