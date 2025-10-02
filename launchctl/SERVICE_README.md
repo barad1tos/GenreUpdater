@@ -1,174 +1,176 @@
 # 🎵 Music Genre Autoupdater Service
 
-Автоматичний сервіс для оновлення років альбомів з MusicBrainz та Discogs APIs.
+Automated service that refreshes album years using the MusicBrainz and Discogs APIs.
 
-## 🚀 Швидкий старт
+## 🚀 Quick Start
 
-### Встановлення сервісу
+### Install the service
 
 ```bash
 ./manage_service.sh install
 ```
 
-### Перевірка статусу
+### Check status
 
 ```bash
 ./manage_service.sh status
 ```
 
-### Перегляд логів
+### View logs
 
 ```bash
 ./manage_service.sh logs
 ```
 
-## 📅 Розклад роботи
+## 📅 Schedule
 
-- **Коли:** Щодня о 2:00 ранку
-- **Що:** Оновлення років альбомів для всієї музичної бібліотеки
-- **Тривалість:** 3-6 годин (залежно від розміру бібліотеки)
+- **When:** Every day at 2:00 AM
+- **What:** Update album years for the entire music library
+- **Duration:** 3-6 hours (depends on library size)
 
-## 📊 Моніторинг
+## 📊 Monitoring
 
-### Логи розташовані в:
+### Logs live at
 
-- **LaunchCtl логи:** `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/launchctl/`
-- **Основні логи:** `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/main/`
-- **Помилки:** `~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Python Scripts/Genres Autoupdater v2.0/error.log`
-- **Аналітика:** `~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Python Scripts/Genres Autoupdater v2.0/analytics.log`
+- **LaunchCtl logs:** `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/launchctl/`
+- **Primary logs:** `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/main/`
+- **Errors:**
+  `~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Python Scripts/Genres Autoupdater v2.0/error.log`
+- **Analytics:**
+  `~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/Python Scripts/Genres Autoupdater v2.0/analytics.log`
 
-### Команди управління:
+### Control commands
 
-| Команда                         | Опис              |
-| ------------------------------- | ----------------- |
-| `./manage_service.sh install`   | Встановити сервіс |
-| `./manage_service.sh uninstall` | Видалити сервіс   |
-| `./manage_service.sh start`     | Запустити зараз   |
-| `./manage_service.sh stop`      | Зупинити          |
-| `./manage_service.sh status`    | Показати статус   |
-| `./manage_service.sh logs`      | Показати логи     |
-| `./manage_service.sh test`      | Тестовий запуск   |
+| Command                         | Description         |
+| ------------------------------- | ------------------- |
+| `./manage_service.sh install`   | Install the service |
+| `./manage_service.sh uninstall` | Remove the service  |
+| `./manage_service.sh start`     | Start immediately   |
+| `./manage_service.sh stop`      | Stop the service    |
+| `./manage_service.sh status`    | Show status         |
+| `./manage_service.sh logs`      | Show logs           |
+| `./manage_service.sh test`      | Dry-run test        |
 
-## ⚙️ Конфігурація
+## ⚙️ Configuration
 
-### Основні налаштування в `my-config.yaml`:
+### Key settings in `my-config.yaml`
 
 ```yaml
-# Тестові артисти (порожній = вся бібліотека)
+# Test artists (empty = entire library)
 development:
-  test_artists: [] # Для продакшн
+  test_artists: [] # For production
   debug_mode: true
 
-# API таймаути
+# API timeouts
 applescript_timeouts:
-  default: 3600 # 1 година для повної бібліотеки
-  single_artist_fetch: 600 # 10 хвилин для одного артиста
-  full_library_fetch: 3600 # 1 година для повної бібліотеки
+  default: 3600 # 1 hour for full library
+  single_artist_fetch: 600 # 10 minutes for a single artist
+  full_library_fetch: 3600 # 1 hour for full library
 
-# Batch обробка
+# Batch processing
 year_retrieval:
   processing:
     batch_size: 25
     delay_between_batches: 20
 ```
 
-## 🔧 Технічні деталі
+## 🔧 Technical Details
 
-### Системні вимоги:
+### System requirements
 
-- macOS з Music.app
-- Python 3.12+ (через pyenv)
-- Активні API ключі для Discogs та Last.fm
-- Інтернет з'єднання
+- macOS with the Music.app
+- Python 3.12+ (via pyenv)
+- Active Discogs and Last.fm API keys
+- Internet connection
 
-### Ресурси:
+### Resource usage
 
-- **Пам'ять:** ~200MB під час роботи
-- **CPU:** Low priority (nice=10)
-- **Мережа:** ~1-2 API запити на секунду
-- **Диск:** Логи та кеш ~50-100MB
+- **Memory:** ~200 MB while running
+- **CPU:** Low priority (`nice=10`)
+- **Network:** ~1-2 API requests per second
+- **Disk:** Logs and cache ~50-100 MB
 
-### Безпека:
+### Security
 
-- API ключі зашифровані в конфігурації
-- Валідація всіх вхідних даних
-- Автоматичне очищення небезпечних символів
-- Timeout захист для всіх операцій
+- API keys encrypted in configuration
+- Input validation for every entry point
+- Automatic sanitisation of dangerous characters
+- Timeout protection around all operations
 
-## 🆘 Діагностика проблем
+## 🆘 Troubleshooting
 
-### Сервіс не запускається:
+### Service does not start
 
 ```bash
-# Перевірити статус
+# Check status
 ./manage_service.sh status
 
-# Подивитися помилки
+# Inspect errors
 ./manage_service.sh logs
 
-# Переінсталювати
+# Reinstall
 ./manage_service.sh uninstall
 ./manage_service.sh install
 ```
 
-### Помилки в роботі:
+### Runtime errors
 
 ```bash
-# Перевірити основні логи
+# Review main logs
 tail -f "~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs/main/main.log"
 
-# Перевірити помилки
+# Review errors
 tail -f error.log
 
-# Тестовий запуск
+# Dry-run test
 ./manage_service.sh test
 ```
 
-### Часті проблеми:
+### Common issues
 
-| Проблема             | Рішення                                         |
-| -------------------- | ----------------------------------------------- |
-| AppleScript timeout  | Збільшити `applescript_timeouts` в конфігурації |
-| API rate limits      | Зменшити `requests_per_second` в конфігурації   |
-| Повна пам'ять        | Очистити кеш файли в logs директорії            |
-| Music.app недоступна | Перезапустити Music.app                         |
+| Issue                 | Fix                                                  |
+| --------------------- | ---------------------------------------------------- |
+| AppleScript timeout   | Increase `applescript_timeouts` in the configuration |
+| API rate limits       | Decrease `requests_per_second` in the configuration  |
+| Out of disk space     | Clear cached files in the logs directory             |
+| Music.app unavailable | Restart Music.app                                    |
 
-## 📈 Оптимізація продуктивності
+## 📈 Performance Tuning
 
-### Для великих бібліотек (>20K треків):
+### For large libraries (>20K tracks)
 
 ```yaml
-# Збільшити batch розмір
+# Increase batch size
 year_retrieval:
   processing:
     batch_size: 50
     delay_between_batches: 15
 
-# Збільшити кеш
+# Increase cache
 caching:
   album_cache_max_entries: 100000
 ```
 
-### Для швидкого інтернету:
+### For fast internet connections
 
 ```yaml
-# Збільшити швидкість API запитів
+# Increase API throughput
 year_retrieval:
   rate_limits:
     musicbrainz_requests_per_second: 2
     lastfm_requests_per_second: 10
 ```
 
-## 🔄 Оновлення
+## 🔄 Update Workflow
 
-1. Зупинити сервіс: `./manage_service.sh stop`
-2. Оновити код
-3. Перевірити конфігурацію
-4. Запустити тест: `./manage_service.sh test`
-5. Перезапустити: `./manage_service.sh start`
+1. Stop the service: `./manage_service.sh stop`
+2. Update the code
+3. Verify configuration
+4. Run the test: `./manage_service.sh test`
+5. Restart: `./manage_service.sh start`
 
 ---
 
-**Статус:** ✅ Готовий до продакшну  
-**Тестування:** Пройдено успішно  
-**Останнє оновлення:** 2025-08-28
+**Status:** ✅ Production-ready  
+**Testing:** Passed successfully  
+**Last update:** 2025-08-28
