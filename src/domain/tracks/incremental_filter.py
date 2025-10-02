@@ -127,7 +127,7 @@ class IncrementalFilterService(BaseProcessor):
 
             # Filter tracks that have updated status
             status_changed_tracks: list[TrackDict] = []
-            tracks_by_id = {str(t.id): t for t in tracks}
+            tracks_by_id = {str(t.get("id", "")): t for t in tracks if t.get("id")}
 
             for track_id in delta.updated_ids:
                 if track_id in tracks_by_id:
