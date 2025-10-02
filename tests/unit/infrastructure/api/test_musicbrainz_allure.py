@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 from src.infrastructure.api.musicbrainz import MusicBrainzClient
-from tests.mocks.csv_mock import MockLogger
+
+from tests.mocks.csv_mock import MockLogger  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -18,8 +19,8 @@ from tests.mocks.csv_mock import MockLogger
 class TestMusicBrainzClientAllure:
     """Enhanced tests for MusicBrainzClient with Allure reporting."""
 
+    @staticmethod
     def create_musicbrainz_client(
-        self,
         mock_api_request: AsyncMock | None = None,
         mock_score_release: MagicMock | None = None,
     ) -> MusicBrainzClient:
@@ -31,13 +32,14 @@ class TestMusicBrainzClientAllure:
             mock_score_release = MagicMock(return_value=0.85)
 
         return MusicBrainzClient(
-            console_logger=MockLogger(),
-            error_logger=MockLogger(),
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
         )
 
-    def create_mock_artist_response(self, artist_name: str = "Test Artist") -> dict[str, Any]:
+    @staticmethod
+    def create_mock_artist_response(artist_name: str = "Test Artist") -> dict[str, Any]:
         """Create a mock MusicBrainz artist search response."""
         return {
             "created": "2024-09-26T12:00:00.000Z",
@@ -74,9 +76,9 @@ class TestMusicBrainzClientAllure:
     async def test_search_artist_success(self) -> None:
         """Test successful artist search."""
         with allure.step("Setup successful artist search response"):
-            mock_response = self.create_mock_artist_response("The Beatles")
+            mock_response = TestMusicBrainzClientAllure.create_mock_artist_response("The Beatles")
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Mock API Response", allure.attachment_type.JSON)
 
@@ -107,7 +109,7 @@ class TestMusicBrainzClientAllure:
         with allure.step("Setup empty artist search response"):
             mock_response = {"artists": []}
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Empty API Response", allure.attachment_type.JSON)
 
@@ -130,7 +132,7 @@ class TestMusicBrainzClientAllure:
         with allure.step("Setup rate limiting scenario"):
             # Mock API request that returns None (rate limited)
             mock_api_request = AsyncMock(return_value=None)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach("API returns None (rate limited)", "Rate Limiting Scenario", allure.attachment_type.TEXT)
 
@@ -158,7 +160,7 @@ class TestMusicBrainzClientAllure:
         with allure.step("Setup network error scenario"):
             # Mock API request to return None (network error)
             mock_api_request = AsyncMock(return_value=None)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach("Network connection failed (returns None)", "Simulated Error", allure.attachment_type.TEXT)
 
@@ -196,7 +198,7 @@ class TestMusicBrainzClientAllure:
         for i, malformed_response in enumerate(malformed_responses):
             with allure.step(f"Test malformed response {i + 1}"):
                 mock_api_request = AsyncMock(return_value=malformed_response)
-                client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+                client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
                 # Attempt search with malformed response
                 result = await client.get_artist_info("Test Artist")
@@ -243,10 +245,14 @@ class TestMusicBrainzClientAllure:
         with allure.step("Test Lucene escaping"):
             for input_str, expected in test_cases:
                 with allure.step(f"Escape '{input_str}'"):
-                    result = MusicBrainzClient._escape_lucene(input_str)
+                    result = MusicBrainzClient._escape_lucene(input_str)  # noqa: SLF001
                     assert result == expected, f"Expected '{expected}', got '{result}'"
 
-                    allure.attach(f"'{input_str}' → '{result}'", f"Escaping Result", allure.attachment_type.TEXT)
+                    allure.attach(
+                        f"'{input_str}' → '{result}'",
+                        "Escaping Result",
+                        allure.attachment_type.TEXT,
+                    )
 
         with allure.step("Verify all special characters escaped"):
             allure.attach("✅ All Lucene special characters properly escaped", "Escaping Summary", allure.attachment_type.TEXT)
@@ -259,12 +265,12 @@ class TestMusicBrainzClientAllure:
     async def test_get_artist_region(self) -> None:
         """Test artist region retrieval."""
         with allure.step("Setup artist with region information"):
-            artist_response = self.create_mock_artist_response("Test Artist")
+            artist_response = TestMusicBrainzClientAllure.create_mock_artist_response()
             # Ensure country is in the response
             artist_response["artists"][0]["country"] = "US"
 
             mock_api_request = AsyncMock(return_value=artist_response)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach("US", "Expected Region", allure.attachment_type.TEXT)
 
@@ -285,12 +291,12 @@ class TestMusicBrainzClientAllure:
     async def test_get_artist_activity_period(self) -> None:
         """Test artist activity period retrieval."""
         with allure.step("Setup artist with activity period"):
-            artist_response = self.create_mock_artist_response("Test Artist")
+            artist_response = TestMusicBrainzClientAllure.create_mock_artist_response()
             # Ensure life-span is in the response
             artist_response["artists"][0]["life-span"] = {"begin": "1980", "end": "2020", "ended": True}
 
             mock_api_request = AsyncMock(return_value=artist_response)
-            client = self.create_musicbrainz_client(mock_api_request=mock_api_request)
+            client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
             allure.attach("1980 - 2020", "Expected Activity Period", allure.attachment_type.TEXT)
 

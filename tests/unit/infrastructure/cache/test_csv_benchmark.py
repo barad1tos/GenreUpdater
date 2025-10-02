@@ -24,7 +24,7 @@ TRACK_MANIFEST = "Маніфест"
 class SimpleCsvArtistIndex:
     """Minimal CSV index wrapper that leverages GenericCacheService for caching."""
 
-    def __init__(self, csv_path: "Path", cache_service: GenericCacheService) -> None:
+    def __init__(self, csv_path: Path, cache_service: GenericCacheService) -> None:
         self.csv_path = csv_path
         self.cache_service = cache_service
         self._read_count = 0
@@ -58,7 +58,7 @@ class SimpleCsvArtistIndex:
 
 
 @pytest.mark.asyncio
-async def test_csv_lookup_uses_cache(tmp_path: "Path") -> None:
+async def test_csv_lookup_uses_cache(tmp_path: Path) -> None:
     csv_path = tmp_path / "tracks.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["artist", "album", "name"])
@@ -83,7 +83,7 @@ async def test_csv_lookup_uses_cache(tmp_path: "Path") -> None:
 
 
 @pytest.mark.asyncio
-async def test_csv_lookup_cache_miss_for_new_artist(tmp_path: "Path") -> None:
+async def test_csv_lookup_cache_miss_for_new_artist(tmp_path: Path) -> None:
     csv_path = tmp_path / "tracks.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["artist", "album", "name"])

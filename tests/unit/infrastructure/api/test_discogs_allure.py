@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 from src.infrastructure.api.discogs import DiscogsClient
-from tests.mocks.csv_mock import MockLogger
+
+from tests.mocks.csv_mock import MockLogger  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -18,8 +19,8 @@ from tests.mocks.csv_mock import MockLogger
 class TestDiscogsClientAllure:
     """Enhanced tests for DiscogsClient with Allure reporting."""
 
+    @staticmethod
     def create_discogs_client(
-        self,
         mock_api_request: AsyncMock | None = None,
         mock_score_release: MagicMock | None = None,
         mock_cache_service: MagicMock | None = None,
@@ -40,26 +41,31 @@ class TestDiscogsClientAllure:
 
         # Create a mock analytics that bypasses the decorator
         class MockAnalytics:
-            async def execute_async_wrapped_call(self, func, *args, **kwargs):
+            """Mock analytics service that bypasses tracking."""
+
+            @staticmethod
+            async def execute_async_wrapped_call(func: Any, *args: Any, **kwargs: Any) -> Any:
+                """Execute async function without tracking."""
                 # Simply call the function without tracking
                 return await func(*args, **kwargs)
 
         mock_analytics = MockAnalytics()
 
+        test_api_token = "test_token"  # noqa: S105
         return DiscogsClient(
-            token="test_token",
-            console_logger=MockLogger(),
-            error_logger=MockLogger(),
-            analytics=mock_analytics,
+            token=test_api_token,
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            analytics=mock_analytics,  # type: ignore[arg-type]
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
             cache_service=mock_cache_service,
             scoring_config={"weight_match_year": 0.3, "weight_match_artist": 0.4},
             config={"discogs": {"search_limit": 10}},
-            cache_ttl_days=30,
         )
 
-    def create_mock_discogs_response(self, artist_name: str = "Test Artist", album_name: str = "Test Album") -> dict[str, Any]:
+    @staticmethod
+    def create_mock_discogs_response(artist_name: str = "Test Artist", album_name: str = "Test Album") -> dict[str, Any]:
         """Create a mock Discogs search response."""
         return {
             "pagination": {"pages": 1, "page": 1, "per_page": 10, "items": 1, "urls": {}},
@@ -85,7 +91,8 @@ class TestDiscogsClientAllure:
             ],
         }
 
-    def create_mock_release_details(self) -> dict[str, Any]:
+    @staticmethod
+    def create_mock_release_details() -> dict[str, Any]:
         """Create a mock Discogs release details response."""
         return {
             "id": 123456,
@@ -128,9 +135,9 @@ class TestDiscogsClientAllure:
     async def test_search_release_success(self) -> None:
         """Test successful release search."""
         with allure.step("Setup successful release search response"):
-            mock_response = self.create_mock_discogs_response("The Beatles", "Abbey Road")
+            mock_response = TestDiscogsClientAllure.create_mock_discogs_response("The Beatles", "Abbey Road")
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Mock API Response", allure.attachment_type.JSON)
 
@@ -165,7 +172,7 @@ class TestDiscogsClientAllure:
         with allure.step("Setup empty release search response"):
             mock_response = {"results": [], "pagination": {"pages": 0, "items": 0}}
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach(json.dumps(mock_response, indent=2), "Empty API Response", allure.attachment_type.JSON)
 
@@ -186,10 +193,10 @@ class TestDiscogsClientAllure:
     async def test_get_release_year(self) -> None:
         """Test release year retrieval."""
         with allure.step("Setup release with year information"):
-            mock_response = self.create_mock_discogs_response("Test Artist", "Test Album")
+            mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
             mock_response["results"][0]["year"] = 1969  # Set specific year
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach("1969", "Expected Year", allure.attachment_type.TEXT)
 
@@ -211,7 +218,7 @@ class TestDiscogsClientAllure:
         """Test authentication handling."""
         with allure.step("Setup authenticated client"):
             mock_api_request = AsyncMock(return_value={"results": []})
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach("test_token", "API Token", allure.attachment_type.TEXT)
 
@@ -238,7 +245,7 @@ class TestDiscogsClientAllure:
         with allure.step("Setup quota exceeded scenario"):
             # Mock API request that returns None (quota exceeded)
             mock_api_request = AsyncMock(return_value=None)
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach("API returns None (quota exceeded)", "Quota Scenario", allure.attachment_type.TEXT)
 
@@ -262,7 +269,7 @@ class TestDiscogsClientAllure:
         with allure.step("Setup timeout scenario"):
             # Mock API request that returns None (timeout)
             mock_api_request = AsyncMock(return_value=None)
-            client = self.create_discogs_client(mock_api_request=mock_api_request)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
 
             allure.attach("API request timeout (returns None)", "Timeout Scenario", allure.attachment_type.TEXT)
 
@@ -284,7 +291,7 @@ class TestDiscogsClientAllure:
     async def test_caching_behavior(self) -> None:
         """Test caching behavior."""
         with allure.step("Setup caching scenario"):
-            mock_response = self.create_mock_discogs_response()
+            mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
 
             # Setup cache service mock
             mock_cache_service = MagicMock()
@@ -303,7 +310,7 @@ class TestDiscogsClientAllure:
 
             # API should not be called if cache hit
             mock_api_request = AsyncMock(return_value=mock_response)
-            client = self.create_discogs_client(mock_api_request=mock_api_request, mock_cache_service=mock_cache_service)
+            client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request, mock_cache_service=mock_cache_service)
 
             allure.attach(json.dumps(cached_releases, indent=2), "Cached Data", allure.attachment_type.JSON)
 

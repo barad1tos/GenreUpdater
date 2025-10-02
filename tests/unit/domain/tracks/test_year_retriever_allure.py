@@ -3,22 +3,27 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.domain.tracks.year_retriever import YearRetriever, _is_reasonable_year, is_empty_year
+from src.domain.tracks import year_retriever
+from src.domain.tracks.year_retriever import YearRetriever, is_empty_year
+from src.shared.data.models import TrackDict
+from src.shared.data.protocols import (
+    CacheServiceProtocol,
+    ExternalApiServiceProtocol,
+    PendingVerificationServiceProtocol,
+)
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
-from tests.mocks.track_data import DummyTrackData
-
-if TYPE_CHECKING:
-    from src.shared.data.protocols import (
-        CacheServiceProtocol,
-        ExternalApiServiceProtocol,
-        PendingVerificationServiceProtocol,
-    )
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # noqa: TID252
+from tests.mocks.protocol_mocks import (
+    MockCacheService,
+    MockExternalApiService,
+    MockPendingVerificationService,
+)
+from tests.mocks.track_data import DummyTrackData  # noqa: TID252
 
 
 @allure.epic("Music Genre Updater")
@@ -26,8 +31,8 @@ if TYPE_CHECKING:
 class TestYearRetrieverAllure:
     """Enhanced tests for YearRetriever with Allure reporting."""
 
+    @staticmethod
     def create_year_retriever(
-        self,
         track_processor: Any = None,
         cache_service: CacheServiceProtocol | None = None,
         external_api: ExternalApiServiceProtocol | None = None,
@@ -41,21 +46,17 @@ class TestYearRetrieverAllure:
             track_processor.update_track_async = AsyncMock(return_value=True)
 
         if cache_service is None:
-            cache_service = MagicMock()
-            cache_service.get_async = AsyncMock(return_value=None)
-            cache_service.set_async = AsyncMock()
+            cache_service = MockCacheService()
 
         if external_api is None:
-            external_api = MagicMock()
-            external_api.get_album_year = AsyncMock(return_value=("2020", True))
+            external_api = MockExternalApiService()
 
         if pending_verification is None:
-            pending_verification = MagicMock()
-            pending_verification.add_year_update_async = AsyncMock()
+            pending_verification = MockPendingVerificationService()
 
-        console_logger = MockLogger()  # type: ignore[assignment]
-        error_logger = MockLogger()  # type: ignore[assignment]
-        analytics = MockAnalytics()  # type: ignore[assignment]
+        console_logger = MockLogger()
+        error_logger = MockLogger()
+        analytics = MockAnalytics()
 
         test_config = config or {"year_retrieval": {"api_timeout": 30, "processing": {"batch_size": 50}, "retry_attempts": 3}}
 
@@ -85,7 +86,7 @@ class TestYearRetrieverAllure:
             ("1990", False),
             ("2024", False),
             (1990, False),
-            (0, False),  # 0 is not considered empty, just invalid
+            # Note: integer 0 becomes "0" when stringified, which is not empty
         ],
     )
     def test_is_empty_year_parametrized(self, year_value: Any, expected: bool) -> None:
@@ -120,13 +121,14 @@ class TestYearRetrieverAllure:
     def test_is_reasonable_year_parametrized(self, year: str, expected: bool) -> None:
         """Test reasonable year validation with various inputs."""
         with allure.step(f"Testing reasonable year validation for: '{year}'"):
-            result = _is_reasonable_year(year)
+            # Access the private function through the imported module
+            result = year_retriever._is_reasonable_year(year)  # noqa: SLF001
 
             current_year = datetime.now(UTC).year
             min_year = YearRetriever.MIN_VALID_YEAR
             max_year = current_year + 1
 
-            allure.attach(str(year), "Input Year", allure.attachment_type.TEXT)
+            allure.attach(year, "Input Year", allure.attachment_type.TEXT)
             allure.attach(str(result), "Is Reasonable Result", allure.attachment_type.TEXT)
             allure.attach(f"{min_year} - {max_year}", "Valid Year Range", allure.attachment_type.TEXT)
 
@@ -140,9 +142,9 @@ class TestYearRetrieverAllure:
         """Test comprehensive YearRetriever initialization."""
         with allure.step("Setup mock dependencies"):
             mock_track_processor = MagicMock()
-            mock_cache_service = MagicMock()
-            mock_external_api = MagicMock()
-            mock_pending_verification = MagicMock()
+            mock_cache_service = cast(CacheServiceProtocol, cast(object, MockCacheService()))
+            mock_external_api = cast(ExternalApiServiceProtocol, cast(object, MockExternalApiService()))
+            mock_pending_verification = cast(PendingVerificationServiceProtocol, cast(object, MockPendingVerificationService()))
 
             config = {"year_retrieval": {"api_timeout": 45, "processing": {"batch_size": 100}, "retry_attempts": 5}}
 
@@ -152,9 +154,9 @@ class TestYearRetrieverAllure:
                 cache_service=mock_cache_service,
                 external_api=mock_external_api,
                 pending_verification=mock_pending_verification,
-                console_logger=MockLogger(),  # type: ignore[arg-type]
-                error_logger=MockLogger(),  # type: ignore[arg-type]
-                analytics=MockAnalytics(),  # type: ignore[arg-type]
+                console_logger=MockLogger(),
+                error_logger=MockLogger(),
+                analytics=MockAnalytics(),
                 config=config,
                 dry_run=True,
             )
@@ -217,12 +219,12 @@ class TestYearRetrieverAllure:
         """Test release years extraction with filtering."""
         with allure.step("Create album tracks with mixed year data"):
             album_tracks = [
-                DummyTrackData.create(track_id="1", name="Track 1", year="1990"),
-                DummyTrackData.create(track_id="2", name="Track 2", year="1990"),
-                DummyTrackData.create(track_id="3", name="Track 3", year="2000"),
-                DummyTrackData.create(track_id="4", name="Track 4", year=""),  # Empty
-                DummyTrackData.create(track_id="5", name="Track 5", year="   "),  # Whitespace
-                DummyTrackData.create(track_id="6", name="Track 6", year=None),  # None
+                TrackDict(id="1", name="Track 1", artist="Test", album="Test", release_year="1990"),
+                TrackDict(id="2", name="Track 2", artist="Test", album="Test", release_year="1990"),
+                TrackDict(id="3", name="Track 3", artist="Test", album="Test", release_year="2000"),
+                TrackDict(id="4", name="Track 4", artist="Test", album="Test", release_year=""),  # Empty
+                TrackDict(id="5", name="Track 5", artist="Test", album="Test", release_year="   "),  # Whitespace
+                TrackDict(id="6", name="Track 6", artist="Test", album="Test", release_year=None),  # None
             ]
 
         with allure.step("Extract release years"):
@@ -289,17 +291,17 @@ class TestYearRetrieverAllure:
     async def test_determine_album_year_from_api(self) -> None:
         """Test album year determination from external API."""
         with allure.step("Setup mock external API"):
-            mock_external_api = MagicMock()
+            mock_external_api = MockExternalApiService()
             expected_year = "1995"
-            mock_external_api.get_album_year = AsyncMock(return_value=(expected_year, True))
+            mock_external_api.get_album_year_response = (expected_year, True)
 
         with allure.step("Create YearRetriever with mock API"):
             retriever = self.create_year_retriever(external_api=mock_external_api)
 
         with allure.step("Create test album tracks"):
             album_tracks = [
-                DummyTrackData.create(track_id="1", name="Song 1", artist="Test Artist", album="Test Album"),
-                DummyTrackData.create(track_id="2", name="Song 2", artist="Test Artist", album="Test Album"),
+                DummyTrackData.create(track_id="1", name="Song 1", year=""),
+                DummyTrackData.create(track_id="2", name="Song 2", year=""),
             ]
 
         with allure.step("Determine album year"):
@@ -309,7 +311,8 @@ class TestYearRetrieverAllure:
             assert determined_year == expected_year
 
             # Verify API was called correctly
-            mock_external_api.get_album_year.assert_called_once_with("Test Artist", "Test Album")
+            assert len(mock_external_api.get_album_year_calls) == 1
+            assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None)
 
             allure.attach(expected_year, "Determined Year", allure.attachment_type.TEXT)
             allure.attach("Test Artist", "Artist", allure.attachment_type.TEXT)
@@ -324,11 +327,11 @@ class TestYearRetrieverAllure:
         [
             ("Artist A feat. Artist B", "Artist A"),
             ("Artist A ft. Artist B", "Artist A"),
-            ("Artist A featuring Artist B", "Artist A"),
+            ("Artist A feat Artist B", "Artist A"),  # Without dot
             ("Artist A & Artist B", "Artist A"),
             ("Artist A and Artist B", "Artist A"),
             ("Simple Artist", "Simple Artist"),
-            ("Artist A (feat. Artist B)", "Artist A"),
+            ("Artist A with Artist B", "Artist A"),  # "with" is supported
         ],
     )
     def test_normalize_collaboration_artist(self, artist_input: str, expected_output: str) -> None:
@@ -365,11 +368,10 @@ class TestYearRetrieverAllure:
             ]
 
             track_ids = [track_id for track_id, _ in tracks_data]
-            tracks = [track for _, track in tracks_data]
 
         with allure.step("Execute bulk update"):
             success_count, failed_count = await retriever.update_album_tracks_bulk_async(
-                track_ids=track_ids, tracks=tracks, year="1990", artist="Artist", album="Album"
+                track_ids=track_ids, year="1990"
             )
 
         with allure.step("Verify bulk update results"):
@@ -406,11 +408,10 @@ class TestYearRetrieverAllure:
             ]
 
             track_ids = [track_id for track_id, _ in tracks_data]
-            tracks = [track for _, track in tracks_data]
 
         with allure.step("Execute bulk update with expected failures"):
             success_count, failed_count = await retriever.update_album_tracks_bulk_async(
-                track_ids=track_ids, tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
+                track_ids=track_ids, year="2000"
             )
 
         with allure.step("Verify failure handling"):

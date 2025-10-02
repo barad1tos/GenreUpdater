@@ -1,3 +1,5 @@
+"""Unit tests for repair utilities."""
+
 from pathlib import Path
 from typing import Any
 
@@ -119,13 +121,18 @@ def test_build_targets_from_backup_csv(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_apply_year_reverts_matches_by_id_and_album_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Mock track_processor with minimal interface
-    class TP:
+async def test_apply_year_reverts_matches_by_id_and_album_name() -> None:
+    """Test that year reverts correctly match tracks by ID and album/name combination."""
+
+    class MockTrackProcessor:
+        """Mock track processor for testing."""
+
         def __init__(self) -> None:
             self.updated: list[tuple[str, str]] = []
 
-        async def fetch_tracks_async(self, artist: str, ignore_test_filter: bool = False) -> list[dict[str, str]]:  # noqa: FBT001
+        @staticmethod
+        async def fetch_tracks_async(artist: str, **_kwargs: Any) -> list[dict[str, str]]:
+            """Fetch mock tracks for testing."""
             # Return two tracks: one with matching id, one matched by (album, name)
             return [
                 {"id": "1", "name": "Rising", "artist": artist, "album": "Hydra", "track_status": "subscription", "year": "2007"},
@@ -137,16 +144,14 @@ async def test_apply_year_reverts_matches_by_id_and_album_name(monkeypatch: pyte
             *,
             track_id: str,
             new_year: str | None = None,
-            track_status: str | None = None,
-            original_artist: str | None = None,
-            original_album: str | None = None,
-            original_track: str | None = None,
+            **_kwargs: Any,
         ) -> bool:
+            """Update track year in mock storage."""
             if new_year:
                 self.updated.append((track_id, new_year))
             return True
 
-    tp = TP()
+    tp = MockTrackProcessor()
 
     # Two targets: one by ID, one by (album, name)
     targets = [

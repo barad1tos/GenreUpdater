@@ -332,7 +332,7 @@ class TestGenreManager:
     def test_process_batch_results_with_updates(self) -> None:
         """Test processing batch results with updates."""
         updated_tracks: list[TrackDict] = []
-        change_logs: list[dict[str, Any]] = []
+        change_logs: list[ChangeLogEntry] = []
 
         track1 = DummyTrackData.create(track_id="1")
         track2 = DummyTrackData.create(track_id="2")
@@ -363,7 +363,7 @@ class TestGenreManager:
     def test_process_batch_results_empty(self) -> None:
         """Test processing empty batch results."""
         updated_tracks: list[TrackDict] = []
-        change_logs: list[dict[str, Any]] = []
+        change_logs: list[ChangeLogEntry] = []
 
         GenreManager.process_batch_results([], updated_tracks, change_logs)
 
