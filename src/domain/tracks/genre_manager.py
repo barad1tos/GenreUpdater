@@ -191,8 +191,9 @@ class GenreManager(BaseProcessor):
                 force_update,
             )
 
-        # Check if an update is needed (skip if genre unchanged, regardless of force_update)
-        if current_genre == new_genre:
+        # Check if an update is needed
+        # Skip only when genre matches AND force_update is not requested
+        if not force_update and current_genre == new_genre:
             return None, None
 
         # Reduce logging noise - only log errors/warnings, not every successful update
