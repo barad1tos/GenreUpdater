@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import pytest
 from src.shared.data.metadata import determine_dominant_genre_for_artist
 from src.shared.data.models import TrackDict
 
 if TYPE_CHECKING:
-    from pytest import LogCaptureFixture
+    import pytest
+
+    LogCaptureFixture = pytest.LogCaptureFixture
 
 
 class TestDominantGenreWithEmptyDates:

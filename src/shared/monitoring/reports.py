@@ -507,6 +507,12 @@ def _convert_changelog_to_dict(item: dict[str, Any] | ChangeLogEntry) -> dict[st
             "track_name": item.track_name,
             "old_genre": item.old_genre,
             "new_genre": item.new_genre,
+            "old_year": item.old_year,
+            "new_year": item.new_year,
+            "old_track_name": item.old_track_name,
+            "new_track_name": item.new_track_name,
+            "old_album_name": item.old_album_name,
+            "new_album_name": item.new_album_name,
             "timestamp": item.timestamp,
             "track_id": item.track_id,
         }
@@ -1190,6 +1196,20 @@ async def sync_track_list_with_current(
     # 4. Merge current into CSV map
     added_or_updated = _merge_current_into_csv(current_map, csv_map)
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
+
+    # 5. Remove tracks from CSV that no longer exist in Music.app
+    removed_count = 0
+    tracks_to_remove = []
+    for track_id in csv_map:
+        if track_id not in current_map:
+            tracks_to_remove.append(track_id)
+
+    for track_id in tracks_to_remove:
+        del csv_map[track_id]
+        removed_count += 1
+
+    if removed_count > 0:
+        console_logger.info("Removed %s tracks from CSV that no longer exist in Music.app", removed_count)
 
     # Generate the final list from the updated csv_map and write to CSV
     final_list = list(csv_map.values())

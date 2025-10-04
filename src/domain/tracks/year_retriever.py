@@ -694,7 +694,7 @@ class YearRetriever:
             album_name=album,
             track_name=str(track.get("name", "")),
             old_year=str(track.get("year") or "None"),
-            new_year=year,
+            new_year=year or "Unknown",
         )
 
     async def _update_tracks_for_album(
@@ -736,6 +736,9 @@ class YearRetriever:
                 updated_tracks.append(updated_track)
 
                 change_entry = YearRetriever._create_change_entry(track, artist, album, year)
+                # Ensure new_year always has a value - use actually set year if available
+                if not change_entry.new_year and updated_track.year:
+                    change_entry.new_year = str(updated_track.year)
                 changes_log.append(change_entry)
 
                 # Keep the in-memory snapshot aligned with Music.app for downstream sync
