@@ -32,7 +32,7 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
@@ -195,8 +195,10 @@ def save_to_csv(
         "old_year",
         "new_year",
     ]
+    # Convert TrackDict models to plain dictionaries with string values
+    track_dicts = [{field: str(track.get(field) or "") for field in fieldnames} for track in tracks]
     _save_csv(
-        cast("Sequence[dict[str, str]]", tracks),
+        track_dicts,
         fieldnames,
         file_path,
         console_logger,
@@ -440,6 +442,14 @@ def _get_csv_fieldnames() -> list[str]:
     ]
 
 
+def _print_no_changes_summary(console: Console | None = None) -> None:
+    """Render the standard console summary when no changes are present."""
+    active_console = console or Console()
+    active_console.print(f"\n{Misc.EMOJI_REPORT} [bold]Changes Summary:[/]")
+    active_console.print("[dim italic]No changes were made during this run.[/dim italic]")
+    active_console.print("-" * Format.SEPARATOR_100)
+
+
 def save_unified_changes_report(
     changes: list[dict[str, Any]],
     file_path: str | None,
@@ -459,17 +469,52 @@ def save_unified_changes_report(
     """
     # Handle empty changes case
     if not changes:
-        console = Console()
-        console.print(f"\n{Misc.EMOJI_REPORT} [bold]Changes Summary:[/]")
-        console.print("[dim italic]No changes were made during this run.[/dim italic]")
-        console.print("-" * Format.SEPARATOR_100)
+        _print_no_changes_summary()
         return
 
     # Sort and group changes
     changes_sorted = _sort_changes_by_artist_album(changes)
-    grouped = _group_changes_by_type(changes_sorted)
 
-    # Console output
+    # Filter changes for console display (show only real changes where old != new)
+    console_changes = []
+    for change in changes_sorted:
+        change_type = change.get("change_type", "")
+
+        # For genre updates, skip if old_genre == new_genre
+        if change_type == "genre_update":
+            if change.get("old_genre") != change.get("new_genre"):
+                console_changes.append(change)
+        # For year updates, skip if old_year == new_year
+        elif change_type == "year_update":
+            if change.get("old_year") != change.get("new_year"):
+                console_changes.append(change)
+        # For name cleaning, skip if old_track_name == new_track_name
+        elif change_type == "name_clean":
+            if change.get("old_track_name") != change.get("new_track_name"):
+                console_changes.append(change)
+        else:
+            # Keep other change types as-is
+            console_changes.append(change)
+
+    # Handle case where all changes were filtered out (e.g., force_update with no real changes)
+    if not console_changes:
+        _print_no_changes_summary()
+        # Still save CSV with all entries (including force_update) for audit trail
+        if file_path:
+            ensure_directory(str(Path(file_path).parent), error_logger)
+            _save_csv(
+                changes_sorted,  # Use full unfiltered list for CSV audit trail
+                _get_csv_fieldnames(),
+                file_path,
+                console_logger,
+                error_logger,
+                "changes report",
+            )
+        return
+
+    grouped = _group_changes_by_type(console_changes)
+
+    # Console output (filtered - only real changes)
     console = Console()
     console.print(f"\n{Misc.EMOJI_REPORT} [bold]Changes Summary:[/]")
 
@@ -482,11 +527,11 @@ def save_unified_changes_report(
 
     console.print("-" * Format.SEPARATOR_100)
 
-    # CSV export if file path provided
+    # CSV export if file path provided (save ALL changes including force_update duplicates)
     if file_path:
         ensure_directory(str(Path(file_path).parent), error_logger)
         _save_csv(
-            changes_sorted,
+            changes_sorted,  # Use full unfiltered list for CSV audit trail
             _get_csv_fieldnames(),
             file_path,
             console_logger,
@@ -505,6 +550,12 @@ def _convert_changelog_to_dict(item: dict[str, Any] | ChangeLogEntry) -> dict[st
             "track_name": item.track_name,
             "old_genre": item.old_genre,
             "new_genre": item.new_genre,
+            "old_year": item.old_year,
+            "new_year": item.new_year,
+            "old_track_name": item.old_track_name,
+            "new_track_name": item.new_track_name,
+            "old_album_name": item.old_album_name,
+            "new_album_name": item.new_album_name,
             "timestamp": item.timestamp,
             "track_id": item.track_id,
         }
@@ -1188,6 +1239,19 @@ async def sync_track_list_with_current(
     # 4. Merge current into CSV map
     added_or_updated = _merge_current_into_csv(current_map, csv_map)
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
+
+    # 5. Remove tracks from CSV that no longer exist in Music.app
+    removed_count = 0
+    tracks_to_remove = []
+    tracks_to_remove.extend(
+        track_id for track_id in csv_map if track_id not in current_map
+    )
+    for track_id in tracks_to_remove:
+        del csv_map[track_id]
+        removed_count += 1
+
+    if removed_count > 0:
+        console_logger.info("Removed %s tracks from CSV that no longer exist in Music.app", removed_count)
 
     # Generate the final list from the updated csv_map and write to CSV
     final_list = list(csv_map.values())

@@ -574,28 +574,44 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 if proc.returncode == 0:
                     # Don't strip() here as it removes special separator characters
                     script_result: str = stdout.decode()
-                    # Create a preview for logging - this can be stripped
-                    preview_text = script_result.strip()
-                    preview = f"{preview_text[:RESULT_PREVIEW_LEN]}..." if len(preview_text) > RESULT_PREVIEW_LEN else preview_text
-                    # Log at appropriate level based on result content
-                    if "No Change" in preview:
-                        # Log "No Change" results at debug level to reduce noise
-                        self.console_logger.debug(
-                            "◁ %s (%dB, %.1fs) %s",
+
+                    # Special formatting for fetch_tracks.scpt
+                    if label == "fetch_tracks.scpt":
+                        # Count tracks by counting line separators (ASCII 29)
+                        track_count = script_result.count("\x1d")
+                        size_bytes = len(script_result.encode())
+                        size_kb = size_bytes / 1024
+
+                        self.console_logger.info(
+                            "◁ %s: %d tracks (%.1fKB, %.1fs)",
                             label,
-                            len(script_result.encode()),
+                            track_count,
+                            size_kb,
                             elapsed,
-                            preview,
                         )
                     else:
-                        # Log actual changes and other results at info level
-                        self.console_logger.info(
-                            "◁ %s (%dB, %.1fs) %s",
-                            label,
-                            len(script_result.encode()),
-                            elapsed,
-                            preview,
-                        )
+                        # Create a preview for logging - this can be stripped
+                        preview_text = script_result.strip()
+                        preview = f"{preview_text[:RESULT_PREVIEW_LEN]}..." if len(preview_text) > RESULT_PREVIEW_LEN else preview_text
+                        # Log at appropriate level based on result content
+                        if "No Change" in preview:
+                            # Log "No Change" results at debug level to reduce noise
+                            self.console_logger.debug(
+                                "◁ %s (%dB, %.1fs) %s",
+                                label,
+                                len(script_result.encode()),
+                                elapsed,
+                                preview,
+                            )
+                        else:
+                            # Log actual changes and other results at info level
+                            self.console_logger.info(
+                                "◁ %s (%dB, %.1fs) %s",
+                                label,
+                                len(script_result.encode()),
+                                elapsed,
+                                preview,
+                            )
                     return script_result
                 self.error_logger.error(
                     "◁ %s failed with return code %s: %s",

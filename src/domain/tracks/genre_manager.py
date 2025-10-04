@@ -192,6 +192,7 @@ class GenreManager(BaseProcessor):
             )
 
         # Check if an update is needed
+        # Skip only when genre matches AND force_update is not requested
         if not force_update and current_genre == new_genre:
             return None, None
 
