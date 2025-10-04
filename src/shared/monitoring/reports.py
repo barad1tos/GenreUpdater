@@ -32,7 +32,7 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
@@ -195,8 +195,10 @@ def save_to_csv(
         "old_year",
         "new_year",
     ]
+    # Convert TrackDict models to plain dictionaries with string values
+    track_dicts = [{field: str(track.get(field) or "") for field in fieldnames} for track in tracks]
     _save_csv(
-        cast("Sequence[dict[str, str]]", tracks),
+        track_dicts,
         fieldnames,
         file_path,
         console_logger,
