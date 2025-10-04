@@ -886,22 +886,18 @@ class MusicUpdater:
         Args:
             changes: List of all changes collected during pipeline execution
         """
-        # Skip full library sync when using test artists for performance
-        if self.dry_run_test_artists:
-            self.console_logger.info("Skipping full library sync (using test artists)")
-            return
+        # Always display changes report (shows "No changes" message if empty)
+        changes_report_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
 
-        # Save changes report if there are any changes
+        save_changes_report(
+            changes=changes,
+            file_path=changes_report_path if changes else None,  # Only save CSV if there are changes
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+            compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
+        )
+
         if changes:
-            changes_report_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
-
-            save_changes_report(
-                changes=changes,
-                file_path=changes_report_path,
-                console_logger=self.console_logger,
-                error_logger=self.error_logger,
-                compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
-            )
             self.console_logger.info("✅ Saved %d changes to changes report", len(changes))
 
             # Validation: log change breakdown by type
@@ -911,8 +907,11 @@ class MusicUpdater:
                 change_types[change_type] = change_types.get(change_type, 0) + 1
 
             self.console_logger.info("Change breakdown: %s", ", ".join(f"{k}: {v}" for k, v in sorted(change_types.items())))
-        else:
-            self.console_logger.info("No changes to record in this pipeline run")
+
+        # Skip full library sync when using test artists for performance
+        if self.dry_run_test_artists:
+            self.console_logger.info("Skipping full library sync (using test artists)")
+            return
 
         # Use cached snapshot when available to avoid a second AppleScript fetch
         snapshot_tracks = self._get_pipeline_snapshot()

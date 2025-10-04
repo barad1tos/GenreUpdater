@@ -83,7 +83,7 @@ database_verification:
 
 # Development and testing settings
 development:
-  test_artists: [] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  test_artists: [Ghost Brigade] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
   debug_mode: true # 🎛️ GLOBAL DEBUG TOGGLE - Controls all [*_DEBUG] logs throughout the application
 
 # Caching configuration
