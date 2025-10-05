@@ -694,7 +694,7 @@ class YearRetriever:
             album_name=album,
             track_name=str(track.get("name", "")),
             old_year=str(track.get("year") or "None"),
-            new_year=year or "Unknown",
+            new_year=year or "None",
         )
 
     async def _update_tracks_for_album(
