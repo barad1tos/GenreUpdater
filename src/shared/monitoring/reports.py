@@ -450,6 +450,27 @@ def _print_no_changes_summary(console: Console | None = None) -> None:
     active_console.print("-" * Format.SEPARATOR_100)
 
 
+def _is_real_change(change: dict[str, Any]) -> bool:
+    """Check if a change represents a real modification (old != new).
+
+    Args:
+        change: Change record dictionary
+
+    Returns:
+        True if the change has different old and new values, False otherwise
+    """
+    change_type = change.get("change_type", "")
+
+    if change_type == "genre_update":
+        return change.get("old_genre") != change.get("new_genre")
+    if change_type == "year_update":
+        return change.get("old_year") != change.get("new_year")
+    if change_type == "name_clean":
+        return change.get("old_track_name") != change.get("new_track_name")
+    # For unknown types, include by default to be safe
+    return True
+
+
 def save_unified_changes_report(
     changes: list[dict[str, Any]],
     file_path: str | None,
@@ -476,25 +497,7 @@ def save_unified_changes_report(
     changes_sorted = _sort_changes_by_artist_album(changes)
 
     # Filter changes for console display (show only real changes where old != new)
-    console_changes = []
-    for change in changes_sorted:
-        change_type = change.get("change_type", "")
-
-        # For genre updates, skip if old_genre == new_genre
-        if change_type == "genre_update":
-            if change.get("old_genre") != change.get("new_genre"):
-                console_changes.append(change)
-        # For year updates, skip if old_year == new_year
-        elif change_type == "year_update":
-            if change.get("old_year") != change.get("new_year"):
-                console_changes.append(change)
-        # For name cleaning, skip if old_track_name == new_track_name
-        elif change_type == "name_clean":
-            if change.get("old_track_name") != change.get("new_track_name"):
-                console_changes.append(change)
-        else:
-            # Keep other change types as-is
-            console_changes.append(change)
+    console_changes = [change for change in changes_sorted if _is_real_change(change)]
 
     # Handle case where all changes were filtered out (e.g., force_update with no real changes)
     if not console_changes:
@@ -1241,14 +1244,8 @@ async def sync_track_list_with_current(
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
 
     # 5. Remove tracks from CSV that no longer exist in Music.app
-    removed_count = 0
-    tracks_to_remove = []
-    tracks_to_remove.extend(
-        track_id for track_id in csv_map if track_id not in current_map
-    )
-    for track_id in tracks_to_remove:
-        del csv_map[track_id]
-        removed_count += 1
+    removed_count = len([tid for tid in csv_map if tid not in current_map])
+    csv_map = {tid: track for tid, track in csv_map.items() if tid in current_map}
 
     if removed_count > 0:
         console_logger.info("Removed %s tracks from CSV that no longer exist in Music.app", removed_count)
