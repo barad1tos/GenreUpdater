@@ -450,11 +450,12 @@ def _print_no_changes_summary(console: Console | None = None) -> None:
     active_console.print("-" * Format.SEPARATOR_100)
 
 
-def _is_real_change(change: dict[str, Any]) -> bool:
+def _is_real_change(change: dict[str, Any], logger: logging.Logger | None = None) -> bool:
     """Check if a change represents a real modification (old != new).
 
     Args:
         change: Change record dictionary
+        logger: Optional logger for warnings about unknown change types
 
     Returns:
         True if the change has different old and new values, False otherwise
@@ -467,7 +468,14 @@ def _is_real_change(change: dict[str, Any]) -> bool:
         return change.get("old_year") != change.get("new_year")
     if change_type == "name_clean":
         return change.get("old_track_name") != change.get("new_track_name")
-    # For unknown types, include by default to be safe
+
+    # For unknown types, log a warning and include by default to be safe
+    if logger:
+        logger.warning(
+            "Unknown change_type '%s' encountered in _is_real_change; defaulting to include. "
+            "This may indicate a typo or missing handler.",
+            change_type
+        )
     return True
 
 
@@ -497,7 +505,7 @@ def save_unified_changes_report(
     changes_sorted = _sort_changes_by_artist_album(changes)
 
     # Filter changes for console display (show only real changes where old != new)
-    console_changes = [change for change in changes_sorted if _is_real_change(change)]
+    console_changes = [change for change in changes_sorted if _is_real_change(change, console_logger)]
 
     # Handle case where all changes were filtered out (e.g., force_update with no real changes)
     if not console_changes:
@@ -544,24 +552,15 @@ def save_unified_changes_report(
 
 
 def _convert_changelog_to_dict(item: dict[str, Any] | ChangeLogEntry) -> dict[str, Any]:
-    """Convert ChangeLogEntry objects to dictionary format."""
+    """Convert ChangeLogEntry objects to dictionary format.
+
+    Uses Pydantic's model_dump() to ensure all fields are automatically included
+    when ChangeLogEntry evolves, preventing silent omissions.
+    """
     if isinstance(item, ChangeLogEntry):
-        return {
-            "change_type": item.change_type,
-            "artist": item.artist,
-            "album": item.album_name,
-            "track_name": item.track_name,
-            "old_genre": item.old_genre,
-            "new_genre": item.new_genre,
-            "old_year": item.old_year,
-            "new_year": item.new_year,
-            "old_track_name": item.old_track_name,
-            "new_track_name": item.new_track_name,
-            "old_album_name": item.old_album_name,
-            "new_album_name": item.new_album_name,
-            "timestamp": item.timestamp,
-            "track_id": item.track_id,
-        }
+        # Type ignore because Pydantic's model_dump() returns dict[str, Any] but mypy sees it as Any
+        result: dict[str, Any] = item.model_dump()
+        return result
     return item
 
 
@@ -1018,12 +1017,21 @@ def _check_if_track_needs_update(old_data: TrackDict, new_data: TrackDict, field
 
 
 def _update_existing_track_fields(old_data: TrackDict, new_data: TrackDict, fields: list[str]) -> None:
-    """Update existing track with new field values."""
+    """Update existing track with new field values.
+
+    Logs a warning if a field does not exist on TrackDict to catch typos
+    and prevent silent failures.
+    """
     for field in fields:
-        if hasattr(new_data, field):
-            new_value = getattr(new_data, field)
-            if new_value is not None:
-                setattr(old_data, field, new_value)
+        if not hasattr(new_data, field):
+            logging.warning(
+                "Field '%s' does not exist on TrackDict. Skipping update for this field.",
+                field
+            )
+            continue
+        new_value = getattr(new_data, field)
+        if new_value is not None:
+            setattr(old_data, field, new_value)
 
 
 def _merge_current_into_csv(
@@ -1058,7 +1066,11 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
 
 
 def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
-    """Parse AppleScript output into track cache dictionary."""
+    """Parse AppleScript output into track cache dictionary.
+
+    Validates field count to detect AppleScript output format changes and logs
+    warnings for lines with incorrect field counts to aid debugging.
+    """
     tracks_cache: dict[str, dict[str, str]] = {}
 
     # AppleScript uses ASCII character 29 (line separator) and 30 (field separator)
@@ -1069,19 +1081,27 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
     # AppleScript returns 10 fields: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
     expected_field_count = 10
 
-    for track_line in tracks_data:
-        if not track_line:  # Skip empty lines
+    for line_num, track_line in enumerate(tracks_data, start=1):
+        if not track_line.strip():  # Skip empty lines
             continue
         fields = track_line.split(field_separator)
-        if len(fields) >= expected_field_count:
-            track_id = fields[0]
-            # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
-            missing_value = "missing value"
-            tracks_cache[track_id] = {
-                "date_added": fields[5] if fields[5] != missing_value else "",
-                "track_status": fields[6] if fields[6] != missing_value else "",
-                "old_year": fields[7] if fields[7] != missing_value else "",
-            }
+        if len(fields) != expected_field_count:
+            logging.warning(
+                "Track line %d has %d fields, expected %d. Skipping line: %r",
+                line_num,
+                len(fields),
+                expected_field_count,
+                track_line[:100],  # Truncate long lines for readability
+            )
+            continue
+        track_id = fields[0]
+        # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
+        missing_value = "missing value"
+        tracks_cache[track_id] = {
+            "date_added": fields[5] if fields[5] != missing_value else "",
+            "track_status": fields[6] if fields[6] != missing_value else "",
+            "old_year": fields[7] if fields[7] != missing_value else "",
+        }
 
     return tracks_cache
 
@@ -1165,7 +1185,11 @@ async def _fetch_missing_track_fields_for_sync(
 
 
 def _update_track_with_cached_fields_for_sync(track: TrackDict, tracks_cache: dict[str, dict[str, str]]) -> None:
-    """Update track with cached fields if they were empty for sync operation."""
+    """Update track with cached fields if they were empty for sync operation.
+
+    Uses setattr for dynamic fields to ensure proper Pydantic validation
+    and maintain consistency with attribute assignment patterns.
+    """
     if not track.id or track.id not in tracks_cache:
         return
     cached_fields = tracks_cache[track.id]
@@ -1173,7 +1197,7 @@ def _update_track_with_cached_fields_for_sync(track: TrackDict, tracks_cache: di
     if not track.date_added and cached_fields["date_added"]:
         track.date_added = cached_fields["date_added"]
     if not getattr(track, "last_modified", "") and cached_fields.get("last_modified"):
-        track.__dict__["last_modified"] = cached_fields["last_modified"]
+        track.last_modified = cached_fields["last_modified"]
     if not track.track_status and cached_fields["track_status"]:
         track.track_status = cached_fields["track_status"]
     if not track.old_year and cached_fields["old_year"]:
