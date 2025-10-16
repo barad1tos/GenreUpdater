@@ -48,11 +48,7 @@ def compute_track_delta(
     current_tracks: Iterable[TrackDict],
     existing_map: dict[str, TrackDict],
 ) -> TrackDelta:
-    """Compute track delta given current TrackDict objects and CSV snapshot.
-
-    Works directly with TrackDict objects, eliminating the need
-    for a separate fetch_track_summaries call that duplicates data.
-    """
+    """Compute track delta given current TrackDict objects and CSV snapshot."""
     current_map: dict[str, TrackDict] = {str(track.id): track for track in current_tracks}
     current_ids = set(current_map.keys())
     existing_ids = set(existing_map.keys())
