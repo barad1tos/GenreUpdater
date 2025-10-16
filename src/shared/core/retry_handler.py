@@ -44,7 +44,9 @@ class RetryMetadata(TypedDict, total=False):
 
 def _create_empty_metadata() -> RetryMetadata:
     """Create an empty RetryMetadata dict for default_factory."""
-    return cast(RetryMetadata, {})
+    # Two-step cast: dict -> object -> RetryMetadata (TypedDict)
+    # Empty dict is valid for RetryMetadata since all fields are optional (total=False)
+    return cast(RetryMetadata, cast(object, {}))
 
 
 @dataclass

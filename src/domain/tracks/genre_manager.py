@@ -60,7 +60,9 @@ class GenreManager(BaseProcessor):
         Returns:
             True if genre is missing, empty, or 'unknown'
         """
-        genre_val = track.genre or ""
+        genre_val = track.genre
+
+        # Check type before applying string operations
         if not isinstance(genre_val, str):
             return True
 
@@ -138,38 +140,49 @@ class GenreManager(BaseProcessor):
         )
         return combined
 
-    async def _update_track_genre(
-        self,
-        track: TrackDict,
-        new_genre: str,
-        force_update: bool,
-    ) -> tuple[TrackDict | None, ChangeLogEntry | None]:
-        """Update a single track's genre if needed.
+    def _validate_track_for_update(self, track: TrackDict) -> tuple[bool, str]:
+        """Validate if track can be updated.
 
         Args:
-            track: The track to update
-            new_genre: New genre to apply
-            force_update: Whether to force update even if genre matches
+            track: Track to validate
 
         Returns:
-            Tuple of (updated_track, change_log_entry) or (None, None) if no update
-
+            Tuple of (is_valid, track_id)
         """
         track_id = track.id or ""
-        track_name = track.name or "Unknown"
-        current_genre = track.genre or ""
         track_status = track.track_status or ""
 
         if not track_id:
             self.error_logger.error("Track missing 'id' field")
-            return None, None
+            return False, ""
 
         # Skip prerelease tracks (read-only)
         if track_status == "prerelease":
             self.console_logger.debug("Skipping prerelease track %s (read-only)", track_id)
-            return None, None
+            return False, track_id
 
-        # DEBUG: Log decision for each track
+        return True, track_id
+
+    def _log_track_update_decision(
+        self,
+        track: TrackDict,
+        track_id: str,
+        current_genre: str,
+        new_genre: str,
+        force_update: bool,
+    ) -> None:
+        """Log track update decision for debugging.
+
+        Args:
+            track: Track being updated
+            track_id: Track identifier
+            current_genre: Current genre value
+            new_genre: New genre value
+            force_update: Whether force update is enabled
+        """
+        track_name = track.name or "Unknown"
+        track_status = track.track_status or ""
+
         if current_genre != new_genre:
             self.console_logger.debug(
                 "Track %s (%s): Current='%s', New='%s', Status='%s', Force=%s -> WILL UPDATE",
@@ -191,12 +204,37 @@ class GenreManager(BaseProcessor):
                 force_update,
             )
 
-        # Check if an update is needed
-        # Skip only when genre matches AND force_update is not requested
-        if not force_update and current_genre == new_genre:
+    async def _update_track_genre(
+        self,
+        track: TrackDict,
+        new_genre: str,
+        force_update: bool,
+    ) -> tuple[TrackDict | None, ChangeLogEntry | None]:
+        """Update a single track's genre if needed.
+
+        Args:
+            track: The track to update
+            new_genre: New genre to apply
+            force_update: Whether to force update even if genre matches
+
+        Returns:
+            Tuple of (updated_track, change_log_entry) or (None, None) if no update
+
+        """
+        # Validate track
+        is_valid, track_id = self._validate_track_for_update(track)
+        if not is_valid:
             return None, None
 
-        # Reduce logging noise - only log errors/warnings, not every successful update
+        track_name = track.name or "Unknown"
+        current_genre = track.genre or ""
+
+        # Log decision
+        self._log_track_update_decision(track, track_id, current_genre, new_genre, force_update)
+
+        # Check if update is needed
+        if not force_update and current_genre == new_genre:
+            return None, None
 
         # Perform the update
         success = await self.track_processor.update_track_async(
@@ -208,11 +246,10 @@ class GenreManager(BaseProcessor):
         )
 
         if success:
-            # Create an updated track record by copying the Pydantic model and updating the genre
+            # Create updated track and change log
             track.genre = new_genre
             updated_track = track.copy(genre=new_genre)
 
-            # Create change log entry with explicit string conversion
             change_log = ChangeLogEntry(
                 timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
                 change_type="genre_update",

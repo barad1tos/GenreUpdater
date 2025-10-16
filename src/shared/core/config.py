@@ -47,9 +47,14 @@ def resolve_env_vars(config: ConfigValue) -> ConfigValue:
         return {str(k): resolve_env_vars(v) for k, v in config.items()}
     if isinstance(config, list):
         return [resolve_env_vars(item) for item in config]
-    if isinstance(config, str) and config.startswith("${") and config.endswith("}"):
-        var_name = config[2:-1]
-        return os.getenv(var_name, "")
+    if isinstance(config, str):
+        # First, handle ${VAR} syntax
+        if config.startswith("${") and config.endswith("}"):
+            var_name = config[2:-1]
+            return os.getenv(var_name, "")
+        # Then, expand any $VAR or ${VAR} in paths using os.path.expandvars
+        if "$" in config:
+            return os.path.expandvars(config)
     return config
 
 

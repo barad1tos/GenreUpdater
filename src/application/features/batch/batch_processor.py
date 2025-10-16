@@ -53,7 +53,7 @@ class BatchProcessor:
                 return {"successful": [], "failed": [], "skipped": []}
 
             # Use run_in_executor to avoid blocking async operation
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _read_file() -> list[str]:
                 with path.open(encoding="utf-8") as f:
@@ -108,10 +108,11 @@ class BatchProcessor:
                 results["successful"].append(artist)
                 self.console_logger.info("✅ Successfully processed: %s", artist)
 
-            except KeyboardInterrupt:
-                self.console_logger.warning("\nBatch processing interrupted by user")
+            except asyncio.CancelledError:
+                # Properly handle cancellation of async tasks
+                self.console_logger.warning("\nBatch processing interrupted (async task cancelled)")
                 results["skipped"].extend(artists[i:])
-                break
+                raise  # Re-raise to propagate cancellation
 
             except (OSError, ValueError, TypeError, RuntimeError):
                 results["failed"].append(artist)
@@ -143,8 +144,10 @@ class BatchProcessor:
             self.console_logger.error("❌ Failed: %d", failed)
             for artist in results["failed"]:
                 self.console_logger.error("  - %s", artist)
-
         if skipped:
+            self.console_logger.warning("⏭️  Skipped: %d", skipped)
+            for artist in results["skipped"]:
+                self.console_logger.warning("  - %s", artist)
             self.console_logger.warning("⏭️  Skipped: %d", skipped)
 
         # Success rate

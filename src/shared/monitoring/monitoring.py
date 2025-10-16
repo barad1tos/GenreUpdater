@@ -13,7 +13,8 @@ import logging
 import time
 
 try:
-    import psutil  # type: ignore
+    import psutil  # type: ignore[import]
+
     _psutil_module = psutil
     psutil_available = True
 except ImportError:
@@ -28,7 +29,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 if TYPE_CHECKING:
-    import types
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -361,7 +361,7 @@ class ResourceMonitor:
         return metric
 
     @staticmethod
-    def _get_cpu_freq_dict(psutil_module: Any) -> dict[str, float ]:
+    def _get_cpu_freq_dict(psutil_module: Any) -> dict[str, float]:
         """Get CPU frequency information as dictionary without using protected _asdict method."""
         cpu_freq = psutil_module.cpu_freq()
         if cpu_freq is None:
@@ -450,9 +450,7 @@ class ResourceMonitor:
             self.collect_disk_metrics(disk_path),
         ]
 
-    def get_metrics(
-        self, resource_type: ResourceType | None = None, since: datetime | None = None
-    ) -> list[ResourceMetric]:
+    def get_metrics(self, resource_type: ResourceType | None = None, since: datetime | None = None) -> list[ResourceMetric]:
         """Get resource metrics filtered by type and time."""
         filtered_metrics = self.metrics
 
@@ -575,9 +573,7 @@ class MetricsCollector:
                 resource_metrics = self.resource_monitor.collect_all_metrics()
 
                 # Get recent performance metrics
-                recent_performance = self.performance_tracker.get_metrics(
-                    since=datetime.now(UTC).replace(second=0, microsecond=0)
-                )
+                recent_performance = self.performance_tracker.get_metrics(since=datetime.now(UTC).replace(second=0, microsecond=0))
 
                 # Evaluate alerts
                 all_metrics = resource_metrics + recent_performance
@@ -691,7 +687,7 @@ class OperationContext:
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: types.TracebackType | None,
+        exc_tb: object,
     ) -> None:
         """Exit the operation context, record duration and success/error counters."""
         self.tracker.end_operation(self.operation_name, self.tags)

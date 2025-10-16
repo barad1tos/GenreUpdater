@@ -21,13 +21,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol, TypeVar
 
-try:
-    import aiofiles  # type: ignore  # noqa: PGH003
-except ImportError:
-    aiofiles = None
+_aiofiles: Any
 
-# ==================== CACHE CONFIGURATION ====================
-# Content from cache_config.py
+try:
+    import aiofiles as _aiofiles
+except ImportError:
+    _aiofiles = None
 
 
 class CacheLevel(Enum):
@@ -283,9 +282,12 @@ class CacheFileManager:
     @staticmethod
     async def save_to_file(file_path: Path, data: dict[str, Any]) -> None:
         """Save data to file atomically."""
-        if aiofiles is None:
+        if _aiofiles is None:
             msg = "aiofiles is required for async file operations"
             raise ImportError(msg)
+
+        # Type narrowing: after None check and raise, _aiofiles is guaranteed to be available
+        assert _aiofiles is not None
 
         # Ensure directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -293,7 +295,7 @@ class CacheFileManager:
         # Write to temporary file first
         temp_file = file_path.with_suffix(".tmp")
 
-        async with aiofiles.open(temp_file, "w", encoding="utf-8") as f:
+        async with _aiofiles.open(temp_file, "w", encoding="utf-8") as f:
             await f.write(json.dumps(data, indent=2, ensure_ascii=False))
 
         # Atomic rename
@@ -302,15 +304,18 @@ class CacheFileManager:
     @staticmethod
     async def load_from_file(file_path: Path) -> dict[str, Any]:
         """Load data from file."""
-        if aiofiles is None:
+        if _aiofiles is None:
             msg = "aiofiles is required for async file operations"
             raise ImportError(msg)
+
+        # Type narrowing: after None check and raise, _aiofiles is guaranteed to be available
+        assert _aiofiles is not None
 
         if not file_path.exists():
             return {}
 
         try:
-            async with aiofiles.open(file_path, encoding="utf-8") as f:
+            async with _aiofiles.open(file_path, encoding="utf-8") as f:
                 content = await f.read()
                 result = json.loads(content)
                 return result if isinstance(result, dict) else {}
