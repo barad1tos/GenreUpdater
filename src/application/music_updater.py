@@ -867,16 +867,18 @@ class MusicUpdater:
             self.error_logger.exception("=== ERROR in Step 3 ===")
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
-            changes_log.append(ChangeLogEntry(
-                timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
-                change_type="year_update_error",
-                track_id="",
-                artist="ERROR",
-                album_name=f"Year update failed: {type(e).__name__}",
-                track_name=str(e)[:100],
-                old_year="",
-                new_year="",
-            ))
+            changes_log.append(
+                ChangeLogEntry(
+                    timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
+                    change_type="year_update_error",
+                    track_id="",
+                    artist="ERROR",
+                    album_name=f"Year update failed: {type(e).__name__}",
+                    track_name=str(e)[:100],
+                    old_year="",
+                    new_year="",
+                )
+            )
 
         return changes_log
 
@@ -959,7 +961,6 @@ class MusicUpdater:
         last_run_time = await self._get_last_run_time(force=False)
 
         # Use dedicated incremental filter service
-        # Note: No longer need fetch_track_summaries - IncrementalFilterService works with TrackDict directly
         incremental_tracks = self.incremental_filter.filter_tracks_for_incremental_update(tracks, last_run_time)
 
         # Early exit if no tracks need processing
