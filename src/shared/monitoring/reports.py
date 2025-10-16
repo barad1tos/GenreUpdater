@@ -468,6 +468,11 @@ def _is_real_change(change: dict[str, Any], logger: logging.Logger | None = None
         return change.get("old_year") != change.get("new_year")
     if change_type == "name_clean":
         return change.get("old_track_name") != change.get("new_track_name")
+    if change_type == "metadata_cleaning":
+        # Check both album and track name changes
+        album_changed = change.get("old_album_name") != change.get("new_album_name")
+        track_changed = change.get("old_track_name") != change.get("new_track_name")
+        return album_changed or track_changed
 
     # For unknown types, log a warning and include by default to be safe
     if logger:
@@ -519,7 +524,7 @@ def save_unified_changes_report(
                 file_path,
                 console_logger,
                 error_logger,
-                "changes report",
+                Misc.CHANGES_REPORT_TYPE,
             )
         return
 
@@ -547,7 +552,7 @@ def save_unified_changes_report(
             file_path,
             console_logger,
             error_logger,
-            "changes report",
+            Misc.CHANGES_REPORT_TYPE,
         )
 
 
@@ -616,7 +621,7 @@ def _add_timestamp_to_filename(file_path: str) -> str:
 
 def save_changes_report(
     changes: Sequence[dict[str, Any] | ChangeLogEntry],
-    file_path: str,
+    file_path: str | None,
     console_logger: logging.Logger | None = None,
     error_logger: logging.Logger | None = None,
     add_timestamp: bool = False,
@@ -629,7 +634,7 @@ def save_changes_report(
 
     Args:
         changes: List of change dictionaries or ChangeLogEntry objects
-        file_path: Path to save the CSV file
+        file_path: Path to save the CSV file (None to skip file saving)
         console_logger: Logger for console output
         error_logger: Logger for errors
         add_timestamp: If True, add timestamp to filename
@@ -650,8 +655,8 @@ def save_changes_report(
             change["change_type"] = _determine_change_type(change)
         _normalize_field_mappings(change)
 
-    # Generate final file path with optional timestamp
-    final_path = _add_timestamp_to_filename(file_path) if add_timestamp else file_path
+    # Generate final file path with optional timestamp (handle None)
+    final_path = _add_timestamp_to_filename(file_path) if add_timestamp and file_path else file_path
 
     save_unified_changes_report(
         dict_changes,

@@ -6,6 +6,7 @@ import logging
 from typing import Any, Protocol, runtime_checkable
 
 
+# noinspection PyPep8Naming
 @runtime_checkable
 class LoggerLike(Protocol):
     """Protocol for logger-like objects."""
@@ -42,9 +43,11 @@ class LoggerLike(Protocol):
 
     def isEnabledFor(self, level: int) -> bool:  # noqa: N802 - matches logging.Logger API
         """Return True if the logger handles records at the given level."""
+        ...
 
     def getEffectiveLevel(self) -> int:  # noqa: N802 - matches logging.Logger API
         """Return the effective logging level for the logger."""
+        ...
 
 
 # Type alias for logger-like objects

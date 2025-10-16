@@ -5,11 +5,11 @@
 # -----------------------------------------------------------------------
 
 # Essential paths for the application to function
-music_library_path: /Users/romanborodavkin/Music/Music/Music Library.musiclibrary
-apple_scripts_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/applescripts
+music_library_path: ${HOME}/Music/Music/Music Library.musiclibrary
+apple_scripts_dir: ${HOME}/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/applescripts
 
 # Base directory for all generated files (logs, reports, caches, etc.)
-logs_base_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs
+logs_base_dir: ${HOME}/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs
 
 # Python settings
 python_settings:
@@ -59,6 +59,8 @@ cleaning:
     - Anniversary Edition
     - Bonus Tracks
     - Digital Version
+    - Original Soundtrack
+
   album_suffixes_to_remove:
     - " - Remaster"
     - " (Remaster)"
@@ -83,7 +85,7 @@ database_verification:
 
 # Development and testing settings
 development:
-  test_artists: [Ghost Brigade] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  test_artists: [] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
   debug_mode: true # 🎛️ GLOBAL DEBUG TOGGLE - Controls all [*_DEBUG] logs throughout the application
 
 # Caching configuration

@@ -1495,10 +1495,12 @@ class ExternalApiOrchestrator:
         if api_name in {"musicbrainz", "discogs"}:
             # Type narrowing: cast to APIs that accept artist_region parameter
             client_with_region = cast(MusicBrainzClient | DiscogsClient, api_client)
-            return await client_with_region.get_scored_releases(artist_norm, album_norm, artist_region)
+            result = await client_with_region.get_scored_releases(artist_norm, album_norm, artist_region)
+            return cast(list[ScoredRelease], result)
         # Type narrowing: cast to APIs that don't accept artist_region parameter
         client_without_region = cast(LastFmClient | AppleMusicClient, api_client)
-        return await client_without_region.get_scored_releases(artist_norm, album_norm)
+        result = await client_without_region.get_scored_releases(artist_norm, album_norm)
+        return cast(list[ScoredRelease], result)
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
         """Get API client by name."""
