@@ -399,9 +399,9 @@ def _render_compact_change(console: Console, change_type: str, record: dict[str,
         item = f"{artist} - {album}"
         # Only highlight in yellow if the year actually changed
         if old_val != new_val:
-            console.print(f"  {item}: [dim]{old_val or 'None'}[/dim] → [bold yellow]{new_val}[/bold yellow]")
+            console.print(f"  {item}: [dim]{old_val or '(empty)'}[/dim] → [bold yellow]{new_val}[/bold yellow]")
         else:
-            console.print(f"  {item}: {old_val or 'None'} → {new_val}")
+            console.print(f"  {item}: {old_val or '(empty)'} → {new_val}")
     elif change_type == "name_change":
         if record.get(Key.OLD_TRACK_NAME):
             old_val = record.get(Key.OLD_TRACK_NAME, "")

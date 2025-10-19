@@ -8,8 +8,10 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from src.domain.tracks.artist_renamer import ArtistRenamer
 from src.shared.data.metadata import parse_tracks
 from src.shared.data.models import TrackDict
+from src.shared.data.track_status import can_edit_metadata
 from src.shared.data.validators import SecurityValidationError, SecurityValidator, is_valid_track_item
 from src.shared.monitoring import Analytics
 
@@ -27,7 +29,7 @@ class TrackProcessor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: dict[str, Any],
-        analytics: "Analytics",
+        analytics: Analytics,
         dry_run: bool = False,
         security_validator: SecurityValidator | None = None,
     ) -> None:
@@ -57,6 +59,7 @@ class TrackProcessor:
         # Dry run context from MusicUpdater
         self.dry_run_mode: str = ""
         self.dry_run_test_artists: set[str] = set()
+        self.artist_renamer: ArtistRenamer | None = None
 
     def set_dry_run_context(self, mode: str, test_artists: set[str]) -> None:
         """Set dry run context for test mode filtering.
@@ -68,6 +71,10 @@ class TrackProcessor:
         """
         self.dry_run_mode = mode
         self.dry_run_test_artists = test_artists
+
+    def set_artist_renamer(self, renamer: ArtistRenamer) -> None:
+        """Attach artist renamer service for automatic post-fetch processing."""
+        self.artist_renamer = renamer
 
     async def _process_test_artists(self, _force_refresh: bool) -> list[TrackDict]:
         """Process tracks for all configured test artists.
@@ -96,6 +103,16 @@ class TrackProcessor:
             artist_tracks = await self.fetch_tracks_async(test_artist, _force_refresh, ignore_test_filter=True)
             collected_tracks.extend(artist_tracks)
         return collected_tracks
+
+    async def _apply_artist_renames(self, tracks: list[TrackDict]) -> None:
+        """Apply artist rename rules if service is configured."""
+        if self.artist_renamer is None or not tracks:
+            return
+
+        try:
+            await self.artist_renamer.rename_tracks(tracks)
+        except (OSError, ValueError, RuntimeError):
+            self.error_logger.exception("Artist renamer failed")
 
     async def _get_cached_tracks(self, cache_key: str) -> Sequence[TrackDict] | None:
         """Retrieve tracks from the cache with type validation.
@@ -244,6 +261,14 @@ class TrackProcessor:
                 self.error_logger.error("AppleScript returned empty output")
                 return []
 
+            # Check for AppleScript status codes
+            if raw_output.startswith("ERROR:"):
+                self.error_logger.error(f"AppleScript error: {raw_output}")
+                return []
+            if raw_output == "NO_TRACKS_FOUND":
+                self.console_logger.info("No tracks found matching filter criteria")
+                return []
+
             # Parse the raw output
             tracks = parse_tracks(raw_output, self.error_logger)
 
@@ -252,6 +277,7 @@ class TrackProcessor:
 
             # Validate each track for security
             validated_tracks = self._validate_tracks_security(tracks)
+            await self._apply_artist_renames(validated_tracks)
 
             self.console_logger.info(
                 "AppleScript fetch_tracks.scpt executed successfully, got %d bytes, validated %d/%d tracks",
@@ -292,6 +318,7 @@ class TrackProcessor:
 
             parsed_tracks = parse_tracks(raw_output, self.error_logger)
             validated_tracks = self._validate_tracks_security(parsed_tracks)
+            await self._apply_artist_renames(validated_tracks)
             collected.extend(validated_tracks)
 
         return collected
@@ -336,6 +363,7 @@ class TrackProcessor:
                     len(validated_cached),
                     len(cached_tracks),
                 )
+                await self._apply_artist_renames(validated_cached)
                 return validated_cached
 
         # Fetch from Music.app
@@ -420,6 +448,14 @@ class TrackProcessor:
             self.console_logger.info("Batch %d returned empty result, assuming end of tracks", batch_count)
             return None
 
+        # Check for AppleScript status codes
+        if raw_output.startswith("ERROR:"):
+            self.error_logger.error(f"Batch {batch_count} AppleScript error: {raw_output}")
+            return None
+        if raw_output == "NO_TRACKS_FOUND":
+            self.console_logger.info("Batch %d: no tracks found", batch_count)
+            return None
+
         # Parse the batch
         batch_tracks = parse_tracks(raw_output, self.error_logger)
 
@@ -429,6 +465,7 @@ class TrackProcessor:
 
         # Validate each track for security
         validated_tracks = self._validate_tracks_security(batch_tracks)
+        await self._apply_artist_renames(validated_tracks)
 
         self.console_logger.info(
             "Batch %d: fetched %d tracks, validated %d/%d",
@@ -608,6 +645,8 @@ class TrackProcessor:
         sanitized_album_name: str | None,
         sanitized_genre: str | None,
         sanitized_year: str | None,
+        *,
+        sanitized_artist_name: str | None = None,
     ) -> bool:
         """Handle dry run update recording.
 
@@ -617,6 +656,7 @@ class TrackProcessor:
             sanitized_album_name: Sanitized album name (optional)
             sanitized_genre: Sanitized genre (optional)
             sanitized_year: Sanitized year (optional)
+            sanitized_artist_name: Sanitized artist name (optional)
 
         Returns:
             True (dry run always succeeds)
@@ -624,6 +664,8 @@ class TrackProcessor:
         """
         # Record dry-run action with sanitized values
         updates: dict[str, str] = {}
+        if sanitized_artist_name:
+            updates["artist"] = sanitized_artist_name
         if sanitized_track_name:
             updates["name"] = sanitized_track_name
         if sanitized_album_name:
@@ -874,8 +916,12 @@ class TrackProcessor:
 
         """
         # Check if the track is prerelease (read-only) - prevent update attempts
-        if track_status and track_status.lower() == "prerelease":
-            self.console_logger.info("Skipping update for prerelease track %s (read-only status)", track_id)
+        if not can_edit_metadata(track_status):
+            self.console_logger.info(
+                "Skipping update for read-only track %s (status: %s)",
+                track_id,
+                track_status or "unknown",
+            )
             return False
 
         # Validate and sanitize all input parameters
@@ -912,6 +958,93 @@ class TrackProcessor:
             original_album,
             original_track,
         )
+
+    @Analytics.track_instance_method("track_artist_update")
+    async def update_artist_async(
+        self,
+        track: TrackDict,
+        new_artist_name: str,
+        *,
+        original_artist: str | None = None,
+    ) -> bool:
+        """Update the artist name for a track.
+
+        Args:
+            track: Track dictionary representing the target track
+            new_artist_name: Artist name to apply
+            original_artist: Original artist for logging context (optional)
+
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        prepared = self._prepare_artist_update(track, new_artist_name, original_artist)
+        if prepared is None:
+            return False
+
+        sanitized_track_id, sanitized_artist, current_artist = prepared
+
+        if self.dry_run:
+            return self._handle_dry_run_update(
+                sanitized_track_id,
+                None,
+                None,
+                None,
+                None,
+                sanitized_artist_name=sanitized_artist,
+            )
+
+        success = await self._apply_track_updates(
+            sanitized_track_id,
+            [("artist", sanitized_artist)],
+            artist=original_artist or current_artist,
+            album=track.album,
+            track=track.name,
+        )
+
+        if success:
+            track.artist = sanitized_artist
+
+        return success
+
+    def _prepare_artist_update(
+        self,
+        track: TrackDict,
+        new_artist_name: str,
+        original_artist: str | None,
+    ) -> tuple[str, str, str] | None:
+        track_id = track.id
+        if not track_id:
+            self.error_logger.warning("Cannot update artist for track without ID: %s", track)
+            return None
+
+        current_artist = track.artist or ""
+        target_artist = (new_artist_name or "").strip()
+
+        if not target_artist:
+            self.error_logger.warning("New artist name is empty for track %s", track_id)
+            return None
+
+        if target_artist == current_artist and (original_artist or current_artist):
+            self.console_logger.debug("Artist name already up to date for track %s: %s", track_id, target_artist)
+            return None
+
+        if not can_edit_metadata(track.track_status):
+            status_value = track.track_status or "unknown"
+            self.console_logger.info("Skipping artist rename for track %s due to read-only status: %s", track_id, status_value)
+            return None
+
+        try:
+            sanitized_track_id = self.security_validator.sanitize_string(track_id, "track_id")
+            sanitized_artist = self.security_validator.sanitize_string(target_artist, "artist")
+        except SecurityValidationError as exc:
+            self.error_logger.warning(
+                "Security validation failed when renaming artist for track %s: %s",
+                track_id,
+                exc,
+            )
+            return None
+
+        return sanitized_track_id, sanitized_artist, current_artist
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Get the list of dry-run actions recorded.

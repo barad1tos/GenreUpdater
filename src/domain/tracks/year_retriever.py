@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.shared.data.models import ChangeLogEntry, TrackDict
+from src.shared.data.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status
 from src.shared.data.protocols import (
     CacheServiceProtocol,
     ExternalApiServiceProtocol,
@@ -423,6 +424,190 @@ class YearRetriever:
             albums[album_key].append(track)
         return albums
 
+    class _AlbumProcessingProgress:
+        """Track album processing progress and emit informative logs."""
+
+        def __init__(self, total: int, logger: logging.Logger) -> None:
+            self.total = total
+            self.logger = logger
+            self.processed = 0
+            self.lock = asyncio.Lock()
+            self.interval = max(1, total // 10) if total > 0 else 1
+
+        async def record(self) -> None:
+            """Increment processed counter and log progress when appropriate."""
+            async with self.lock:
+                self.processed += 1
+                if self.processed % self.interval == 0 or self.processed == self.total:
+                    self.logger.info("Album processing progress: %d/%d", self.processed, self.total)
+
+    def _warn_legacy_year_config(self, year_config: dict[str, Any]) -> None:
+        """Emit warnings when user still relies on the legacy config format."""
+        if "batch_size" in year_config and "processing" not in year_config:
+            self.console_logger.warning(
+                "⚠️ Legacy config detected: 'year_retrieval.batch_size' should be 'year_retrieval.processing.batch_size'. "
+                "Update your config file for optimal performance."
+            )
+        if "delay_between_batches" in year_config and "processing" not in year_config:
+            self.console_logger.warning(
+                "⚠️ Legacy config detected: 'year_retrieval.delay_between_batches' should be 'year_retrieval.processing.delay_between_batches'. "
+                "Update your config file for optimal performance."
+            )
+
+    @staticmethod
+    def _get_processing_settings(year_config: dict[str, Any]) -> tuple[int, int, bool]:
+        """Extract batch processing settings with sane fallbacks."""
+        processing_config = year_config.get("processing", {})
+        batch_size_raw = processing_config.get("batch_size", 10)
+        delay_raw = processing_config.get("delay_between_batches", 60)
+        adaptive_delay_raw = processing_config.get("adaptive_delay", False)
+
+        try:
+            batch_size = int(batch_size_raw)
+        except (TypeError, ValueError):
+            batch_size = 10
+
+        try:
+            delay_between_batches = int(delay_raw)
+        except (TypeError, ValueError):
+            delay_between_batches = 60
+
+        adaptive_delay = bool(adaptive_delay_raw)
+        return max(1, batch_size), max(0, delay_between_batches), adaptive_delay
+
+    def _determine_concurrency_limit(self, year_config: dict[str, Any]) -> int:
+        """Compute concurrency limit based on AppleScript and API limits."""
+        api_concurrency_raw = year_config.get("rate_limits", {}).get("concurrent_api_calls")
+        apple_script_concurrency_raw = self.config.get("apple_script_concurrency", 1)
+
+        try:
+            apple_script_concurrency = int(apple_script_concurrency_raw)
+        except (TypeError, ValueError):
+            apple_script_concurrency = 1
+
+        try:
+            api_concurrency = int(api_concurrency_raw) if api_concurrency_raw is not None else None
+        except (TypeError, ValueError):
+            api_concurrency = None
+
+        if api_concurrency is None or api_concurrency <= 0:
+            return max(1, apple_script_concurrency)
+        return max(1, min(apple_script_concurrency, api_concurrency))
+
+    @staticmethod
+    def _should_use_sequential_processing(adaptive_delay: bool, concurrency_limit: int) -> bool:
+        """Return True when the legacy sequential mode should remain active."""
+        return not adaptive_delay and concurrency_limit == 1
+
+    async def _process_batches_sequentially(
+        self,
+        album_items: list[tuple[tuple[str, str], list[TrackDict]]],
+        batch_size: int,
+        delay_between_batches: int,
+        total_batches: int,
+        total_albums: int,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+    ) -> None:
+        """Process albums strictly sequentially with explicit pauses."""
+        for batch_start in range(0, total_albums, batch_size):
+            batch_end = min(batch_start + batch_size, total_albums)
+            batch_index = batch_start // batch_size + 1
+
+            self.console_logger.info("Processing batch %d/%d", batch_index, total_batches)
+
+            for album_key, album_tracks in album_items[batch_start:batch_end]:
+                artist_name, album_name = album_key
+                self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist_name, album_name)
+                await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log)
+
+            if batch_end < total_albums and delay_between_batches > 0:
+                self.console_logger.info("Waiting %d seconds before next batch...", delay_between_batches)
+                await asyncio.sleep(delay_between_batches)
+
+    async def _process_album_entry(
+        self,
+        album_index: int,
+        total_albums: int,
+        album_entry: tuple[tuple[str, str], list[TrackDict]],
+        semaphore: asyncio.Semaphore,
+        progress: _AlbumProcessingProgress,
+        concurrency_limit: int,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+    ) -> None:
+        """Process a single album within concurrency limits and update progress."""
+        album_key, album_tracks = album_entry
+        artist_name, album_name = album_key
+
+        self.console_logger.debug(
+            "DEBUG: Queued album %d/%d '%s - %s' (concurrency=%d)",
+            album_index + 1,
+            total_albums,
+            artist_name,
+            album_name,
+            concurrency_limit,
+        )
+
+        async with semaphore:
+            self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist_name, album_name)
+            await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log)
+
+        await progress.record()
+
+    async def _process_batches_concurrently(
+        self,
+        album_items: list[tuple[tuple[str, str], list[TrackDict]]],
+        batch_size: int,
+        total_batches: int,
+        total_albums: int,
+        concurrency_limit: int,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+        adaptive_delay: bool,
+    ) -> None:
+        """Process albums concurrently using adaptive pacing and shared semaphore."""
+        semaphore = asyncio.Semaphore(concurrency_limit)
+        progress = YearRetriever._AlbumProcessingProgress(total_albums, self.console_logger)
+
+        for batch_start in range(0, total_albums, batch_size):
+            batch_end = min(batch_start + batch_size, total_albums)
+            batch_index = batch_start // batch_size + 1
+            batch_slice = album_items[batch_start:batch_end]
+
+            self.console_logger.info(
+                "Processing batch %d/%d (size=%d, concurrency=%d, adaptive_delay=%s)",
+                batch_index,
+                total_batches,
+                len(batch_slice),
+                concurrency_limit,
+                adaptive_delay,
+            )
+
+            async with asyncio.TaskGroup() as task_group:
+                for offset, album_entry in enumerate(batch_slice):
+                    album_position = batch_start + offset
+                    task_group.create_task(
+                        self._process_album_entry(
+                            album_position,
+                            total_albums,
+                            album_entry,
+                            semaphore,
+                            progress,
+                            concurrency_limit,
+                            updated_tracks,
+                            changes_log,
+                        )
+                    )
+
+            self.console_logger.info(
+                "Completed batch %d/%d (%d/%d albums processed)",
+                batch_index,
+                total_batches,
+                batch_end,
+                total_albums,
+            )
+
     def _should_skip_album_due_to_existing_years(self, album_tracks: list[TrackDict], artist: str, album: str) -> bool:
         """Check if the album should be skipped due to existing years.
 
@@ -579,7 +764,11 @@ class YearRetriever:
             True if the album should be skipped, False otherwise
 
         """
-        if prerelease_tracks := [track for track in album_tracks if track.get("track_status") == "prerelease"]:
+        if prerelease_tracks := [
+            track
+            for track in album_tracks
+            if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
+        ]:
             self.console_logger.info(
                 "Skipping album '%s - %s': %d of %d tracks are prerelease (read-only)",
                 artist,
@@ -615,27 +804,32 @@ class YearRetriever:
         tracks_needing_update: list[TrackDict] = []
 
         for track in album_tracks:
-            if track_id_value := track.get("id", ""):
-                track_id = str(track_id_value)
-                track_current_year = track.get("year", "")
-                track_status = track.get("track_status")
+            if not (track_id_value := track.get("id", "")):
+                continue
 
-                # Skip prerelease tracks (read-only)
-                if track_status == "prerelease":
-                    self.console_logger.debug("Skipping prerelease track %s (read-only)", track_id)
-                    continue
+            track_id = str(track_id_value)
+            track_current_year = track.get("year", "")
+            track_status = track.track_status if isinstance(track.track_status, str) else None
+            # Skip read-only tracks (e.g., prerelease)
+            if not can_edit_metadata(track_status):
+                self.console_logger.debug(
+                    "Skipping read-only track %s (status: %s)",
+                    track_id,
+                    track_status or "unknown",
+                )
+                continue
 
-                if YearRetriever._track_needs_year_update(track_current_year, year):
-                    track_ids.append(track_id)
-                    tracks_needing_update.append(track)
-                    self.console_logger.debug(
-                        "Track %s needs year update from '%s' to '%s'",
-                        track_id,
-                        track_current_year or "empty",
-                        year,
-                    )
-                else:
-                    self.console_logger.debug("Track %s already has correct year %s, skipping", track_id, year)
+            if YearRetriever._track_needs_year_update(track_current_year, year):
+                track_ids.append(track_id)
+                tracks_needing_update.append(track)
+                self.console_logger.debug(
+                    "Track %s needs year update from '%s' to '%s'",
+                    track_id,
+                    track_current_year or "empty",
+                    year,
+                )
+            else:
+                self.console_logger.debug("Track %s already has correct year %s, skipping", track_id, year)
 
         return track_ids, tracks_needing_update
 
@@ -693,8 +887,8 @@ class YearRetriever:
             artist=artist,
             album_name=album,
             track_name=str(track.get("name", "")),
-            old_year=str(track.get("year") or "None"),
-            new_year=year or "None",
+            old_year=str(track.get("year")) if track.get("year") is not None else "",
+            new_year=str(year) if year is not None else "",
         )
 
     async def _update_tracks_for_album(
@@ -756,16 +950,7 @@ class YearRetriever:
             List of available tracks
 
         """
-        available_statuses = {
-            "local only",
-            "purchased",
-            "matched",
-            "uploaded",
-            "subscription",
-            "downloaded",
-        }
-
-        return [track for track in album_tracks if track.get("track_status") in available_statuses]
+        return filter_available_tracks(album_tracks)
 
     def _handle_no_year_found(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
         """Handle case when no year could be determined for the album.
@@ -964,46 +1149,42 @@ class YearRetriever:
             changes_log: List to append change entries to
 
         """
-        # Check for old config format and warn user
         year_config = self.config.get("year_retrieval", {})
-        if "batch_size" in year_config and "processing" not in year_config:
-            self.console_logger.warning(
-                "⚠️ Legacy config detected: 'year_retrieval.batch_size' should be 'year_retrieval.processing.batch_size'. "
-                "Update your config file for optimal performance."
-            )
-        if "delay_between_batches" in year_config and "processing" not in year_config:
-            self.console_logger.warning(
-                "⚠️ Legacy config detected: 'year_retrieval.delay_between_batches' should be 'year_retrieval.processing.delay_between_batches'. "
-                "Update your config file for optimal performance."
-            )
+        self._warn_legacy_year_config(year_config)
 
-        batch_size = year_config.get("processing", {}).get("batch_size", 10)
-        delay_between_batches = year_config.get("processing", {}).get("delay_between_batches", 60)
+        batch_size, delay_between_batches, adaptive_delay = self._get_processing_settings(year_config)
 
         album_items = list(albums.items())
-        for batch_start in range(0, len(album_items), batch_size):
-            batch_end = min(batch_start + batch_size, len(album_items))
-            batch = album_items[batch_start:batch_end]
+        total_albums = len(album_items)
+        if total_albums == 0:
+            return
 
-            self.console_logger.info(
-                "Processing batch %d/%d",
-                batch_start // batch_size + 1,
-                (len(album_items) + batch_size - 1) // batch_size,
+        total_batches = (total_albums + batch_size - 1) // batch_size
+
+        concurrency_limit = self._determine_concurrency_limit(year_config)
+
+        if self._should_use_sequential_processing(adaptive_delay, concurrency_limit):
+            await self._process_batches_sequentially(
+                album_items,
+                batch_size,
+                delay_between_batches,
+                total_batches,
+                total_albums,
+                updated_tracks,
+                changes_log,
             )
+            return
 
-            # Process each album in the batch
-            # Note: artist is actually album_artist due to grouping logic change
-            for (artist, album), album_tracks in batch:
-                self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist, album)
-                await self._process_single_album(artist, album, album_tracks, updated_tracks, changes_log)
-
-            # Delay between batches to respect rate limits
-            if batch_end < len(album_items):
-                self.console_logger.info(
-                    "Waiting %d seconds before next batch...",
-                    delay_between_batches,
-                )
-                await asyncio.sleep(delay_between_batches)
+        await self._process_batches_concurrently(
+            album_items,
+            batch_size,
+            total_batches,
+            total_albums,
+            concurrency_limit,
+            updated_tracks,
+            changes_log,
+            adaptive_delay,
+        )
 
     async def get_album_years_with_logs(
         self,
