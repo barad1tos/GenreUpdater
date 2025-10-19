@@ -237,7 +237,12 @@ class ExternalApiOrchestrator:
 
         if not self.contact_email:
             self.error_logger.error(
-                "Contact email is missing or not properly loaded from environment variables",
+                "Contact email is missing or not properly loaded from environment variables. "
+                "Set 'contact_email' in config or CONTACT_EMAIL environment variable. "
+                "MusicBrainz API requires valid contact information for compliance.",
+            )
+            self.console_logger.warning(
+                "⚠️  Missing contact email - using placeholder. MusicBrainz API requests may be rate-limited or rejected.",
             )
             self.contact_email = "no-email-provided@example.com"
 
@@ -1098,6 +1103,11 @@ class ExternalApiOrchestrator:
     ) -> None:
         """Safely mark an album for verification, optionally as fire-and-forget."""
         if not self.pending_verification_service:
+            self.error_logger.warning(
+                "Pending verification service not initialized - cannot mark '%s - %s' for verification. Check dependency injection configuration.",
+                artist,
+                album,
+            )
             return
         try:
             if fire_and_forget:
@@ -1130,6 +1140,11 @@ class ExternalApiOrchestrator:
     async def _safe_remove_from_pending(self, artist: str, album: str) -> None:
         """Safely remove an album from the pending verification queue."""
         if not self.pending_verification_service:
+            self.error_logger.warning(
+                "Pending verification service not initialized - cannot remove '%s - %s' from pending. Check dependency injection configuration.",
+                artist,
+                album,
+            )
             return
         try:
             await self.pending_verification_service.remove_from_pending(artist=artist, album=album)
@@ -1535,8 +1550,7 @@ class ExternalApiOrchestrator:
         api_names = ["musicbrainz", "discogs", "itunes", "lastfm"] if self.use_lastfm else ["musicbrainz", "discogs", "itunes"]
         all_releases: list[ScoredRelease] = []
 
-        for i, result in enumerate(results):
-            api_name = api_names[i]
+        for api_name, result in zip(api_names, results, strict=True):
             if isinstance(result, Exception):
                 self._log_api_error(api_name, log_artist, log_album, result)
             elif isinstance(result, list) and result:
