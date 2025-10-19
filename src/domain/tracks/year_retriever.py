@@ -765,7 +765,9 @@ class YearRetriever:
 
         """
         if prerelease_tracks := [
-            track for track in album_tracks if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
+            track
+            for track in album_tracks
+            if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
         ]:
             self.console_logger.info(
                 "Skipping album '%s - %s': %d of %d tracks are prerelease (read-only)",
