@@ -10,7 +10,6 @@ from unittest.mock import patch
 import allure
 import pytest
 from src.domain.tracks.incremental_filter import IncrementalFilterService
-from src.infrastructure.track_delta_service import TrackSummary
 from src.shared.data.models import TrackDict
 from src.shared.monitoring.analytics import Analytics
 
@@ -59,15 +58,20 @@ class TestIncrementalPipelineIntegration:
         return tracks
 
     @staticmethod
-    def create_track_summaries(summaries_data: list[dict[str, Any]]) -> list[TrackSummary]:
-        """Create TrackSummary objects for testing."""
+    def create_track_summaries(summaries_data: list[dict[str, Any]]) -> list[TrackDict]:
+        """Create TrackDict objects representing previous CSV snapshots."""
         summaries = []
         for data in summaries_data:
-            summary = TrackSummary(
-                track_id=data.get("id", "test_id"),
-                date_added=data.get("date_added", "2024-01-01 10:00:00"),
-                track_status=data.get("track_status", "subscription"),
-                last_modified=data.get("last_modified", "2024-01-01 10:00:00"),
+            summary = TrackDict(
+                id=data.get("id", "test_id"),
+                name=data.get("name", "Test Track"),
+                artist=data.get("artist", "Test Artist"),
+                album=data.get("album", "Test Album"),
+                genre=data.get("genre"),
+                year=data.get("year"),
+                date_added=data.get("date_added"),
+                track_status=data.get("track_status"),
+                last_modified=data.get("last_modified"),
             )
             summaries.append(summary)
         return summaries
@@ -243,7 +247,7 @@ class TestIncrementalPipelineIntegration:
                             "id": t.id,
                             "name": t.name,
                             "current_status": t.track_status,
-                            "previous_status": next((s.track_status for s in summaries if s.track_id == t.id), "unknown"),
+                            "previous_status": next((s.track_status for s in summaries if s.id == t.id), "unknown"),
                         }
                         for t in tracks
                     ],
@@ -265,9 +269,7 @@ class TestIncrementalPipelineIntegration:
             assert isinstance(filtered_tracks, list)
 
             # Identify tracks with status changes
-            status_changes = [
-                track.id for track in tracks for summary in summaries if track.id == summary.track_id and track.track_status != summary.track_status
-            ]
+            status_changes = [track.id for track in tracks for summary in summaries if track.id == summary.id and track.track_status != summary.track_status]
 
             allure.attach(f"{len(status_changes)}", "Status Changes Detected", allure.attachment_type.TEXT)
             allure.attach(f"{len(filtered_tracks)}", "Tracks Filtered", allure.attachment_type.TEXT)
