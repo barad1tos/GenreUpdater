@@ -35,80 +35,85 @@ on run argv
             -- Include tracks where either track artist or album artist EXACTLY matches the filter
             set trackObjects to (every track of library playlist 1 whose (artist is selectedArtist) or (album artist is selectedArtist))
         else if batchLimit > 0 then
-            -- Batch mode: get tracks from offset to offset+limit-1
-            set allTracks to (every track of library playlist 1)
-            set totalTracks to count of allTracks
-            
+            -- Batch mode: get tracks from offset to offset+limit-1 without materializing the entire library collection each time
+            set totalTracks to (count of tracks of library playlist 1)
+
             -- Check if offset is within bounds
             if batchOffset > totalTracks then
-                return ""
+                return "ERROR:OFFSET_OUT_OF_BOUNDS:offset=" & batchOffset & ":total=" & totalTracks
             end if
-            
+
             -- Calculate end index
             set endIndex to batchOffset + batchLimit - 1
             if endIndex > totalTracks then
                 set endIndex to totalTracks
             end if
-            
-            -- Extract the batch slice
-            set trackObjects to items batchOffset thru endIndex of allTracks
+
+            -- Extract the batch slice directly from the playlist
+            try
+                set trackObjects to (tracks batchOffset thru endIndex of library playlist 1)
+            on error
+                -- Fallback: materialize once if direct slice fails
+                set allTracks to (every track of library playlist 1)
+                set trackObjects to items batchOffset thru endIndex of allTracks
+            end try
         else
             set trackObjects to (every track of library playlist 1)
         end if
 
         if (count of trackObjects) = 0 then
-            return ""
+            return "NO_TRACKS_FOUND"
         end if
 
-        -- Loop through each track and filter by status
-        repeat with currentTrack in trackObjects
+        -- Determine track count once for consistent array handling
+        set trackCount to count of trackObjects
+
+        -- Pre-fetch commonly used fields in bulk to minimize per-track AppleScript calls (with safe fallbacks)
+        set statusList to my fetch_property_list(trackObjects, "cloud status", trackCount)
+        set idList to my fetch_property_list(trackObjects, "id", trackCount)
+        set nameList to my fetch_property_list(trackObjects, "name", trackCount)
+        set artistList to my fetch_property_list(trackObjects, "artist", trackCount)
+        set albumArtistList to my fetch_property_list(trackObjects, "album artist", trackCount)
+        set albumList to my fetch_property_list(trackObjects, "album", trackCount)
+        set genreList to my fetch_property_list(trackObjects, "genre", trackCount)
+        set dateAddedList to my fetch_property_list(trackObjects, "date added", trackCount)
+        set yearList to my fetch_property_list(trackObjects, "year", trackCount)
+
+        -- Loop through each track index and filter by status
+        repeat with idx from 1 to trackCount
             try
-                set rawCloudStatus to (cloud status of currentTrack)
-                set statusText to (rawCloudStatus as text)
+                set currentTrack to item idx of trackObjects
+                set statusText to my text_or_empty(my item_or_missing(statusList, idx))
 
                 -- Keep only tracks with modifiable cloud status
                 if my is_valid_cloud_status(statusText) then
-                    -- Get all properties for the valid track
-                    set track_id to (id of currentTrack) as text
-                    set track_name to (name of currentTrack) as text
-                    set track_artist to (artist of currentTrack) as text
-                    set album_artist to (album artist of currentTrack) as text
-                    set track_album to (album of currentTrack) as text
-                    set track_genre to (genre of currentTrack) as text
-                    set date_added_raw to (date added of currentTrack)
+                    -- Retrieve pre-fetched values
+                    set track_id to my text_or_empty(my item_or_missing(idList, idx))
+                    set track_name to my text_or_empty(my item_or_missing(nameList, idx))
+                    set track_artist to my text_or_empty(my item_or_missing(artistList, idx))
+                    set album_artist to my text_or_empty(my item_or_missing(albumArtistList, idx))
+                    set track_album to my text_or_empty(my item_or_missing(albumList, idx))
+                    set track_genre to my text_or_empty(my item_or_missing(genreList, idx))
+                    set date_added_raw to my item_or_missing(dateAddedList, idx)
                     set date_added to my formatDate(date_added_raw)
                     set track_status to statusText -- Already a clean string
 
-                    set raw_year to (year of currentTrack)
-                    if class of raw_year is integer then
-                        if raw_year is 0 then
-                            set track_year to ""
-                        else
-                            set track_year to raw_year as text
-                        end if
-                    else
-                        set track_year to ""
-                    end if
-                    
-                    -- Get release date if available
+                    set raw_year to my item_or_missing(yearList, idx)
+                    set track_year to my normalize_year(raw_year)
+
+                    -- Get release date if available (individual fetch is retained for reliability)
+                    set release_year to ""
                     try
                         set raw_release_date to (release date of currentTrack)
-                    on error
-                        set raw_release_date to missing value
-                    end try
-                    
-                    -- Extract year from release date (must be done outside the track property access)
-                    if raw_release_date is not missing value then
-                        try
+                        if raw_release_date is not missing value then
                             set release_year to my extractYearFromDate(raw_release_date)
-                        on error
-                            set release_year to ""
-                        end try
-                    else
+                        end if
+                    on error
                         set release_year to ""
-                    end if
+                    end try
 
                     -- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year
+                    -- Note: new_year is empty placeholder, will be populated by Python after year determination
                     set trackFields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, ""}
 
                     set oldDelimiters to AppleScript's text item delimiters
@@ -118,9 +123,8 @@ on run argv
 
                     set end of finalResult to trackLine
                 end if
-
             on error
-                -- We skip problematic tracks, the logic remains
+                -- Skip problematic tracks while continuing processing
             end try
         end repeat
     end tell
@@ -140,6 +144,147 @@ on is_valid_cloud_status(statusText)
     -- Excludes "prerelease" as they are read-only and cause permission errors
     return statusText is in {"local only", "purchased", "matched", "uploaded", "subscription", "downloaded"}
 end is_valid_cloud_status
+
+on fetch_property_list(trackObjects, propertyName, expectedCount)
+    -- Safely fetch a property list, falling back to per-track retrieval on failure or mismatched counts
+    tell application "Music"
+        set valueList to {}
+        try
+            if propertyName is "cloud status" then
+                set valueList to my ensure_list(cloud status of trackObjects)
+            else if propertyName is "id" then
+                set valueList to my ensure_list(id of trackObjects)
+            else if propertyName is "name" then
+                set valueList to my ensure_list(name of trackObjects)
+            else if propertyName is "artist" then
+                set valueList to my ensure_list(artist of trackObjects)
+            else if propertyName is "album artist" then
+                set valueList to my ensure_list(album artist of trackObjects)
+            else if propertyName is "album" then
+                set valueList to my ensure_list(album of trackObjects)
+            else if propertyName is "genre" then
+                set valueList to my ensure_list(genre of trackObjects)
+            else if propertyName is "date added" then
+                set valueList to my ensure_list(date added of trackObjects)
+            else if propertyName is "year" then
+                set valueList to my ensure_list(year of trackObjects)
+            else
+                error "Unsupported property selector: " & propertyName
+            end if
+        on error
+            set valueList to {}
+        end try
+
+        if (count of valueList) = expectedCount then
+            return valueList
+        end if
+
+        -- Fall back to per-track retrieval to handle missing properties safely
+        set fallbackList to {}
+        repeat with idx from 1 to expectedCount
+            try
+                set currentTrack to item idx of trackObjects
+                if propertyName is "cloud status" then
+                    set end of fallbackList to (cloud status of currentTrack)
+                else if propertyName is "id" then
+                    set end of fallbackList to (id of currentTrack)
+                else if propertyName is "name" then
+                    set end of fallbackList to (name of currentTrack)
+                else if propertyName is "artist" then
+                    set end of fallbackList to (artist of currentTrack)
+                else if propertyName is "album artist" then
+                    set end of fallbackList to (album artist of currentTrack)
+                else if propertyName is "album" then
+                    set end of fallbackList to (album of currentTrack)
+                else if propertyName is "genre" then
+                    set end of fallbackList to (genre of currentTrack)
+                else if propertyName is "date added" then
+                    set end of fallbackList to (date added of currentTrack)
+                else if propertyName is "year" then
+                    set end of fallbackList to (year of currentTrack)
+                else
+                    set end of fallbackList to missing value
+                end if
+            on error
+                set end of fallbackList to missing value
+            end try
+        end repeat
+        return fallbackList
+    end tell
+end fetch_property_list
+
+on ensure_list(candidate)
+    -- Ensure values are treated as a list so single-element results stay indexable
+    if candidate is missing value then
+        return {}
+    else if class of candidate is list then
+        return candidate
+    else
+        return {candidate}
+    end if
+end ensure_list
+
+on item_or_missing(theList, position)
+    -- Safely return an item from a list, or missing value if out-of-bounds
+    try
+        if class of theList is list then
+            if (count of theList) >= position then
+                return item position of theList
+            else
+                return missing value
+            end if
+        else if position = 1 then
+            return theList
+        end if
+    on error
+        return missing value
+    end try
+    return missing value
+end item_or_missing
+
+on text_or_empty(value)
+    -- Convert common value types to text, guarding against missing value
+    if value is missing value then
+        return ""
+    end if
+    try
+        return value as text
+    on error
+        try
+            return value as string
+        on error
+            return ""
+        end try
+    end try
+end text_or_empty
+
+on normalize_year(value)
+    -- Normalize raw year values into a clean string representation
+    if value is missing value then
+        return ""
+    end if
+    try
+        if class of value is integer then
+            if value is 0 then
+                return ""
+            else
+                return value as text
+            end if
+        else if class of value is text then
+            if value is "" then
+                return ""
+            else if value is "0" then
+                return ""
+            else
+                return value
+            end if
+        else
+            return ""
+        end if
+    on error
+        return ""
+    end try
+end normalize_year
 
 on formatDate(theDate)
     try
