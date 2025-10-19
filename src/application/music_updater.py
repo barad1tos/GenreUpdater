@@ -5,9 +5,11 @@ This is a streamlined version that uses the new modular components.
 
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from src.application.features.verification.database_verifier import DatabaseVerifier
+from src.domain.tracks.artist_renamer import ArtistRenamer
 from src.domain.tracks.genre_manager import GenreManager
 from src.domain.tracks.incremental_filter import IncrementalFilterService
 from src.domain.tracks.track_processor import TrackProcessor
@@ -53,6 +55,15 @@ class MusicUpdater:
             analytics=deps.analytics,
             dry_run=deps.dry_run,
         )
+
+        rename_config_path = self._resolve_artist_rename_config_path(deps)
+        self.artist_renamer = ArtistRenamer(
+            track_processor=self.track_processor,
+            console_logger=deps.console_logger,
+            error_logger=deps.error_logger,
+            config_path=rename_config_path,
+        )
+        self.track_processor.set_artist_renamer(self.artist_renamer)
 
         self.genre_manager = GenreManager(
             track_processor=self.track_processor,
@@ -115,6 +126,14 @@ class MusicUpdater:
         """Reset cached pipeline tracks before a fresh run."""
         self._pipeline_tracks_snapshot = None
         self._pipeline_tracks_index = {}
+
+    def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
+        """Resolve absolute path to artist rename configuration file."""
+        config_entry = self.config.get("artist_renamer", {}).get("config_path", "artist-renames.yaml")
+        candidate = Path(config_entry)
+        if candidate.is_absolute():
+            return candidate
+        return deps.config_path.parent / candidate
 
     def _set_pipeline_snapshot(self, tracks: list["TrackDict"]) -> None:
         """Store the current pipeline track snapshot for downstream reuse."""

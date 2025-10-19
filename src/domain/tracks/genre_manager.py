@@ -15,6 +15,7 @@ from src.shared.data.metadata import (
     group_tracks_by_artist,
 )
 from src.shared.data.models import ChangeLogEntry, TrackDict
+from src.shared.data.track_status import can_edit_metadata, normalize_track_status
 
 from .base_processor import BaseProcessor
 
@@ -150,15 +151,19 @@ class GenreManager(BaseProcessor):
             Tuple of (is_valid, track_id)
         """
         track_id = track.id or ""
-        track_status = track.track_status or ""
+        track_status = track.track_status
 
         if not track_id:
             self.error_logger.error("Track missing 'id' field")
             return False, ""
 
         # Skip prerelease tracks (read-only)
-        if track_status == "prerelease":
-            self.console_logger.debug("Skipping prerelease track %s (read-only)", track_id)
+        if not can_edit_metadata(track_status):
+            self.console_logger.debug(
+                "Skipping read-only track %s (status: %s)",
+                track_id,
+                track_status or "unknown",
+            )
             return False, track_id
 
         return True, track_id
@@ -181,7 +186,7 @@ class GenreManager(BaseProcessor):
             force_update: Whether force update is enabled
         """
         track_name = track.name or "Unknown"
-        track_status = track.track_status or ""
+        track_status = normalize_track_status(track.track_status)
 
         if current_genre != new_genre:
             self.console_logger.debug(
@@ -190,7 +195,7 @@ class GenreManager(BaseProcessor):
                 track_name,
                 current_genre,
                 new_genre,
-                track_status,
+                track_status or "unknown",
                 force_update,
             )
         else:
@@ -200,7 +205,7 @@ class GenreManager(BaseProcessor):
                 track_name,
                 current_genre,
                 new_genre,
-                track_status,
+                track_status or "unknown",
                 force_update,
             )
 
