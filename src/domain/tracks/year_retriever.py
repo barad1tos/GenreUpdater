@@ -10,12 +10,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.shared.data.models import ChangeLogEntry, TrackDict
-from src.shared.data.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status
 from src.shared.data.protocols import (
     CacheServiceProtocol,
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
+from src.shared.data.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status
 from src.shared.data.validators import is_valid_year
 from src.shared.monitoring import Analytics
 

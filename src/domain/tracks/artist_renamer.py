@@ -10,8 +10,9 @@ from src.shared.data.track_status import can_edit_metadata
 from src.shared.data.validators import SecurityValidationError
 
 if TYPE_CHECKING:
-    from pathlib import Path
     import logging
+    from pathlib import Path
+
     from src.domain.tracks.track_processor import TrackProcessor
     from src.shared.data.models import TrackDict
 
