@@ -9,7 +9,6 @@ import pytest
 
 from src.domain.tracks.artist_renamer import ArtistRenamer
 from src.shared.data.models import TrackDict
-
 from tests.mocks.csv_mock import MockLogger
 from tests.mocks.track_data import DummyTrackData
 

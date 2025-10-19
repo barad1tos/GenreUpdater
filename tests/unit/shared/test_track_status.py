@@ -10,7 +10,6 @@ from src.shared.data.track_status import (
     is_subscription_status,
     normalize_track_status,
 )
-
 from tests.mocks.track_data import DummyTrackData
 
 
