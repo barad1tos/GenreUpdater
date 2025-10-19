@@ -32,8 +32,8 @@ on run argv
 
         set propName to item 2 of argv
         -- Verify it's one of the supported properties
-        if propName is not in {"name", "album", "genre", "year"} then
-            return "Error: Unsupported property '" & propName & "'. Must be name, album, genre, or year."
+        if propName is not in {"name", "album", "artist", "genre", "year"} then
+            return "Error: Unsupported property '" & propName & "'. Must be name, album, artist, genre, or year."
         end if
 
         set propValue to item 3 of argv
@@ -58,6 +58,8 @@ on run argv
                     set currentValue to name of trackRef
                 else if propName is "album" then
                     set currentValue to album of trackRef
+                else if propName is "artist" then
+                    set currentValue to artist of trackRef
                 else if propName is "genre" then
                     set currentValue to genre of trackRef
                 else if propName is "year" then
@@ -74,16 +76,24 @@ on run argv
                     set name of trackRef to propValue
                 else if propName is "album" then
                     set album of trackRef to propValue
+                else if propName is "artist" then
+                    set artist of trackRef to propValue
                 else if propName is "genre" then
                     set genre of trackRef to propValue
                 else if propName is "year" then
-                    -- DEBUG: Let's see what Music.app actually says
                     try
                         set propValueInt to propValue as integer
+
+                        -- Soft validation: reject obviously invalid years
+                        -- Allow future years (up to +2 years) for pre-releases and scheduled albums
+                        set currentYear to year of (current date)
+                        if propValueInt < 1900 or propValueInt > (currentYear + 2) then
+                            return "Error: Year value '" & propValueInt & "' is out of reasonable range (1900-" & (currentYear + 2) & ")"
+                        end if
+
                         set year of trackRef to propValueInt
                     on error yearErr
-                        -- Get more debug info about what's really happening
-                        return "DEBUG: Music.app year error for '" & propValue & "': " & yearErr & " | System date: " & (current date)
+                        return "Error: Failed to set year '" & propValue & "': " & yearErr
                     end try
                 end if
                 return "Success: Updated track " & tID & " " & propName & " from '" & currentValue & "' to '" & propValue & "'"
