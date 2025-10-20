@@ -889,7 +889,7 @@ class MusicUpdater:
             # Call the public API that returns changes
             updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)
             # Store updated tracks for snapshot tracking
-            self.year_retriever._last_updated_tracks = updated_tracks  # noqa: SLF001
+            self.year_retriever.set_last_updated_tracks(updated_tracks)
             self._update_snapshot_tracks(updated_tracks)
             changes_log = year_changes
             self.console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))

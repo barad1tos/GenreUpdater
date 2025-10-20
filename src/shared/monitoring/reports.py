@@ -617,8 +617,10 @@ def _normalize_field_mappings(change: dict[str, Any]) -> None:
         change["track_name"] = change["name"]
 
 
-def _add_timestamp_to_filename(file_path: str) -> str:
+def _add_timestamp_to_filename(file_path: str | None) -> str | None:
     """Add timestamp to filename to preserve previous reports."""
+    if file_path is None:
+        return None
     path_obj = Path(file_path)
     base = str(path_obj.parent / path_obj.stem)
     ext = path_obj.suffix

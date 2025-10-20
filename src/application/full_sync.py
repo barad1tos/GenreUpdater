@@ -111,14 +111,23 @@ async def main() -> None:
 
     # Determine config path - look for it in the current project directory
     # Try standard config names in order of preference
-    for config_name in ["config.yaml", "my-config.yaml"]:
-        config_path = project_root / config_name
-        if config_path.exists():
-            break
+    config_files = ["config.yaml", "my-config.yaml"]
+    if found_configs := [
+        project_root / name
+        for name in config_files
+        if (project_root / name).exists()
+    ]:
+        config_path = found_configs[0]
+        if len(found_configs) > 1:
+            print(
+                f"⚠️  Both '{config_files[0]}' and '{config_files[1]}' found in the project directory.\n"
+                f"    Using '{config_path.name}' as configuration file (higher precedence).\n"
+                "    Please remove the unused config file to avoid ambiguity."
+            )
+
     else:
         # If neither exists, use default naming
         config_path = project_root / "config.yaml"
-
     if not config_path.exists():
         print(f"❌ Configuration file not found: {config_path}")
         print("Please make sure you're running this script from the correct directory.")
@@ -173,7 +182,11 @@ async def main() -> None:
 
         # Cleanup logging resources
         if listener:
-            listener.stop()
+            try:
+                listener.stop()
+            except Exception as e:
+                print(f"❌ Exception during listener.stop(): {e}")
+                traceback.print_exc()
 
 
 if __name__ == "__main__":

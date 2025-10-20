@@ -5,6 +5,7 @@ This module handles the high-level coordination of all operations.
 
 import argparse
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -185,19 +186,32 @@ class Orchestrator:
                     key_file_path,
                     ".key.backup",
                     "📦 Created backup of old key: %s",
+                    preserve_existing=True,  # Critical: preserve previous key backups
                 )
         self._create_backup_file(config_path, ".yaml.backup", "📦 Created backup of config: %s")
 
-    def _create_backup_file(self, source_path: Path, suffix: str, success_message: str) -> None:
+    def _create_backup_file(
+        self, source_path: Path, suffix: str, success_message: str, preserve_existing: bool = False
+    ) -> None:
         """Create a backup of a file with the specified suffix.
 
         Args:
             source_path: Path to the source file to backup
             suffix: File suffix for the backup (e.g., '.backup', '.yaml.backup')
             success_message: Message to log on successful backup creation
+            preserve_existing: If True and backup exists, create timestamped backup instead of overwriting
 
         """
         backup_path: Path = source_path.with_suffix(suffix)
+
+        # If preserving existing backups and file exists, use timestamped name
+        if preserve_existing and backup_path.exists():
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            backup_path = source_path.parent / f"{source_path.stem}_{timestamp}{suffix}"
+            self.console_logger.warning(
+                "⚠️  Previous backup exists, creating timestamped backup: %s", backup_path
+            )
+
         shutil.copy2(source_path, backup_path)
         self.console_logger.info(success_message, backup_path)
 

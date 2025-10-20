@@ -1,5 +1,6 @@
 """Configuration management for Music Genre Updater."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, TypeVar, cast, overload
@@ -39,8 +40,14 @@ class Config:
                         config_path = default_file
                         break
                 else:
-                    # If none exist, use the first default (standard name)
+                    # If none exist, use the first default (standard name) but warn user
                     config_path = DEFAULT_CONFIG_FILES[0]
+                    logging.warning(
+                        "No configuration file found. Checked CONFIG_PATH env var and files: %s. "
+                        "Will attempt to use '%s' (may not exist).",
+                        DEFAULT_CONFIG_FILES,
+                        config_path,
+                    )
 
         # config_path is guaranteed to be not None at this point
         self.config_path = config_path

@@ -1451,3 +1451,12 @@ class YearRetriever:
     def get_last_updated_tracks(self) -> list[TrackDict]:
         """Return the tracks updated during the most recent processing run."""
         return self._last_updated_tracks
+
+    def set_last_updated_tracks(self, tracks: list[TrackDict]) -> None:
+        """Store the tracks updated during processing for snapshot tracking.
+
+        Args:
+            tracks: List of updated track records
+
+        """
+        self._last_updated_tracks = tracks
