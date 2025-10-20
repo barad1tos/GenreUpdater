@@ -129,7 +129,7 @@ Examples:
         parser.add_argument(
             "--config",
             type=str,
-            help="Path to configuration file (default: config.yaml or my-config.yaml)",
+            help="Path to configuration file. If not specified, tries 'my-config.yaml' first, then 'config.yaml' as fallback.",
         )
 
         # Subcommands
@@ -138,6 +138,7 @@ Examples:
             title="Commands",
             description="Available commands",
             help="Use '%(prog)s COMMAND --help' for command-specific help",
+            required=True,
         )
 
         # Clean artist command
