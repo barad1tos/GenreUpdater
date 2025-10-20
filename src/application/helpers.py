@@ -93,16 +93,36 @@ def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:
     if not isinstance(item, dict):
         return False
 
-    # Check required fields
-    required_fields = ["id", "artist", "track_name", "album_name"]
+    # Check required fields (all must be strings)
+    required_fields = ["id", "name", "artist", "album"]
     for field in required_fields:
         if field not in item:
             return False
         if not isinstance(item[field], str):
             return False
 
-    # Check optional fields if present
-    optional_fields = ["genre", "year", "date_added", "date_modified"]
+    # Check optional string fields if present
+    optional_str_fields = [
+        "genre",
+        "year",
+        "date_added",
+        "last_modified",
+        "track_status",
+        "original_artist",
+        "original_album",
+        "old_year",
+        "new_year",
+        "release_year",
+    ]
+    for field in optional_str_fields:
+        if field in item and item[field] is not None and not isinstance(item[field], str):
+            return False
+
+    # Check optional int fields if present
+    optional_int_fields = ["original_pos"]
     return not any(
-        field in item and item[field] is not None and not isinstance(item[field], str) for field in optional_fields
+        field in item
+        and item[field] is not None
+        and not isinstance(item[field], int)
+        for field in optional_int_fields
     )
