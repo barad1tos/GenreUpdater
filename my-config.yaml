@@ -54,6 +54,7 @@ cleaning:
     - Re-recording
     - Redux
     - Expanded
+    - Deluxe
     - Special Edition
     - Deluxe Edition
     - Anniversary Edition
@@ -66,9 +67,10 @@ cleaning:
     - " (Remaster)"
     - " (Remastered)"
     - " - EP"
-    - "EP" # trunk-ignore(yamllint/quoted-strings)
+    - "EP"
     - " - Single"
-    - "Single" # trunk-ignore(yamllint/quoted-strings)
+    - "Single"
+    - "(Deluxe)"
 
 artist_renamer:
   config_path: artist-renames.yaml

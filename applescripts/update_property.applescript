@@ -32,8 +32,8 @@ on run argv
 
         set propName to item 2 of argv
         -- Verify it's one of the supported properties
-        if propName is not in {"name", "album", "artist", "genre", "year"} then
-            return "Error: Unsupported property '" & propName & "'. Must be name, album, artist, genre, or year."
+        if propName is not in {"name", "album", "artist", "album_artist", "genre", "year"} then
+            return "Error: Unsupported property '" & propName & "'. Must be name, album, artist, album_artist, genre, or year."
         end if
 
         set propValue to item 3 of argv
@@ -60,6 +60,8 @@ on run argv
                     set currentValue to album of trackRef
                 else if propName is "artist" then
                     set currentValue to artist of trackRef
+                else if propName is "album_artist" then
+                    set currentValue to album artist of trackRef
                 else if propName is "genre" then
                     set currentValue to genre of trackRef
                 else if propName is "year" then
@@ -78,6 +80,8 @@ on run argv
                     set album of trackRef to propValue
                 else if propName is "artist" then
                     set artist of trackRef to propValue
+                else if propName is "album_artist" then
+                    set album artist of trackRef to propValue
                 else if propName is "genre" then
                     set genre of trackRef to propValue
                 else if propName is "year" then

@@ -52,4 +52,4 @@ def can_edit_metadata(status: str | None) -> bool:
 
 def filter_available_tracks(tracks: Iterable[TrackDict]) -> list[TrackDict]:
     """Filter tracks that are available for processing based on status."""
-    return [track for track in tracks if is_available_status(track.track_status if isinstance(track.track_status, str) else None)]
+    return [track for track in tracks if is_available_status(track.track_status)]

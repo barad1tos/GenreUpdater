@@ -311,7 +311,14 @@ def _determine_if_changed(header: str, value: str, record: dict[str, str]) -> bo
     if "name" in header.lower():
         old_name = record.get(Key.OLD_TRACK_NAME, "") if "track" in header.lower() else record.get(Key.OLD_ALBUM_NAME, "")
         return old_name != value
-    return True  # Default to highlight for other types
+    # Only known change types (year, genre, name) are highlighted
+    # Log unrecognized headers for debugging
+    logging.debug(
+        "Unrecognized header '%s' with value '%s' - not highlighting (only year/genre/name are tracked)",
+        header,
+        value,
+    )
+    return False
 
 
 def _apply_value_highlighting(header: str, value: str, record: dict[str, str]) -> str:
@@ -1028,10 +1035,16 @@ def _update_existing_track_fields(old_data: TrackDict, new_data: TrackDict, fiel
     and prevent silent failures.
     """
     for field in fields:
+        missing_in = []
+        if not hasattr(old_data, field):
+            missing_in.append("old_data")
         if not hasattr(new_data, field):
+            missing_in.append("new_data")
+        if missing_in:
             logging.warning(
-                "Field '%s' does not exist on TrackDict. Skipping update for this field.",
-                field
+                "Field '%s' does not exist on %s. Skipping update for this field.",
+                field,
+                " and ".join(missing_in),
             )
             continue
         new_value = getattr(new_data, field)

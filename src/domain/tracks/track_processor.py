@@ -301,6 +301,7 @@ class TrackProcessor:
 
         batch_size = int(self.config.get("batch_processing", {}).get("ids_batch_size", 200))
         batch_size = max(batch_size, 1)
+        batch_size = min(batch_size, 1000)  # Enforce upper limit to prevent excessive memory/performance issues
 
         collected: list[TrackDict] = []
         for i in range(0, len(track_ids), batch_size):
@@ -966,6 +967,7 @@ class TrackProcessor:
         new_artist_name: str,
         *,
         original_artist: str | None = None,
+        update_album_artist: bool = False,
     ) -> bool:
         """Update the artist name for a track.
 
@@ -973,6 +975,8 @@ class TrackProcessor:
             track: Track dictionary representing the target track
             new_artist_name: Artist name to apply
             original_artist: Original artist for logging context (optional)
+            update_album_artist: If True, also update album_artist field when it matches
+                                 the old or new artist name from configuration mapping
 
         Returns:
             True if update succeeded, False otherwise
@@ -993,9 +997,22 @@ class TrackProcessor:
                 sanitized_artist_name=sanitized_artist,
             )
 
+        # Prepare updates list: always update artist
+        updates: list[tuple[str, str]] = [("artist", sanitized_artist)]
+
+        # Update album_artist only if explicitly requested (e.g., from artist rename configuration)
+        # This ensures we only sync album_artist when both fields are from the same mapping
+        if update_album_artist:
+            album_artist = getattr(track, "album_artist", None)
+            if isinstance(album_artist, str):
+                normalized_album_artist = album_artist.strip()
+                # Check if album_artist matches either old or new name from configuration
+                if normalized_album_artist in (current_artist, sanitized_artist):
+                    updates.append(("album_artist", sanitized_artist))
+
         success = await self._apply_track_updates(
             sanitized_track_id,
-            [("artist", sanitized_artist)],
+            updates,
             artist=original_artist or current_artist,
             album=track.album,
             track=track.name,
@@ -1003,6 +1020,9 @@ class TrackProcessor:
 
         if success:
             track.artist = sanitized_artist
+            # Update album_artist in TrackDict if it was updated in Music.app
+            if len(updates) > 1:
+                track.album_artist = sanitized_artist
 
         return success
 
