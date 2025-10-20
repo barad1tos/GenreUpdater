@@ -139,11 +139,21 @@ class ArtistRenamer:
     async def _apply_rename(self, track: TrackDict, current_artist: str, new_artist: str) -> bool:
         track_id = track.id or "unknown"
 
+        # Check if album_artist should also be updated (only if it's from the same mapping)
+        # Update album_artist if it matches either the old name (key) or new name (value)
+        # This handles cases where one field was already updated but the other wasn't
+        # Note: album_artist is stored as extra field (TrackDict uses extra="allow")
+        album_artist_raw = track.get("album_artist")
+        album_artist_str = album_artist_raw if isinstance(album_artist_raw, str) else None
+        album_artist = self._normalize_artist(album_artist_str)
+        should_update_album_artist = bool(album_artist and album_artist in (current_artist, new_artist))
+
         try:
             success = await self._track_processor.update_artist_async(
                 track,
                 new_artist,
                 original_artist=current_artist,
+                update_album_artist=should_update_album_artist,
             )
         except (OSError, ValueError, RuntimeError, SecurityValidationError):
             self.error_logger.exception(
@@ -157,12 +167,8 @@ class ArtistRenamer:
         if not success:
             return False
 
+        # Note: track.artist and track.album_artist are updated by update_artist_async
         track.original_artist = current_artist
-        track.artist = new_artist
-
-        album_artist = getattr(track, "album_artist", None)
-        if isinstance(album_artist, str) and album_artist == current_artist:
-            track.__dict__["album_artist"] = new_artist
 
         self.console_logger.info(
             "Renamed artist '%s' -> '%s' for track %s",

@@ -577,17 +577,28 @@ class MusicUpdater:
         # Get last run time for incremental updates
         last_run_time = await self._get_last_run_time(force)
 
-        # Execute the three main steps with incremental scope and collect changes
+        # Execute the main steps with incremental scope and collect changes
         all_changes: list[ChangeLogEntry] = []
 
+        # Step 1: Clean metadata
         cleaning_changes = await self._clean_all_tracks_metadata_with_logs(incremental_tracks)
         all_changes.extend(cleaning_changes)
 
-        # Use ALL tracks for genre updates (GenreManager handles incremental logic internally)
+        # Step 2: Rename artists (if configured)
+        if self.artist_renamer.has_mapping:
+            self.console_logger.info("Step 2/4: Renaming artists based on configuration")
+            renamed_tracks = await self.artist_renamer.rename_tracks(incremental_tracks)
+            if renamed_tracks:
+                self.console_logger.info("Renamed artists for %d tracks", len(renamed_tracks))
+                # Artist renames create their own change log entries via track_processor
+        else:
+            self.console_logger.debug("No artist rename mappings configured, skipping rename step")
+
+        # Step 3: Update genres (use ALL tracks - GenreManager handles incremental logic internally)
         genre_changes = await self._update_all_genres(tracks, last_run_time, force)
         all_changes.extend(genre_changes)
 
-        # Use incremental tracks for year updates - the year retriever handles album-level logic
+        # Step 4: Update years (use incremental tracks - the year retriever handles album-level logic)
         year_changes = await self._update_all_years_with_logs(incremental_tracks, force)
         all_changes.extend(year_changes)
 
@@ -677,7 +688,7 @@ class MusicUpdater:
             List of updated tracks
 
         """
-        self.console_logger.info("Step 1/3: Cleaning metadata")
+        self.console_logger.info("Step 1/4: Cleaning metadata")
         cleaned_tracks: list[TrackDict] = []
 
         for track in tracks:
@@ -698,7 +709,7 @@ class MusicUpdater:
             List of change log entries
 
         """
-        self.console_logger.info("Step 1/3: Cleaning metadata")
+        self.console_logger.info("Step 1/4: Cleaning metadata")
         changes_log: list[ChangeLogEntry] = []
 
         for track in tracks:
@@ -835,28 +846,28 @@ class MusicUpdater:
             List of genre change log entries
 
         """
-        self.console_logger.info("Step 2/3: Updating genres")
+        self.console_logger.info("Step 3/4: Updating genres")
         updated_genre_tracks, genre_changes = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
         self._update_snapshot_tracks(updated_genre_tracks)
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
 
     async def _update_all_years(self, tracks: list["TrackDict"], force: bool) -> None:
-        """Update years for all tracks (Step 3 of pipeline).
+        """Update years for all tracks (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process
             force: Force all operations
 
         """
-        self.console_logger.info("=== BEFORE Step 3/3: Updating album years ===")
-        self.console_logger.info("Step 3/3: Updating album years")
+        self.console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
+        self.console_logger.info("Step 4/4: Updating album years")
         try:
             await self.year_retriever.process_album_years(tracks, force=force)
             self._update_snapshot_tracks(self.year_retriever.get_last_updated_tracks())
-            self.console_logger.info("=== AFTER Step 3 completed successfully ===")
+            self.console_logger.info("=== AFTER Step 4 completed successfully ===")
         except Exception:
-            self.error_logger.exception("=== ERROR in Step 3 ===")
+            self.error_logger.exception("=== ERROR in Step 4 ===")
             raise
 
     async def _update_all_years_with_logs(self, tracks: list["TrackDict"], _force: bool) -> list[ChangeLogEntry]:
@@ -870,8 +881,8 @@ class MusicUpdater:
             List of change log entries
 
         """
-        self.console_logger.info("=== BEFORE Step 3/3: Updating album years ===")
-        self.console_logger.info("Step 3/3: Updating album years")
+        self.console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
+        self.console_logger.info("Step 4/4: Updating album years")
         changes_log: list[ChangeLogEntry] = []
 
         try:
