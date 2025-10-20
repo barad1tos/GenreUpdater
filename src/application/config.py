@@ -71,7 +71,11 @@ class Config:
         """
         if not self._loaded:
             load_path = Path(os.path.expandvars(self.config_path)).expanduser()
-            self._config = load_yaml_config(str(load_path))
+            try:
+                self._config = load_yaml_config(str(load_path))
+            except Exception as e:
+                msg = f"Failed to load configuration from '{load_path}': {e}"
+                raise RuntimeError(msg) from e
             self._resolved_path = self._resolve_config_path()
             self._loaded = True
         return self._config
@@ -153,7 +157,7 @@ class Config:
             List value
 
         """
-        result: list[Any] = default or []
+        result: list[Any] = default if default is not None else []
         value: Any = self.get(key, result)
 
         return list(cast(list[Any], value)) if isinstance(value, list) else result
@@ -169,7 +173,7 @@ class Config:
             Dict value
 
         """
-        result: dict[str, Any] = default or {}
+        result: dict[str, Any] = default if default is not None else {}
         value: Any = self.get(key, result)
 
         return dict(cast(dict[str, Any], value)) if isinstance(value, dict) else result
@@ -189,7 +193,13 @@ class Config:
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
-            return value.lower() in ("true", "yes", "1", "on")
+            true_values = {"true", "yes", "1", "on"}
+            false_values = {"false", "no", "0", "off"}
+            val = value.strip().lower()
+            if val in true_values:
+                return True
+            if val in false_values:
+                return False
         return bool(value)
 
     def get_int(self, key: str, default: int = 0) -> int:
