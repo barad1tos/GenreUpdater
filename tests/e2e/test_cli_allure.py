@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import allure
 import pytest
 import yaml
+
 from src.application.cli import CLI
 from src.application.orchestrator import Orchestrator
 from src.infrastructure.dependencies_service import DependencyContainer
-
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
@@ -60,6 +60,16 @@ class TestCLIE2E:
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
+
+        # FIX: Add config_path to prevent MagicMock from breaking file operations
+        # This is critical - without it, MusicUpdater.__init__() hangs when trying to
+        # resolve artist_renamer config path, because MagicMock.open() creates infinite recursion
+        import tempfile
+        from pathlib import Path
+
+        temp_dir = Path(tempfile.mkdtemp())
+        mock_config_file = temp_dir / "config.yaml"
+        mock_deps.config_path = mock_config_file
 
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()

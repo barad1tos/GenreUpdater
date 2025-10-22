@@ -238,7 +238,7 @@ class GenreManager(BaseProcessor):
         self._log_track_update_decision(track, track_id, current_genre, new_genre, force_update)
 
         # Check if update is needed
-        if not force_update and current_genre == new_genre:
+        if not force_update and current_genre.strip() == new_genre.strip():
             return None, None
 
         # Perform the update
@@ -564,7 +564,7 @@ class GenreManager(BaseProcessor):
         seen_ids: set[str] = set()
         unique: list[TrackDict] = []
         for t in tracks:
-            tid = str(t.id or "")
+            tid = t.id or ""
             if not tid or tid in seen_ids:
                 continue
             seen_ids.add(tid)

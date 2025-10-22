@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import allure
 import pytest
+
 from src.infrastructure.cache.api_cache_service import ApiCacheService
 from src.infrastructure.cache.cache_config import CacheEvent, CacheEventType
 from src.infrastructure.cache.hash_service import UnifiedHashService
@@ -40,10 +41,7 @@ class TestApiCacheService:
 
     @staticmethod
     def create_cached_result(
-        artist: str = "Test Artist",
-        album: str = "Test Album",
-        year: str | None = "2023",
-        source: str = "spotify"
+        artist: str = "Test Artist", album: str = "Test Album", year: str | None = "2023", source: str = "spotify"
     ) -> CachedApiResult:
         """Create a test CachedApiResult."""
         return CachedApiResult(
@@ -137,10 +135,7 @@ class TestApiCacheService:
         await service.initialize()
 
         with allure.step("Store successful API result with year"):
-            await service.set_cached_result(
-                "Beatles", "Abbey Road", "spotify",
-                True, {"year": "1969"}
-            )
+            await service.set_cached_result("Beatles", "Abbey Road", "spotify", True, {"year": "1969"})
 
         with allure.step("Mock very old timestamp"):
             key = UnifiedHashService.hash_api_key("Beatles", "Abbey Road", "spotify")
@@ -284,7 +279,7 @@ class TestApiCacheService:
                 "source": "musicbrainz",
                 "timestamp": datetime.now(UTC).timestamp(),
                 "metadata": {},
-                "api_response": {"year": "1971"}
+                "api_response": {"year": "1971"},
             }
         }
 
@@ -326,11 +321,7 @@ class TestApiCacheService:
             await service.set_cached_result(artist, album, "lastfm", True, {"year": "1997"})
 
         with allure.step("Emit track removed event"):
-            event = CacheEvent(
-                event_type=CacheEventType.TRACK_REMOVED,
-                track_id="track123",
-                metadata={"artist": artist, "album": album}
-            )
+            event = CacheEvent(event_type=CacheEventType.TRACK_REMOVED, track_id="track123", metadata={"artist": artist, "album": album})
 
             service.event_manager.emit_event(event)
 
@@ -350,18 +341,13 @@ class TestApiCacheService:
         service = TestApiCacheService.create_service()
 
         with allure.step("Create and handle event"):
-            event = CacheEvent(
-                event_type=CacheEventType.TRACK_MODIFIED,
-                track_id="track456"
-            )
+            event = CacheEvent(event_type=CacheEventType.TRACK_MODIFIED, track_id="track456")
 
             # Should only log, not modify cache
             service.event_manager.emit_event(event)
 
         with allure.step("Verify logger was called"):
-            service.logger.debug.assert_called_once_with(
-                "Track modified: %s, API cache unaffected", "track456"
-            )
+            service.logger.debug.assert_called_once_with("Track modified: %s, API cache unaffected", "track456")
 
     @allure.story("Statistics")
     @allure.title("Should provide cache statistics")
@@ -515,6 +501,6 @@ class TestApiCacheService:
         with allure.step("Attempt to save"), patch("pathlib.Path.open") as mock_open:
             await service.save_to_disk()
 
-        with allure.step("Verify save was skipped"):
+        with allure.step("Verify save deletes empty cache file"):
             mock_open.assert_not_called()
-            service.logger.debug.assert_any_call("API cache is empty, skipping save")
+            service.logger.debug.assert_any_call("API cache is empty, deleting cache file if exists")

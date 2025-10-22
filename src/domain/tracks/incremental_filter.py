@@ -6,6 +6,7 @@ responsibility separate from genre-specific logic.
 
 from __future__ import annotations
 
+import csv
 import itertools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -99,7 +100,7 @@ class IncrementalFilterService(BaseProcessor):
             date_added_str = track.get("date_added", "")
             if isinstance(date_added_str, str) and date_added_str:
                 return datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-        except (ValueError, TypeError):
+        except ValueError:
             return None
         return None
 
@@ -136,7 +137,7 @@ class IncrementalFilterService(BaseProcessor):
 
             return status_changed_tracks
 
-        except Exception as e:
+        except (OSError, UnicodeError, csv.Error, KeyError, AttributeError) as e:
             self.console_logger.warning("Failed to check status changes: %s", e)
             return []
 

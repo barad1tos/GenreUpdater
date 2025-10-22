@@ -233,23 +233,38 @@ class MusicBrainzClient(BaseApiClient):
                 continue
 
             # Check if any artist credit matches our target artist
-            for ac in artist_credits:
-                artist_info = ac.get("artist", {})
-                artist_name = artist_info.get("name", "")
-
-                if self._normalize_name(artist_name) == artist_norm:
-                    matching_groups.append(rg)
-                    break
-
-                # Check aliases
-                aliases = artist_info.get("aliases", [])
-                for alias in aliases:
-                    alias_name = alias.get("name", "")
-                    if self._normalize_name(alias_name) == artist_norm:
-                        matching_groups.append(rg)
-                        break
+            if self._artist_matches_any_credit(artist_credits, artist_norm):
+                matching_groups.append(rg)
 
         return matching_groups
+
+    def _artist_matches_any_credit(self, artist_credits: list[dict[str, Any]], artist_norm: str) -> bool:
+        """Check if artist matches any credit by name or alias.
+
+        Args:
+            artist_credits: List of artist credits from release group
+            artist_norm: Normalized artist name to match
+
+        Returns:
+            True if artist matches any credit, False otherwise
+
+        """
+        for ac in artist_credits:
+            artist_info = ac.get("artist", {})
+            artist_name = artist_info.get("name", "")
+
+            # Check direct name match
+            if self._normalize_name(artist_name) == artist_norm:
+                return True
+
+            # Check aliases
+            aliases = artist_info.get("aliases", [])
+            for alias in aliases:
+                alias_name = alias.get("name", "")
+                if self._normalize_name(alias_name) == artist_norm:
+                    return True
+
+        return False
 
     @Analytics.track_instance_method("musicbrainz_artist_search")
     async def get_artist_info(self, artist_norm: str, include_aliases: bool = False) -> dict[str, Any] | None:
@@ -504,32 +519,49 @@ class MusicBrainzClient(BaseApiClient):
                 )
 
                 if score > 0:
-                    year_str = self._extract_year_from_date(release.get("date")) or self._extract_year_from_date(
-                        rg_info.get("first-release-date"),
-                    )
-
-                    release_info: ScoredRelease = {
-                        "title": release.get("title", "") or "",
-                        "year": year_str,
-                        "score": score,
-                        "artist": artist_norm,
-                        "album_type": rg_info.get("primary-type", "Album"),
-                        "country": release.get("country", "") or "",
-                        "status": release.get("status", "Official"),
-                        "format": self._get_format_from_media(release.get("media")),
-                        "label": self._get_label_name(
-                            cast("list[LabelInfo] | None", release.get("label-info"))
-                        ),
-                        "catalog_number": self._get_catalog_number(
-                            cast("list[LabelInfo] | None", release.get("label-info"))
-                        ),
-                        "barcode": release.get("barcode"),
-                        "disambiguation": release.get("disambiguation"),
-                        "source": "musicbrainz",
-                    }
+                    release_info = self._create_scored_release(release, rg_info, score, artist_norm)
                     scored_releases.append(release_info)
 
         return scored_releases
+
+    def _create_scored_release(
+        self,
+        release: dict[str, Any],
+        rg_info: dict[str, Any],
+        score: float,
+        artist_norm: str,
+    ) -> ScoredRelease:
+        """Create a ScoredRelease from MusicBrainz release data.
+
+        Args:
+            release: MusicBrainz release data
+            rg_info: Release group information
+            score: Calculated score for the release
+            artist_norm: Normalized artist name
+
+        Returns:
+            ScoredRelease object with all fields populated
+
+        """
+        year_str = self._extract_year_from_date(release.get("date")) or self._extract_year_from_date(
+            rg_info.get("first-release-date"),
+        )
+
+        return {
+            "title": release.get("title", "") or "",
+            "year": year_str,
+            "score": score,
+            "artist": artist_norm,
+            "album_type": rg_info.get("primary-type", "Album"),
+            "country": release.get("country", "") or "",
+            "status": release.get("status", "Official"),
+            "format": self._get_format_from_media(release.get("media")),
+            "label": self._get_label_name(cast("list[LabelInfo] | None", release.get("label-info"))),
+            "catalog_number": self._get_catalog_number(cast("list[LabelInfo] | None", release.get("label-info"))),
+            "barcode": release.get("barcode"),
+            "disambiguation": release.get("disambiguation"),
+            "source": "musicbrainz",
+        }
 
     @Analytics.track_instance_method("musicbrainz_release_search")
     async def get_scored_releases(

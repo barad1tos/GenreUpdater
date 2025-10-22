@@ -10,6 +10,7 @@ Replaces:
 """
 
 import hashlib
+import json
 from typing import Any
 
 
@@ -48,8 +49,11 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        # Include source in the key for API-specific caching
-        key_string = f"{source}:{artist}|{album}".strip().lower()
+        # Normalize components individually before concatenation (consistent with hash_album_key)
+        normalized_source = source.strip().lower()
+        normalized_artist = artist.strip().lower()
+        normalized_album = album.strip().lower()
+        key_string = f"{normalized_source}:{normalized_artist}|{normalized_album}"
 
         return hashlib.sha256(key_string.encode()).hexdigest()
 
@@ -63,8 +67,8 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        # Handle different data types consistently
-        key_string = str(sorted(data.items())) if isinstance(data, dict) and data else str(data)
+        # Handle different data types consistently (including empty dicts)
+        key_string = str(sorted(data.items())) if isinstance(data, dict) else str(data)
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod
@@ -78,14 +82,10 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        # Combine all arguments into a stable string representation
-        args_string = "|".join(str(arg) for arg in args)
+        # Use json.dumps for stable serialization of complex types
+        args_string = "|".join(json.dumps(arg, sort_keys=True) for arg in args)
 
-        if kwargs:
-            kwargs_items = kwargs.items()
-            kwargs_string = "|".join(f"{k}={v}" for k, v in sorted(kwargs_items))
-        else:
-            kwargs_string = ""
+        kwargs_string = "|".join(f"{k}={json.dumps(v, sort_keys=True)}" for k, v in sorted(kwargs.items())) if kwargs else ""
 
         combined_string = f"{args_string}|{kwargs_string}".strip("|")
 
@@ -101,7 +101,7 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        key_string = f"pending:{track_id}".strip()
+        key_string = f"pending:{track_id}"
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod

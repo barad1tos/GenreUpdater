@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from typing import Any, TypeGuard
+from typing import Any, Self, TypeGuard
 
 from src.infrastructure.cache.cache_config import CacheContentType, SmartCacheConfig
 from src.infrastructure.cache.hash_service import UnifiedHashService
@@ -31,7 +31,15 @@ def is_generic_cache_entry(value: object) -> TypeGuard[tuple[CacheableValue, flo
     Returns:
         True if value is a (data, timestamp) tuple
     """
-    return isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], int | float)
+    if not isinstance(value, tuple) or len(value) != 2:
+        return False
+
+    # Check timestamp (second element) is numeric
+    if not isinstance(value[1], (int, float)):
+        return False
+
+    # Check first element is a cacheable type (str, int, float, bool, dict, list, or None)
+    return isinstance(value[0], (str, int, float, bool, dict, list, type(None)))
 
 
 class GenericCacheService:
@@ -78,6 +86,11 @@ class GenericCacheService:
                     cleaned = self.cleanup_expired()
                     if cleaned > 0:
                         self.logger.debug("Periodic cleanup removed %d expired entries", cleaned)
+
+                    # Enforce size limits to prevent unbounded growth
+                    removed = self.enforce_size_limits()
+                    if removed > 0:
+                        self.logger.debug("Periodic size enforcement removed %d oldest entries", removed)
                 except asyncio.CancelledError:
                     self.logger.debug("Cleanup task cancelled")
                     raise
@@ -225,6 +238,15 @@ class GenericCacheService:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
             self.logger.debug("Stopped cleanup task")
+
+    async def __aenter__(self) -> Self:
+        """Async context manager entry."""
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object) -> None:
+        """Async context manager exit - ensures cleanup task is stopped."""
+        await self.stop_cleanup_task()
 
     def get_stats(self) -> dict[str, Any]:
         """Get generic cache statistics.

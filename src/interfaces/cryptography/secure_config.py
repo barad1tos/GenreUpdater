@@ -124,7 +124,7 @@ class SecureConfig:
             SecurityConfigError: Always raised with the formatted error message
 
         """
-        result = f"{message_prefix}{error.message}"
+        result = f"{message_prefix}{error!s}"
         self.logger.exception(result)
         raise SecurityConfigError(result) from error
 

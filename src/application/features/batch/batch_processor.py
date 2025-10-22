@@ -111,7 +111,8 @@ class BatchProcessor:
             except asyncio.CancelledError:
                 # Properly handle cancellation of async tasks
                 self.console_logger.warning("\nBatch processing interrupted (async task cancelled)")
-                results["skipped"].extend(artists[i:])
+                # Include current artist (i-1) since enumerate starts at 1
+                results["skipped"].extend(artists[i - 1 :])
                 raise  # Re-raise to propagate cancellation
 
             except (OSError, ValueError, TypeError, RuntimeError):

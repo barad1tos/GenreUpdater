@@ -11,7 +11,6 @@ Key Features:
 """
 
 import asyncio
-import concurrent.futures
 import json
 import logging
 from datetime import UTC, datetime
@@ -158,10 +157,13 @@ class ApiCacheService:
         await asyncio.sleep(0)  # Make function truly async
         key = UnifiedHashService.hash_api_key(artist, album, source)
 
-        # Extract year from data if available
+        # Extract year from data if available (explicit None check to handle falsy values like 0 or empty string)
         year = None
         if data and isinstance(data, dict):
-            year = str(data.get("year", "")) if data.get("year") else None
+            year_value = data.get("year")
+            if year_value is not None:
+                year_str = str(year_value).strip()
+                year = year_str or None
 
         # Create cached result
         cached_result = CachedApiResult(
@@ -230,7 +232,11 @@ class ApiCacheService:
     async def save_to_disk(self) -> None:
         """Save API cache to JSON file."""
         if not self.api_cache:
-            self.logger.debug("API cache is empty, skipping save")
+            self.logger.debug("API cache is empty, deleting cache file if exists")
+            # Delete cache file to prevent loading stale data on next initialization
+            if self.api_cache_file.exists():
+                self.api_cache_file.unlink()
+                self.logger.info("Deleted empty API cache file: %s", self.api_cache_file)
             return
 
         def blocking_save() -> None:
@@ -265,10 +271,9 @@ class ApiCacheService:
                 self.logger.exception("Failed to save API cache: %s", e)
                 raise
 
-        # Run in thread executor to avoid blocking
-        executor = concurrent.futures.ThreadPoolExecutor()
-        future = executor.submit(blocking_save)
-        await asyncio.wrap_future(future)
+        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, blocking_save)
 
     async def _load_api_cache(self) -> None:
         """Load API cache from JSON file."""
@@ -310,10 +315,9 @@ class ApiCacheService:
                 self.logger.exception("Error loading API cache file %s: %s", self.api_cache_file, e)
                 return {}
 
-        # Run in thread executor to avoid blocking
-        executor = concurrent.futures.ThreadPoolExecutor()
-        future = executor.submit(blocking_load)
-        loaded_cache = await asyncio.wrap_future(future)
+        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
+        loop = asyncio.get_running_loop()
+        loaded_cache = await loop.run_in_executor(None, blocking_load)
         self.api_cache.update(loaded_cache)
 
     def emit_track_removed(self, track_id: str, artist: str, album: str) -> None:

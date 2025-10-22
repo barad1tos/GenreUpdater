@@ -76,7 +76,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
             str | None: The script output if this is a fetch operation, DRY_RUN_SUCCESS_MESSAGE otherwise.
 
         """
-        if script_name.startswith("fetch"):
+        if isinstance(script_name, str) and script_name.startswith("fetch"):
             # For fetch operations, we need REAL data from Music.app
             # Apply test_artists filter if configured
             test_artists = self.config.get("development", {}).get("test_artists", [])

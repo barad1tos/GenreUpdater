@@ -334,6 +334,7 @@ class TrackDict(BaseModel):
     new_year: str | None = None  # For tracking changes
     release_year: str | None = None  # Year from Music.app release date field
     original_pos: int | None = None  # Original position in the track list
+    album_artist: str | None = None  # Album artist for proper grouping of collaborations
 
     model_config = ConfigDict(extra="allow")
 

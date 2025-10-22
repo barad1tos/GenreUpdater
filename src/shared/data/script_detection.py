@@ -250,10 +250,10 @@ def has_korean(text: str) -> bool:
 
 
 def has_latin(text: str) -> bool:
-    """Check if the text contains Latin characters.
+    """Check if the text contains Latin alphabetic characters.
 
     Covers:
-    - Basic Latin (U+0000-U+007F) - ASCII
+    - Basic Latin (U+0041-U+005A, U+0061-U+007A) - A-Z, a-z
     - Latin-1 Supplement (U+0080-U+00FF) - Accented letters
     - Latin Extended-A (U+0100-U+017F) - Eastern European
     - Latin Extended-B (U+0180-U+024F) - African languages, phonetic
@@ -262,7 +262,7 @@ def has_latin(text: str) -> bool:
         text: Text to analyze
 
     Returns:
-        True if Latin characters are found, False otherwise
+        True if Latin alphabetic characters are found, False otherwise
 
     Examples:
         >>> has_latin("Pink Floyd")
@@ -271,15 +271,22 @@ def has_latin(text: str) -> bool:
         True
         >>> has_latin("МУР")  # noqa: RUF002
         False
+        >>> has_latin("123")
+        False
+        >>> has_latin("!!!")
+        False
 
     """
     if not text:
         return False
     return any(
-        "\u0000" <= c <= "\u007f"  # Basic Latin (ASCII)
-        or "\u0080" <= c <= "\u00ff"  # Latin-1 Supplement
-        or "\u0100" <= c <= "\u017f"  # Latin Extended-A
-        or "\u0180" <= c <= "\u024f"  # Latin Extended-B
+        c.isalpha() and (
+            "\u0041" <= c <= "\u005a"  # A-Z
+            or "\u0061" <= c <= "\u007a"  # a-z
+            or "\u0080" <= c <= "\u00ff"  # Latin-1 Supplement
+            or "\u0100" <= c <= "\u017f"  # Latin Extended-A
+            or "\u0180" <= c <= "\u024f"  # Latin Extended-B
+        )
         for c in text
     )
 
@@ -374,6 +381,9 @@ def _handle_cjk_detection(text: str) -> ScriptType | None:
 def _count_script_characters(text: str) -> tuple[dict[ScriptType, int], int]:
     """Count characters by script type, excluding punctuation and spaces.
 
+    Each character is counted only once for the first matching script to prevent
+    double-counting when a character could match multiple script detectors.
+
     Args:
         text: Text to analyze
 
@@ -393,6 +403,7 @@ def _count_script_characters(text: str) -> tuple[dict[ScriptType, int], int]:
         for script_type, detector in SCRIPT_DETECTORS.items():
             if detector(char):
                 script_counts[script_type] = script_counts.get(script_type, 0) + 1
+                break  # Count character only for the first matching script
 
     return script_counts, total_chars
 

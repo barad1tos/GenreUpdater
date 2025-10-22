@@ -163,20 +163,31 @@ class DatabaseVerifier:
         Returns:
             True if the track exists, False otherwise
 
+        Raises:
+            ValueError: If track_id is not numeric
+
         """
+        # Validate track_id is numeric to prevent AppleScript injection
+        try:
+            int(track_id)
+        except ValueError as e:
+            error_message = f"track_id must be numeric, got {track_id!r}"
+            self.error_logger.exception(error_message)
+            raise ValueError(error_message) from e
+
         script = f"""
         tell application "Music"
             try
-                # Efficiently check existence by trying to get a property
-                # Using 'properties' to get a dictionary is slightly more robust than just 'id'
+                -- Efficiently check existence by trying to get a property
+                -- Using 'properties' to get a dictionary is slightly more robust than just 'id'
                 get properties of track id {track_id} of library playlist 1
                 return "exists"
             on error errMsg number errNum
                 if errNum is -1728 then
-                    # Error code for "item not found"
+                    -- Error code for "item not found"
                     return "not_found"
                 else
-                    # Log other errors but treat as potentially existing
+                    -- Log other errors but treat as potentially existing
                     log "Error verifying track {track_id}: " & errNum & " " & errMsg
                     return "error_assume_exists"
                 end if

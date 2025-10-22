@@ -107,6 +107,14 @@ class CryptographyManager:
         # Try to load existing key
         if self.key_file_path.exists():
             key_data = self.key_file_path.read_bytes()
+            # Validate the key format to catch corruption/tampering early
+            try:
+                Fernet(key_data)
+            except Exception as e:
+                error_message = f"Invalid encryption key format in {self.key_file_path}: {e}"
+                self.logger.exception(error_message)
+                raise ValueError(error_message) from e
+
             self.logger.info("Loaded encryption key from %s", self.key_file_path)
             return key_data
 
@@ -136,12 +144,16 @@ class CryptographyManager:
         try:
             if key:
                 # Try to determine if the key is base64-encoded or a password
-                with contextlib.suppress(Exception):
-                    # First, try treating it as a base64-encoded key
-                    if len(key) == FERNET_KEY_LENGTH and key.endswith("="):  # Fernet key characteristics
-                        key_bytes = base64.urlsafe_b64decode(key.encode())
-                        return Fernet(base64.urlsafe_b64encode(key_bytes))
-                # If that fails, treat it as a password for key derivation
+                # Improved heuristic: attempt to decode AND validate with Fernet
+                if len(key) == FERNET_KEY_LENGTH:
+                    with contextlib.suppress(binascii.Error, Exception):
+                        # Try to decode as base64 and validate with Fernet
+                        decoded = base64.urlsafe_b64decode(key.encode())
+                        if len(decoded) == 32:  # Fernet requires exactly 32 bytes
+                            fernet_key = base64.urlsafe_b64encode(decoded)
+                            # Validate by creating Fernet instance
+                            return Fernet(fernet_key)
+                # Treat as password for key derivation
                 derived_key = self._generate_key_from_password(key)
                 return Fernet(derived_key)
 
@@ -287,6 +299,15 @@ class CryptographyManager:
 
     def rotate_key(self, new_password: str | None = None, backup_old_key: bool = True) -> None:
         """Rotate the encryption key to a new one.
+
+        **WARNING**: This method only rotates the encryption key file itself.
+        Any data encrypted with the old key will become inaccessible after rotation
+        unless you:
+        1. Decrypt all existing data with the old key BEFORE calling this method
+        2. Re-encrypt the data with the new key AFTER rotation completes
+
+        For automatic token migration, use the orchestrator's `rotate_keys` command
+        which handles the complete re-encryption workflow.
 
         Args:
             new_password: Password for new key derivation

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import allure
 import pytest
+
 from src.infrastructure.cache.album_cache_service import AlbumCacheService
 from src.infrastructure.cache.hash_service import UnifiedHashService
 
@@ -266,10 +267,12 @@ class TestAlbumCacheService:
 
         with allure.step("Test missing headers"):
             missing_headers = ["artist", "album"]  # Missing 'year'
-            assert service._validate_csv_headers(missing_headers) is False  # noqa: SLF001
+            with pytest.raises(ValueError, match="missing required headers"):
+                service._validate_csv_headers(missing_headers)  # noqa: SLF001
 
         with allure.step("Test no headers"):
-            assert service._validate_csv_headers(None) is False  # noqa: SLF001
+            with pytest.raises(ValueError, match="has no headers"):
+                service._validate_csv_headers(None)  # noqa: SLF001
 
         with allure.step("Test extra headers (should still be valid)"):
             extra_headers = ["artist", "album", "year", "extra_field"]

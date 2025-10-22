@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
 import pytest
+
 from src.infrastructure.applescript_client import (
     MAX_SCRIPT_SIZE,
     MAX_TRACK_ID_LENGTH,
@@ -15,7 +16,6 @@ from src.infrastructure.applescript_client import (
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
 )
-
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # noqa: TID252
 
 
@@ -263,6 +263,7 @@ class TestAppleScriptClientAllure:
             # Mock successful script execution
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"Success result", b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -319,6 +320,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(mock_tracks_data.encode(), b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -350,6 +352,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         with allure.step("Setup mock track update response"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"Success: Genre updated", b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -381,6 +384,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         with allure.step("Setup failing AppleScript execution"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"", b"AppleScript Error: syntax error"))
+            mock_process.wait = AsyncMock(return_value=1)
             mock_process.returncode = 1  # Error exit code
             mock_subprocess.return_value = mock_process
 
@@ -423,6 +427,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         with allure.step("Setup multiple concurrent script executions"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -545,6 +550,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         ):
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"Batch complete: 10 tracks updated", b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -584,6 +590,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         ):
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
+            mock_process.wait = AsyncMock(return_value=0)
             mock_process.returncode = 0
             mock_subprocess.return_value = mock_process
 
@@ -627,6 +634,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
                 return b"", b"Timeout"
 
             mock_process.communicate = slow_communicate
+            mock_process.wait = AsyncMock(return_value=-1)
             mock_process.returncode = -1
             mock_subprocess.return_value = mock_process
 

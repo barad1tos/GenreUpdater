@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from datetime import timedelta
 
 try:
     import psutil  # type: ignore[import]
@@ -330,7 +331,12 @@ class ResourceMonitor:
         self.metrics: list[ResourceMetric] = []
 
     def collect_cpu_metrics(self) -> ResourceMetric:
-        """Collect CPU usage metrics."""
+        """Collect CPU usage metrics.
+
+        Note:
+            Uses interval=0.1 (100ms) for CPU measurement to balance accuracy
+            with responsiveness. Avoid blocking for 1 second during metrics collection.
+        """
         if not psutil_available:
             return ResourceMetric(
                 resource_type=ResourceType.CPU,
@@ -342,7 +348,8 @@ class ResourceMonitor:
             )
 
         psutil_module = _get_psutil()
-        cpu_percent = psutil_module.cpu_percent(interval=1)
+        # Use 0.1s interval for better responsiveness (vs 1s blocking)
+        cpu_percent = psutil_module.cpu_percent(interval=0.1)
         cpu_count = psutil_module.cpu_count()
 
         metric = ResourceMetric(
@@ -425,7 +432,8 @@ class ResourceMonitor:
         psutil_module = _get_psutil()
         disk = psutil_module.disk_usage(path)
 
-        usage_percent = (disk.used / disk.total) * 100
+        # Prevent division by zero for edge cases where disk.total == 0
+        usage_percent = (disk.used / disk.total * 100) if disk.total > 0 else 0.0
 
         metric = ResourceMetric(
             resource_type=ResourceType.DISK,
@@ -572,8 +580,10 @@ class MetricsCollector:
                 # Collect resource metrics
                 resource_metrics = self.resource_monitor.collect_all_metrics()
 
-                # Get recent performance metrics
-                recent_performance = self.performance_tracker.get_metrics(since=datetime.now(UTC).replace(second=0, microsecond=0))
+                # Get performance metrics from the last minute (not just current minute)
+                recent_performance = self.performance_tracker.get_metrics(
+                    since=datetime.now(UTC) - timedelta(minutes=1)
+                )
 
                 # Evaluate alerts
                 all_metrics = resource_metrics + recent_performance

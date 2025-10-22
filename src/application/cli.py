@@ -138,7 +138,7 @@ Examples:
             title="Commands",
             description="Available commands",
             help="Use '%(prog)s COMMAND --help' for command-specific help",
-            required=True,
+            required=False,
         )
 
         # Clean artist command
