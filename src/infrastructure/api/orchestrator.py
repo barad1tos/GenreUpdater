@@ -1803,32 +1803,42 @@ class ExternalApiOrchestrator:
             effective_score_threshold = self.definitive_score_diff
 
         # Look for earlier years that might be the original release
+        # Collect all valid candidates within score threshold, then pick the earliest
+        valid_candidates: list[tuple[str, int]] = []
+
         for candidate_year, candidate_score in sorted_years[1:]:
             candidate_year_int = int(candidate_year)
             score_difference = best_score - candidate_score
             year_difference = best_year_int - candidate_year_int
 
             # If we find an earlier year within the score threshold, and it's at least a few years earlier,
-            # prefer it as the likely original release
+            # add it as a candidate for the likely original release
             if score_difference <= effective_score_threshold and year_difference >= MIN_REISSUE_YEAR_DIFFERENCE:
-                self.console_logger.info(
-                    "[ORIGINAL_RELEASE_FIX] Preferring earlier year %s over later year %s "
-                    "(likely original vs reissue, scores: %d vs %d, year diff: %d, threshold: %d)",
-                    candidate_year,
-                    best_year,
-                    candidate_score,
-                    best_score,
-                    year_difference,
-                    effective_score_threshold,
-                )
-                return candidate_year, candidate_score
+                valid_candidates.append((candidate_year, candidate_score))
 
             # If the score difference is significant, stop looking (reissue has much better data)
             if score_difference >= self.definitive_score_diff:
                 break
 
-            # If years are too close together (< 3 years), continue looking
-            # for an earlier candidate that might be the original
+        # If we found valid candidates, pick the earliest year
+        if valid_candidates:
+            # Find the earliest year among all valid candidates
+            earliest_candidate_tuple: tuple[str, int] = min(valid_candidates, key=lambda x: int(x[0]))
+            selected_year: str = earliest_candidate_tuple[0]
+            selected_score: int = earliest_candidate_tuple[1]
+            year_difference = best_year_int - int(selected_year)
+
+            self.console_logger.info(
+                "[ORIGINAL_RELEASE_FIX] Preferring earliest year %s over later year %s "
+                "(likely original vs reissue, scores: %d vs %d, year diff: %d, threshold: %d)",
+                selected_year,
+                best_year,
+                selected_score,
+                best_score,
+                year_difference,
+                effective_score_threshold,
+            )
+            return selected_year, selected_score
 
         return best_year, best_score
 

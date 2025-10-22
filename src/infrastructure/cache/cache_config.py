@@ -200,7 +200,8 @@ class SmartCacheConfig:
                 setattr(policy, key, value)
                 self.logger.info("Updated %s policy: %s=%s", content_type.value, key, value)
             else:
-                self.logger.warning("Unknown policy attribute: %s", key)
+                msg = f"Unknown policy attribute: {key}"
+                raise AttributeError(msg)
 
     def get_all_policies(self) -> dict[CacheContentType, CachePolicy]:
         """Get all configured cache policies.
@@ -233,6 +234,8 @@ class SmartCacheConfig:
         Returns:
             Human-readable TTL string
         """
+        if seconds < 0:
+            return "expired"
         if seconds >= self.INFINITE_TTL:
             return "∞ (infinite)"
         if seconds >= self.DAY:
@@ -289,7 +292,7 @@ class EventDrivenCacheManager:
         """
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self._event_handlers: dict[CacheEventType, list] = {}
+        self._event_handlers: dict[CacheEventType, list[Callable[[CacheEvent], None]]] = {}
 
     def register_event_handler(self, event_type: CacheEventType, handler: Callable) -> None:
         """Register event handler for specific event type.

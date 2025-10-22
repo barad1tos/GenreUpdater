@@ -354,7 +354,8 @@ class CacheOrchestrator(CacheServiceProtocol):
         hash_service = UnifiedHashService()
         return hash_service.hash_album_key(artist, album)
 
-    def clear(self) -> None:
-        """Clear all entries from the cache."""
-        # Delegate to generic service for now, could be enhanced
+    async def clear(self) -> None:
+        """Clear all entries from all caches (generic, album, and API caches)."""
         self.generic_service.invalidate_all()
+        await self.album_service.invalidate_all()
+        await self.api_service.invalidate_all()

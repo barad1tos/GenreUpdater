@@ -15,6 +15,7 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 """
 
 import logging
+import traceback
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -63,7 +64,9 @@ class AppleMusicClient:
         self.base_url = "https://itunes.apple.com/search"
         self.country_code = country_code
         self.entity = entity
-        self.limit = min(limit, 200)  # iTunes API max is 200
+        # Ensure limit is positive and within iTunes API bounds [1, 200]
+        validated_limit = max(1, limit)
+        self.limit = min(validated_limit, 200)
 
         self.console_logger.debug(
             "iTunes Search API client initialized (country=%s, entity=%s, limit=%d)",
@@ -147,18 +150,40 @@ class AppleMusicClient:
 
             # Filter and score results
             scored_releases: list[ScoredRelease] = []
+            skipped_count = 0
             for result in results:
                 try:
                     if scored_release := self._process_itunes_result(result, artist_norm, album_norm):
                         scored_releases.append(scored_release)
+                    else:
+                        skipped_count += 1
                 except (KeyError, ValueError, TypeError) as e:
-                    self.error_logger.warning("[itunes] Error processing result for '%s': %s", search_term, e)
+                    # Expected errors from malformed API responses or missing fields
+                    self.error_logger.warning(
+                        "[itunes] Expected error processing result for '%s': %s (type: %s)",
+                        search_term,
+                        e,
+                        type(e).__name__,
+                    )
+                    skipped_count += 1
+                    continue
+                except Exception as e:
+                    # Unexpected errors that need investigation
+                    self.error_logger.exception(
+                        "[itunes] Unexpected error processing result for '%s': %s (type: %s)\n%s",
+                        search_term,
+                        e,
+                        type(e).__name__,
+                        traceback.format_exc(),
+                    )
+                    skipped_count += 1
                     continue
 
             self.console_logger.debug(
-                "[itunes] Processed %d results, returning %d scored releases",
+                "[itunes] Processed %d results, returning %d scored releases (%d skipped)",
                 len(results),
                 len(scored_releases),
+                skipped_count,
             )
 
         except (OSError, ValueError, RuntimeError) as e:
@@ -215,25 +240,37 @@ class AppleMusicClient:
                 return None
 
             # Score the release using the injected scoring function
-            score = self.score_release_func(
-                release={
-                    "title": collection_name,
-                    "artist": artist_name,
-                    "year": release_year,
-                    "album_type": result.get("collectionType", ""),
-                    "country": self.country_code,
-                    "status": "official",  # iTunes only has official releases
-                    "format": "Digital",  # iTunes is digital distribution
-                    "label": result.get("copyright", ""),
-                    "genre": result.get("primaryGenreName", ""),
-                },
-                artist_norm=target_artist_norm,
-                album_norm=target_album_norm,
-                artist_region=None,  # Not used in scoring
-                source="itunes",
-            )
+            try:
+                score = self.score_release_func(
+                    release={
+                        "title": collection_name,
+                        "artist": artist_name,
+                        "year": release_year,
+                        "album_type": result.get("collectionType", ""),
+                        "country": self.country_code,
+                        "status": "official",  # iTunes only has official releases
+                        "format": "Digital",  # iTunes is digital distribution
+                        "label": result.get("copyright", ""),
+                        "genre": result.get("primaryGenreName", ""),
+                    },
+                    artist_norm=target_artist_norm,
+                    album_norm=target_album_norm,
+                    artist_region=None,  # Not used in scoring
+                    source="itunes",
+                )
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                self.console_logger.debug(
+                    "[itunes] Failed to score release '%s - %s': %s",
+                    artist_name,
+                    collection_name,
+                    e,
+                )
+                return None
 
             # Create scored release
+            # Note: iTunes API does not provide a dedicated label/publisher field.
+            # The copyright field is used as label, which may contain full legal text.
+            # This field is primarily used for scoring, not display.
             scored_release: ScoredRelease = {
                 "title": collection_name,
                 "year": release_year,
@@ -243,7 +280,7 @@ class AppleMusicClient:
                 "country": self.country_code,
                 "status": "official",
                 "format": "Digital",
-                "label": (result.get("copyright", "")[:100] if result.get("copyright") else None),  # Truncate long labels
+                "label": result.get("copyright") or None,
                 "catalog_number": None,  # iTunes doesn't provide catalog numbers
                 "barcode": None,  # iTunes doesn't provide barcodes
                 "disambiguation": result.get("collectionCensoredName", ""),

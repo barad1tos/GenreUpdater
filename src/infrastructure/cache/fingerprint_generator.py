@@ -283,7 +283,7 @@ class FingerprintGenerator:
             self.logger.warning("Invalid fingerprint format in comparison")
             return False
 
-        return fp1.lower() == fp2.lower()  # Case-insensitive comparison
+        return fp1 == fp2  # SHA-256 hex digests are lowercase by convention
 
     def get_fingerprint_summary(self, track_data: dict[str, Any]) -> dict[str, Any]:
         """Get fingerprint along with summary of properties used.

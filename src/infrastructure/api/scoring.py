@@ -193,7 +193,23 @@ class ReleaseScorer:
             Normalized name string
 
         """
-        return name
+        if not name:
+            return ""
+
+        # Convert to lowercase
+        normalized = name.lower()
+
+        # Replace '&' with 'and'
+        normalized = normalized.replace("&", "and")
+
+        # Remove common punctuation and special characters
+        normalized = re.sub(r"[^\w\s]", "", normalized)
+
+        # Normalize whitespace (multiple spaces to single space)
+        normalized = re.sub(r"\s+", " ", normalized)
+
+        # Strip leading/trailing whitespace
+        return normalized.strip()
 
     def _is_valid_year(
         self,
@@ -418,7 +434,7 @@ class ReleaseScorer:
             status_penalty: int = int(scoring_cfg.get("status_bootleg_penalty", -50))
             score_components.append(f"Status Bootleg/Unofficial: {status_penalty}")
             return status_penalty
-        if status == "promotion":
+        if any(s in status for s in ["promotion", "promo", "promotional"]):
             status_promo_penalty = int(scoring_cfg.get("status_promo_penalty", -20))
             score_components.append(f"Status Promo: {status_promo_penalty}")
             return status_promo_penalty
@@ -510,13 +526,14 @@ class ReleaseScorer:
         """
         scoring_cfg = self.scoring_config
         release_country = (release.get("country") or "").lower()
+        artist_region_normalized = (artist_region or "").lower()
 
-        if not artist_region or not release_country:
+        if not artist_region_normalized or not release_country:
             return 0
 
-        if release_country == artist_region:
+        if release_country == artist_region_normalized:
             country_bonus: int = int(scoring_cfg.get("country_artist_match_bonus", 10))
-            score_components.append(f"Country Matches Artist Region ({artist_region.upper()}): +{country_bonus}")
+            score_components.append(f"Country Matches Artist Region ({artist_region_normalized.upper()}): +{country_bonus}")
             return country_bonus
         if release_country in scoring_cfg.get("major_market_codes", ["us", "gb", "uk", "de", "jp", "fr"]):
             market_bonus: int = int(scoring_cfg.get("country_major_market_bonus", 5))
@@ -603,11 +620,18 @@ class ReleaseScorer:
         # At this point, validated_year is guaranteed to be int
         year: int = validated_year
 
-        # Apply future year penalty for suspicious reissue dates
-        if year >= self.current_year:
+        # Apply penalties for current and future year releases
+        if year > self.current_year:
+            # Future years are suspicious (likely incorrect data)
             future_penalty: int = int(scoring_cfg.get("future_year_penalty", -10))
             score += future_penalty
-            score_components.append(f"Future/Current Year ({year}): {future_penalty}")
+            score_components.append(f"Future Year ({year}): {future_penalty}")
+        elif year == self.current_year:
+            # Current year: small penalty to prefer earlier releases when ambiguous
+            current_year_penalty: int = int(scoring_cfg.get("current_year_penalty", 0))
+            score += current_year_penalty
+            if current_year_penalty != 0:
+                score_components.append(f"Current Year ({year}): {current_year_penalty}")
 
         # Calculate score components
         score += self._calculate_match_score(

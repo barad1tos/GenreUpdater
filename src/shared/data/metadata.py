@@ -173,8 +173,8 @@ def group_tracks_by_artist(
         artist = track.get("artist", "Unknown")
         if artist and isinstance(artist, str):
             artists[artist].append(track)
-    # Return defaultdict directly without converting to dict for better performance
-    return artists
+    # Convert to dict for type safety (function signature promises dict, not defaultdict)
+    return dict(artists)
 
 
 def determine_dominant_genre_for_artist(
@@ -197,45 +197,74 @@ def determine_dominant_genre_for_artist(
     if not artist_tracks:
         return "Unknown"
     try:
-        # Find the earliest track for each album
-        album_earliest = _find_earliest_track_per_album(artist_tracks, error_logger)
+        if album_earliest := _get_earliest_track_per_album(
+            artist_tracks, error_logger
+        ):
+            return (
+                _get_genre_from_track(earliest_album_track)
+                if (
+                    earliest_album_track := _get_earliest_track_across_albums(
+                        album_earliest, error_logger
+                    )
+                )
+                else "Unknown"
+            )
+        return "Unknown"
 
-        # From these tracks, find the earliest album (by the date of addition of its earliest track)
-        # Ensure album_earliest is not empty before finding min
-        if not album_earliest:
-            return "Unknown"
-
-        # Find the earliest track, ensuring date_added is valid string
-        earliest_album_track = None
-        earliest_date = None
-
-        for track in album_earliest.values():
-            date_str = track.get("date_added", "9999-12-31 00:00:00")
-            if isinstance(date_str, str) and date_str.strip():
-                try:
-                    track_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                    if earliest_date is None or track_date < earliest_date:
-                        earliest_date = track_date
-                        earliest_album_track = track
-                except ValueError as e:
-                    error_logger.warning("Invalid date_added format '%s': %s", date_str, e)
-                    continue
-            else:
-                error_logger.warning("Track %s has empty or invalid date_added, skipping from dominant genre calculation", track.get("id", "unknown"))
-
-        if not earliest_album_track:
-            return "Unknown"
-
-        dominant_genre = earliest_album_track.get("genre")
-
-        # Ensure return type is always string
-        return dominant_genre if isinstance(dominant_genre, str) else "Unknown"
     except (KeyError, TypeError, AttributeError) as e:  # Catch data structure errors
         error_logger.exception(
             "Error in determine_dominant_genre_for_artist: %s",
             e,
         )
         return "Unknown"
+
+
+def _get_earliest_track_across_albums(
+    album_earliest: dict[str, TrackDict],
+    error_logger: logging.Logger,
+) -> TrackDict | None:
+    """Find the earliest track across all albums.
+
+    Args:
+        album_earliest: Dictionary mapping album names to their earliest tracks
+        error_logger: Logger for error output
+
+    Returns:
+        The earliest track across all albums, or None if no valid tracks
+
+    """
+    earliest_album_track = None
+    earliest_date = None
+
+    for track in album_earliest.values():
+        date_str = track.get("date_added", "9999-12-31 00:00:00")
+        if not isinstance(date_str, str) or not date_str.strip():
+            error_logger.warning(
+                "Track %s has empty or invalid date_added, skipping from dominant genre calculation",
+                track.get("id", "unknown"),
+            )
+            continue
+
+        track_date = _parse_track_date(date_str, error_logger)
+        if track_date and (earliest_date is None or track_date < earliest_date):
+            earliest_date = track_date
+            earliest_album_track = track
+
+    return earliest_album_track
+
+
+def _get_genre_from_track(track: TrackDict) -> str:
+    """Extract genre from track, ensuring return type is always string.
+
+    Args:
+        track: Track dictionary
+
+    Returns:
+        Genre string or "Unknown" if invalid
+
+    """
+    genre = track.get("genre")
+    return genre if isinstance(genre, str) else "Unknown"
 
 
 def _parse_track_date(date_str: str, error_logger: logging.Logger) -> datetime | None:
@@ -284,7 +313,7 @@ def _is_track_earlier(track: TrackDict, existing_track: TrackDict, error_logger:
     return track_date is not None and existing_date is not None and track_date < existing_date
 
 
-def _find_earliest_track_per_album(
+def _get_earliest_track_per_album(
     artist_tracks: Sequence[TrackDict],
     error_logger: logging.Logger,
 ) -> dict[str, TrackDict]:
@@ -457,8 +486,8 @@ def _clean_text_segments(name: str, keywords: list[str], console_logger: logging
     # Remove bracket segments containing keywords
     cleaned = _remove_bracket_segments(cleaned, keywords)
 
-    # Collapse excess whitespace that may be left after removals
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    # Collapse excess whitespace (including all Unicode whitespace) that may be left after removals
+    cleaned = " ".join(cleaned.split())
 
     console_logger.debug("remove_parentheses_with_keywords: '%s' -> '%s'", name, cleaned)
     return cleaned
@@ -646,7 +675,10 @@ def is_music_app_running(error_logger: logging.Logger) -> bool:
         return _check_osascript_availability(error_logger)
     except subprocess.TimeoutExpired:
         error_logger.warning("Music.app status check timed out after 10 seconds. Assuming Music.app is available.")
-        return True  # Assume running on timeout to avoid blocking execution
+        # Optimistic: assume running to avoid false-negative blocking.
+        # If Music.app isn't actually running, AppleScript commands will
+        # fail later with clear error messages.
+        return True
     except (subprocess.SubprocessError, OSError) as e:
         error_logger.exception("Unable to check Music.app status: %s", e)
         return False  # Assume not running on error

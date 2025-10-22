@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import threading
 import time
+import traceback
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -224,7 +226,10 @@ class ErrorClassifier:
 
 
 class ErrorRateTracker:
-    """Tracks error rates over time."""
+    """Tracks error rates over time.
+
+    Thread-safe implementation using a lock to protect shared state.
+    """
 
     def __init__(self, window_minutes: int = 60, bucket_size_seconds: int = 60) -> None:
         """Initialize rate tracker.
@@ -243,48 +248,54 @@ class ErrorRateTracker:
         self.current_bucket_start = time.time()
         self.total_errors = 0
 
+        # Thread safety
+        self._lock = threading.Lock()
+
     def record_error(self) -> None:
-        """Record an error occurrence."""
-        now = time.time()
+        """Record an error occurrence (thread-safe)."""
+        with self._lock:
+            now = time.time()
 
-        # Check if we need to advance to a new bucket
-        elapsed = now - self.current_bucket_start
-        if elapsed >= self.bucket_size_seconds:
-            # Calculate how many buckets to advance
-            buckets_to_advance = min(int(elapsed // self.bucket_size_seconds), self.buckets_count)
+            # Check if we need to advance to a new bucket
+            elapsed = now - self.current_bucket_start
+            if elapsed >= self.bucket_size_seconds:
+                # Calculate how many buckets to advance
+                buckets_to_advance = min(int(elapsed // self.bucket_size_seconds), self.buckets_count)
 
-            # Add empty buckets for the time that passed
-            for _ in range(buckets_to_advance):
-                self.error_buckets.append(0)
+                # Add empty buckets for the time that passed
+                for _ in range(buckets_to_advance):
+                    self.error_buckets.append(0)
 
-            # Update bucket start time
-            self.current_bucket_start += buckets_to_advance * self.bucket_size_seconds
+                # Update bucket start time
+                self.current_bucket_start += buckets_to_advance * self.bucket_size_seconds
 
-        # Increment current bucket
-        if self.error_buckets:
-            self.error_buckets[-1] += 1
+            # Increment current bucket
+            if self.error_buckets:
+                self.error_buckets[-1] += 1
 
-        self.total_errors += 1
+            self.total_errors += 1
 
     def get_error_rate(self) -> float:
-        """Get current error rate per minute."""
-        total_errors_in_window = sum(self.error_buckets)
-        return (total_errors_in_window / self.window_minutes) if self.window_minutes > 0 else 0.0
+        """Get current error rate per minute (thread-safe)."""
+        with self._lock:
+            total_errors_in_window = sum(self.error_buckets)
+            return (total_errors_in_window / self.window_minutes) if self.window_minutes > 0 else 0.0
 
     def get_trend(self) -> str:
-        """Get current error rate trend."""
-        if len(self.error_buckets) < MIN_BUCKETS_FOR_TREND_ANALYSIS:
-            return "stable"
+        """Get current error rate trend (thread-safe)."""
+        with self._lock:
+            if len(self.error_buckets) < MIN_BUCKETS_FOR_TREND_ANALYSIS:
+                return "stable"
 
-        # Compare recent buckets to older ones
-        recent_rate = sum(list(self.error_buckets)[-2:]) / 2
-        older_rate = sum(list(self.error_buckets)[-4:-2]) / 2
+            # Compare recent buckets to older ones
+            recent_rate = sum(list(self.error_buckets)[-2:]) / 2
+            older_rate = sum(list(self.error_buckets)[-4:-2]) / 2
 
-        if recent_rate > older_rate * 2:
-            return "spike"
-        if recent_rate > older_rate * 1.5:
-            return "increasing"
-        return "decreasing" if recent_rate < older_rate * 0.5 else "stable"
+            if recent_rate > older_rate * 2:
+                return "spike"
+            if recent_rate > older_rate * 1.5:
+                return "increasing"
+            return "decreasing" if recent_rate < older_rate * 0.5 else "stable"
 
 
 class ErrorPatternDetector:
@@ -314,6 +325,11 @@ class ErrorPatternDetector:
         # Clean old occurrences
         cutoff_time = now - self.time_window
         self.pattern_counts[signature] = [ts for ts in self.pattern_counts[signature] if ts >= cutoff_time]
+
+        # Remove key if no timestamps remain to prevent memory leak
+        if not self.pattern_counts[signature]:
+            del self.pattern_counts[signature]
+            return
 
         # Check if this forms a pattern
         count = len(self.pattern_counts[signature])
@@ -389,7 +405,13 @@ class ErrorPatternDetector:
 
 
 class ErrorMetricsCollector:
-    """Main error metrics collection and analysis system."""
+    """Main error metrics collection and analysis system.
+
+    Note:
+        Uses unbounded list for error storage with periodic pruning to ensure
+        all errors within the time window are retained, preventing data loss
+        during high error rate scenarios.
+    """
 
     def __init__(self, window_minutes: int = 60) -> None:
         """Initialize error metrics collector."""
@@ -398,11 +420,35 @@ class ErrorMetricsCollector:
         self.rate_tracker = ErrorRateTracker(window_minutes)
         self.pattern_detector = ErrorPatternDetector(time_window_minutes=window_minutes)
 
-        # Store recent errors
-        self.recent_errors: deque[ErrorEvent] = deque(maxlen=1000)
+        # Store all errors (will be pruned periodically to prevent unbounded growth)
+        self.all_errors: list[ErrorEvent] = []
+        self._last_prune_time = time.time()
+        self._prune_interval_seconds = 300  # Prune every 5 minutes
 
         # Alert handlers
         self.alert_handlers: list[Callable[[str, ErrorSeverity, dict[str, Any]], None]] = []
+
+    def _prune_old_errors(self) -> None:
+        """Prune errors outside the extended window to prevent unbounded memory growth.
+
+        Keeps errors within 2x the window_minutes to ensure we don't prune too aggressively.
+        """
+        now = time.time()
+        if now - self._last_prune_time < self._prune_interval_seconds:
+            return
+
+        # Keep errors within 2x the time window (provides buffer for queries)
+        extended_window = timedelta(minutes=self.window_minutes * 2)
+        cutoff_time = datetime.now(UTC) - extended_window
+
+        original_count = len(self.all_errors)
+        self.all_errors = [e for e in self.all_errors if e.timestamp >= cutoff_time]
+        pruned_count = original_count - len(self.all_errors)
+
+        if pruned_count > 0:
+            logger.debug(f"Pruned {pruned_count} old errors (kept {len(self.all_errors)})")
+
+        self._last_prune_time = now
 
     def record_error(
         self,
@@ -421,7 +467,14 @@ class ErrorMetricsCollector:
         if request.exception:
             exception_type = type(request.exception).__name__
             error_message = str(request.exception)
-            stack_trace = repr(request.exception)  # Simple representation
+            # Capture complete stack trace with line numbers for debugging
+            stack_trace = "".join(
+                traceback.format_exception(
+                    type(request.exception),
+                    request.exception,
+                    request.exception.__traceback__,
+                )
+            )
         else:
             exception_type = "UnknownError"
             error_message = request.message or "Unknown error"
@@ -451,9 +504,12 @@ class ErrorMetricsCollector:
         )
 
         # Record in various trackers
-        self.recent_errors.append(error_event)
+        self.all_errors.append(error_event)
         self.rate_tracker.record_error()
         self.pattern_detector.record_error(error_event)
+
+        # Periodic pruning to prevent unbounded memory growth
+        self._prune_old_errors()
 
         # Check for alerts
         self._check_alerts(error_event)
@@ -518,12 +574,17 @@ class ErrorMetricsCollector:
         self.alert_handlers.append(handler)
 
     def get_error_stats(self, time_window: timedelta | None = None) -> ErrorStats:
-        """Get error statistics for a time period."""
+        """Get error statistics for a time period.
+
+        Note:
+            Uses all_errors list which contains complete error history within the
+            configured window, ensuring accurate statistics even during high error rates.
+        """
         if time_window is None:
             time_window = timedelta(minutes=self.window_minutes)
 
         cutoff_time = datetime.now(UTC) - time_window
-        recent_errors = [e for e in self.recent_errors if e.timestamp >= cutoff_time]
+        recent_errors = [e for e in self.all_errors if e.timestamp >= cutoff_time]
 
         stats = ErrorStats(time_window=time_window)
         stats.total_errors = len(recent_errors)

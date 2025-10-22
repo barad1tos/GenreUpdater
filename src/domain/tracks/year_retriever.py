@@ -5,6 +5,7 @@ This module handles fetching and updating album years from external APIs.
 
 import asyncio
 import logging
+import random
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -288,15 +289,18 @@ class YearRetriever:
             except (OSError, ValueError, RuntimeError) as e:
                 last_exception = e
                 if attempt < max_retries - 1:
+                    # Add jitter to prevent thundering herd
+                    jitter = 0.1 * retry_delay
+                    sleep_time = retry_delay + random.uniform(-jitter, jitter)  # noqa: S311
                     self.console_logger.warning(
                         "Failed to update year for track %s (attempt %d/%d): %s. Retrying in %.1fs...",
                         track_id,
                         attempt + 1,
                         max_retries,
                         last_exception,
-                        retry_delay,
+                        sleep_time,
                     )
-                    await asyncio.sleep(retry_delay)
+                    await asyncio.sleep(sleep_time)
                     retry_delay *= 2  # Exponential backoff
             else:
                 return False
@@ -800,6 +804,7 @@ class YearRetriever:
             Tuple of (track_ids, tracks_needing_update)
 
         """
+        seen_ids: set[str] = set()
         track_ids: list[str] = []
         tracks_needing_update: list[TrackDict] = []
 
@@ -808,6 +813,11 @@ class YearRetriever:
                 continue
 
             track_id = str(track_id_value)
+
+            # Skip duplicates
+            if track_id in seen_ids:
+                continue
+            seen_ids.add(track_id)
             track_current_year = track.get("year", "")
             track_status = track.track_status if isinstance(track.track_status, str) else None
             # Skip read-only tracks (e.g., prerelease)
@@ -1322,6 +1332,9 @@ class YearRetriever:
         Calculates dominance based on ALL tracks in album, not just tracks for years.
         A year is dominant only if >50% of ALL album tracks have that year.
 
+        Note: Years "0" and empty strings are excluded from dominance calculation
+        as they represent placeholder/default values in Music.app.
+
         Args:
             tracks: List of ALL tracks in the album to analyze
 
@@ -1329,7 +1342,7 @@ class YearRetriever:
             Dominant year string if found, None if no clear majority or parity
 
         """
-        # Collect all non-empty years
+        # Collect all non-empty years (excluding "0" placeholder)
         years: list[str] = []
         for track in tracks:
             year = track.get("year")

@@ -91,7 +91,17 @@ def _validate_config_path(path: str) -> pathlib.Path:
     ]
 
     # Ensure the resolved path is within one of the allowed directories
-    if not any(str(resolved_path).startswith(str(d)) for d in allowed_dirs):
+    # Use relative_to() for secure path containment check (prevents bypass via /foo/bar2 matching /foo/bar)
+    is_allowed = False
+    for allowed_dir in allowed_dirs:
+        try:
+            resolved_path.relative_to(allowed_dir)
+            is_allowed = True
+            break
+        except ValueError:
+            continue
+
+    if not is_allowed:
         allowed_paths_str = ", ".join(f'"{d}"' for d in allowed_dirs)
         msg = f"Access to {resolved_path} is not allowed. Config must be in one of: {allowed_paths_str}"
         raise ValueError(
@@ -258,10 +268,13 @@ def validate_api_auth(api_auth: dict[str, Any]) -> None:
     Args:
         api_auth: Dictionary containing API authentication settings.
 
+    Raises:
+        ValueError: If api_auth section is missing or incomplete
+
     """
     if not api_auth:
-        logger.warning("'api_auth' section is missing in year_retrieval config")
-        return
+        msg = "'api_auth' section is missing in year_retrieval config"
+        raise ValueError(msg)
 
     missing_fields: list[str] = []
     if not api_auth.get("discogs_token"):
@@ -272,7 +285,7 @@ def validate_api_auth(api_auth: dict[str, Any]) -> None:
         missing_fields.append("LASTFM_API_KEY (required when use_lastfm is enabled)")
 
     for field in missing_fields:
-        logger.warning("%s is not set in .env file", field)
+        logger.warning("%s is not set in environment", field)
     if missing_fields:
         msg = f"API authentication config incomplete: {', '.join(missing_fields)}"
         raise ValueError(msg)

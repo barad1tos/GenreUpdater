@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
+
 from src.application.music_updater import MusicUpdater
 from src.infrastructure.dependencies_service import DependencyContainer
 from src.shared.data.models import TrackDict
-
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
@@ -68,15 +68,25 @@ class TestFullApplicationPipelineE2E:
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
 
+        # FIX: Add config_path to prevent MagicMock from breaking file operations
+        # This is critical - without it, MusicUpdater.__init__() hangs when trying to
+        # resolve artist_renamer config path, because MagicMock.open() creates infinite recursion
+        import tempfile
+        from pathlib import Path
+
+        temp_dir = Path(tempfile.mkdtemp())
+        mock_config_file = temp_dir / "config.yaml"
+        mock_deps.config_path = mock_config_file
+
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()
         mock_deps.ap_client.get_tracks = AsyncMock(return_value=[])
         mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         # Smart mock for run_script that returns different data based on script name
-        async def smart_run_script(script_name: str, _args: list[str] | None = None, _timeout: int = 30) -> str:
+        async def smart_run_script(script_name: str, args: list[str] | None = None, timeout: int = 30, **kwargs) -> str:
             """Mock script runner that handles different script types."""
-            del _args, _timeout  # Explicitly mark as unused
+            del args, timeout, kwargs  # Explicitly mark as unused
             if "fetch_tracks" in script_name:
                 # Return empty for batch processing end
                 return ""

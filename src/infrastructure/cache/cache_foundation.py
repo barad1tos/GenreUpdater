@@ -10,7 +10,9 @@ This module provides foundational cache components that form the basis of the ca
 These are active production components, not legacy code.
 """
 
+
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -55,16 +57,21 @@ class CacheConfigurationFactory:
 
     @staticmethod
     def create_from_dict(config: dict[str, Any]) -> CacheConfiguration:
-        """Create configuration from dictionary."""
+        """Create configuration from dictionary.
+
+        Note:
+            All numeric fields are coerced to int to handle YAML/env substitution
+            that may return strings (e.g., "${L1_TTL_SECONDS}" → "600").
+        """
         cache_config = config.get("caching", {})
         return CacheConfiguration(
-            l1_max_entries=cache_config.get("l1_max_entries", 1000),
-            l1_ttl_seconds=cache_config.get("default_ttl_seconds", 300),
-            l2_max_size_mb=cache_config.get("l2_max_size_mb", 100),
-            l2_ttl_seconds=cache_config.get("l2_ttl_seconds", 3600),
-            l3_ttl_seconds=cache_config.get("l3_ttl_seconds", 86400),
-            sync_interval=cache_config.get("sync_interval", 60),
-            compression_enabled=cache_config.get("compression_enabled", False),
+            l1_max_entries=int(cache_config.get("l1_max_entries", 1000)),
+            l1_ttl_seconds=int(cache_config.get("l1_ttl_seconds") or cache_config.get("default_ttl_seconds", 300)),
+            l2_max_size_mb=int(cache_config.get("l2_max_size_mb", 100)),
+            l2_ttl_seconds=int(cache_config.get("l2_ttl_seconds", 3600)),
+            l3_ttl_seconds=int(cache_config.get("l3_ttl_seconds", 86400)),
+            sync_interval=int(cache_config.get("sync_interval", 60)),
+            compression_enabled=bool(cache_config.get("compression_enabled", False)),
         )
 
 
@@ -157,14 +164,14 @@ class HierarchicalCacheManager:
         """Get value with hierarchical lookup."""
         current_time = time.time()
 
-        # Try L1 first (fastest)
-        if key in self.l1_cache:
+        # Try L1 first (fastest) - atomic operation with try/except
+        with contextlib.suppress(KeyError):
             value, timestamp = self.l1_cache[key]
             if current_time - timestamp < self.config.l1_ttl_seconds:
                 self.stats["l1"]["hits"] += 1
                 return value
-            del self.l1_cache[key]
-
+            # Expired - remove atomically
+            self.l1_cache.pop(key, None)
         self.stats["l1"]["misses"] += 1
 
         # Try L2 (disk)
@@ -212,12 +219,12 @@ class HierarchicalCacheManager:
 
     async def _set_l2(self, key: str, value: Any, timestamp: float) -> None:
         """Set value in L2 cache."""
-        await asyncio.sleep(0)  # Make function truly async
+        await asyncio.sleep(0)  # Required for async interface (awaited by callers)
         self.l2_cache[key] = (value, timestamp)
 
     async def _set_l3(self, key: str, value: Any, timestamp: float) -> None:
         """Set value in L3 cache."""
-        await asyncio.sleep(0)  # Make function truly async
+        await asyncio.sleep(0)  # Required for async interface (awaited by callers)
         self.l3_cache[key] = (value, timestamp)
 
     async def _promote_to_l1(self, key: str, value: Any) -> None:
@@ -298,7 +305,9 @@ class CacheFileManager:
         async with _aiofiles.open(temp_file, "w", encoding="utf-8") as f:
             await f.write(json.dumps(data, indent=2, ensure_ascii=False))
 
-        # Atomic rename
+        # Atomic rename (atomic on Unix, may not be on Windows)
+        # Note: Path.replace() provides best-effort atomicity across platforms
+        # For Windows-specific guarantees, consider using proper locking mechanisms
         temp_file.replace(file_path)
 
     @staticmethod
@@ -396,7 +405,7 @@ def serialize_cache_key(key_data: Any) -> str:
         return key_data
     if isinstance(key_data, dict):
         return json.dumps(key_data, sort_keys=True)
-    if isinstance(key_data, list | tuple):
+    if isinstance(key_data, (list, tuple)):
         return json.dumps(list(key_data))
     return str(key_data)
 
@@ -412,7 +421,7 @@ def calculate_memory_usage(cache_dict: dict[str, Any]) -> int:
         # Recursively calculate for nested structures
         if isinstance(value, dict):
             total_size += calculate_memory_usage(value)
-        elif isinstance(value, list | tuple):
+        elif isinstance(value, (list, tuple)):
             total_size += sum(sys.getsizeof(item) for item in value)
 
     return total_size

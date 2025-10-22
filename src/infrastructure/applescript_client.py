@@ -454,9 +454,11 @@ class AppleScriptClient(AppleScriptClientProtocol):
             resolved_path = Path(script_path).resolve()
             scripts_dir = Path(self.apple_scripts_dir).resolve()
 
-            # Ensure the path is within the allowed directory
-            if not str(resolved_path).startswith(str(scripts_dir)):
-                self.error_logger.error("Script path is outside allowed directory: %s", script_path)
+            # Ensure the path is within the allowed directory (safe from path traversal)
+            try:
+                resolved_path.relative_to(scripts_dir)
+            except ValueError:
+                self.error_logger.exception("Script path is outside allowed directory: %s", script_path)
                 return False
 
             # Check for suspicious patterns
@@ -487,7 +489,15 @@ class AppleScriptClient(AppleScriptClientProtocol):
             bool: True if the file is valid and accessible
 
         """
-        if not os.path.exists(script_path):
+        script_file = Path(script_path)
+
+        # Reject symlinks to prevent path traversal attacks
+        if script_file.is_symlink():
+            self.error_logger.error("❌ Symlinks not allowed: %s", script_path)
+            return False
+
+        # Check if file exists (without following symlinks)
+        if not script_file.is_file():
             self.error_logger.error("❌ AppleScript file does not exist: %s", script_path)
 
             # List directory contents for debugging
@@ -545,6 +555,42 @@ class AppleScriptClient(AppleScriptClientProtocol):
         else:
             self.console_logger.warning("⚠️ AppleScript execution returned None")
 
+    def _log_script_success(self, label: str, script_result: str, elapsed: float) -> None:
+        """Log successful script execution with appropriate formatting.
+
+        Args:
+            label: Script label for logging
+            script_result: Script output
+            elapsed: Execution time in seconds
+
+        """
+        if label == "fetch_tracks.scpt":
+            # Count tracks by counting line separators (ASCII 29)
+            track_count = script_result.count("\x1d")
+            size_bytes = len(script_result.encode())
+            size_kb = size_bytes / 1024
+
+            self.console_logger.info(
+                "◁ %s: %d tracks (%.1fKB, %.1fs)",
+                label,
+                track_count,
+                size_kb,
+                elapsed,
+            )
+        else:
+            # Create a preview for logging - this can be stripped
+            preview_text = script_result.strip()
+            preview = f"{preview_text[:RESULT_PREVIEW_LEN]}..." if len(preview_text) > RESULT_PREVIEW_LEN else preview_text
+            # Log at appropriate level based on result content
+            log_level = self.console_logger.debug if "No Change" in preview else self.console_logger.info
+            log_level(
+                "◁ %s (%dB, %.1fs) %s",
+                label,
+                len(script_result.encode()),
+                elapsed,
+                preview,
+            )
+
     async def _handle_subprocess_execution(self, cmd: list[str], label: str, timeout: float) -> str | None:
         """Handle subprocess execution with timeout and error handling.
 
@@ -574,45 +620,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 if proc.returncode == 0:
                     # Don't strip() here as it removes special separator characters
                     script_result: str = stdout.decode()
-
-                    # Special formatting for fetch_tracks.scpt
-                    if label == "fetch_tracks.scpt":
-                        # Count tracks by counting line separators (ASCII 29)
-                        track_count = script_result.count("\x1d")
-                        size_bytes = len(script_result.encode())
-                        size_kb = size_bytes / 1024
-
-                        self.console_logger.info(
-                            "◁ %s: %d tracks (%.1fKB, %.1fs)",
-                            label,
-                            track_count,
-                            size_kb,
-                            elapsed,
-                        )
-                    else:
-                        # Create a preview for logging - this can be stripped
-                        preview_text = script_result.strip()
-                        preview = f"{preview_text[:RESULT_PREVIEW_LEN]}..." if len(preview_text) > RESULT_PREVIEW_LEN else preview_text
-                        # Log at appropriate level based on result content
-                        if "No Change" in preview:
-                            # Log "No Change" results at debug level to reduce noise
-                            self.console_logger.debug(
-                                "◁ %s (%dB, %.1fs) %s",
-                                label,
-                                len(script_result.encode()),
-                                elapsed,
-                                preview,
-                            )
-                        else:
-                            # Log actual changes and other results at info level
-                            self.console_logger.info(
-                                "◁ %s (%dB, %.1fs) %s",
-                                label,
-                                len(script_result.encode()),
-                                elapsed,
-                                preview,
-                            )
+                    self._log_script_success(label, script_result, elapsed)
                     return script_result
+
                 self.error_logger.error(
                     "◁ %s failed with return code %s: %s",
                     label,
@@ -842,11 +852,16 @@ class AppleScriptClient(AppleScriptClientProtocol):
             label: Label for logging
 
         """
-        if proc.returncode is None:  # The Process is still running
+        try:
+            # Wait briefly for process to exit naturally
+            await asyncio.wait_for(proc.wait(), timeout=0.5)
+            self.console_logger.debug("Process for %s exited naturally and cleaned up", label)
+        except TimeoutError:
+            # If still running, kill and wait for cleanup
             try:
                 proc.kill()
                 await asyncio.wait_for(proc.wait(), timeout=5)
-                self.console_logger.debug("Process for %s cleaned up", label)
+                self.console_logger.debug("Process for %s killed and cleaned up", label)
             except (TimeoutError, ProcessLookupError) as e:
                 self.console_logger.warning(
                     "Could not kill or wait for process %s during cleanup: %s",

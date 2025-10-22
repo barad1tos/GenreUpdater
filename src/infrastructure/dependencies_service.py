@@ -19,7 +19,6 @@ import yaml
 
 from src.shared.core.config import load_config
 from src.shared.core.dry_run import DryRunAppleScriptClient
-from src.shared.debug import init_debug_mode
 from src.shared.monitoring.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
@@ -275,14 +274,6 @@ class DependencyContainer:
         if not self._config:
             self._config = self._load_config()
 
-            # Initialize global debug mode from config
-            debug_enabled = self._config.get("development", {}).get("debug_mode", False)
-            init_debug_mode(debug_enabled)
-            if debug_enabled:
-                print("🐛 Debug mode ENABLED - All [*_DEBUG] logs will be shown")
-            else:
-                print("🔇 Debug mode DISABLED - All [*_DEBUG] logs suppressed")
-
         # Construct missing service instances
         if self._analytics is None:
             loggers = LoggerContainer(
@@ -364,11 +355,14 @@ class DependencyContainer:
 
         # Close API Orchestrator's aiohttp session properly
         if self._api_orchestrator is not None:
-            try:
-                await self._api_orchestrator.close()
-                self._console_logger.debug("API Orchestrator closed successfully")
-            except (OSError, RuntimeError, asyncio.CancelledError, AttributeError) as e:
-                self._console_logger.warning(f"Failed to close API Orchestrator: {e}")
+            if not hasattr(self._api_orchestrator, "close"):
+                self._console_logger.error("API Orchestrator does not have a 'close' method. Possible interface change or initialization error.")
+            else:
+                try:
+                    await self._api_orchestrator.close()
+                    self._console_logger.debug("API Orchestrator closed successfully")
+                except (OSError, RuntimeError, asyncio.CancelledError) as e:
+                    self._console_logger.warning(f"Failed to close API Orchestrator: {e}")
 
         self._console_logger.debug("DependencyContainer closed.")
 

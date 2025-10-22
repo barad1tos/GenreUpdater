@@ -86,8 +86,11 @@ class LoggerFilter:
         self.allowed_loggers = set(allowed_loggers)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Filter records based on logger name."""
-        return record.name in self.allowed_loggers
+        """Filter records based on logger name or child loggers."""
+        return any(
+            record.name == logger or record.name.startswith(f"{logger}.")
+            for logger in self.allowed_loggers
+        )
 
 
 class RunHandler:

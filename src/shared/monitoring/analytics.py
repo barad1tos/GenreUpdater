@@ -126,6 +126,9 @@ class Analytics:
         self.time_format = config.get("analytics", {}).get("time_format", "%Y-%m-%d %H:%M:%S")
         self.compact_time = config.get("analytics", {}).get("compact_time", False)
 
+        # Performance options
+        self.enable_gc_collect = config.get("analytics", {}).get("enable_gc_collect", True)
+
         self.console_logger.debug(f"📊 Analytics #{self.instance_id} initialised")
 
     # --- Public decorator helpers ---
@@ -246,8 +249,22 @@ class Analytics:
         Returns:
             Function result
 
+        Note:
+            Cannot be called from within an active event loop. If you need to call
+            a sync function from async context, call it directly or use an async wrapper.
+
         """
-        return asyncio.run(self._wrapped_call(func, event_type, False, *args, **kwargs))
+        try:
+            return asyncio.run(self._wrapped_call(func, event_type, False, *args, **kwargs))
+        except RuntimeError as e:
+            if "cannot be called from a running event loop" in str(e):
+                self.console_logger.warning(
+                    f"⚠️ Cannot track {func.__name__} with asyncio.run() from within event loop; "
+                    "executing without tracking"
+                )
+                # Execute function directly without tracking to avoid blocking
+                return func(*args, **kwargs)
+            raise
 
     async def execute_wrapped_call(
         self,
@@ -323,9 +340,9 @@ class Analytics:
         call_info: CallInfo,
         timing_info: TimingInfo,
     ) -> None:
-        # Prune if exceeding cap
+        # Prune if exceeding cap (batch size: at least 5 or 10% for efficiency)
         if 0 < self.max_events <= len(self.events):
-            prune = max(1, int(self.max_events * 0.1))
+            prune = max(5, int(self.max_events * 0.1))
             self.events = self.events[prune:]
             self.console_logger.debug(f"📊 Pruned {prune} old events")
 
@@ -423,11 +440,26 @@ class Analytics:
 
     # --- Maintenance helpers ---
     def clear_old_events(self, days: int = 7) -> int:
-        """Clear old events from the analytics log."""
+        """Clear old events from the analytics log.
+
+        Args:
+            days: Number of days to keep (only applies when compact_time=False)
+
+        Returns:
+            Number of events removed
+
+        Note:
+            When compact_time=True, uses count-based pruning (removes oldest half or 1000 events)
+            instead of age-based pruning, since timestamps don't include dates.
+
+        """
         if not self.events:
             return 0
 
         if self.compact_time:
+            self.console_logger.warning(
+                "⚠️ Age-based pruning not supported in compact_time mode; using count-based pruning"
+            )
             prune = min(len(self.events) // 2, 1_000)
             self.events = self.events[prune:]
             return prune
@@ -442,10 +474,16 @@ class Analytics:
         if other is self:
             return
 
-        # Handle events
+        # Handle events with cap enforcement
         if self.max_events > 0:
             cap = max(0, self.max_events - len(self.events))
-            to_add = other.events[: min(cap, len(other.events))]
+            num_to_add = min(cap, len(other.events))
+            to_add = other.events[:num_to_add]
+            num_dropped = len(other.events) - num_to_add
+            if num_dropped > 0:
+                self.console_logger.warning(
+                    f"📊 Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
+                )
         else:
             to_add = other.events
         self.events.extend(to_add)
@@ -470,7 +508,16 @@ class Analytics:
 
     # --- Reports ---
     def generate_reports(self, force_mode: bool = False) -> None:
-        """Generate analytics reports."""
+        """Generate analytics reports.
+
+        Args:
+            force_mode: Force report generation even if criteria not met
+
+        Note:
+            Garbage collection is triggered after report generation if enabled
+            via config (analytics.enable_gc_collect) and event count exceeds threshold.
+
+        """
         if not self.events and not self.call_counts:
             self.console_logger.warning("📊 No analytics data; skipping report")
             return
@@ -489,7 +536,7 @@ class Analytics:
             force_mode=force_mode,
         )
 
-        if len(self.events) > self.GC_COLLECTION_THRESHOLD:
+        if len(self.events) > self.GC_COLLECTION_THRESHOLD and self.enable_gc_collect:
             gc.collect()
 
     # --- Utilities ---

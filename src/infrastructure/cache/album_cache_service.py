@@ -59,7 +59,7 @@ class AlbumCacheService:
         Returns:
             Album release year if found, None otherwise
         """
-        # Use asyncio.sleep(0) to yield control and satisfy async requirements
+        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
         await asyncio.sleep(0)
         key = UnifiedHashService.hash_album_key(artist, album)
 
@@ -85,7 +85,7 @@ class AlbumCacheService:
             album: Album name
             year: Album release year
         """
-        # Use asyncio.sleep(0) to yield control and satisfy async requirements
+        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
         await asyncio.sleep(0)
         key = UnifiedHashService.hash_album_key(artist, album)
 
@@ -104,7 +104,7 @@ class AlbumCacheService:
             artist: Artist name
             album: Album name
         """
-        # Use asyncio.sleep(0) to yield control and satisfy async requirements
+        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
         await asyncio.sleep(0)
         key = UnifiedHashService.hash_album_key(artist, album)
 
@@ -114,7 +114,7 @@ class AlbumCacheService:
 
     async def invalidate_all(self) -> None:
         """Clear all album cache entries."""
-        # Use asyncio.sleep(0) to yield control and satisfy async requirements
+        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
         await asyncio.sleep(0)
         count = len(self.album_years_cache)
         self.album_years_cache.clear()
@@ -144,7 +144,7 @@ class AlbumCacheService:
                 raise
 
         # Run in thread executor to avoid blocking
-        await asyncio.get_event_loop().run_in_executor(None, blocking_save)  # type: ignore[arg-type]
+        await asyncio.get_running_loop().run_in_executor(None, blocking_save)  # type: ignore[arg-type]
 
     async def _load_album_years_cache(self) -> None:
         """Load album years cache from CSV file."""
@@ -157,7 +157,7 @@ class AlbumCacheService:
             return self._read_csv_file()
 
         # Run in thread executor to avoid blocking
-        loaded_cache = await asyncio.get_event_loop().run_in_executor(None, blocking_load)  # type: ignore[arg-type]
+        loaded_cache = await asyncio.get_running_loop().run_in_executor(None, blocking_load)  # type: ignore[arg-type]
         self.album_years_cache.update(loaded_cache)
 
     def _read_csv_file(self) -> dict[str, tuple[str, str, str]]:
@@ -172,9 +172,8 @@ class AlbumCacheService:
             with self.album_years_cache_file.open(encoding="utf-8") as file:
                 reader = csv.DictReader(file)
 
-                # Validate CSV headers
-                if not self._validate_csv_headers(reader.fieldnames):
-                    return album_data
+                # Validate CSV headers (raises ValueError if invalid)
+                self._validate_csv_headers(reader.fieldnames)
 
                 # Process each row
                 for row in reader:
@@ -194,18 +193,23 @@ class AlbumCacheService:
             fieldnames: Sequence of CSV column headers
 
         Returns:
-            True if headers are valid, False otherwise
+            True if headers are valid
+
+        Raises:
+            ValueError: If CSV headers are missing or invalid
         """
         required_headers = {"artist", "album", "year"}
 
         if not fieldnames:
-            self.logger.error("CSV file has no headers")
-            return False
+            msg = "CSV file has no headers"
+            self.logger.error(msg)
+            raise ValueError(msg)
 
         if not required_headers.issubset(set(fieldnames)):
             missing = required_headers - set(fieldnames)
-            self.logger.error("CSV file missing required headers: %s", missing)
-            return False
+            msg = f"CSV file missing required headers: {missing}"
+            self.logger.error(msg)
+            raise ValueError(msg)
 
         return True
 

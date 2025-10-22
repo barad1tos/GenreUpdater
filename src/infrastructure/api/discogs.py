@@ -242,8 +242,8 @@ class DiscogsClient(BaseApiClient):
         scoring_cfg = self.scoring_config
         reissue_keywords: list[str] = scoring_cfg.get("reissue_detection", {}).get("reissue_keywords", [])
         remaster_keywords: list[str] = self.config.get("cleaning", {}).get("remaster_keywords", [])
-        reissue_keywords.extend(remaster_keywords)
-        return reissue_keywords
+        # Use concatenation to avoid mutating the original config lists
+        return reissue_keywords + remaster_keywords
 
     async def _make_discogs_search_request(
         self,

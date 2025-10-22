@@ -167,7 +167,10 @@ def _find_track_for_target(
         return by_id[target.track_id]
 
     if target.album:
-        track_key = (target.album, target.track_name)
+        # Normalize both album and track name to match dict keys created in _build_track_lookups
+        normalized_album = _normalize_text(target.album)
+        normalized_track = _normalize_text(target.track_name)
+        track_key = (normalized_album, normalized_track)
         if track_key in by_album_track:
             return by_album_track[track_key]
 

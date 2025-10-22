@@ -981,7 +981,7 @@ class TrackProcessor:
         Returns:
             True if update succeeded, False otherwise
         """
-        prepared = self._prepare_artist_update(track, new_artist_name, original_artist)
+        prepared = self._prepare_artist_update(track, new_artist_name)
         if prepared is None:
             return False
 
@@ -1030,7 +1030,6 @@ class TrackProcessor:
         self,
         track: TrackDict,
         new_artist_name: str,
-        original_artist: str | None,
     ) -> tuple[str, str, str] | None:
         track_id = track.id
         if not track_id:
@@ -1044,7 +1043,7 @@ class TrackProcessor:
             self.error_logger.warning("New artist name is empty for track %s", track_id)
             return None
 
-        if target_artist == current_artist and (original_artist or current_artist):
+        if target_artist == current_artist:
             self.console_logger.debug("Artist name already up to date for track %s: %s", track_id, target_artist)
             return None
 

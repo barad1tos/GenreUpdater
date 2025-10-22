@@ -33,6 +33,7 @@ Usage:
 
 import asyncio
 import csv
+import json
 import logging
 import os
 import sys
@@ -127,7 +128,6 @@ class PendingVerificationService:
         self.pending_albums: dict[str, tuple[datetime, str, str, str, str]] = {}
 
         # Initialize an asyncio Lock for thread-safe access to the in-memory cache
-        self._lock = asyncio.Lock()
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
@@ -302,7 +302,7 @@ class PendingVerificationService:
         Uses loop.run_in_executor for blocking file operations.
         Read artist, album, and timestamp from CSV and stores using hash keys.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def blocking_load() -> dict[str, tuple[datetime, str, str, str, str]]:
             """Blocking file operation to be run in executor."""
@@ -433,10 +433,10 @@ class PendingVerificationService:
             # Generate the hash key for the album
             key_hash = self._generate_album_key(artist, album)
 
-            # Convert metadata dict to string format (key:value;key:value)
+            # Serialize metadata dict to JSON string to preserve type information
             metadata_str = ""
             if metadata:
-                metadata_str = ";".join(f"{k}:{v}" for k, v in metadata.items())
+                metadata_str = json.dumps(metadata)
 
             # Store the current timestamp, original artist, album, reason, and metadata in the value
             self.pending_albums[key_hash] = (

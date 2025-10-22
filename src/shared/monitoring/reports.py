@@ -1011,13 +1011,17 @@ def _create_normalized_track_dict(track: TrackDict, tid: str, artist: str, album
 
 
 def _get_fields_to_check() -> list[str]:
-    """Get the list of fields that should be checked during track merging."""
+    """Get the list of fields that should be checked during track merging.
+
+    Note:
+        Uses old_year and new_year for change tracking. The 'year' field exists
+        in TrackDict but is not populated in this context (reports.py sync operations).
+    """
     return [
         "name",
         "artist",
         "album",
         "genre",
-        "year",
         "date_added",
         "track_status",
         "old_year",
@@ -1207,20 +1211,21 @@ async def _fetch_missing_track_fields_for_sync(
 def _update_track_with_cached_fields_for_sync(track: TrackDict, tracks_cache: dict[str, dict[str, str]]) -> None:
     """Update track with cached fields if they were empty for sync operation.
 
-    Uses setattr for dynamic fields to ensure proper Pydantic validation
-    and maintain consistency with attribute assignment patterns.
+    Uses .get() for safe dictionary access to prevent KeyError if cache structure
+    changes. Currently, last_modified is not populated by _parse_osascript_output(),
+    but this defensive approach ensures future compatibility.
     """
     if not track.id or track.id not in tracks_cache:
         return
     cached_fields = tracks_cache[track.id]
 
-    if not track.date_added and cached_fields["date_added"]:
+    if not track.date_added and cached_fields.get("date_added"):
         track.date_added = cached_fields["date_added"]
-    if not getattr(track, "last_modified", "") and cached_fields.get("last_modified"):
-        track.last_modified = cached_fields["last_modified"]
-    if not track.track_status and cached_fields["track_status"]:
+    if not getattr(track, "last_modified", "") and (cached_value := cached_fields.get("last_modified")):
+        track.last_modified = cached_value
+    if not track.track_status and cached_fields.get("track_status"):
         track.track_status = cached_fields["track_status"]
-    if not track.old_year and cached_fields["old_year"]:
+    if not track.old_year and cached_fields.get("old_year"):
         track.old_year = cached_fields["old_year"]
 
 

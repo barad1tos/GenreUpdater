@@ -158,7 +158,9 @@ def validate_album_name(album: str | None) -> bool:
 
 
 # Security constants for input validation (only control chars for music metadata)
-DANGEROUS_CHARS: list[str] = []  # Removed music-incompatible chars: !&'
+# Note: DANGEROUS_CHARS is empty because music metadata legitimately uses special characters
+# (e.g., "AC/DC", "Don't Stop", "2 < 3"). Validation relies on context-specific checks instead.
+DANGEROUS_CHARS: list[str] = []
 CONTROL_CHARS = [
     "\x00",
     "\x01",
@@ -272,12 +274,12 @@ class SecurityValidator:
         optional_fields = [
             "genre",
             "year",
-            "date_added",  # Fixed: was dateAdded
-            "track_status",  # Fixed: was trackStatus
+            "date_added",
+            "track_status",
             "old_year",
             "release_year",
             "new_year",
-            "album_artist",  # Preserve album-level artist for grouping logic
+            "album_artist",
         ]
         for field in optional_fields:
             if field in track_data and track_data[field] is not None:
@@ -391,34 +393,21 @@ class SecurityValidator:
             raise SecurityValidationError(msg) from e
 
     def _validate_and_normalize_path(self, file_path: str, allowed_base_paths: list[str] | None) -> str:
-        # Normalize and resolve the path
-        normalized_path = SecurityValidator._normalize_path(file_path)
+        # Expand user (~) and resolve path for proper validation
+        expanded_path = Path(file_path).expanduser().resolve()
+        normalized_path = str(expanded_path)
 
-        # Check for suspicious patterns
-        suspicious_patterns = ["../", "..\\", "~", "$", "`"]
-        for pattern in suspicious_patterns:
-            if pattern in file_path:
-                msg = f"Suspicious pattern in path: '{pattern}'"
-                raise SecurityValidationError(msg)
+        # Check for path traversal: ensure resolved path doesn't contain ".."
+        if ".." in expanded_path.parts:
+            msg = "Path traversal attempt detected"
+            raise SecurityValidationError(msg)
 
         # Validate against allowed base paths if provided
         if allowed_base_paths:
-            is_allowed = False
-            for base_path in allowed_base_paths:
-                normalized_base = str(Path(base_path).resolve())
-                if normalized_path.startswith(normalized_base):
-                    is_allowed = True
-                    break
-
-            if not is_allowed:
-                msg = f"Path not in allowed directories: {file_path}"
+            allowed_resolved = [Path(base).expanduser().resolve() for base in allowed_base_paths]
+            if not any(str(expanded_path).startswith(str(base)) for base in allowed_resolved):
+                msg = f"Path not within allowed base paths: '{normalized_path}'"
                 raise SecurityValidationError(msg)
-
-        # Additional security checks
-        path_obj = Path(normalized_path)
-        if ".." in path_obj.parts:
-            msg = "Path traversal attempt detected"
-            raise SecurityValidationError(msg)
 
         self.logger.debug("Validated file path: %s", normalized_path)
         return normalized_path
@@ -460,24 +449,31 @@ class SecurityValidator:
             msg = f"Invalid track ID format: {track_id}"
             raise SecurityValidationError(msg)
 
-        # Check for dangerous characters
-        if any(char in track_id for char in DANGEROUS_CHARS):
-            msg = f"Dangerous characters in track ID: {track_id}"
-            raise SecurityValidationError(msg)
-
-    def validate_api_input(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate_api_input(
+        self,
+        data: dict[str, Any],
+        max_depth: int = 10,
+        _current_depth: int = 0,
+    ) -> dict[str, Any]:
         """Validate and sanitize API input data.
 
         Args:
             data: Input data dictionary to validate
+            max_depth: Maximum recursion depth allowed (default: 10)
+            _current_depth: Internal parameter for tracking recursion depth
 
         Returns:
             dict[str, Any]: Validated and sanitized data
 
         Raises:
-            SecurityValidationError: If validation fails
+            SecurityValidationError: If validation fails or max depth exceeded
 
         """
+        # Check recursion depth to prevent deeply nested or cyclic structures
+        if _current_depth >= max_depth:
+            msg = f"Maximum nesting depth ({max_depth}) exceeded"
+            raise SecurityValidationError(msg)
+
         validated_data: dict[str, Any] = {}
 
         for key, value in data.items():
@@ -493,10 +489,14 @@ class SecurityValidator:
             elif isinstance(value, list):
                 sanitized_value = [
                     (self.sanitize_string(str(item), f"{sanitized_key}_item") if isinstance(item, str) else item)
-                    for item in value  # pyright: ignore[reportUnknownVariableType]
+                    for item in value
                 ]
             elif isinstance(value, dict):
-                sanitized_value = self.validate_api_input(value)  # pyright: ignore[reportUnknownArgumentType]
+                sanitized_value = self.validate_api_input(
+                    value,
+                    max_depth=max_depth,
+                    _current_depth=_current_depth + 1,
+                )
             elif value is None:
                 sanitized_value = None
             else:
