@@ -546,8 +546,21 @@ def clean_names(
         ["remaster", "remastered"],
     )
     album_suffixes_raw: list[str] = cleaning_config.get("album_suffixes_to_remove", [])
-    # Sort suffixes by length in descending order to remove longer patterns first
-    album_suffixes: list[str] = sorted(album_suffixes_raw, key=len, reverse=True)
+    # Remove duplicates while preserving order, then sort by length descending
+    deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
+    album_suffixes: list[str] = sorted(deduped_suffixes, key=len, reverse=True)
+
+    compiled_suffixes: list[tuple[str, re.Pattern[str]]] = []
+    for suffix in album_suffixes:
+        trimmed_suffix = suffix.strip()
+        if not trimmed_suffix:
+            continue
+
+        if re.search(r"[\s\(\)\-\u2013\u2014]", suffix):
+            pattern = re.compile(rf"{re.escape(suffix.rstrip())}\s*$", re.IGNORECASE)
+        else:
+            pattern = re.compile(rf"[ \t\-\u2013\u2014]*\b{re.escape(trimmed_suffix)}\b\s*$", re.IGNORECASE)
+        compiled_suffixes.append((suffix, pattern))
 
     # Helper function for cleaning strings using remove_parentheses_with_keywords
     def clean_string(val: str, keywords: list[str]) -> str:
@@ -587,11 +600,11 @@ def clean_names(
     removed = True
     while removed:
         removed = False
-        for suffix in album_suffixes:
-            if cleaned_album.lower().endswith(suffix.lower()):
+        for suffix, pattern in compiled_suffixes:
+            match = pattern.search(cleaned_album)
+            if match:
                 before = cleaned_album
-                cleaned_album = cleaned_album[: -len(suffix)]
-                # Strip trailing spaces, tabs, and dashes (safe approach)
+                cleaned_album = pattern.sub("", cleaned_album)
                 cleaned_album = cleaned_album.rstrip(" \t-\u2013\u2014")
                 console_logger.debug(
                     "Removed suffix '%s' from album '%s'; result '%s'",
