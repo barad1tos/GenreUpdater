@@ -783,7 +783,7 @@ class TrackProcessor:
         self,
         track_id: str,
         updates: list[tuple[str, Any]],
-        artist: str | None = None,
+        original_artist: str | None = None,
         album: str | None = None,
         track: str | None = None,
     ) -> bool:
@@ -795,7 +795,7 @@ class TrackProcessor:
         Args:
             track_id: Sanitized track ID
             updates: List of (property_name, value) tuples to apply
-            artist: Artist name for contextual logging
+            original_artist: Artist name for contextual logging
             album: Album name for contextual logging
             track: Track name for contextual logging
 
@@ -813,7 +813,11 @@ class TrackProcessor:
         updates_count = len(updates)
         if batch_enabled and 1 < updates_count <= max_batch_size:
             try:
-                return await self._try_batch_update(track_id, updates, artist, album, track)
+                batch_success = await self._try_batch_update(track_id, updates, original_artist, album, track)
+                if batch_success:
+                    primary_artist = self._resolve_updated_artist(updates, original_artist)
+                    await self._notify_track_cache_invalidation(track_id, primary_artist, album, track, original_artist)
+                return batch_success
             except Exception as e:
                 self.console_logger.warning(
                     "Batch update failed for track %s, falling back to individual updates: %s",
@@ -823,13 +827,58 @@ class TrackProcessor:
 
         # Individual updates (current reliable method)
         all_success = True
+        any_success = False
         for property_name, property_value in updates:
             success = await self._update_single_property(
-                track_id, property_name, property_value, artist, album, track
+                track_id, property_name, property_value, original_artist, album, track
             )
+            any_success = any_success or success
             all_success = all_success and success
 
+        if any_success:
+            primary_artist = self._resolve_updated_artist(updates, original_artist)
+            await self._notify_track_cache_invalidation(track_id, primary_artist, album, track, original_artist)
+
         return all_success
+
+    @staticmethod
+    def _resolve_updated_artist(
+        updates: list[tuple[str, Any]],
+        original_artist: str | None,
+    ) -> str | None:
+        """Determine the latest artist value after updates."""
+        for property_name, property_value in updates:
+            if property_name == "artist":
+                return str(property_value)
+        return original_artist
+
+    async def _notify_track_cache_invalidation(
+        self,
+        track_id: str,
+        artist: str | None,
+        album: str | None,
+        track_name: str | None,
+        original_artist: str | None = None,
+    ) -> None:
+        """Notify cache services that a track metadata change occurred."""
+        primary_artist = (artist or original_artist or "").strip()
+        payload = TrackDict(
+            id=track_id,
+            name=(track_name or "").strip(),
+            artist=primary_artist,
+            album=(album or "").strip(),
+            genre=None,
+            year=None,
+            date_added=None,
+        )
+
+        if original_artist:
+            payload.__dict__["original_artist"] = original_artist.strip()
+
+        try:
+            await self.cache_service.invalidate_for_track(payload)
+        except Exception as exc:
+            self.error_logger.warning("Failed to invalidate cache for track %s: %s", track_id, exc)
 
     async def _try_batch_update(
         self,
@@ -917,12 +966,7 @@ class TrackProcessor:
 
         """
         # Check if the track is prerelease (read-only) - prevent update attempts
-        if not can_edit_metadata(track_status):
-            self.console_logger.info(
-                "Skipping update for read-only track %s (status: %s)",
-                track_id,
-                track_status or "unknown",
-            )
+        if self._is_read_only_track(track_status, track_id):
             return False
 
         # Validate and sanitize all input parameters
@@ -959,6 +1003,18 @@ class TrackProcessor:
             original_album,
             original_track,
         )
+
+    def _is_read_only_track(self, track_status: str | None, track_id: str | None = None) -> bool:
+        """Return True when metadata cannot be edited for the given track status."""
+        if can_edit_metadata(track_status):
+            return False
+
+        self.console_logger.info(
+            "Skipping update for read-only track %s (status: %s)",
+            track_id or "<unknown>",
+            track_status or "unknown",
+        )
+        return True
 
     @Analytics.track_instance_method("track_artist_update")
     async def update_artist_async(
@@ -1013,7 +1069,7 @@ class TrackProcessor:
         success = await self._apply_track_updates(
             sanitized_track_id,
             updates,
-            artist=original_artist or current_artist,
+            original_artist=original_artist or current_artist,
             album=track.album,
             track=track.name,
         )
@@ -1047,9 +1103,7 @@ class TrackProcessor:
             self.console_logger.debug("Artist name already up to date for track %s: %s", track_id, target_artist)
             return None
 
-        if not can_edit_metadata(track.track_status):
-            status_value = track.track_status or "unknown"
-            self.console_logger.info("Skipping artist rename for track %s due to read-only status: %s", track_id, status_value)
+        if self._is_read_only_track(track.track_status, track_id):
             return None
 
         try:

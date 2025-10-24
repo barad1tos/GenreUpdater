@@ -1,25 +1,31 @@
-"""Album Cache Service - Specialized cache for album release years.
+"""Album cache service with TTL-aware entries and CSV persistence."""
 
-This module provides a dedicated cache service for storing and retrieving
-album release years with CSV persistence and efficient lookup operations.
-
-Key Features:
-- CSV-based persistence for album metadata
-- Efficient artist/album -> year lookups
-- TTL management and cache validation
-- Integration with SmartCacheConfig for content-aware policies
-"""
+from __future__ import annotations
 
 import asyncio
 import csv
 import logging
-from collections.abc import Sequence
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.infrastructure.cache.cache_config import CacheContentType
+from src.infrastructure.cache.cache_config import CacheContentType, SmartCacheConfig
 from src.infrastructure.cache.hash_service import UnifiedHashService
 from src.shared.core.logger import ensure_directory, get_full_log_path
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+
+@dataclass(slots=True)
+class AlbumCacheEntry:
+    """Album cache entry with timestamp for TTL management."""
+
+    artist: str
+    album: str
+    year: str
+    timestamp: float
 
 
 class AlbumCacheService:
@@ -34,11 +40,11 @@ class AlbumCacheService:
         """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
-        # Initialize cache config later when needed
-        self.cache_config = None
+        self.cache_config = SmartCacheConfig()
+        self.policy = self.cache_config.get_policy(CacheContentType.ALBUM_YEAR)
 
-        # Album years cache: {hash_key: (artist, album, year)}
-        self.album_years_cache: dict[str, tuple[str, str, str]] = {}
+        # Album years cache: {hash_key: AlbumCacheEntry}
+        self.album_years_cache: dict[str, AlbumCacheEntry] = {}
 
         # Cache file paths - use get_full_log_path to ensure proper logs_base_dir integration
         self.album_years_cache_file = Path(get_full_log_path(config, "album_years_cache_file", "cache/album_years.csv"))
@@ -64,15 +70,21 @@ class AlbumCacheService:
         key = UnifiedHashService.hash_album_key(artist, album)
 
         if key in self.album_years_cache:
-            cached_artist, cached_album, cached_year = self.album_years_cache[key]
+            entry = self.album_years_cache[key]
 
             # Validate cache entry consistency
-            if cached_artist.lower().strip() == artist.lower().strip() and cached_album.lower().strip() == album.lower().strip():
-                self.logger.debug("Album year cache hit: %s - %s = %s", artist, album, cached_year)
-                return cached_year
-            # Hash collision - remove invalid entry
-            self.logger.warning("Hash collision detected for %s - %s, removing invalid entry", artist, album)
-            del self.album_years_cache[key]
+            if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
+                self.logger.warning("Hash collision detected for %s - %s, removing invalid entry", artist, album)
+                del self.album_years_cache[key]
+                return None
+
+            if self._is_entry_expired(entry):
+                self.logger.debug("Album year cache expired: %s - %s", artist, album)
+                del self.album_years_cache[key]
+                return None
+
+            self.logger.debug("Album year cache hit: %s - %s = %s", artist, album, entry.year)
+            return entry.year
 
         self.logger.debug("Album year cache miss: %s - %s", artist, album)
         return None
@@ -94,7 +106,12 @@ class AlbumCacheService:
         normalized_album = album.strip()
         normalized_year = year.strip()
 
-        self.album_years_cache[key] = (normalized_artist, normalized_album, normalized_year)
+        self.album_years_cache[key] = AlbumCacheEntry(
+            artist=normalized_artist,
+            album=normalized_album,
+            year=normalized_year,
+            timestamp=time.time(),
+        )
         self.logger.debug("Stored album year: %s - %s = %s", normalized_artist, normalized_album, normalized_year)
 
     async def invalidate_album(self, artist: str, album: str) -> None:
@@ -152,7 +169,7 @@ class AlbumCacheService:
             self.logger.info("Album cache file does not exist, starting with empty cache")
             return
 
-        def blocking_load() -> dict[str, tuple[str, str, str]]:
+        def blocking_load() -> dict[str, AlbumCacheEntry]:
             """Synchronous load operation for thread executor."""
             return self._read_csv_file()
 
@@ -160,13 +177,13 @@ class AlbumCacheService:
         loaded_cache = await asyncio.get_running_loop().run_in_executor(None, blocking_load)  # type: ignore[arg-type]
         self.album_years_cache.update(loaded_cache)
 
-    def _read_csv_file(self) -> dict[str, tuple[str, str, str]]:
+    def _read_csv_file(self) -> dict[str, AlbumCacheEntry]:
         """Read and parse CSV file containing album years data.
 
         Returns:
             Dictionary mapping hash keys to (artist, album, year) tuples
         """
-        album_data: dict[str, tuple[str, str, str]] = {}
+        album_data: dict[str, AlbumCacheEntry] = {}
 
         try:
             with self.album_years_cache_file.open(encoding="utf-8") as file:
@@ -213,7 +230,7 @@ class AlbumCacheService:
 
         return True
 
-    def _process_csv_row(self, row: dict[str, str], album_data: dict[str, tuple[str, str, str]]) -> None:
+    def _process_csv_row(self, row: dict[str, str], album_data: dict[str, AlbumCacheEntry]) -> None:
         """Process a single CSV row and add to album data.
 
         Args:
@@ -224,10 +241,17 @@ class AlbumCacheService:
             artist = row["artist"].strip()
             album = row["album"].strip()
             year = row["year"].strip()
+            timestamp_raw = row.get("timestamp", "")
+            timestamp = float(timestamp_raw) if timestamp_raw else time.time()
 
             if artist and album and year:
                 key = UnifiedHashService.hash_album_key(artist, album)
-                album_data[key] = (artist, album, year)
+                album_data[key] = AlbumCacheEntry(
+                    artist=artist,
+                    album=album,
+                    year=year,
+                    timestamp=timestamp,
+                )
             else:
                 self.logger.warning("Skipping invalid CSV row: %s", row)
 
@@ -237,7 +261,7 @@ class AlbumCacheService:
             self.logger.warning("Error processing CSV row %s: %s", row, e)
 
     @staticmethod
-    def _write_csv_data(file_path: str, items: list[tuple[str, str, str]]) -> None:
+    def _write_csv_data(file_path: str, items: list[AlbumCacheEntry]) -> None:
         """Write album data to CSV file.
 
         Args:
@@ -246,8 +270,9 @@ class AlbumCacheService:
         """
         with Path(file_path).open("w", encoding="utf-8", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["artist", "album", "year"])
-            writer.writerows(items)
+            writer.writerow(["artist", "album", "year", "timestamp"])
+            for item in items:
+                writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
 
     def get_stats(self) -> dict[str, Any]:
         """Get album cache statistics.
@@ -255,11 +280,19 @@ class AlbumCacheService:
         Returns:
             Dictionary containing cache statistics
         """
+        ttl_seconds = self.policy.ttl_seconds
         return {
             "total_albums": len(self.album_years_cache),
             "cache_file": str(self.album_years_cache_file),
             "cache_file_exists": self.album_years_cache_file.exists(),
             "content_type": CacheContentType.ALBUM_YEAR.value,
-            "ttl_policy": 86400,  # Default 1 day
-            "persistent": True,  # Album cache is persistent
+            "ttl_policy": ttl_seconds,
+            "persistent": ttl_seconds >= self.cache_config.INFINITE_TTL,
         }
+
+    def _is_entry_expired(self, entry: AlbumCacheEntry) -> bool:
+        """Check whether cache entry is expired based on configuration."""
+        ttl_seconds = self.policy.ttl_seconds
+        if ttl_seconds >= self.cache_config.INFINITE_TTL:
+            return False
+        return (time.time() - entry.timestamp) > ttl_seconds

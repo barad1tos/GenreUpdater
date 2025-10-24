@@ -133,7 +133,14 @@ class MusicUpdater:
         candidate = Path(config_entry)
         if candidate.is_absolute():
             return candidate
-        return deps.config_path.parent / candidate
+        base_path = getattr(deps, "config_path", None)
+        if isinstance(base_path, Path):
+            config_root = base_path.parent
+        elif isinstance(base_path, str):
+            config_root = Path(base_path).expanduser().resolve().parent
+        else:
+            config_root = Path.cwd()
+        return config_root / candidate
 
     def _set_pipeline_snapshot(self, tracks: list["TrackDict"]) -> None:
         """Store the current pipeline track snapshot for downstream reuse."""
@@ -886,10 +893,18 @@ class MusicUpdater:
         changes_log: list[ChangeLogEntry] = []
 
         try:
-            # Call the public API that returns changes
-            updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)
-            # Store updated tracks for snapshot tracking
-            self.year_retriever.set_last_updated_tracks(updated_tracks)
+            updated_tracks: list[TrackDict] = []
+            year_changes: list[ChangeLogEntry] = []
+
+            if hasattr(self.year_retriever, "get_album_years_with_logs"):
+                updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)  # type: ignore[call-arg]
+                if hasattr(self.year_retriever, "set_last_updated_tracks"):
+                    self.year_retriever.set_last_updated_tracks(updated_tracks)  # type: ignore[call-arg]
+            else:
+                await self.year_retriever.process_album_years(tracks, force=_force)
+                if hasattr(self.year_retriever, "get_last_updated_tracks"):
+                    updated_tracks = self.year_retriever.get_last_updated_tracks()  # type: ignore[call-arg]
+
             self._update_snapshot_tracks(updated_tracks)
             changes_log = year_changes
             self.console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))

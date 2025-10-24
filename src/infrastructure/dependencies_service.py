@@ -352,6 +352,11 @@ class DependencyContainer:
                 self._console_logger.debug("Cache saved successfully")
             except Exception as e:
                 self._console_logger.warning(f"Failed to save cache: {e}")
+            finally:
+                try:
+                    await self._cache_service.shutdown()
+                except Exception as e:
+                    self._console_logger.warning(f"Failed to shutdown cache services: {e}")
 
         # Close API Orchestrator's aiohttp session properly
         if self._api_orchestrator is not None:

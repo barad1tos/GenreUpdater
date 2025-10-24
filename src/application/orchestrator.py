@@ -60,7 +60,7 @@ class Orchestrator:
 
         # ALWAYS apply test_artists from config if configured (even in --force mode)
         elif test_artists_config := set(self.config.get("development", {}).get("test_artists", [])):
-            self.console_logger.info("Using test_artists from config in normal mode: %s", list(test_artists_config))
+            self.console_logger.info("Using test_artists from config in normal mode: %s", sorted(test_artists_config))
             self.music_updater.set_dry_run_context("normal", test_artists_config)
 
         # Route to an appropriate command
@@ -190,9 +190,7 @@ class Orchestrator:
                 )
         self._create_backup_file(config_path, ".yaml.backup", "📦 Created backup of config: %s")
 
-    def _create_backup_file(
-        self, source_path: Path, suffix: str, success_message: str, preserve_existing: bool = False
-    ) -> None:
+    def _create_backup_file(self, source_path: Path, suffix: str, success_message: str, preserve_existing: bool = False) -> None:
         """Create a backup of a file with the specified suffix.
 
         Args:
@@ -208,12 +206,14 @@ class Orchestrator:
         if preserve_existing and backup_path.exists():
             timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
             backup_path = source_path.parent / f"{source_path.stem}_{timestamp}{suffix}"
-            self.console_logger.warning(
-                "⚠️  Previous backup exists, creating timestamped backup: %s", backup_path
-            )
+            self.console_logger.warning("⚠️  Previous backup exists, creating timestamped backup: %s", backup_path)
 
-        shutil.copy2(source_path, backup_path)
-        self.console_logger.info(success_message, backup_path)
+        try:
+            shutil.copy2(source_path, backup_path)
+            self.console_logger.info(success_message, backup_path)
+        except OSError as exc:
+            self.console_logger.exception("❌ Failed to backup %s to %s: %s", source_path, backup_path, exc)
+            raise
 
     def _re_encrypt_tokens(self, secure_config: "SecureConfig", current_tokens: dict[str, str]) -> dict[str, str]:
         """Re-encrypt tokens with a new encryption key.
