@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import allure
 import pytest
+
 from src.infrastructure.cache.generic_cache_service import GenericCacheService, is_generic_cache_entry
 from src.infrastructure.cache.hash_service import UnifiedHashService
 
