@@ -63,14 +63,11 @@ cleaning:
     - Original Soundtrack
 
   album_suffixes_to_remove:
-    - " - Remaster"
-    - " (Remaster)"
-    - " (Remastered)"
-    - " - EP"
-    - "EP"
-    - " - Single"
-    - "Single"
-    - "(Deluxe)"
+    - Remaster
+    - Remastered
+    - EP
+    - Single
+    - Deluxe
 
 artist_renamer:
   config_path: artist-renames.yaml
