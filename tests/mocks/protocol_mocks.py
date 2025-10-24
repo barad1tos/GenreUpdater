@@ -3,8 +3,10 @@
 These mocks properly implement the protocol interfaces defined in src.shared.data.protocols.
 """
 
+
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
@@ -85,7 +87,7 @@ class MockAppleScriptClient:
         # Handle batch processing for fetch_tracks.scpt
         if script_name == "fetch_tracks.scpt" and arguments and len(arguments) >= 3:
             # Check if this is a batch request (has offset and limit)
-            try:
+            with contextlib.suppress(ValueError, IndexError):
                 offset = int(arguments[1]) if arguments[1] else 1
                 limit = int(arguments[2]) if arguments[2] else 1000
 
@@ -103,14 +105,7 @@ class MockAppleScriptClient:
                     batch_tracks = tracks[start_idx:end_idx]
 
                     # Return empty if no tracks in this batch (end of data)
-                    if not batch_tracks:
-                        return ""
-
-                    # Return the batch as formatted output
-                    return "\x1d".join(batch_tracks)
-            except (ValueError, IndexError):
-                # Fall through to normal response handling
-                pass
+                    return "\x1d".join(batch_tracks) if batch_tracks else ""
 
         # Return predefined response or default based on script name
         if script_name in self.script_responses:
@@ -165,7 +160,7 @@ class MockCacheService:
 
     def __init__(self) -> None:
         """Initialize the mock cache service."""
-        self.storage: dict[str, Any] = {}
+        self.storage: dict[str, CacheableValue] = {}
         self.album_cache: dict[str, str] = {}
         self.api_cache: dict[str, CachedApiResult] = {}
         self.last_run_timestamp = datetime(2024, 1, 1, tzinfo=UTC)
@@ -212,7 +207,6 @@ class MockCacheService:
         compute_func: None = None,
     ) -> list[TrackDict]:
         """Get all tracks from cache."""
-        ...
 
     @overload
     async def get_async(
@@ -221,7 +215,6 @@ class MockCacheService:
         compute_func: None = None,
     ) -> list[TrackDict] | None:
         """Get track list from cache by string key."""
-        ...
 
     @overload
     async def get_async(
@@ -230,7 +223,6 @@ class MockCacheService:
         compute_func: Callable[[], Awaitable[CacheableValue]] | None = None,
     ) -> CacheableValue:
         """Get value from cache with optional compute function."""
-        ...
 
     async def get_async(
         self,
@@ -389,6 +381,11 @@ class MockCacheService:
             timestamp=datetime.now(UTC).timestamp(),
             metadata=metadata_payload,
         )
+
+    async def invalidate_for_track(self, track: TrackDict) -> None:
+        """Record track invalidation event for assertions."""
+        key = f"invalidate:{track.id}"
+        self.storage[key] = track
 
     @staticmethod
     def generate_album_key(artist: str, album: str) -> str:

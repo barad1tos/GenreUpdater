@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import json
+import tempfile
+from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import allure
@@ -23,8 +26,18 @@ class TestGenericCacheService:
         default_config = {
             "cleanup_interval": 1,  # Short interval for testing
             "max_generic_entries": 100,
+            "logs_base_dir": tempfile.gettempdir(),
+            "logging": {},
         }
-        test_config = {**default_config, **(config or {})}
+
+        test_config = default_config.copy()
+        if config:
+            if logging_cfg := config.get("logging"):
+                merged_logging = {**test_config.get("logging", {}), **logging_cfg}
+                test_config["logging"] = merged_logging
+            for key, value in config.items():
+                if key != "logging":
+                    test_config[key] = value
         mock_logger = MagicMock()
         return GenericCacheService(test_config, mock_logger)
 
@@ -195,7 +208,7 @@ class TestGenericCacheService:
                 # The entries with the highest timestamps should remain (5-9)
                 # We need to check via the cache directly since get() checks expiration
                 remaining_values = [v for v, _ in service.cache.values()]
-                remaining_numbers = [v["value"] for v in remaining_values]
+                remaining_numbers = [cast(dict[str, Any], v)["value"] for v in remaining_values]
                 remaining_numbers.sort()
                 assert remaining_numbers == [5, 6, 7, 8, 9]
 
@@ -355,6 +368,73 @@ class TestGenericCacheService:
 
         finally:
             await service.stop_cleanup_task()
+
+    @allure.story("Persistence")
+    @allure.title("Should persist cache entries to disk")
+    @allure.description("Verify save_to_disk writes serialized cache data")
+    @pytest.mark.asyncio
+    async def test_save_to_disk_persists_entries(self) -> None:
+        """Ensure cache entries are written to the configured JSON file."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = Path(tmp_dir) / "generic_cache.json"
+            service = TestGenericCacheService.create_service(
+                {
+                    "logs_base_dir": tmp_dir,
+                    "logging": {"generic_cache_file": cache_path.name},
+                }
+            )
+            await service.initialize()
+
+            try:
+                service.set("persist_key", {"value": "data"}, ttl=60)
+                await service.save_to_disk()
+            finally:
+                await service.stop_cleanup_task()
+
+            with cache_path.open(encoding="utf-8") as handle:
+                payload = json.load(handle)
+
+            assert payload
+            assert any(entry["value"] for entry in payload.values())
+
+    @allure.story("Persistence")
+    @allure.title("Should load cache entries from disk")
+    @allure.description("Verify initialize restores cached data from JSON file")
+    @pytest.mark.asyncio
+    async def test_load_from_disk_restores_entries(self) -> None:
+        """Ensure initialize() repopulates cache from existing file."""
+        hashed_key = UnifiedHashService.hash_generic_key("abc")
+        payload = {
+            hashed_key: {"value": {"foo": "bar"}, "expires_at": 9999999999.0},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = Path(tmp_dir) / "generic_cache.json"
+            with cache_path.open("w", encoding="utf-8") as tmp_file:
+                json.dump(payload, tmp_file)
+
+            service = TestGenericCacheService.create_service(
+                {
+                    "logs_base_dir": tmp_dir,
+                    "logging": {"generic_cache_file": cache_path.name},
+                }
+            )
+            await service.initialize()
+
+            try:
+                assert service.cache
+                cached = service.get("abc")
+                assert cached == {"foo": "bar"}
+            finally:
+                await service.stop_cleanup_task()
+
+    @allure.story("Configuration")
+    @allure.title("Should respect TTL overrides from configuration")
+    @allure.description("Verify TTL resolution honours cache_ttl_seconds")
+    def test_default_ttl_override_from_config(self) -> None:
+        """Ensure explicit TTL in config is applied."""
+        service = TestGenericCacheService.create_service({"cache_ttl_seconds": 42})
+        assert service.default_ttl == 42
 
     @allure.story("Edge Cases")
     @allure.title("Should handle edge cases gracefully")

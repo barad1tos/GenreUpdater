@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import csv
 import tempfile
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import allure
 import pytest
 
-from src.infrastructure.cache.album_cache_service import AlbumCacheService
+from src.infrastructure.cache.album_cache_service import AlbumCacheEntry, AlbumCacheService
+from src.infrastructure.cache.cache_config import CacheContentType
 from src.infrastructure.cache.hash_service import UnifiedHashService
 
 
@@ -46,7 +48,7 @@ class TestAlbumCacheService:
 
         with allure.step("Verify initialization"):
             assert not service.album_years_cache
-            assert service.cache_config is None
+            assert service.policy.ttl_seconds == service.cache_config.get_ttl(CacheContentType.ALBUM_YEAR)
 
     @allure.story("Basic Operations")
     @allure.title("Should store and retrieve album years")
@@ -112,6 +114,29 @@ class TestAlbumCacheService:
             assert result == "1971"
 
     @allure.story("Validation")
+    @allure.title("Should expire stale cache entries")
+    @allure.description("Track entries should respect TTL and expire accordingly")
+    @pytest.mark.asyncio
+    async def test_expired_entry_returns_none(self) -> None:
+        """Ensure expired entries are removed on access."""
+        service = TestAlbumCacheService.create_service()
+        await service.initialize()
+
+        base_time = 1000.0
+        ttl_seconds = service.policy.ttl_seconds
+
+        with allure.step("Store album at base time"), patch(
+            "src.infrastructure.cache.album_cache_service.time.time", return_value=base_time
+        ):
+            await service.store_album_year("Artist", "Album", "2000")
+
+        with allure.step("Advance time beyond TTL"), patch(
+            "src.infrastructure.cache.album_cache_service.time.time", return_value=base_time + ttl_seconds + 5
+        ):
+            result = await service.get_album_year("Artist", "Album")
+            assert result is None
+
+    @allure.story("Validation")
     @allure.title("Should detect and handle hash collisions")
     @allure.description("Test hash collision detection and recovery")
     @pytest.mark.asyncio
@@ -128,7 +153,12 @@ class TestAlbumCacheService:
             key = UnifiedHashService.hash_album_key("Queen", "A Night at the Opera")
 
             # Manually corrupt the entry to simulate collision
-            service.album_years_cache[key] = ("Different Artist", "Different Album", "1999")
+            service.album_years_cache[key] = AlbumCacheEntry(
+                artist="Different Artist",
+                album="Different Album",
+                year="1999",
+                timestamp=time.time(),
+            )
 
         with allure.step("Attempt to retrieve - should detect collision"):
             result = await service.get_album_year("Queen", "A Night at the Opera")
@@ -197,12 +227,9 @@ class TestAlbumCacheService:
             await service.store_album_year("David Bowie", "The Rise and Fall of Ziggy Stardust", "1972")
             await service.store_album_year("David Bowie", "Station to Station", "1976")
 
-        with (
-            allure.step("Mock file operations"),
-            patch("pathlib.Path.open", MagicMock()),
-            patch("src.shared.core.logger.ensure_directory"),
-            patch.object(AlbumCacheService, "_write_csv_data") as mock_write,
-        ):
+        with allure.step("Mock file operations"), patch("pathlib.Path.open", MagicMock()), patch(
+            "src.shared.core.logger.ensure_directory"
+        ), patch.object(AlbumCacheService, "_write_csv_data") as mock_write:
             await service.save_to_disk()
 
         with allure.step("Verify save was attempted"):
@@ -228,7 +255,8 @@ class TestAlbumCacheService:
 
         with allure.step("Verify save was skipped"):
             mock_open.assert_not_called()
-            service.logger.debug.assert_any_call("Album cache is empty, skipping save")
+            logger_mock = cast(MagicMock, service.logger)
+            logger_mock.debug.assert_any_call("Album cache is empty, skipping save")
 
     @allure.story("Persistence")
     @allure.title("Should load cache from CSV file")
@@ -239,7 +267,14 @@ class TestAlbumCacheService:
         with allure.step("Create test CSV data with correct hash"):
             # Use the actual hash function to create proper key
             key = UnifiedHashService.hash_album_key("Nirvana", "Nevermind")
-            test_data = {key: ("Nirvana", "Nevermind", "1991")}
+            test_data = {
+                key: AlbumCacheEntry(
+                    artist="Nirvana",
+                    album="Nevermind",
+                    year="1991",
+                    timestamp=time.time(),
+                )
+            }
 
         with (
             allure.step("Mock file operations"),
@@ -270,9 +305,8 @@ class TestAlbumCacheService:
             with pytest.raises(ValueError, match="missing required headers"):
                 service._validate_csv_headers(missing_headers)  # noqa: SLF001
 
-        with allure.step("Test no headers"):
-            with pytest.raises(ValueError, match="has no headers"):
-                service._validate_csv_headers(None)  # noqa: SLF001
+        with allure.step("Test no headers"), pytest.raises(ValueError, match="has no headers"):
+            service._validate_csv_headers(None)  # noqa: SLF001
 
         with allure.step("Test extra headers (should still be valid)"):
             extra_headers = ["artist", "album", "year", "extra_field"]
@@ -284,7 +318,7 @@ class TestAlbumCacheService:
     def test_process_csv_row_valid(self) -> None:
         """Test processing valid CSV rows."""
         service = TestAlbumCacheService.create_service()
-        album_data: dict[str, tuple[str, str, str]] = {}
+        album_data: dict[str, AlbumCacheEntry] = {}
 
         with allure.step("Process valid row"):
             row = {"artist": "The Doors", "album": "L.A. Woman", "year": "1971"}
@@ -294,7 +328,9 @@ class TestAlbumCacheService:
             assert len(album_data) == 1
             # Check that some entry was added (key is hashed)
             values = next(iter(album_data.values()))
-            assert values == ("The Doors", "L.A. Woman", "1971")
+            assert values.artist == "The Doors"
+            assert values.album == "L.A. Woman"
+            assert values.year == "1971"
 
     @allure.story("CSV Processing")
     @allure.title("Should skip invalid CSV rows")
@@ -302,7 +338,7 @@ class TestAlbumCacheService:
     def test_process_csv_row_invalid(self) -> None:
         """Test processing invalid CSV rows."""
         service = TestAlbumCacheService.create_service()
-        album_data: dict[str, tuple[str, str, str]] = {}
+        album_data: dict[str, AlbumCacheEntry] = {}
 
         with allure.step("Process row with empty fields"):
             row = {"artist": "", "album": "Album", "year": "1999"}
@@ -320,7 +356,10 @@ class TestAlbumCacheService:
     def test_write_csv_data(self) -> None:
         """Test writing CSV data."""
         with allure.step("Prepare test data"):
-            items = [("The Clash", "London Calling", "1979"), ("Joy Division", "Unknown Pleasures", "1979")]
+            items = [
+                AlbumCacheEntry("The Clash", "London Calling", "1979", 123.456),
+                AlbumCacheEntry("Joy Division", "Unknown Pleasures", "1979", 789.012),
+            ]
 
         with allure.step("Write to temporary file"):
             with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp_file:
@@ -334,12 +373,12 @@ class TestAlbumCacheService:
                     rows = list(reader)
 
                     # Check header
-                    assert rows[0] == ["artist", "album", "year"]
+                    assert rows[0] == ["artist", "album", "year", "timestamp"]
 
                     # Check data rows
                     assert len(rows) == 3  # Header + 2 data rows
-                    assert rows[1] == ["The Clash", "London Calling", "1979"]
-                    assert rows[2] == ["Joy Division", "Unknown Pleasures", "1979"]
+                    assert rows[1] == ["The Clash", "London Calling", "1979", "123.456000"]
+                    assert rows[2] == ["Joy Division", "Unknown Pleasures", "1979", "789.012000"]
             finally:
                 # Cleanup
                 Path(temp_path).unlink(missing_ok=True)
@@ -368,7 +407,7 @@ class TestAlbumCacheService:
             assert "cache_file" in stats
             assert "cache_file_exists" in stats
             assert stats["content_type"] == "album_year"
-            assert stats["persistent"] is True
+            assert stats["persistent"] is False
 
     @allure.story("Error Handling")
     @allure.title("Should handle save errors gracefully")
@@ -391,7 +430,8 @@ class TestAlbumCacheService:
             await service.save_to_disk()
 
         with allure.step("Verify logger captured exception"):
-            service.logger.exception.assert_called()
+            logger_mock = cast(MagicMock, service.logger)
+            logger_mock.exception.assert_called()
 
     @allure.story("Error Handling")
     @allure.title("Should handle load errors gracefully")
@@ -412,7 +452,8 @@ class TestAlbumCacheService:
         with allure.step("Verify service still initializes"):
             # Cache should be empty due to load failure
             assert not service.album_years_cache
-            service.logger.exception.assert_called()
+            logger_mock = cast(MagicMock, service.logger)
+            logger_mock.exception.assert_called()
 
     @allure.story("Edge Cases")
     @allure.title("Should handle special characters in data")
