@@ -12,12 +12,13 @@ Key Features:
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
 from src.infrastructure.cache.album_cache_service import AlbumCacheService
 from src.infrastructure.cache.api_cache_service import ApiCacheService
+from src.infrastructure.cache.cache_config import CacheEvent, CacheEventType
 from src.infrastructure.cache.generic_cache_service import GenericCacheService
 from src.infrastructure.cache.hash_service import UnifiedHashService
 from src.shared.data.models import CachedApiResult, TrackDict
@@ -57,10 +58,24 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Initialize all cache services."""
         self.logger.info("Initializing CacheOrchestrator...")
 
-        # Initialize all services in parallel
-        await asyncio.gather(
-            self.album_service.initialize(), self.api_service.initialize(), self.generic_service.initialize(), return_exceptions=True
-        )
+        service_tasks: list[tuple[str, Awaitable[Any]]] = [
+            ("AlbumCacheService", self.album_service.initialize()),
+            ("ApiCacheService", self.api_service.initialize()),
+            ("GenericCacheService", self.generic_service.initialize()),
+        ]
+
+        results = await asyncio.gather(*(task for _, task in service_tasks), return_exceptions=True)
+
+        failed_services: list[str] = []
+        for (service_name, _), result in zip(service_tasks, results, strict=False):
+            if isinstance(result, Exception):
+                self.logger.error("Failed to initialize %s: %s", service_name, result, exc_info=result)
+                failed_services.append(service_name)
+
+        if failed_services:
+            failed_list = ", ".join(failed_services)
+            msg = f"Cache service initialization failed for: {failed_list}"
+            raise RuntimeError(msg)
 
         self.logger.info("CacheOrchestrator initialized successfully")
 
@@ -184,28 +199,49 @@ class CacheOrchestrator(CacheServiceProtocol):
         Args:
             track: Track dictionary with artist and album information
         """
-        artist = track.get("artist", "")
-        album = track.get("album", "")
+        track_payload = track.model_dump()
+
+        artist = str(track_payload.get("artist", "") or "").strip()
+        original_artist = str(track_payload.get("original_artist", "") or "").strip()
+        album = str(track_payload.get("album", "") or "").strip()
+        track_id = str(track_payload.get("id", "") or "").strip()
+
+        # Invalidate generic caches (full snapshot + per artist variants)
+        self.generic_service.invalidate("tracks_all")
+
+        artist_candidates = {candidate for candidate in (artist, original_artist) if candidate}
+        for candidate in artist_candidates:
+            self.generic_service.invalidate(f"tracks_{candidate}")
 
         if artist and album:
-            # Ensure types are strings
-            artist_str = str(artist)
-            album_str = str(album)
-
-            # Invalidate album cache
-            await self.album_service.invalidate_album(artist_str, album_str)
-
-            # Invalidate API cache for all sources
-            await self.api_service.invalidate_for_album(artist_str, album_str)
+            await self.album_service.invalidate_album(artist, album)
+            await self.api_service.invalidate_for_album(artist, album)
 
             self.logger.info("Invalidated caches for track: %s - %s", artist, album)
+
+            cache_event = CacheEvent(
+                event_type=CacheEventType.TRACK_MODIFIED,
+                track_id=track_id or None,
+                metadata={"artist": artist, "album": album},
+            )
+            self.api_service.event_manager.emit_event(cache_event)
 
     async def save_all_to_disk(self) -> None:
         """Save all persistent caches to disk."""
         self.logger.info("Saving all caches to disk...")
 
         # Save services that have disk persistence
-        await asyncio.gather(self.album_service.save_to_disk(), self.api_service.save_to_disk(), return_exceptions=True)
+        save_tasks: list[tuple[str, Awaitable[Any]]] = [
+            ("AlbumCacheService", self.album_service.save_to_disk()),
+            ("ApiCacheService", self.api_service.save_to_disk()),
+            ("GenericCacheService", self.generic_service.save_to_disk()),
+        ]
+
+        results = await asyncio.gather(*(task for _, task in save_tasks), return_exceptions=True)
+
+        for (service_name, _), result in zip(save_tasks, results, strict=False):
+            if isinstance(result, Exception):
+                self.logger.error("Failed to save %s to disk: %s", service_name, result, exc_info=result)
 
         self.logger.info("All caches saved to disk")
 
@@ -278,7 +314,7 @@ class CacheOrchestrator(CacheServiceProtocol):
     @property
     def album_years_cache(self) -> dict[str, tuple[str, str, str]]:
         """Album years cache for backward compatibility."""
-        return self.album_service.album_years_cache
+        return {key: (entry.artist, entry.album, entry.year) for key, entry in self.album_service.album_years_cache.items()}
 
     @property
     def api_cache(self) -> dict[str, Any]:
@@ -359,3 +395,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         self.generic_service.invalidate_all()
         await self.album_service.invalidate_all()
         await self.api_service.invalidate_all()
+
+    async def shutdown(self) -> None:
+        """Gracefully shutdown background tasks for cache services."""
+        await self.generic_service.stop_cleanup_task()

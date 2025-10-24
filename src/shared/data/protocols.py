@@ -237,6 +237,10 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
+    async def invalidate_for_track(self, track: TrackDict) -> None:
+        """Invalidate caches impacted by a specific track update."""
+        ...
+
     @staticmethod
     def generate_album_key(artist: str, album: str) -> str:
         """Generate a unique key for an artist/album pair.

@@ -149,13 +149,22 @@ class ArtistRenamer:
         should_update_album_artist = bool(album_artist and album_artist in (current_artist, new_artist))
 
         try:
-            success = await self._track_processor.update_artist_async(
-                track,
-                new_artist,
-                original_artist=current_artist,
-                update_album_artist=should_update_album_artist,
-            )
-        except (OSError, ValueError, RuntimeError, SecurityValidationError):
+            try:
+                success = await self._track_processor.update_artist_async(
+                    track,
+                    new_artist,
+                    original_artist=current_artist,
+                    update_album_artist=should_update_album_artist,
+                )
+            except TypeError as exc:
+                if "update_album_artist" not in str(exc):
+                    raise
+                success = await self._track_processor.update_artist_async(  # type: ignore[call-arg]
+                    track,
+                    new_artist,
+                    original_artist=current_artist,
+                )
+        except (OSError, ValueError, RuntimeError, SecurityValidationError, TypeError):
             self.error_logger.exception(
                 "Failed to rename artist '%s' -> '%s' for track %s",
                 current_artist,
