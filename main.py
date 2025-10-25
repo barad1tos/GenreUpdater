@@ -8,6 +8,7 @@ It uses a fully modularized architecture for better maintainability.
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 import warnings
@@ -39,6 +40,14 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
     # Load configuration
     config_manager = Config(args.config if hasattr(args, "config") else None)
     config = config_manager.load()
+
+    # Apply runtime environment settings derived from configuration
+    python_settings = config.get("python_settings", {}) if isinstance(config, dict) else {}
+    prevent_bytecode = python_settings.get("prevent_bytecode")
+    if prevent_bytecode:
+        os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+    else:
+        os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
 
     # Initialize logging
     logger_console, logger_error, analytics_logger, year_updates_logger, db_verify_logger, listener = get_loggers(config)

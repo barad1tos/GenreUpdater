@@ -70,6 +70,31 @@ class YearRetriever:
     # Safety guard for suspicious album names (e.g., overly short, likely truncated)
     SUSPICIOUS_ALBUM_MIN_LEN = 3  # album names with length <= 3 are suspicious
     SUSPICIOUS_MANY_YEARS = 3  # if >= 3 unique years present, skip auto updates
+    MAX_RETRY_DELAY_SECONDS = 10.0  # Safety cap for configurable retry delay
+
+    @staticmethod
+    def _resolve_non_negative_int(value: Any, default: int) -> int:
+        """Convert arbitrary value to non-negative int with fallback."""
+        try:
+            candidate = int(value)
+        except (TypeError, ValueError):
+            return default
+        return candidate if candidate >= 0 else default
+
+    @staticmethod
+    def _resolve_positive_int(value: Any, default: int) -> int:
+        """Convert arbitrary value to strictly positive int with fallback."""
+        result = YearRetriever._resolve_non_negative_int(value, default)
+        return result if result > 0 else default
+
+    @staticmethod
+    def _resolve_non_negative_float(value: Any, default: float) -> float:
+        """Convert arbitrary value to non-negative float with fallback."""
+        try:
+            candidate = float(value)
+        except (TypeError, ValueError):
+            return default
+        return candidate if candidate >= 0 else default
 
     def __init__(
         self,
@@ -108,6 +133,19 @@ class YearRetriever:
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
         self._last_updated_tracks: list[TrackDict] = []
+
+        year_config = self.config.get("year_retrieval", {}) if isinstance(self.config, dict) else {}
+        processing_config = year_config.get("processing", {}) if isinstance(year_config, dict) else {}
+
+        self.skip_prerelease = bool(processing_config.get("skip_prerelease", True))
+        self.future_year_threshold = YearRetriever._resolve_non_negative_int(processing_config.get("future_year_threshold"), default=1)
+        self.prerelease_recheck_days = YearRetriever._resolve_positive_int(
+            processing_config.get("prerelease_recheck_days"),
+            default=30,
+        )
+
+        self.track_retry_attempts = YearRetriever._resolve_positive_int(self.config.get("max_retries"), default=3)
+        self.track_retry_delay = YearRetriever._resolve_non_negative_float(self.config.get("retry_delay_seconds"), default=1.0)
 
     @staticmethod
     def _extract_future_years(album_tracks: list[TrackDict]) -> list[int]:
@@ -174,20 +212,38 @@ class YearRetriever:
             True if album should be skipped
 
         """
+        if not self.skip_prerelease or not future_years:
+            return False
+
+        current_year = datetime.now(UTC).year
+        max_future_year = max(future_years)
+
+        if max_future_year - current_year <= self.future_year_threshold:
+            self.console_logger.debug(
+                "Detected future year %s for '%s - %s' but within configured threshold (%d year(s)); continuing processing",
+                max_future_year,
+                artist,
+                album,
+                self.future_year_threshold,
+            )
+            return False
+
         self.console_logger.info(
             "Skipping prerelease album '%s - %s' with future year(s): %s",
             artist,
             album,
-            max(future_years),
+            max_future_year,
         )
+        metadata = {
+            "expected_year": str(max_future_year),
+            "track_count": str(len(album_tracks)),
+        }
         await self.pending_verification.mark_for_verification(
             artist,
             album,
             reason="prerelease",
-            metadata={
-                "expected_year": str(max(future_years)),
-                "track_count": str(len(album_tracks)),
-            },
+            metadata=metadata,
+            recheck_days=self.prerelease_recheck_days,
         )
         return True
 
@@ -252,23 +308,25 @@ class YearRetriever:
         self,
         track_id: str,
         new_year: str,
-        max_retries: int = 3,
+        max_retries: int | None = None,
     ) -> bool:
         """Update a track's year with exponential backoff retry logic.
 
         Args:
             track_id: Track ID to update
             new_year: Year to set
-            max_retries: Maximum number of retry attempts
+            max_retries: Optional override for retry attempts
 
         Returns:
             True if successful, False otherwise
 
         """
-        retry_delay = 1.0  # Start with 1 second
+        attempts = self.track_retry_attempts if max_retries is None else YearRetriever._resolve_positive_int(max_retries, self.track_retry_attempts)
+        retry_delay = self.track_retry_delay if self.track_retry_delay > 0 else 1.0
+        retry_delay = min(retry_delay, self.MAX_RETRY_DELAY_SECONDS)
         last_exception: Exception | None = None
 
-        for attempt in range(max_retries):
+        for attempt in range(attempts):
             try:
                 result = await self.track_processor.update_track_async(
                     track_id=track_id,
@@ -283,12 +341,12 @@ class YearRetriever:
                     "Update returned False for track %s (attempt %d/%d)",
                     track_id,
                     attempt + 1,
-                    max_retries,
+                    attempts,
                 )
 
             except (OSError, ValueError, RuntimeError) as e:
                 last_exception = e
-                if attempt < max_retries - 1:
+                if attempt < attempts - 1:
                     # Add jitter to prevent thundering herd
                     jitter = 0.1 * retry_delay
                     sleep_time = retry_delay + random.uniform(-jitter, jitter)  # noqa: S311
@@ -296,12 +354,12 @@ class YearRetriever:
                         "Failed to update year for track %s (attempt %d/%d): %s. Retrying in %.1fs...",
                         track_id,
                         attempt + 1,
-                        max_retries,
+                        attempts,
                         last_exception,
                         sleep_time,
                     )
                     await asyncio.sleep(sleep_time)
-                    retry_delay *= 2  # Exponential backoff
+                retry_delay = min(retry_delay * 2, self.MAX_RETRY_DELAY_SECONDS)  # Exponential backoff with cap
             else:
                 return False
 
@@ -310,7 +368,7 @@ class YearRetriever:
             self.error_logger.exception(
                 "Failed to update year for track %s after %d attempts",
                 track_id,
-                max_retries,
+                attempts,
             )
         return False
 
@@ -768,11 +826,15 @@ class YearRetriever:
             True if the album should be skipped, False otherwise
 
         """
-        if prerelease_tracks := [
+        if not self.skip_prerelease:
+            return False
+
+        prerelease_tracks = [
             track
             for track in album_tracks
             if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
-        ]:
+        ]
+        if prerelease_tracks:
             self.console_logger.info(
                 "Skipping album '%s - %s': %d of %d tracks are prerelease (read-only)",
                 artist,
@@ -789,6 +851,7 @@ class YearRetriever:
                     "track_count": str(len(album_tracks)),
                     "prerelease_count": str(len(prerelease_tracks)),
                 },
+                recheck_days=self.prerelease_recheck_days,
             )
             return True
         return False
@@ -897,8 +960,10 @@ class YearRetriever:
             artist=artist,
             album_name=album,
             track_name=str(track.get("name", "")),
-            old_year=str(track.get("year")) if track.get("year") is not None else "",
-            new_year=str(year) if year is not None else "",
+            old_year=(
+                str(track.get("year")) if track.get("year") is not None else ""
+            ),
+            new_year=year if year is not None else "",
         )
 
     async def _update_tracks_for_album(

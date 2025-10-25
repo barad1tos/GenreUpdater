@@ -427,6 +427,7 @@ class PendingVerificationServiceProtocol(Protocol):
         album: str,
         reason: str = "no_year_found",
         metadata: dict[str, Any] | None = None,
+        recheck_days: int | None = None,
     ) -> None:
         """Mark an album for future verification.
 
@@ -435,6 +436,7 @@ class PendingVerificationServiceProtocol(Protocol):
             album: Album name
             reason: Reason for marking for verification
             metadata: Additional metadata to store
+            recheck_days: Optional override for verification interval in days
 
         """
         ...

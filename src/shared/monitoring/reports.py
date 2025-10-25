@@ -484,9 +484,8 @@ def _is_real_change(change: dict[str, Any], logger: logging.Logger | None = None
     # For unknown types, log a warning and include by default to be safe
     if logger:
         logger.warning(
-            "Unknown change_type '%s' encountered in _is_real_change; defaulting to include. "
-            "This may indicate a typo or missing handler.",
-            change_type
+            "Unknown change_type '%s' encountered in _is_real_change; defaulting to include. This may indicate a typo or missing handler.",
+            change_type,
         )
     return True
 
@@ -572,6 +571,9 @@ def _convert_changelog_to_dict(item: dict[str, Any] | ChangeLogEntry) -> dict[st
     if isinstance(item, ChangeLogEntry):
         # Type ignore because Pydantic's model_dump() returns dict[str, Any] but mypy sees it as Any
         result: dict[str, Any] = item.model_dump()
+        # Maintain backwards compatibility for summary consumers expecting 'album'
+        if "album" not in result:
+            result[Key.ALBUM] = result.get("album_name", "")
         return result
     return item
 

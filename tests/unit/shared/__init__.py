@@ -1,1 +1,1 @@
-"""Unit tests for shared modules."""
+"""Unit tests for shared components."""

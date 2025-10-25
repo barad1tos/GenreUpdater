@@ -116,6 +116,9 @@ class PendingVerificationService:
             "pending_verification_interval_days",
             30,
         )  # Get from processing
+        self.prerelease_recheck_days = self._normalize_recheck_days(processing_config.get(
+            "prerelease_recheck_days")
+        ) or self.verification_interval_days
 
         # Set up the pending file path using the utility function
         self.pending_file_path = get_full_log_path(
@@ -129,6 +132,26 @@ class PendingVerificationService:
 
         # Initialize an asyncio Lock for thread-safe access to the in-memory cache
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _normalize_recheck_days(value: Any) -> int | None:
+        """Convert value to a positive integer suitable for recheck interval."""
+        try:
+            candidate = int(value)
+        except (TypeError, ValueError):
+            return None
+        return candidate if candidate > 0 else None
+
+    @staticmethod
+    def _parse_metadata(metadata_str: str) -> dict[str, Any]:
+        """Safely parse metadata JSON string into a dictionary."""
+        if not metadata_str:
+            return {}
+        try:
+            parsed = json.loads(metadata_str)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
 
     async def initialize(self) -> None:
         """Asynchronously initializes the PendingVerificationService by loading data from the disk.
@@ -408,14 +431,13 @@ class PendingVerificationService:
             except (OSError, csv.Error) as e:
                 # The exception from blocking_save is caught here
                 self.error_logger.exception(f"Error saving pending verification file: {e}")
-
-    # Mark album for future verification (now an async method because it calls async _save_pending_albums)
     async def mark_for_verification(
         self,
         artist: str,
         album: str,
         reason: str = "no_year_found",
         metadata: dict[str, Any] | None = None,
+        recheck_days: int | None = None,
     ) -> None:
         """Mark an album for future verification with reason and optional metadata.
 
@@ -426,18 +448,27 @@ class PendingVerificationService:
             album: Album name
             reason: Reason for verification (default: "no_year_found", can be "prerelease", etc.)
             metadata: Optional metadata dictionary to store additional information
+            recheck_days: Optional override for verification interval in days
 
         """
+        interval_override = self._normalize_recheck_days(recheck_days)
+        if interval_override is None and reason == "prerelease":
+            interval_override = self.prerelease_recheck_days
+
         # Acquire lock before modifying the in-memory cache
         async with self._lock:
             # Generate the hash key for the album
             key_hash = self._generate_album_key(artist, album)
 
             # Serialize metadata dict to JSON string to preserve type information
-            metadata_str = ""
+            metadata_payload: dict[str, Any] = {}
             if metadata:
-                metadata_str = json.dumps(metadata)
+                metadata_payload |= metadata
 
+            if interval_override is not None:
+                metadata_payload["recheck_days"] = interval_override
+
+            metadata_str = json.dumps(metadata_payload) if metadata_payload else ""
             # Store the current timestamp, original artist, album, reason, and metadata in the value
             self.pending_albums[key_hash] = (
                 datetime.now(UTC),
@@ -448,15 +479,19 @@ class PendingVerificationService:
             )
 
         # Log with the appropriate message based on reason
+        effective_interval = interval_override if interval_override is not None else self.verification_interval_days
+
         if reason == "prerelease":
             self.console_logger.info(
-                f"Marked prerelease album '{artist} - {album}' for future verification",
+                f"Marked prerelease album '{artist} - {album}' for future verification in {effective_interval} days",
             )
         else:
             self.console_logger.info(
-                f"Marked '{artist} - {album}' for verification in {self.verification_interval_days} days (reason: {reason})",
+                f"Marked '{artist} - {album}' for verification in {effective_interval} days (reason: {reason})",
             )
 
+        # Save asynchronously after modifying the cache
+        await self._save_pending_albums()
         # Save asynchronously after modifying the cache
         await self._save_pending_albums()
 
@@ -484,10 +519,14 @@ class PendingVerificationService:
                 return False
 
             # The value is a tuple (timestamp, artist, album, reason, metadata)
-            timestamp, stored_artist, stored_album, _reason, _metadata = self.pending_albums[key_hash]
-            verification_time = timestamp + timedelta(
-                days=self.verification_interval_days,
-            )
+            timestamp, stored_artist, stored_album, stored_reason, raw_metadata = self.pending_albums[key_hash]
+            metadata = self._parse_metadata(raw_metadata)
+            interval_days = self.verification_interval_days
+            if stored_reason == "prerelease":
+                override = self._normalize_recheck_days(metadata.get("recheck_days"))
+                interval_days = override if override is not None else self.prerelease_recheck_days
+
+            verification_time = timestamp + timedelta(days=interval_days)
 
             if datetime.now(UTC) >= verification_time:
                 # Verification period has elapsed
