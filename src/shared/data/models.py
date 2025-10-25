@@ -288,7 +288,6 @@ class AppConfig(BaseModel):
     retry_delay_seconds: float = Field(ge=0)
     incremental_interval_minutes: int = Field(ge=1)
     cache_ttl_seconds: int = Field(ge=0)
-    album_cache_sync_interval: int = Field(ge=0)
 
     # Feature toggles and settings
     cleaning: CleaningConfig

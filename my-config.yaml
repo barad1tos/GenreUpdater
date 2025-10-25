@@ -37,9 +37,8 @@ retry_delay_seconds: 1 # Base delay between retries
 
 # In-memory cache settings (used by CacheService for temporary data like fetched tracks)
 cache_ttl_seconds: 1800 # Default lifetime for in-memory cache items (30 min)
-album_cache_sync_interval: 300 # Interval for syncing in-memory cache with disk (5 min)
 # Incremental update settings
-incremental_interval_minutes: 1 # Interval for incremental updates (1 hour)
+incremental_interval_minutes: 1 # Interval for incremental updates (1 minute)
 # -----------------------------------------------------------------------
 # 3. FEATURE TOGGLES AND SETTINGS
 # -----------------------------------------------------------------------
@@ -90,32 +89,24 @@ development:
   test_artists: [] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
   debug_mode: true # 🎛️ GLOBAL DEBUG TOGGLE - Controls all [*_DEBUG] logs throughout the application
 
-# Caching configuration
-caching:
-  # Basic cache settings
-  default_ttl_seconds: 900 # Default TTL for cache entries (15 minutes)
-  negative_result_ttl: 2592000 # TTL for negative results (30 days in seconds)
-
-  # Cache synchronization settings
-  album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
-  cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
-
-  # Cache size limits and cleanup settings (TASK-002)
-  cache_size_limits:
-    generic_cache_max_entries: 10000 # Maximum entries in generic cache
-    album_cache_max_entries: 50000 # Maximum entries in album years cache
-    api_cache_max_entries: 25000 # Maximum entries in API results cache
-  cleanup_interval_seconds: 300 # Background cleanup every 5 minutes
-
-  # Advanced cache configuration
-  cache_entry_length: 2 # Number of elements in cache entry tuple (value, timestamp)
-
 # Reporting configuration
 reporting:
   problematic_albums_path: reports/albums_without_year.csv
   min_attempts_for_report: 3
   # Display mode for change reports: "compact" (with yellow highlights) or "table" (rich tables)
   change_display_mode: compact
+
+# Caching configuration
+caching:
+  default_ttl_seconds: 900 # Default TTL for cache entries (15 minutes)
+  negative_result_ttl: 2592000 # TTL for negative results (30 days)
+  album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
+  cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
+  cleanup_interval_seconds: 300 # Background cleanup every 5 minutes
+  cache_size_limits:
+    generic_cache_max_entries: 10000
+    album_cache_max_entries: 50000
+    api_cache_max_entries: 25000
 
 # API Cache file
 api_cache_file: cache/cache.json
@@ -327,29 +318,6 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
 genre_update:
   batch_size: 50 # Number of tracks to process in each batch
   concurrent_limit: 5 # Maximum number of concurrent tasks
-
-  # Smart Update Settings (new)
-  smart_update:
-    enabled: true # Enable smart change detection
-    respect_manual_values: true # Preserve manually set genres unless --force is used
-    normalize_comparisons: true # Normalize genre strings for accurate comparison
-    skip_identical: true # Skip updates when values are identical
-
-  # Change Detection Thresholds
-  change_detection:
-    min_confidence: 0.95 # Minimum confidence for automated changes
-    manual_detection_keywords: # Keywords that indicate manual genre setting
-      - custom
-      - manual
-      - user-defined
-
-  # Reporting Enhancements
-  enhanced_reporting:
-    always_show_summary: true # Always display summary table even with 0 changes
-    use_rich_tables: true # Use rich library for beautiful terminal output
-    compact_mode: true # Default to compact change display
-    show_efficiency_metrics: true # Display skip rate and efficiency stats
-    show_api_statistics: true # Show API call counts in summary
 
 # -----------------------------------------------------------------------
 # 7. EXPERIMENTAL FEATURES (Use with caution)

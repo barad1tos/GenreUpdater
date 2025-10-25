@@ -117,6 +117,55 @@ class ExternalApiOrchestrator:
     # Class constants
     _SUSPICIOUS_CURRENT_YEAR_MSG = "[YEAR_DEBUG] Rejecting suspicious current_library_year=%s (matches system year) for '%s - %s'"
 
+    @staticmethod
+    def _coerce_non_negative_int(value: Any, default: int) -> int:
+        """Convert value to a non-negative integer with fallback."""
+        try:
+            candidate = int(value)
+        except (TypeError, ValueError):
+            return default
+        return candidate if candidate >= 0 else default
+
+    @staticmethod
+    def _coerce_positive_int(value: Any, default: int) -> int:
+        """Convert value to a positive integer with fallback."""
+        result = ExternalApiOrchestrator._coerce_non_negative_int(value, default)
+        return result if result > 0 else default
+
+    @staticmethod
+    def _coerce_non_negative_float(value: Any, default: float) -> float:
+        """Convert value to a non-negative float with fallback."""
+        try:
+            candidate = float(value)
+        except (TypeError, ValueError):
+            return default
+        return candidate if candidate >= 0 else default
+
+    @staticmethod
+    def _normalize_api_name(api_name: Any) -> str:
+        """Normalize API name aliases to orchestrator-internal identifiers."""
+        name = str(api_name).strip().lower()
+        if name in {"applemusic", "itunes"}:
+            return "itunes"
+        if name not in {"musicbrainz", "discogs", "itunes", "lastfm"}:
+            return "musicbrainz"
+        return name
+
+    def _apply_preferred_order(self, api_list: list[str]) -> list[str]:
+        """Apply preferred API ordering to a list of API identifiers."""
+        normalized: list[str] = [self._normalize_api_name(api) for api in api_list]
+        if self.preferred_api in normalized:
+            normalized.remove(self.preferred_api)
+            normalized.insert(0, self.preferred_api)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for api in normalized:
+            if api not in seen:
+                ordered.append(api)
+                seen.add(api)
+        return ordered
+
     def __init__(
         self,
         config: dict[str, Any],
@@ -260,14 +309,24 @@ class ExternalApiOrchestrator:
         self.scoring_config = year_config.get("scoring", {})
 
         # Extract processing parameters
-        self.use_lastfm = bool(self.lastfm_api_key) and year_config.get("use_lastfm", True)
+        preferred_api_raw = year_config.get("preferred_api", "musicbrainz")
+        self.preferred_api = self._normalize_api_name(preferred_api_raw)
+
+        self.use_lastfm = bool(self.lastfm_api_key) and bool(api_auth_config.get("use_lastfm", year_config.get("use_lastfm", True)))
         self.cache_ttl_days = processing_config.get("cache_ttl_days", 30)
+        self.skip_prerelease = bool(processing_config.get("skip_prerelease", True))
+        self.future_year_threshold = self._coerce_non_negative_int(processing_config.get("future_year_threshold"), default=1)
+        self.prerelease_recheck_days = self._coerce_positive_int(processing_config.get("prerelease_recheck_days"), default=30)
 
         # Extract logic parameters
         self.min_valid_year = logic_config.get("min_valid_year", 1900)
         self.definitive_score_threshold = logic_config.get("definitive_score_threshold", 85)
         self.definitive_score_diff = logic_config.get("definitive_score_diff", 15)
         self.current_year = dt.now(UTC).year
+
+        # Global retry configuration sourced from top-level settings
+        self.default_api_max_retries = self._coerce_positive_int(self.config.get("max_retries"), default=3)
+        self.default_api_retry_delay = self._coerce_non_negative_float(self.config.get("retry_delay_seconds"), default=1.0)
 
     def _load_secure_token(self, config: dict[str, Any], key: str, env_var: str) -> str:
         """Load API token using SecureConfig with fallback to environment variables."""
@@ -375,8 +434,8 @@ class ExternalApiOrchestrator:
             url: str,
             params: dict[str, str] | None = None,
             headers_override: dict[str, str] | None = None,
-            max_retries: int = 3,
-            base_delay: float = 1.0,
+            max_retries: int | None = None,
+            base_delay: float | None = None,
             timeout_override: float | None = None,
         ) -> Coroutine[Any, Any, dict[str, Any] | None]:
             """Create an API request coroutine with injected parameters."""
@@ -585,8 +644,8 @@ class ExternalApiOrchestrator:
         url: str,
         params: dict[str, str] | None = None,
         headers_override: dict[str, str] | None = None,
-        max_retries: int = 3,
-        base_delay: float = 1.0,
+        max_retries: int | None = None,
+        base_delay: float | None = None,
         timeout_override: float | None = None,
     ) -> dict[str, Any] | None:
         """Make an API request with rate limiting, error handling, and retry logic."""
@@ -616,6 +675,9 @@ class ExternalApiOrchestrator:
         request_headers, limiter, request_timeout = prepared_request
 
         # Execute request with retry logic
+        retry_attempts = max_retries if isinstance(max_retries, int) and max_retries > 0 else self.default_api_max_retries
+        retry_delay = base_delay if isinstance(base_delay, (int, float)) and base_delay >= 0 else self.default_api_retry_delay
+
         result = await self._execute_request_with_retry(
             api_name,
             url,
@@ -623,8 +685,8 @@ class ExternalApiOrchestrator:
             request_headers=request_headers,
             request_timeout=request_timeout,
             limiter=limiter,
-            max_retries=max_retries,
-            base_delay=base_delay,
+            max_retries=retry_attempts,
+            base_delay=retry_delay,
         )
 
         # Debug logging for iTunes results
@@ -1100,6 +1162,7 @@ class ExternalApiOrchestrator:
         reason: str = "no_year_found",
         metadata: dict[str, Any] | None = None,
         fire_and_forget: bool = False,
+        recheck_days: int | None = None,
     ) -> None:
         """Safely mark an album for verification, optionally as fire-and-forget."""
         if not self.pending_verification_service:
@@ -1116,6 +1179,9 @@ class ExternalApiOrchestrator:
                     self.pending_verification_service.mark_for_verification(
                         artist=artist,
                         album=album,
+                        reason=reason,
+                        metadata=metadata,
+                        recheck_days=recheck_days,
                     ),
                 )
                 self._pending_tasks.add(task)
@@ -1132,6 +1198,7 @@ class ExternalApiOrchestrator:
                     album=album,
                     reason=reason,
                     metadata=metadata,
+                    recheck_days=recheck_days,
                 )
                 self.console_logger.debug("Marked '%s - %s' for verification", artist, album)
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
@@ -1157,6 +1224,90 @@ class ExternalApiOrchestrator:
                 e,
             )
 
+    @staticmethod
+    def _count_prerelease_tracks(tracks: list[dict[str, str]]) -> int:
+        """Count tracks marked as prerelease."""
+        return sum(track.get("track_status", "").lower() == "prerelease" for track in tracks)
+
+    def _compute_future_year_stats(
+        self,
+        tracks: list[dict[str, str]],
+        current_year: int,
+    ) -> tuple[int, int, bool, bool]:
+        """Calculate future-year related statistics."""
+        future_year_count = 0
+        max_year = 0
+        for track in tracks:
+            with contextlib.suppress(ValueError, TypeError):
+                if year := track.get("year"):
+                    year_int = int(year)
+                    if year_int > current_year:
+                        future_year_count += 1
+                        max_year = max(max_year, year_int)
+
+        total_tracks = len(tracks)
+        ratio_triggered = future_year_count > 0 and future_year_count >= total_tracks * 0.5 if total_tracks else False
+        significant = max_year > 0 and (max_year - current_year) > self.future_year_threshold
+        return future_year_count, max_year, ratio_triggered, significant
+
+    @staticmethod
+    def _is_prerelease_album(
+        prerelease_count: int,
+        ratio_triggered: bool,
+        significant_future_year: bool,
+    ) -> bool:
+        """Determine if album should be treated as prerelease."""
+        return prerelease_count > 0 or (ratio_triggered and significant_future_year)
+
+    def _handle_prerelease_album(
+        self,
+        artist: str,
+        album: str,
+        current_library_year: str,
+        prerelease_count: int,
+        future_year_count: int,
+        max_future_year: int,
+        total_tracks: int,
+    ) -> None:
+        """Log and mark prerelease albums for verification."""
+        self.console_logger.info(
+            "Album '%s - %s' detected as prerelease (%d prerelease tracks, %d future year tracks). Keeping current year: %s",
+            artist,
+            album,
+            prerelease_count,
+            future_year_count,
+            current_library_year or "N/A",
+        )
+
+        metadata: dict[str, Any] = {
+            "track_count": str(total_tracks),
+            "future_year_threshold": str(self.future_year_threshold),
+        }
+        if max_future_year > 0:
+            metadata["expected_year"] = str(max_future_year)
+
+        task = asyncio.create_task(
+            self._safe_mark_for_verification(
+                artist,
+                album,
+                reason="prerelease",
+                metadata=metadata,
+                fire_and_forget=True,
+                recheck_days=self.prerelease_recheck_days,
+            ),
+        )
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+
+    def _log_future_year_within_threshold(self, artist: str, album: str) -> None:
+        """Log debug message when future years are detected but under threshold."""
+        self.console_logger.debug(
+            "Future year detected for '%s - %s' but within threshold (%d year(s)); proceeding with update",
+            artist,
+            album,
+            self.future_year_threshold,
+        )
+
     def should_update_album_year(
         self,
         tracks: list[dict[str, str]],
@@ -1168,57 +1319,26 @@ class ExternalApiOrchestrator:
         if not tracks:
             return True
 
-        # Check for explicit prerelease status
-        prerelease_count = sum(track.get("track_status", "").lower() == "prerelease" for track in tracks)
+        if not self.skip_prerelease:
+            return True
 
-        # Also check for future years as a prerelease indicator
         current_year = dt.now(tz=UTC).year
-        future_year_count = 0
-        max_year = 0
-
-        for track in tracks:
-            with contextlib.suppress(ValueError, TypeError):
-                if year := track.get("year"):
-                    year_int = int(year)
-                    if year_int > current_year:
-                        future_year_count += 1
-                        max_year = max(max_year, year_int)
-        total_tracks = len(tracks)
-
-        # Detect prerelease by either explicit status or future years
-        is_prerelease = prerelease_count > 0 or (
-            future_year_count > 0 and future_year_count >= total_tracks * 0.5
-        )  # At least half tracks have future year
-
-        if is_prerelease:
-            self.console_logger.info(
-                "Album '%s - %s' detected as prerelease (%d prerelease tracks, %d future year tracks). Keeping current year: %s",
+        prerelease_count = self._count_prerelease_tracks(tracks)
+        future_year_count, max_future_year, ratio_triggered, significant_future_year = self._compute_future_year_stats(tracks, current_year)
+        if self._is_prerelease_album(prerelease_count, ratio_triggered, significant_future_year):
+            self._handle_prerelease_album(
                 artist,
                 album,
+                current_library_year,
                 prerelease_count,
                 future_year_count,
-                current_library_year or "N/A",
+                max_future_year,
+                len(tracks),
             )
-
-            # Mark for future verification with prerelease reason
-            metadata: dict[str, Any] = {}
-            if max_year > 0:
-                metadata["expected_year"] = str(max_year)
-            metadata["track_count"] = str(total_tracks)
-
-            task = asyncio.create_task(
-                self._safe_mark_for_verification(
-                    artist,
-                    album,
-                    reason="prerelease",
-                    metadata=metadata,
-                    fire_and_forget=True,
-                ),
-            )
-            self._pending_tasks.add(task)
-            task.add_done_callback(self._pending_tasks.discard)
-
             return False
+
+        if ratio_triggered and not significant_future_year:
+            self._log_future_year_within_threshold(artist, album)
 
         return True
 
@@ -1447,7 +1567,16 @@ class ExternalApiOrchestrator:
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
         """Get script-specific API priorities from config."""
         script_priorities = self._get_script_config_priorities(script_type)
-        return {"primary": script_priorities.get("primary", ["musicbrainz"]), "fallback": script_priorities.get("fallback", ["lastfm"])}
+        primary_raw = script_priorities.get("primary", ["musicbrainz"])
+        fallback_raw = script_priorities.get("fallback", ["lastfm"])
+
+        primary = primary_raw if isinstance(primary_raw, list) else ["musicbrainz"]
+        fallback = fallback_raw if isinstance(fallback_raw, list) else ["lastfm"]
+
+        return {
+            "primary": self._apply_preferred_order(primary),
+            "fallback": self._apply_preferred_order(fallback),
+        }
 
     def _get_script_config_priorities(self, script_type: ScriptType) -> dict[str, Any]:
         """Get script-specific API priorities from configuration file.
@@ -1468,7 +1597,8 @@ class ExternalApiOrchestrator:
         self, api_names: list[str], artist_norm: str, album_norm: str, artist_region: str | None, script_type: ScriptType, is_fallback: bool
     ) -> list[ScoredRelease] | None:
         """Try a list of API names and return the first successful result."""
-        for api_name in api_names:
+        normalized_names = [self._normalize_api_name(name) for name in api_names]
+        for api_name in normalized_names:
             results = await self._try_single_api(api_name, artist_norm, album_norm, artist_region, script_type, is_fallback)
             if results:
                 return results
@@ -1532,22 +1662,35 @@ class ExternalApiOrchestrator:
         self, artist_norm: str, album_norm: str, artist_region: str | None, log_artist: str, log_album: str
     ) -> list[ScoredRelease]:
         """Execute standard concurrent API search across all providers."""
-        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = [
-            self.musicbrainz_client.get_scored_releases(artist_norm, album_norm, artist_region),
-            self.discogs_client.get_scored_releases(artist_norm, album_norm, artist_region),
-            self.applemusic_client.get_scored_releases(artist_norm, album_norm),
-        ]
-        if self.use_lastfm:
-            api_tasks.append(self.lastfm_client.get_scored_releases(artist_norm, album_norm))
+        api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else []))
+        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = []
+        ordered_names: list[str] = []
+
+        for api_name in api_order:
+            api_client = self._get_api_client(api_name)
+            if not api_client:
+                continue
+            api_tasks.append(
+                self._call_api_with_proper_params(
+                    api_client,
+                    api_name,
+                    artist_norm,
+                    album_norm,
+                    artist_region,
+                )
+            )
+            ordered_names.append(api_name)
+
+        if not api_tasks:
+            return []
 
         results = await asyncio.gather(*api_tasks, return_exceptions=True)
-        return self._process_api_task_results(results, log_artist, log_album, artist_norm, album_norm)
+        return self._process_api_task_results(results, ordered_names, log_artist, log_album, artist_norm, album_norm)
 
     def _process_api_task_results(
-        self, results: list[Any], log_artist: str, log_album: str, artist_norm: str, album_norm: str
+        self, results: list[Any], api_names: list[str], log_artist: str, log_album: str, artist_norm: str, album_norm: str
     ) -> list[ScoredRelease]:
         """Process results from concurrent API tasks."""
-        api_names = ["musicbrainz", "discogs", "itunes", "lastfm"] if self.use_lastfm else ["musicbrainz", "discogs", "itunes"]
         all_releases: list[ScoredRelease] = []
 
         for api_name, result in zip(api_names, results, strict=True):

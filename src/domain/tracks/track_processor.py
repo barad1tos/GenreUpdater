@@ -255,7 +255,7 @@ class TrackProcessor:
                 self.error_logger.info(f"DEBUG: First 200 chars: {raw_output[:200]}")
                 field_sep_found = "\x1e" in raw_output
                 line_sep_found = "\x1d" in raw_output
-                self.error_logger.info(f"DEBUG: Raw output contains separators - field (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
+                self.error_logger.info(f"DEBUG: Raw output contains separators (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
 
             if not raw_output:
                 self.error_logger.error("AppleScript returned empty output")
@@ -290,7 +290,6 @@ class TrackProcessor:
             return []
 
         return validated_tracks
-
 
     @Analytics.track_instance_method("track_fetch_by_ids")
     async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
@@ -819,19 +818,14 @@ class TrackProcessor:
                     await self._notify_track_cache_invalidation(track_id, primary_artist, album, track, original_artist)
                 return batch_success
             except Exception as e:
-                self.console_logger.warning(
-                    "Batch update failed for track %s, falling back to individual updates: %s",
-                    track_id, str(e)
-                )
+                self.console_logger.warning("Batch update failed for track %s, falling back to individual updates: %s", track_id, str(e))
                 # Fall through to individual updates
 
         # Individual updates (current reliable method)
         all_success = True
         any_success = False
         for property_name, property_value in updates:
-            success = await self._update_single_property(
-                track_id, property_name, property_value, original_artist, album, track
-            )
+            success = await self._update_single_property(track_id, property_name, property_value, original_artist, album, track)
             any_success = any_success or success
             all_success = all_success and success
 
@@ -914,11 +908,31 @@ class TrackProcessor:
 
         batch_command = ";".join(commands)
 
-        # Execute batch update with short timeout (batch should be fast)
+        # Determine timeout from configuration with sensible fallbacks
+        timeouts_config = self.config.get("applescript_timeouts", {}) if isinstance(self.config, dict) else {}
+        timeout_value = timeouts_config.get("batch_update")
+        if timeout_value is None:
+            timeout_value = self.config.get("applescript_timeout_seconds", 3600)
+        try:
+            batch_timeout = float(timeout_value)
+        except (TypeError, ValueError):
+            self.console_logger.warning(
+                "Invalid 'applescript_timeouts.batch_update' value '%s'; falling back to 60.0 seconds",
+                timeout_value,
+            )
+            batch_timeout = 60.0
+        if batch_timeout <= 0:
+            self.console_logger.warning(
+                "Non-positive 'applescript_timeouts.batch_update' value '%s'; falling back to 60.0 seconds",
+                timeout_value,
+            )
+            batch_timeout = 60.0
+
+        # Execute batch update with configured timeout (defaults to 60s)
         result = await self.ap_client.run_script(
             "batch_update_tracks.applescript",
             [batch_command],
-            timeout=60,  # Shorter timeout for batch operations
+            timeout=batch_timeout,
             context_artist=artist,
             context_album=album,
             context_track=track,
@@ -926,10 +940,7 @@ class TrackProcessor:
 
         # Check if batch operation succeeded
         if result and "Success" in result:
-            self.console_logger.debug(
-                "✅ Batch updated %d properties for track %s",
-                len(updates), track_id
-            )
+            self.console_logger.debug("✅ Batch updated %d properties for track %s", len(updates), track_id)
             return True
 
         error_msg = f"Batch update script returned: {result}"

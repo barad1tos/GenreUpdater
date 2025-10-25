@@ -146,7 +146,7 @@ class ArtistRenamer:
         album_artist_raw = track.get("album_artist")
         album_artist_str = album_artist_raw if isinstance(album_artist_raw, str) else None
         album_artist = self._normalize_artist(album_artist_str)
-        should_update_album_artist = bool(album_artist and album_artist in (current_artist, new_artist))
+        should_update_album_artist = album_artist is None or album_artist == current_artist
 
         try:
             try:
@@ -176,7 +176,10 @@ class ArtistRenamer:
         if not success:
             return False
 
-        # Note: track.artist and track.album_artist are updated by update_artist_async
+        # Keep local model in sync even if processor does not mutate it (e.g., tests, dry-run)
+        track.artist = new_artist
+        if should_update_album_artist:
+            track.__dict__["album_artist"] = new_artist
         track.original_artist = current_artist
 
         self.console_logger.info(
