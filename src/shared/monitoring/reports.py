@@ -419,6 +419,25 @@ def _render_compact_change(console: Console, change_type: str, record: dict[str,
             new_val = record.get(Key.NEW_ALBUM_NAME, "")
             item = f"{artist} - Album"
         console.print(f"  {item}: [dim]{old_val}[/dim] → [bold yellow]{new_val}[/bold yellow]")
+    elif change_type == "metadata_cleaning":
+        # Check which metadata was cleaned
+        album_changed = record.get(Key.OLD_ALBUM_NAME) != record.get(Key.NEW_ALBUM_NAME)
+        track_changed = record.get(Key.OLD_TRACK_NAME) != record.get(Key.NEW_TRACK_NAME)
+
+        # Display album cleaning
+        if album_changed:
+            old_album = record.get(Key.OLD_ALBUM_NAME, "")
+            new_album = record.get(Key.NEW_ALBUM_NAME, "")
+            track_name = record.get(Key.TRACK_NAME, "")
+            item = f"{artist} - {track_name}"
+            console.print(f"  {item} [dim](album)[/dim]: [dim]{old_album}[/dim] → [bold yellow]{new_album}[/bold yellow]")
+
+        # Display track name cleaning
+        if track_changed:
+            old_track = record.get(Key.OLD_TRACK_NAME, "")
+            new_track = record.get(Key.NEW_TRACK_NAME, "")
+            item = f"{artist} - {album}"
+            console.print(f"  {item} [dim](track)[/dim]: [dim]{old_track}[/dim] → [bold yellow]{new_track}[/bold yellow]")
 
 
 def _render_compact_group(console: Console, change_type: str, records: list[dict[str, str]]) -> None:
@@ -1091,11 +1110,28 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
     return cmd
 
 
+# AppleScript output field count constants
+_FIELD_COUNT_WITH_ALBUM_ARTIST = 11
+_FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 10
+
+# Field indices for format with album_artist (11 fields)
+_DATE_ADDED_IDX_11 = 6
+_STATUS_IDX_11 = 7
+_OLD_YEAR_IDX_11 = 8
+
+# Field indices for format without album_artist (10 fields)
+_DATE_ADDED_IDX_10 = 5
+_STATUS_IDX_10 = 6
+_OLD_YEAR_IDX_10 = 7
+
+
 def _resolve_field_indices(field_count: int) -> tuple[int, int, int] | None:
     """Return indices for date_added, status, and old_year columns."""
-    if field_count == 11:
-        return 6, 7, 8
-    return (5, 6, 7) if field_count == 10 else None
+    if field_count == _FIELD_COUNT_WITH_ALBUM_ARTIST:
+        return _DATE_ADDED_IDX_11, _STATUS_IDX_11, _OLD_YEAR_IDX_11
+    if field_count == _FIELD_COUNT_WITHOUT_ALBUM_ARTIST:
+        return _DATE_ADDED_IDX_10, _STATUS_IDX_10, _OLD_YEAR_IDX_10
+    return None
 
 
 def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
@@ -1425,6 +1461,16 @@ def _group_events_by_duration_and_success(
             event_duration = event[Misc.DURATION_FIELD]
             success = event["Success"]
 
+            # Validate duration is numeric
+            if not isinstance(event_duration, (int, float)):
+                error_logger.warning(
+                    "Invalid duration type in event (expected number, got %s): %s",
+                    type(event_duration).__name__,
+                    event,
+                )
+                big_or_fail_events.append(event)
+                continue
+
             if success and event_duration <= short_max:
                 key = (
                     event.get("Function", "Unknown"),
@@ -1610,8 +1656,13 @@ def _generate_detailed_events_table_html(
             <th>Success</th>
         </tr>"""
 
+    def _safe_start_time(event_record: dict[str, Any]) -> str:
+        """Extract sortable start time string, ensuring string type."""
+        start_time = event_record.get("Start Time", "")
+        return start_time if isinstance(start_time, str) else ""
+
     if big_or_fail_events:
-        for event in sorted(big_or_fail_events, key=lambda x: x.get("Start Time", "")):
+        for event in sorted(big_or_fail_events, key=_safe_start_time):
             try:
                 row_class = _determine_event_row_class(event, duration_thresholds)
                 html += _format_event_table_row(event, row_class)
