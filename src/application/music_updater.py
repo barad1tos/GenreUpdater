@@ -970,15 +970,17 @@ class MusicUpdater:
 
         if all_current_tracks:
             csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
-            # Use sync function instead of save_to_csv for bidirectional sync
-            await sync_track_list_with_current(
-                all_current_tracks,
-                csv_path,
-                self.deps.cache_service,
-                self.console_logger,
-                self.error_logger,
-                partial_sync=True,  # Incremental sync - only process new/changed tracks
-            )
+            # Only sync CSV in non-dry-run mode to prevent divergence between CSV and Apple Music
+            if not self.deps.dry_run:
+                # Use sync function instead of save_to_csv for bidirectional sync
+                await sync_track_list_with_current(
+                    all_current_tracks,
+                    csv_path,
+                    self.deps.cache_service,
+                    self.console_logger,
+                    self.error_logger,
+                    partial_sync=True,  # Incremental sync - only process new/changed tracks
+                )
 
     async def _compute_incremental_scope(self, tracks: list["TrackDict"], force: bool) -> tuple[list["TrackDict"], bool]:
         """Compute which tracks need processing in incremental mode.
