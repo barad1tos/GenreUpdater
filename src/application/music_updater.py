@@ -6,7 +6,7 @@ This is a streamlined version that uses the new modular components.
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from src.application.features.verification.database_verifier import DatabaseVerifier
 from src.domain.tracks.artist_renamer import ArtistRenamer
@@ -17,7 +17,7 @@ from src.domain.tracks.year_retriever import YearRetriever
 from src.shared.core.logger import get_full_log_path
 from src.shared.core.run_tracking import IncrementalRunTracker
 from src.shared.data.metadata import clean_names, is_music_app_running
-from src.shared.data.models import ChangeLogEntry
+from src.shared.data.models import ChangeLogEntry, TrackDict
 from src.shared.monitoring.reports import (
     save_changes_report,
     sync_track_list_with_current,
@@ -25,7 +25,6 @@ from src.shared.monitoring.reports import (
 
 if TYPE_CHECKING:
     from src.infrastructure.dependencies_service import DependencyContainer
-    from src.shared.data.models import TrackDict
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -49,6 +48,7 @@ class MusicUpdater:
         self.track_processor = TrackProcessor(
             ap_client=deps.ap_client,
             cache_service=deps.cache_service,
+            library_snapshot_service=deps.library_snapshot_service,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             config=deps.config,
@@ -653,7 +653,7 @@ class MusicUpdater:
             # Use batch processing for full library to avoid timeout
             self.console_logger.info("Using batch processing for full library fetch")
             batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
-            tracks = cast(list["TrackDict"], await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size))
+            tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size)
             self._set_pipeline_snapshot(tracks)
             return tracks
 

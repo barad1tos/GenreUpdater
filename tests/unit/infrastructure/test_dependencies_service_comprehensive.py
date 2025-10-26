@@ -95,6 +95,7 @@ class TestDependencyContainer:
             patch("src.infrastructure.dependencies_service.Analytics") as mock_analytics,
             patch("src.infrastructure.dependencies_service.CacheOrchestrator") as mock_cache,
             patch("src.infrastructure.dependencies_service.PendingVerificationService") as mock_pending,
+            patch("src.infrastructure.dependencies_service.LibrarySnapshotService") as mock_snapshot,
             patch("src.infrastructure.dependencies_service.create_external_api_orchestrator") as mock_api,
             patch.object(container, "_initialize_apple_script_client") as mock_init_ap,
         ):
@@ -103,20 +104,26 @@ class TestDependencyContainer:
             mock_cache_instance = AsyncMock()
             mock_pending_instance = AsyncMock()
             mock_api_instance = AsyncMock()
+            mock_snapshot_instance = MagicMock()
+            mock_snapshot_instance.initialize = AsyncMock()
 
             mock_analytics.return_value = mock_analytics_instance
             mock_cache.return_value = mock_cache_instance
             mock_pending.return_value = mock_pending_instance
             mock_api.return_value = mock_api_instance
+            mock_snapshot.return_value = mock_snapshot_instance
 
             # Mock the AppleScript client initialization to do nothing
             mock_init_ap.return_value = None
+            container._ap_client = MagicMock()
+            container._ap_client.initialize = AsyncMock()
 
             await container.initialize()
 
             # Verify services were created using public accessors
             assert container.analytics is not None
             assert container.cache_service is not None
+            assert container.library_snapshot_service is not None
             assert container.pending_verification_service is not None
             assert container.external_api_service is not None
             assert container.ap_client is not None
@@ -159,13 +166,36 @@ class TestDependencyContainer:
     @pytest.mark.asyncio
     async def test_initialize_service(self, container: DependencyContainer) -> None:
         """Test individual service initialization."""
-        mock_service = AsyncMock(spec=InitializableService)
-        mock_service.initialize = AsyncMock()
-
         # Use public method or test through public interface
         # Since _initialize_service is private, we test through initialize()
         # or create a test helper that doesn't use private methods
-        with patch.object(container, "_load_config", return_value={}):
+        with (
+            patch.object(container, "_load_config", return_value={}),
+            patch("src.infrastructure.dependencies_service.Analytics"),
+            patch("src.infrastructure.dependencies_service.CacheOrchestrator") as mock_cache,
+            patch("src.infrastructure.dependencies_service.LibrarySnapshotService") as mock_snapshot,
+            patch("src.infrastructure.dependencies_service.PendingVerificationService") as mock_pending,
+            patch("src.infrastructure.dependencies_service.create_external_api_orchestrator") as mock_api,
+        ):
+            mock_cache_instance = MagicMock()
+            mock_cache_instance.initialize = AsyncMock()
+            mock_cache.return_value = mock_cache_instance
+
+            mock_snapshot_instance = MagicMock()
+            mock_snapshot_instance.initialize = AsyncMock()
+            mock_snapshot.return_value = mock_snapshot_instance
+
+            mock_pending_instance = MagicMock()
+            mock_pending_instance.initialize = AsyncMock()
+            mock_pending.return_value = mock_pending_instance
+
+            mock_api_instance = MagicMock()
+            mock_api_instance.initialize = AsyncMock()
+            mock_api.return_value = mock_api_instance
+
+            container._ap_client = MagicMock()
+            container._ap_client.initialize = AsyncMock()
+
             # Test indirectly through public initialize method
             await container.initialize()
 
@@ -174,18 +204,21 @@ class TestDependencyContainer:
         self, container: DependencyContainer
     ) -> None:
         """Test service initialization with force flag."""
-        mock_service = AsyncMock(spec=InitializableService)
-        mock_service.initialize = AsyncMock()
+        service = MagicMock()
+        service.initialize = AsyncMock()
 
-        # Mock the initialize signature to accept force
+        init_method = getattr(container, "_initialize_service")
+
         with patch("inspect.signature") as mock_sig:
             mock_params = MagicMock()
             mock_params.parameters = {"force": MagicMock()}
             mock_sig.return_value = mock_params
 
-            # Test through public interface
-            with patch.object(container, "_load_config", return_value={}):
-                await container.initialize()
+            await init_method(service, "Test Service", force=True)
+
+        service.initialize.assert_awaited_once()
+        assert service.initialize.await_args is not None
+        assert service.initialize.await_args.kwargs.get("force") is True
 
     @pytest.mark.asyncio
     async def test_initialize_service_no_method(
@@ -205,13 +238,13 @@ class TestDependencyContainer:
         self, container: DependencyContainer
     ) -> None:
         """Test service initialization failure."""
-        mock_service = AsyncMock(spec=InitializableService)
-        mock_service.initialize = AsyncMock(side_effect=Exception("Init failed"))
+        service = MagicMock()
+        service.initialize = AsyncMock(side_effect=RuntimeError("Init failed"))
 
-        # Test through public interface
-        with patch.object(container, "_load_config", return_value={}):
-            # Expect this to not raise but log the error
-            await container.initialize()
+        init_method = getattr(container, "_initialize_service")
+
+        with pytest.raises(RuntimeError, match="Init failed"):
+            await init_method(service, "Failing Service")
 
     def test_initialize_apple_script_client_dry_run(
         self, container: DependencyContainer, mock_config: dict[str, Any]

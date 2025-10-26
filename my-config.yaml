@@ -107,6 +107,18 @@ caching:
     generic_cache_max_entries: 10000
     album_cache_max_entries: 50000
     api_cache_max_entries: 25000
+  library_snapshot:
+    enabled: true
+    delta_enabled: true
+    cache_file: cache/library_snapshot.json
+    max_age_hours: 24
+    compress: true
+    compress_level: 6
+    hash_fields:
+      - genre
+      - artist
+      - album
+      - year
 
 # API Cache file
 api_cache_file: cache/cache.json

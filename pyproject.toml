@@ -27,6 +27,7 @@ dependencies = [
   "certifi==2025.10.5",              # SSL certificates for secure HTTPS connections
   "cryptography==46.0.3",            # Cryptography for secure token handling
   "aiofiles==25.1.0",                # File operations
+  "orjson>=3.10.0",                  # Fast JSON serialization
   "rich==14.2.0",                    # Console output formatting
   "ruff==0.14.2",                    # Linting and code quality
   "pytest>=8.4.2",                   # Testing framework

@@ -126,19 +126,25 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
     :param error_logger: Logger for error output.
     :return: List of track dictionaries.
     """
-    field_separator = "\x1e"  # ASCII 30 (Record Separator)
-    line_separator = "\x1d"  # ASCII 29 (Group Separator)
+    field_separator = "\x1e" if "\x1e" in raw_data else "\t"
+    line_separator = "\x1d" if "\x1d" in raw_data else None
 
     if not raw_data:
         error_logger.error("No data fetched from AppleScript.")
         return []
 
     error_logger.debug(
-        f"parse_tracks: Input raw_data (first 500 chars): {raw_data[:500]}...",
+        "parse_tracks: Input raw_data (first 500 chars): %s...",
+        raw_data[:500],
+    )
+    error_logger.debug(
+        "parse_tracks: Using field separator %r, line separator %r",
+        field_separator,
+        line_separator or "newline",
     )
 
     tracks: list[TrackDict] = []
-    rows = raw_data.strip().split(line_separator)
+    rows = raw_data.strip().split(line_separator) if line_separator else raw_data.strip().splitlines()
 
     for row in rows:
         if not row:  # Skip empty rows
@@ -197,16 +203,10 @@ def determine_dominant_genre_for_artist(
     if not artist_tracks:
         return "Unknown"
     try:
-        if album_earliest := _get_earliest_track_per_album(
-            artist_tracks, error_logger
-        ):
+        if album_earliest := _get_earliest_track_per_album(artist_tracks, error_logger):
             return (
                 _get_genre_from_track(earliest_album_track)
-                if (
-                    earliest_album_track := _get_earliest_track_across_albums(
-                        album_earliest, error_logger
-                    )
-                )
+                if (earliest_album_track := _get_earliest_track_across_albums(album_earliest, error_logger))
                 else "Unknown"
             )
         return "Unknown"
@@ -493,6 +493,57 @@ def _clean_text_segments(name: str, keywords: list[str], console_logger: logging
     return cleaned
 
 
+def _is_cleaning_exception(artist: str, album_name: str, exceptions: list[dict[str, Any]]) -> bool:
+    """Return True if the artist/album pair is explicitly excluded from cleaning."""
+    artist_lower = artist.lower()
+    album_lower = album_name.lower()
+    return any(entry.get("artist", "").lower() == artist_lower and entry.get("album", "").lower() == album_lower for entry in exceptions)
+
+
+def _compile_suffix_patterns(album_suffixes_raw: list[str]) -> list[tuple[str, re.Pattern[str]]]:
+    """Compile configured album suffixes into ordered regex patterns."""
+    deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
+    suffixes = sorted(deduped_suffixes, key=len, reverse=True)
+
+    compiled: list[tuple[str, re.Pattern[str]]] = []
+    for suffix in suffixes:
+        trimmed = suffix.strip()
+        if not trimmed:
+            continue
+
+        if re.search(r"[\s()\u2013\u2014-]", suffix):
+            pattern = re.compile(rf"{re.escape(suffix.rstrip())}\s*$", re.IGNORECASE)
+        else:
+            pattern = re.compile(rf"[ \t\u2013\u2014-]*\b{re.escape(trimmed)}\b\s*$", re.IGNORECASE)
+        compiled.append((suffix, pattern))
+    return compiled
+
+
+def _strip_album_suffixes(album: str, suffix_patterns: list[tuple[str, re.Pattern[str]]], console_logger: logging.Logger) -> str:
+    """Remove configured suffix patterns from album titles."""
+    if not suffix_patterns:
+        return album
+
+    cleaned = album
+    while True:
+        for suffix, pattern in suffix_patterns:
+            if not pattern.search(cleaned):
+                continue
+            before = cleaned
+            cleaned = pattern.sub("", cleaned)
+            cleaned = cleaned.rstrip(" \t-\u2013\u2014")
+            console_logger.debug(
+                "Removed suffix '%s' from album '%s'; result '%s'",
+                suffix,
+                before,
+                cleaned,
+            )
+            break
+        else:
+            break
+    return cleaned
+
+
 def clean_names(
     artist: str,
     track_name: str,
@@ -516,7 +567,6 @@ def clean_names(
     Returns:
         Tuple (cleaned_track_name, cleaned_album_name).
     """
-    # Only log at debug level to reduce noise, especially for empty values
     if track_name or album_name:
         console_logger.debug(
             "clean_names called with: artist='%s', track_name='%s', album_name='%s'",
@@ -524,43 +574,23 @@ def clean_names(
             track_name,
             album_name,
         )
-    # Skip logging entirely for empty track and album names
 
-    # Use config passed as argument
     exceptions = config.get("exceptions", {}).get("track_cleaning", [])
-    # Check if the current artist/album pair is in the exceptions list
-    is_exception = any(exc.get("artist", "").lower() == artist.lower() and exc.get("album", "").lower() == album_name.lower() for exc in exceptions)
-
-    if is_exception:
+    if _is_cleaning_exception(artist, album_name, exceptions):
         console_logger.info(
             "No cleaning applied due to exceptions for artist '%s', album '%s'.",
             artist,
             album_name,
         )
-        return track_name.strip(), album_name.strip()  # Return original names, stripped
+        return track_name.strip(), album_name.strip()
 
-    # Get cleaning config
     cleaning_config = config.get("cleaning", {})
     remaster_keywords = cleaning_config.get(
         "remaster_keywords",
         ["remaster", "remastered"],
     )
     album_suffixes_raw: list[str] = cleaning_config.get("album_suffixes_to_remove", [])
-    # Remove duplicates while preserving order, then sort by length descending
-    deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
-    album_suffixes: list[str] = sorted(deduped_suffixes, key=len, reverse=True)
-
-    compiled_suffixes: list[tuple[str, re.Pattern[str]]] = []
-    for suffix in album_suffixes:
-        trimmed_suffix = suffix.strip()
-        if not trimmed_suffix:
-            continue
-
-        if re.search(r"[\s\(\)\-\u2013\u2014]", suffix):
-            pattern = re.compile(rf"{re.escape(suffix.rstrip())}\s*$", re.IGNORECASE)
-        else:
-            pattern = re.compile(rf"[ \t\-\u2013\u2014]*\b{re.escape(trimmed_suffix)}\b\s*$", re.IGNORECASE)
-        compiled_suffixes.append((suffix, pattern))
+    compiled_suffixes = _compile_suffix_patterns(album_suffixes_raw)
 
     # Helper function for cleaning strings using remove_parentheses_with_keywords
     def clean_string(val: str, keywords: list[str]) -> str:
@@ -596,24 +626,7 @@ def clean_names(
     cleaned_album = str(cleaned_album)
 
     # Remove specified album suffixes in a case-insensitive manner
-    # and ensure leftover punctuation/whitespace is stripped
-    removed = True
-    while removed:
-        removed = False
-        for suffix, pattern in compiled_suffixes:
-            match = pattern.search(cleaned_album)
-            if match:
-                before = cleaned_album
-                cleaned_album = pattern.sub("", cleaned_album)
-                cleaned_album = cleaned_album.rstrip(" \t-\u2013\u2014")
-                console_logger.debug(
-                    "Removed suffix '%s' from album '%s'; result '%s'",
-                    suffix,
-                    before,
-                    cleaned_album,
-                )
-                removed = True
-                break
+    cleaned_album = _strip_album_suffixes(cleaned_album, compiled_suffixes, console_logger)
 
     # Log the cleaning results only if something changed
     if cleaned_track != original_track:

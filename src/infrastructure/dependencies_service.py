@@ -24,6 +24,7 @@ from src.shared.monitoring.analytics import Analytics, LoggerContainer
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
 from .applescript_client import AppleScriptClient
 from .cache.cache_orchestrator import CacheOrchestrator
+from .cache.library_snapshot_service import LibrarySnapshotService
 from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
@@ -100,9 +101,9 @@ class DependencyContainer:
         self._analytics: Analytics | None = None
         self._ap_client: AppleScriptClientProtocol | None = None
         self._cache_service: CacheOrchestrator | None = None
+        self._library_snapshot_service: LibrarySnapshotService | None = None
         self._pending_verification_service: PendingVerificationService | None = None
         self._api_orchestrator: ExternalApiOrchestrator | None = None
-        # MusicUpdater removed - created by orchestrator to avoid circular dependency
         self._dry_run = dry_run
 
     @property
@@ -143,6 +144,14 @@ class DependencyContainer:
             msg = "Cache service not initialized"
             raise RuntimeError(msg)
         return self._cache_service
+
+    @property
+    def library_snapshot_service(self) -> LibrarySnapshotService:
+        """Get the library snapshot service."""
+        if self._library_snapshot_service is None:
+            msg = "Library snapshot service not initialized"
+            raise RuntimeError(msg)
+        return self._library_snapshot_service
 
     @property
     def pending_verification_service(self) -> PendingVerificationService:
@@ -287,6 +296,8 @@ class DependencyContainer:
             )
         if self._cache_service is None:
             self._cache_service = CacheOrchestrator(self._config, self._console_logger)
+        if self._library_snapshot_service is None:
+            self._library_snapshot_service = LibrarySnapshotService(self._config, self._console_logger)
         if self._pending_verification_service is None:
             self._pending_verification_service = PendingVerificationService(
                 self._config, self._console_logger, self._error_logger
@@ -307,6 +318,7 @@ class DependencyContainer:
 
         # Initialize services in the correct order
         services: list[tuple[InitializableService | None, str]] = [
+            (self._library_snapshot_service, "Library Snapshot Service"),
             (self._cache_service, "Cache Service"),
             (self._pending_verification_service, "Pending Verification Service"),
             (self._api_orchestrator, "API Orchestrator"),
@@ -361,7 +373,10 @@ class DependencyContainer:
         # Close API Orchestrator's aiohttp session properly
         if self._api_orchestrator is not None:
             if not hasattr(self._api_orchestrator, "close"):
-                self._console_logger.error("API Orchestrator does not have a 'close' method. Possible interface change or initialization error.")
+                self._console_logger.error(
+                    "API Orchestrator does not have a 'close' method. "
+                    "Possible interface change or initialization error."
+                )
             else:
                 try:
                     await self._api_orchestrator.close()
@@ -455,10 +470,22 @@ class DependencyContainer:
         # Convert to string if it's a Path object
         scripts_dir_str = str(scripts_dir)
 
-        # Validate directory exists
-        if not Path(scripts_dir_str).is_dir():
-            self._console_logger.error(
-                f"AppleScripts directory does not exist: {scripts_dir_str}",
+        # Validate directory exists and handle permission issues gracefully
+        try:
+            scripts_path = Path(scripts_dir_str)
+            if not scripts_path.is_dir():
+                self._console_logger.error(
+                    f"AppleScripts directory does not exist: {scripts_dir_str}",
+                )
+                return
+        except PermissionError as exc:
+            self._console_logger.exception(
+                f"Permission denied when accessing AppleScripts directory: {scripts_dir_str}. Error: {exc}",
+            )
+            return
+        except Exception as exc:
+            self._console_logger.exception(
+                f"Unexpected error when checking AppleScripts directory: {scripts_dir_str}. Error: {exc}",
             )
             return
 

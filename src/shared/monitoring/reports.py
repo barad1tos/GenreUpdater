@@ -1091,6 +1091,13 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
     return cmd
 
 
+def _resolve_field_indices(field_count: int) -> tuple[int, int, int] | None:
+    """Return indices for date_added, status, and old_year columns."""
+    if field_count == 11:
+        return 6, 7, 8
+    return (5, 6, 7) if field_count == 10 else None
+
+
 def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
     """Parse AppleScript output into track cache dictionary.
 
@@ -1099,34 +1106,31 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
     """
     tracks_cache: dict[str, dict[str, str]] = {}
 
-    # AppleScript uses ASCII character 29 (line separator) and 30 (field separator)
-    line_separator = chr(29)  # ASCII 29
-    field_separator = chr(30)  # ASCII 30
-    tracks_data = raw_output.strip().split(line_separator)
-
-    # AppleScript returns 10 fields: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
-    expected_field_count = 10
+    line_separator = chr(29) if chr(29) in raw_output else None
+    field_separator = chr(30) if chr(30) in raw_output else "\t"
+    tracks_data = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
         if not track_line.strip():  # Skip empty lines
             continue
         fields = track_line.split(field_separator)
-        if len(fields) != expected_field_count:
+        indices = _resolve_field_indices(len(fields))
+        if indices is None:
             logging.warning(
-                "Track line %d has %d fields, expected %d. Skipping line: %r",
+                "Track line %d has %d fields, expected 10 or 11. Skipping line: %r",
                 line_num,
                 len(fields),
-                expected_field_count,
                 track_line[:100],  # Truncate long lines for readability
             )
             continue
+        date_added_index, status_index, old_year_index = indices
         track_id = fields[0]
         # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
         missing_value = "missing value"
         tracks_cache[track_id] = {
-            "date_added": fields[5] if fields[5] != missing_value else "",
-            "track_status": fields[6] if fields[6] != missing_value else "",
-            "old_year": fields[7] if fields[7] != missing_value else "",
+            "date_added": fields[date_added_index] if fields[date_added_index] != missing_value else "",
+            "track_status": fields[status_index] if fields[status_index] != missing_value else "",
+            "old_year": fields[old_year_index] if fields[old_year_index] != missing_value else "",
         }
 
     return tracks_cache

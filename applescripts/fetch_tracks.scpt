@@ -1,7 +1,7 @@
 (*
     The script for getting track parameters from the Music library.
     COMBINED LOGIC:
-    - Uses reliable separators (U+001E for fields, U+001D for lines).
+    - Uses explicit separators (TAB for fields, LF for lines).
     - Efficiently builds a list of results.
     - Filters tracks at the source, returning ONLY those with modifiable statuses.
 *)
@@ -25,15 +25,32 @@ on run argv
         set batchLimit to item 3 of argv as integer
     end if
 
-    set fieldSeparator to ASCII character 30
-    set lineSeparator to ASCII character 29
+    -- Optional filter by minimum date added (Unix timestamp)
+    set minDateAdded to missing value
+    if (count of argv) >= 4 and item 4 of argv is not "" then
+        try
+            set timestampSeconds to item 4 of argv as integer
+            set minDateAdded to my date_from_unix_timestamp(timestampSeconds)
+        on error errMsg
+            log "Invalid minDateAdded timestamp: " & errMsg
+            set minDateAdded to missing value
+        end try
+    end if
+
+    set fieldSeparator to tab
+    set lineSeparator to linefeed
     set finalResult to {}
 
     tell application "Music"
         -- Get a reference to all tracks to be processed
         if selectedArtist is not "" then
-            -- Include tracks where either track artist or album artist EXACTLY matches the filter
-            set trackObjects to (every track of library playlist 1 whose (artist is selectedArtist) or (album artist is selectedArtist))
+            if minDateAdded is not missing value then
+                -- Artist filter + date filter
+                set trackObjects to (every track of library playlist 1 whose ((artist is selectedArtist) or (album artist is selectedArtist)) and (date added > minDateAdded))
+            else
+                -- Include tracks where either track artist or album artist EXACTLY matches the filter
+                set trackObjects to (every track of library playlist 1 whose (artist is selectedArtist) or (album artist is selectedArtist))
+            end if
         else if batchLimit > 0 then
             -- Batch mode: get tracks from offset to offset+limit-1 without materializing the entire library collection each time
             set totalTracks to (count of tracks of library playlist 1)
@@ -58,7 +75,11 @@ on run argv
                 set trackObjects to items batchOffset thru endIndex of allTracks
             end try
         else
-            set trackObjects to (every track of library playlist 1)
+            if minDateAdded is not missing value then
+                set trackObjects to (every track of library playlist 1 whose date added > minDateAdded)
+            else
+                set trackObjects to (every track of library playlist 1)
+            end if
         end if
 
         if (count of trackObjects) = 0 then
@@ -146,83 +167,40 @@ on is_valid_cloud_status(statusText)
 end is_valid_cloud_status
 
 on fetch_property_list(trackObjects, propertyName, expectedCount)
-    -- Safely fetch a property list, falling back to per-track retrieval on failure or mismatched counts
+    -- Safely fetch a property list via per-track retrieval to ensure consistent counts
     tell application "Music"
         set valueList to {}
-        try
-            if propertyName is "cloud status" then
-                set valueList to my ensure_list(cloud status of trackObjects)
-            else if propertyName is "id" then
-                set valueList to my ensure_list(id of trackObjects)
-            else if propertyName is "name" then
-                set valueList to my ensure_list(name of trackObjects)
-            else if propertyName is "artist" then
-                set valueList to my ensure_list(artist of trackObjects)
-            else if propertyName is "album artist" then
-                set valueList to my ensure_list(album artist of trackObjects)
-            else if propertyName is "album" then
-                set valueList to my ensure_list(album of trackObjects)
-            else if propertyName is "genre" then
-                set valueList to my ensure_list(genre of trackObjects)
-            else if propertyName is "date added" then
-                set valueList to my ensure_list(date added of trackObjects)
-            else if propertyName is "year" then
-                set valueList to my ensure_list(year of trackObjects)
-            else
-                error "Unsupported property selector: " & propertyName
-            end if
-        on error
-            set valueList to {}
-        end try
-
-        if (count of valueList) = expectedCount then
-            return valueList
-        end if
-
-        -- Fall back to per-track retrieval to handle missing properties safely
-        set fallbackList to {}
         repeat with idx from 1 to expectedCount
+            set propertyValue to missing value
             try
                 set currentTrack to item idx of trackObjects
                 if propertyName is "cloud status" then
-                    set end of fallbackList to (cloud status of currentTrack)
+                    set propertyValue to (cloud status of currentTrack)
                 else if propertyName is "id" then
-                    set end of fallbackList to (id of currentTrack)
+                    set propertyValue to (id of currentTrack)
                 else if propertyName is "name" then
-                    set end of fallbackList to (name of currentTrack)
+                    set propertyValue to (name of currentTrack)
                 else if propertyName is "artist" then
-                    set end of fallbackList to (artist of currentTrack)
+                    set propertyValue to (artist of currentTrack)
                 else if propertyName is "album artist" then
-                    set end of fallbackList to (album artist of currentTrack)
+                    set propertyValue to (album artist of currentTrack)
                 else if propertyName is "album" then
-                    set end of fallbackList to (album of currentTrack)
+                    set propertyValue to (album of currentTrack)
                 else if propertyName is "genre" then
-                    set end of fallbackList to (genre of currentTrack)
+                    set propertyValue to (genre of currentTrack)
                 else if propertyName is "date added" then
-                    set end of fallbackList to (date added of currentTrack)
+                    set propertyValue to (date added of currentTrack)
                 else if propertyName is "year" then
-                    set end of fallbackList to (year of currentTrack)
-                else
-                    set end of fallbackList to missing value
+                    set propertyValue to (year of currentTrack)
                 end if
             on error
-                set end of fallbackList to missing value
+                set propertyValue to missing value
             end try
+            set end of valueList to propertyValue
         end repeat
-        return fallbackList
+        return valueList
     end tell
 end fetch_property_list
-
-on ensure_list(candidate)
-    -- Ensure values are treated as a list so single-element results stay indexable
-    if candidate is missing value then
-        return {}
-    else if class of candidate is list then
-        return candidate
-    else
-        return {candidate}
-    end if
-end ensure_list
 
 on item_or_missing(theList, position)
     -- Safely return an item from a list, or missing value if out-of-bounds
@@ -257,6 +235,20 @@ on text_or_empty(value)
         end try
     end try
 end text_or_empty
+
+on date_from_unix_timestamp(timestampSeconds)
+    try
+        set epochDate to (current date)
+        set year of epochDate to 1970
+        set month of epochDate to January
+        set day of epochDate to 1
+        set time of epochDate to 0
+        return epochDate + timestampSeconds
+    on error errMsg
+        log "date_from_unix_timestamp error: " & errMsg
+        return missing value
+    end try
+end date_from_unix_timestamp
 
 on normalize_year(value)
     -- Normalize raw year values into a clean string representation
