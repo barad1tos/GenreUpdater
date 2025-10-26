@@ -44,6 +44,60 @@ class TrackDelta:
         return not (self.new_ids or self.updated_ids or self.removed_ids)
 
 
+def _field_changed(current: str, stored: str) -> bool:
+    """Check if a field value has changed.
+
+    Args:
+        current: Current field value
+        stored: Stored field value
+
+    Returns:
+        True if field has a meaningful value and it differs from stored
+
+    """
+    return bool(current and current != stored)
+
+
+def _has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
+    """Check if track metadata has changed between current and stored versions.
+
+    Args:
+        current: Current track from Apple Music
+        stored: Stored track from CSV snapshot
+
+    Returns:
+        True if any tracked field has changed
+
+    """
+    # Compare the same fields that TrackSummary would compare
+    stored_last_modified = getattr(stored, "last_modified", "") or ""
+    current_last_modified = current.last_modified or ""
+
+    stored_date_added = stored.date_added or ""
+    current_date_added = current.date_added or ""
+
+    stored_track_status = stored.track_status or ""
+    current_track_status = current.track_status or ""
+
+    stored_genre = stored.genre or ""
+    current_genre = current.genre or ""
+
+    stored_year = str(stored.year or "")
+    current_year = str(current.year or "")
+
+    # Only consider track_status change if both stored and current have meaningful values
+    # This prevents mass updates on first run after adding track_status field
+    track_status_changed = stored_track_status and current_track_status and current_track_status != stored_track_status
+
+    # Check for changes in metadata fields
+    last_modified_changed = _field_changed(current_last_modified, stored_last_modified)
+    date_added_changed = _field_changed(current_date_added, stored_date_added)
+    genre_changed = _field_changed(current_genre, stored_genre)
+    year_changed = _field_changed(current_year, stored_year)
+
+    return bool(last_modified_changed or date_added_changed or track_status_changed or genre_changed or year_changed)
+
+
 def compute_track_delta(
     current_tracks: Iterable[TrackDict],
     existing_map: dict[str, TrackDict],
@@ -61,25 +115,7 @@ def compute_track_delta(
         current = current_map[track_id]
         stored = existing_map[track_id]
 
-        # Compare the same fields that TrackSummary would compare
-        stored_last_modified = getattr(stored, "last_modified", "") or ""
-        current_last_modified = current.last_modified or ""
-
-        stored_date_added = stored.date_added or ""
-        current_date_added = current.date_added or ""
-
-        stored_track_status = stored.track_status or ""
-        current_track_status = current.track_status or ""
-
-        # Only consider track_status change if both stored and current have meaningful values
-        # This prevents mass updates on first run after adding track_status field
-        track_status_changed = stored_track_status and current_track_status and current_track_status != stored_track_status
-
-        if (
-            (current_last_modified and current_last_modified != stored_last_modified)
-            or (current_date_added and current_date_added != stored_date_added)
-            or track_status_changed
-        ):
+        if _has_track_changed(current, stored):
             updated_ids.append(track_id)
 
     return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
