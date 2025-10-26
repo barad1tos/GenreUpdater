@@ -61,36 +61,65 @@ that reflects the true characteristics of your music.
 
 Music Genre Updater v2.0 follows a **clean architecture pattern** with clear separation of concerns:
 
-### Core Layers
+```mermaid
+graph TD
+    subgraph Application["Application Layer (src/application/)"]
+        CLI[CLI Parser<br/>7 subcommands]
+        Orchestrator[Orchestrator<br/>Command router]
+        Config[Config Manager<br/>YAML validation]
+        MusicUpdater[Music Updater<br/>Business orchestrator]
+        Features[Features/<br/>Batch, Crypto, Verification]
+    end
 
-**Application Layer** (`src/application/`)
+    subgraph Domain["Domain Layer (src/domain/tracks/)"]
+        TrackProcessor[Track Processor<br/>CRUD + AppleScript]
+        GenreManager[Genre Manager<br/>Dominant genre logic]
+        YearRetriever[Year Retriever<br/>API scoring]
+        ArtistRenamer[Artist Renamer<br/>Name normalization]
+        IncrementalFilter[Incremental Filter<br/>Delta updates]
+    end
 
-- `orchestrator.py` - Main workflow coordinator and command router
-- `cli.py` - Command-line interface with 7 subcommands
-- `config.py` - Configuration management and validation
-- `music_updater.py` - Primary business logic orchestrator
-- `features/` - Specialized features (batch processing, cryptography, verification)
+    subgraph Infrastructure["Infrastructure Layer (src/infrastructure/)"]
+        AppleScript[AppleScript Client<br/>Music.app integration]
+        APIs[External APIs<br/>MusicBrainz, Discogs, Last.fm]
+        Cache[Cache Services<br/>Memory, Disk, Snapshot]
+        DI[Dependency Container<br/>Service injection]
+    end
 
-**Domain Layer** (`src/domain/tracks/`)
+    subgraph Shared["Shared Layer (src/shared/)"]
+        Core[Core/<br/>Config, Logging, Retry]
+        Monitoring[Monitoring/<br/>Analytics, Metrics]
+        Data[Data/<br/>Models, Validators, Parsers]
+    end
 
-- `genre_manager.py` - Genre detection and dominant genre calculation
-- `year_retriever.py` - Release year fetching from external APIs with scoring
-- `track_processor.py` - Track CRUD operations and AppleScript integration
-- `artist_renamer.py` - Artist name normalization and mapping
-- `incremental_filter.py` - Incremental update filtering logic
+    CLI --> Orchestrator
+    Orchestrator --> MusicUpdater
+    Orchestrator --> Features
+    MusicUpdater --> TrackProcessor
+    TrackProcessor --> GenreManager
+    TrackProcessor --> YearRetriever
+    TrackProcessor --> ArtistRenamer
+    TrackProcessor --> IncrementalFilter
+    GenreManager --> Cache
+    YearRetriever --> APIs
+    YearRetriever --> Cache
+    TrackProcessor --> AppleScript
+    Orchestrator --> DI
+    MusicUpdater --> DI
+    TrackProcessor -.uses.-> Core
+    TrackProcessor -.uses.-> Monitoring
+    TrackProcessor -.uses.-> Data
 
-**Infrastructure Layer** (`src/infrastructure/`)
+    classDef appLayer fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef domainLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef infraLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef sharedLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
 
-- `applescript_client.py` - Music.app integration via AppleScript
-- `api/` - External API clients (MusicBrainz, Discogs, Last.fm, Apple Music)
-- `cache/` - Multi-tier caching system (memory, disk, snapshot)
-- `dependencies_service.py` - Dependency injection container
-
-**Shared Layer** (`src/shared/`)
-
-- `core/` - Configuration, logging, retry logic, exception handling
-- `monitoring/` - Analytics, performance metrics, HTML reports
-- `data/` - Data models (Pydantic), validators, parsers, protocols
+    class CLI,Orchestrator,Config,MusicUpdater,Features appLayer
+    class TrackProcessor,GenreManager,YearRetriever,ArtistRenamer,IncrementalFilter domainLayer
+    class AppleScript,APIs,Cache,DI infraLayer
+    class Core,Monitoring,Data sharedLayer
+```
 
 ### Key Design Patterns
 
@@ -109,7 +138,8 @@ Music Genre Updater v2.0 follows a **clean architecture pattern** with clear sep
   analysis algorithms with configurable thresholds.
 - **Automatic Year Updating:** Retrieves and updates accurate release years from multiple music databases (MusicBrainz,
   Discogs, Last.fm) with intelligent scoring.
-- **Batch Processing:** Efficiently handles large music libraries (30,000+ tracks) using intelligent batch processing with
+- **Batch Processing:** Efficiently handles large music libraries (30,000+ tracks) using intelligent batch processing
+  with
   automatic parse failure tolerance.
 - **Contextual Logging:** Provides detailed, contextual logs showing `artist | album | track` information for better
   monitoring and debugging.
@@ -153,7 +183,8 @@ Before installing the Music Genre Updater, ensure you have the following:
 
 ### Method 1: Using uv (Recommended)
 
-[uv](https://github.com/astral-sh/uv) is a modern, fast Python package manager. This is the recommended installation method.
+[uv](https://github.com/astral-sh/uv) is a modern, fast Python package manager.
+This is the recommended installation method.
 
 ```bash
 # Install uv if not already installed
@@ -190,7 +221,8 @@ pip install -e .
 python main.py --help
 ```
 
-**Note:** All project dependencies are managed through `pyproject.toml`. The application requires Python 3.13+ and includes 15+ packages for async processing, API integration, caching, and monitoring.
+**Note:** All project dependencies are managed through `pyproject.toml`. The application requires Python 3.13+ and
+includes 15+ packages for async processing, API integration, caching, and monitoring.
 
 ### Configuration
 
@@ -715,7 +747,8 @@ The application uses 4 AppleScript files located in the `applescripts/` director
 
 **Location**: All scripts are in the `applescripts/` directory (set via `apple_scripts_dir` in config).
 
-**Integration**: The `AppleScriptClient` (`src/infrastructure/applescript_client.py`) invokes these scripts with proper error handling, timeouts, and retry logic.
+**Integration**: The `AppleScriptClient` (`src/infrastructure/applescript_client.py`) invokes these scripts with proper
+error handling, timeouts, and retry logic.
 
 ## Contributing
 
