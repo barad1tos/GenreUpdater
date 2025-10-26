@@ -391,11 +391,6 @@ class MusicUpdater:
             changes_log: List of change log entries
 
         """
-        # Skip full library sync when using test artists for performance
-        if self.dry_run_test_artists:
-            self.console_logger.info("Skipping full library sync in _save_clean_results (using test artists)")
-            return
-
         # Sync with the database
         csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
         # Fetch ALL current tracks for complete synchronization
@@ -955,11 +950,6 @@ class MusicUpdater:
 
             self.console_logger.info("Change breakdown: %s", ", ".join(f"{k}: {v}" for k, v in sorted(change_types.items())))
 
-        # Skip full library sync when using test artists for performance
-        if self.dry_run_test_artists:
-            self.console_logger.info("Skipping full library sync (using test artists)")
-            return
-
         # Use cached snapshot when available to avoid a second AppleScript fetch
         snapshot_tracks = self._get_pipeline_snapshot()
         if snapshot_tracks is not None:
@@ -973,6 +963,8 @@ class MusicUpdater:
             # Only sync CSV in non-dry-run mode to prevent divergence between CSV and Apple Music
             if not self.deps.dry_run:
                 # Use sync function instead of save_to_csv for bidirectional sync
+                # In test mode: syncs only test artist tracks (partial_sync handles this)
+                # In normal mode: syncs all tracks
                 await sync_track_list_with_current(
                     all_current_tracks,
                     csv_path,
