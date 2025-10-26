@@ -17,6 +17,8 @@ class MockDependencyContainer:
         """Initialize mock container with given attributes."""
         for key, value in kwargs.items():
             setattr(self, key, value)
+        if not hasattr(self, "library_snapshot_service"):
+            self.library_snapshot_service = None
 
 
 class DummyAppleScriptClient:

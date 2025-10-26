@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import allure
@@ -196,7 +197,7 @@ class TestTrackProcessorAllure:
             processor = self.create_processor(ap_client=mock_ap_client)
 
         with allure.step("Execute track fetching"):
-            result = await processor._fetch_tracks_from_applescript("Test Artist", True)  # noqa: SLF001
+            result = await processor._fetch_tracks_from_applescript("Test Artist")  # noqa: SLF001
 
         with allure.step("Verify fetching results"):
             assert isinstance(result, list)
@@ -210,6 +211,31 @@ class TestTrackProcessorAllure:
 
             allure.attach(f"Fetched {len(result)} tracks", "Fetch Result", allure.attachment_type.TEXT)
             allure.attach(str([track.name for track in result]), "Track Names", allure.attachment_type.TEXT)
+
+    @allure.story("Track Fetching")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Should include min_date_added argument when provided")
+    @allure.description("Verify AppleScript invocation includes timestamp filter when min_date_added is passed")
+    @pytest.mark.asyncio
+    async def test_fetch_tracks_from_applescript_with_min_date(self) -> None:
+        """Test that min_date_added is converted to Unix timestamp."""
+        with allure.step("Setup mock AppleScript client with response"):
+            mock_ap_client = MockAppleScriptClient()
+            mock_ap_client.set_response("fetch_tracks.scpt", "")
+
+        with allure.step("Create processor"):
+            processor = self.create_processor(ap_client=mock_ap_client)
+
+        with allure.step("Invoke fetch with min_date_added"):
+            min_date = datetime(2024, 1, 1, 10, 30, tzinfo=UTC)
+            await processor._fetch_tracks_from_applescript(min_date_added=min_date)  # noqa: SLF001
+
+        with allure.step("Validate AppleScript arguments include timestamp"):
+            _, arguments = mock_ap_client.scripts_run[-1]
+            assert arguments is not None
+            assert len(arguments) >= 4
+            expected_ts = str(int(min_date.replace(second=0, microsecond=0).timestamp()))
+            assert arguments[-1] == expected_ts
 
     @allure.story("Track Updates")
     @allure.severity(allure.severity_level.CRITICAL)

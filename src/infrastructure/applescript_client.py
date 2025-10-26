@@ -14,6 +14,7 @@ import re
 import subprocess
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,14 @@ MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
 COMPLEX_SCRIPT_THRESHOLD = 2000  # Use temp file for scripts > 2KB
 COMPLEX_PATTERN_COUNT = 5  # Use a temp file if the script has > 5 complex patterns
 MAX_TELL_BLOCKS = 3  # Use the temp file if the script has > 3 tell blocks
+
+
+def datetime_to_applescript_timestamp(dt: datetime) -> int:
+    """Convert datetime to Unix timestamp string expected by AppleScript filters."""
+    aware_dt = dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+    utc_dt = aware_dt.astimezone(UTC)
+    floored = utc_dt.replace(second=0, microsecond=0)
+    return int(floored.timestamp())
 
 
 class AppleScriptSanitizationError(Exception):

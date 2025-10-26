@@ -5,10 +5,13 @@ and updating track properties.
 """
 
 import logging
+from datetime import UTC, datetime
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.artist_renamer import ArtistRenamer
+from src.infrastructure.applescript_client import datetime_to_applescript_timestamp
+from src.infrastructure.cache.library_snapshot_service import LibraryCacheMetadata, LibraryDeltaCache, LibrarySnapshotService
 from src.shared.data.metadata import parse_tracks
 from src.shared.data.models import TrackDict
 from src.shared.data.track_status import can_edit_metadata
@@ -26,6 +29,8 @@ class TrackProcessor:
         self,
         ap_client: "AppleScriptClientProtocol",
         cache_service: "CacheServiceProtocol",
+        *,
+        library_snapshot_service: LibrarySnapshotService | None = None,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: dict[str, Any],
@@ -38,6 +43,7 @@ class TrackProcessor:
         Args:
             ap_client: AppleScript client for Music.app communication
             cache_service: Cache service for storing track data
+            library_snapshot_service: Optional library snapshot service for cached snapshots
             console_logger: Logger for console output
             error_logger: Logger for error messages
             config: Configuration dictionary
@@ -48,6 +54,7 @@ class TrackProcessor:
         """
         self.ap_client = ap_client
         self.cache_service = cache_service
+        self.snapshot_service = library_snapshot_service
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
@@ -75,6 +82,11 @@ class TrackProcessor:
     def set_artist_renamer(self, renamer: ArtistRenamer) -> None:
         """Attach artist renamer service for automatic post-fetch processing."""
         self.artist_renamer = renamer
+
+    @staticmethod
+    def _current_time() -> datetime:
+        """Return naive UTC timestamp for cache metadata."""
+        return datetime.now(UTC).replace(tzinfo=None)
 
     async def _process_test_artists(self, _force_refresh: bool) -> list[TrackDict]:
         """Process tracks for all configured test artists.
@@ -151,6 +163,167 @@ class TrackProcessor:
 
         return validated_tracks
 
+    async def _materialize_cached_tracks(self, cache_key: str, artist: str | None) -> list[TrackDict] | None:
+        """Return validated cached tracks if available."""
+        cached_tracks = await self._get_cached_tracks(cache_key)
+        if cached_tracks is None:
+            return None
+
+        validated_cached = self._validate_tracks_security(list(cached_tracks))
+        self.console_logger.info(
+            "Using cached data for %s, validated %d/%d tracks",
+            artist or "all artists",
+            len(validated_cached),
+            len(cached_tracks),
+        )
+        await self._apply_artist_renames(validated_cached)
+        return validated_cached
+
+    async def _try_fetch_test_tracks(self, force_refresh: bool, ignore_test_filter: bool, artist: str | None) -> list[TrackDict] | None:
+        """Return test-mode tracks when applicable."""
+        if artist is not None or ignore_test_filter:
+            return None
+
+        test_tracks = await self._process_test_artists(force_refresh)
+        if test_tracks or self.config.get("development", {}).get("test_artists", []):
+            return test_tracks
+        return None
+
+    async def _try_fetch_snapshot_tracks(self, cache_key: str, use_snapshot: bool, force_refresh: bool) -> list[TrackDict] | None:
+        """Return snapshot tracks when snapshot caching is eligible."""
+        if not use_snapshot or force_refresh:
+            return None
+
+        snapshot_tracks = await self._load_tracks_from_snapshot()
+        if snapshot_tracks is None:
+            return None
+
+        await self.cache_service.set_async(cache_key, snapshot_tracks)
+        self.console_logger.info("Serving tracks from snapshot cache (%d items)", len(snapshot_tracks))
+        return snapshot_tracks
+
+    def _can_use_snapshot(self, artist: str | None) -> bool:
+        """Return True when snapshot caching can be used for this request."""
+        return artist is None and self.snapshot_service is not None and self.snapshot_service.is_enabled()
+
+    @staticmethod
+    def _count_raw_track_rows(raw_output: str) -> int:
+        """Count non-empty raw track rows returned by AppleScript."""
+        if not raw_output:
+            return 0
+        line_separator = "\x1d" if "\x1d" in raw_output else None
+        rows = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
+        return sum(1 for row in rows if row)
+
+    async def _load_tracks_from_snapshot(self) -> list[TrackDict] | None:
+        """Attempt to serve tracks via snapshot and incremental delta updates."""
+        service = self.snapshot_service
+        if service is None:
+            return None
+
+        snapshot_tracks = await service.load_snapshot()
+        if snapshot_tracks is None:
+            self.console_logger.debug("Snapshot cache missing on disk")
+            return None
+
+        if await service.is_snapshot_valid():
+            self.console_logger.debug("Snapshot cache valid; returning %d tracks", len(snapshot_tracks))
+            return snapshot_tracks
+
+        if not service.is_delta_enabled():
+            self.console_logger.info("Snapshot invalid and delta disabled; full rescan required")
+            return None
+
+        merged_tracks = await self._refresh_snapshot_from_delta(snapshot_tracks, service)
+        return merged_tracks if merged_tracks is not None else None
+
+    async def _refresh_snapshot_from_delta(
+        self,
+        snapshot_tracks: list[TrackDict],
+        snapshot_service: LibrarySnapshotService,
+    ) -> list[TrackDict] | None:
+        """Merge snapshot with delta updates when available."""
+        metadata = await snapshot_service.get_snapshot_metadata()
+        min_date = metadata.last_full_scan if metadata else None
+
+        delta_cache = await snapshot_service.load_delta()
+        if delta_cache and (candidates := [
+            candidate
+            for candidate in (min_date, delta_cache.last_run)
+            if candidate is not None
+        ]):
+            min_date = max(candidates)
+
+        if min_date is None:
+            self.console_logger.info("Unable to determine delta window; falling back to full scan")
+            return None
+
+        delta_tracks = await self._fetch_tracks_from_applescript(min_date_added=min_date)
+        if not delta_tracks:
+            self.console_logger.info("Delta fetch returned no tracks; full rescan will be scheduled")
+            return None
+
+        merged_tracks = self._merge_tracks(snapshot_tracks, delta_tracks)
+        await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks])
+        self.console_logger.info(
+            "Updated snapshot from delta window starting %s (+%d tracks)",
+            min_date.isoformat(),
+            len(delta_tracks),
+        )
+        return merged_tracks
+
+    async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
+        """Persist the latest snapshot, metadata, and delta state."""
+        if self.snapshot_service is None or not self.snapshot_service.is_enabled():
+            return
+
+        snapshot_hash = await self.snapshot_service.save_snapshot(tracks)
+        current_time = self._current_time()
+        library_mtime = await self.snapshot_service.get_library_mtime()
+        metadata = LibraryCacheMetadata(
+            last_full_scan=current_time,
+            library_mtime=library_mtime,
+            track_count=len(tracks),
+            snapshot_hash=snapshot_hash,
+        )
+        await self.snapshot_service.update_snapshot_metadata(metadata)
+
+        if not self.snapshot_service.is_delta_enabled():
+            return
+
+        delta_cache = await self.snapshot_service.load_delta()
+        if delta_cache is None:
+            delta_cache = LibraryDeltaCache(last_run=current_time)
+
+        delta_cache.last_run = current_time
+        if processed_track_ids and (ids_as_str := [
+            str(track_id) for track_id in processed_track_ids if str(track_id)
+        ]):
+            delta_cache.add_processed_ids(ids_as_str)
+        await self.snapshot_service.save_delta(delta_cache)
+
+    @staticmethod
+    def _merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
+        """Merge delta updates into the existing snapshot while preserving order."""
+        update_map = {str(track.id): track for track in updates}
+        merged: list[TrackDict] = []
+        seen_ids: set[str] = set()
+
+        for track in existing:
+            track_id = str(track.id)
+            if track_id in update_map:
+                merged.append(update_map[track_id])
+            else:
+                merged.append(track)
+            seen_ids.add(track_id)
+        for track in updates:
+            track_id = str(track.id)
+            if track_id not in seen_ids:
+                merged.append(track)
+                seen_ids.add(track_id)
+
+        return merged
+
     def _validate_tracks_security(self, tracks: list[TrackDict]) -> list[TrackDict]:
         """Validate tracks for security and convert to proper format.
 
@@ -210,38 +383,23 @@ class TrackProcessor:
         return int(timeout_value) if timeout_value is not None else 3600
 
     async def _fetch_tracks_from_applescript(
-        self, artist: str | None = None, _force_refresh: bool = False, ignore_test_filter: bool = False
+        self,
+        artist: str | None = None,
+        min_date_added: datetime | None = None,
     ) -> list[TrackDict]:
-        """Fetch tracks directly from Music.app via AppleScript.
-
-        Args:
-            artist: Optional artist filter
-            _force_refresh: Whether to force refresh (currently unused)
-            ignore_test_filter: Whether to ignore test_artists configuration
-
-        Returns:
-            List of track dictionaries
-
-        """
+        """Fetch tracks directly from Music.app via AppleScript."""
         try:
             # Remember if artist was originally provided by caller
             original_artist_provided = artist is not None
 
-            # Handle test artists if no specific artist and not ignoring filter
-            if not ignore_test_filter and not artist:
-                test_result = await self._process_test_artists(_force_refresh)
-                # If test_artists is empty, proceed with full library fetch
-                if test_result or self.config.get("development", {}).get("test_artists", []):
-                    return test_result
-
-            # Build arguments for AppleScript
-            args: list[str] = []
-            if artist:
-                args.append(artist)
+            args: list[str] = [artist or "", "", ""]
+            if min_date_added:
+                timestamp = datetime_to_applescript_timestamp(min_date_added)
+                args.append(str(timestamp))
 
             self.console_logger.info(
                 "Running AppleScript: fetch_tracks.scpt with args: %s",
-                artist or "",
+                ", ".join(arg for arg in args if arg),
             )
 
             # Execute AppleScript with appropriate timeout based on operation type
@@ -351,30 +509,37 @@ class TrackProcessor:
         # Generate cache key
         cache_key = f"tracks_{artist}" if artist else "tracks_all"
 
-        # Try cache first unless force refresh
+        use_snapshot = self._can_use_snapshot(artist)
+        result: list[TrackDict] | None = None
+
         if not force_refresh:
-            cached_tracks = await self._get_cached_tracks(cache_key)
-            if cached_tracks is not None:
-                # Validate cached tracks for security
-                validated_cached = self._validate_tracks_security(list(cached_tracks))
-                self.console_logger.info(
-                    "Using cached data for %s, validated %d/%d tracks",
-                    artist or "all artists",
-                    len(validated_cached),
-                    len(cached_tracks),
-                )
-                await self._apply_artist_renames(validated_cached)
-                return validated_cached
+            result = await self._materialize_cached_tracks(cache_key, artist)
 
-        # Fetch from Music.app
-        tracks = await self._fetch_tracks_from_applescript(artist, force_refresh, ignore_test_filter)
+        if result is None:
+            result = await self._try_fetch_test_tracks(force_refresh, ignore_test_filter, artist)
 
-        # Cache the results
-        if tracks:
-            await self.cache_service.set_async(cache_key, tracks)
-            self.console_logger.info("Cached %d tracks for key: %s", len(tracks), cache_key)
+        if result is None:
+            result = await self._try_fetch_snapshot_tracks(cache_key, use_snapshot, force_refresh)
 
-        return tracks
+        if result is None:
+            tracks = await self._fetch_tracks_from_applescript(artist=artist)
+
+            if use_snapshot and tracks:
+                await self._update_snapshot(tracks, [track.id for track in tracks])
+
+            if tracks:
+                await self.cache_service.set_async(cache_key, tracks)
+                self.console_logger.info("Cached %d tracks for key: %s", len(tracks), cache_key)
+
+            result = tracks
+
+        if not result:
+            self.console_logger.warning(
+                "No tracks fetched for key: %s. This may indicate an empty library or an upstream issue.",
+                cache_key,
+            )
+
+        return result or []
 
     @Analytics.track_instance_method("track_fetch_batches")
     async def fetch_tracks_in_batches(self, batch_size: int = 1000) -> list[TrackDict]:
@@ -460,8 +625,17 @@ class TrackProcessor:
         batch_tracks = parse_tracks(raw_output, self.error_logger)
 
         if not batch_tracks:
-            self.console_logger.info("Batch %d contained no valid tracks, assuming end", batch_count)
-            return None
+            raw_row_count = self._count_raw_track_rows(raw_output)
+            if raw_row_count == 0:
+                self.console_logger.info("Batch %d contained no raw track rows, assuming end", batch_count)
+                return None
+
+            self.error_logger.warning(
+                "Batch %d produced %d raw rows but none parsed successfully; continuing to next batch",
+                batch_count,
+                raw_row_count,
+            )
+            return [], True
 
         # Validate each track for security
         validated_tracks = self._validate_tracks_security(batch_tracks)
@@ -478,10 +652,7 @@ class TrackProcessor:
         # Safety check - only stop if we got 0 tracks (actual end of library)
         # Note: AppleScript may return fewer tracks due to filtering, not end of library
         should_continue = True
-        if len(batch_tracks) == 0:
-            self.console_logger.info("Batch %d returned 0 tracks, reached actual end of library", batch_count)
-            should_continue = False
-        elif len(batch_tracks) < batch_size:
+        if len(batch_tracks) < batch_size:
             self.console_logger.info(
                 "Batch %d returned %d < %d tracks (some tracks filtered by AppleScript), continuing...",
                 batch_count,
