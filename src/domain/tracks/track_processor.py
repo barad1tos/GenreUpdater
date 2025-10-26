@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 class TrackProcessor:
     """Handles track fetching and updating operations."""
 
+    # Maximum consecutive parse failures before aborting batch processing
+    MAX_CONSECUTIVE_PARSE_FAILURES = 3
+
     def __init__(
         self,
         ap_client: "AppleScriptClientProtocol",
@@ -213,7 +216,8 @@ class TrackProcessor:
             return 0
         line_separator = "\x1d" if "\x1d" in raw_output else None
         rows = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
-        return sum(1 for row in rows if row)
+        return sum(bool(row)
+               for row in rows)
 
     async def _load_tracks_from_snapshot(self) -> list[TrackDict] | None:
         """Attempt to serve tracks via snapshot and incremental delta updates."""
@@ -264,7 +268,8 @@ class TrackProcessor:
             return None
 
         merged_tracks = self._merge_tracks(snapshot_tracks, delta_tracks)
-        await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks])
+        if not self.dry_run:
+            await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks])
         self.console_logger.info(
             "Updated snapshot from delta window starting %s (+%d tracks)",
             min_date.isoformat(),
@@ -524,7 +529,7 @@ class TrackProcessor:
         if result is None:
             tracks = await self._fetch_tracks_from_applescript(artist=artist)
 
-            if use_snapshot and tracks:
+            if use_snapshot and tracks and not self.dry_run:
                 await self._update_snapshot(tracks, [track.id for track in tracks])
 
             if tracks:
@@ -555,6 +560,7 @@ class TrackProcessor:
         all_tracks: list[TrackDict] = []
         offset = 1  # AppleScript indices start from 1
         batch_count = 0
+        consecutive_parse_failures = 0
 
         self.console_logger.info("Starting batch processing with batch_size=%d", batch_size)
 
@@ -568,7 +574,29 @@ class TrackProcessor:
                     # Error occurred or reached end
                     break
 
-                validated_tracks, should_continue = batch_result
+                validated_tracks, should_continue, parse_failed = batch_result
+
+                # Track consecutive parse failures
+                if parse_failed:
+                    consecutive_parse_failures += 1
+                    self.error_logger.warning(
+                        "Parse failure %d/%d for batch %d",
+                        consecutive_parse_failures,
+                        self.MAX_CONSECUTIVE_PARSE_FAILURES,
+                        batch_count,
+                    )
+
+                    # Abort if too many consecutive failures
+                    if consecutive_parse_failures >= self.MAX_CONSECUTIVE_PARSE_FAILURES:
+                        self.error_logger.error(
+                            "Aborting batch processing: %d consecutive parse failures indicate systematic issue",
+                            consecutive_parse_failures,
+                        )
+                        break
+                else:
+                    # Reset counter on successful parse
+                    consecutive_parse_failures = 0
+
                 all_tracks.extend(validated_tracks)
 
                 if not should_continue:
@@ -589,7 +617,7 @@ class TrackProcessor:
 
         return all_tracks
 
-    async def _process_single_batch(self, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool] | None:
+    async def _process_single_batch(self, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
         """Process a single batch of tracks.
 
         Args:
@@ -598,7 +626,10 @@ class TrackProcessor:
             batch_size: Number of tracks to fetch in this batch
 
         Returns:
-            Tuple of (validated_tracks, should_continue) or None if error/end
+            Tuple of (validated_tracks, should_continue, parse_failed) or None if error/end
+            - validated_tracks: List of successfully parsed and validated tracks
+            - should_continue: Whether to continue fetching more batches
+            - parse_failed: True if parsing failed despite having raw data
         """
         # Call AppleScript with batch parameters
         args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
@@ -631,11 +662,11 @@ class TrackProcessor:
                 return None
 
             self.error_logger.warning(
-                "Batch %d produced %d raw rows but none parsed successfully; continuing to next batch",
+                "Batch %d produced %d raw rows but none parsed successfully",
                 batch_count,
                 raw_row_count,
             )
-            return [], True
+            return [], True, True  # Empty tracks, should continue, parse failed
 
         # Validate each track for security
         validated_tracks = self._validate_tracks_security(batch_tracks)
@@ -660,7 +691,7 @@ class TrackProcessor:
                 batch_size,
             )
 
-        return validated_tracks, should_continue
+        return validated_tracks, should_continue, False  # Tracks fetched, should continue, no parse failure
 
     async def _update_property(
         self,
