@@ -57,64 +57,140 @@ and provides comprehensive contextual logging for better monitoring. This ensure
 organized with accurate metadata
 that reflects the true characteristics of your music.
 
+## Architecture Overview
+
+Music Genre Updater v2.0 follows a **clean architecture pattern** with clear separation of concerns:
+
+### Core Layers
+
+**Application Layer** (`src/application/`)
+
+- `orchestrator.py` - Main workflow coordinator and command router
+- `cli.py` - Command-line interface with 7 subcommands
+- `config.py` - Configuration management and validation
+- `music_updater.py` - Primary business logic orchestrator
+- `features/` - Specialized features (batch processing, cryptography, verification)
+
+**Domain Layer** (`src/domain/tracks/`)
+
+- `genre_manager.py` - Genre detection and dominant genre calculation
+- `year_retriever.py` - Release year fetching from external APIs with scoring
+- `track_processor.py` - Track CRUD operations and AppleScript integration
+- `artist_renamer.py` - Artist name normalization and mapping
+- `incremental_filter.py` - Incremental update filtering logic
+
+**Infrastructure Layer** (`src/infrastructure/`)
+
+- `applescript_client.py` - Music.app integration via AppleScript
+- `api/` - External API clients (MusicBrainz, Discogs, Last.fm, Apple Music)
+- `cache/` - Multi-tier caching system (memory, disk, snapshot)
+- `dependencies_service.py` - Dependency injection container
+
+**Shared Layer** (`src/shared/`)
+
+- `core/` - Configuration, logging, retry logic, exception handling
+- `monitoring/` - Analytics, performance metrics, HTML reports
+- `data/` - Data models (Pydantic), validators, parsers, protocols
+
+### Key Design Patterns
+
+- **Async/await throughout**: All I/O operations are async for maximum performance
+- **Dependency injection**: `DependencyContainer` manages all service instances
+- **Protocol-based interfaces**: Enables easy testing and mocking
+- **Multi-tier caching**: Memory → Disk → Snapshot for optimal speed
+- **Contextual logging**: Every log entry includes `artist | album | track` context
+- **Batch processing**: Handles 30,000+ tracks efficiently with configurable batch sizes
+
 ## Features
 
+### Core Functionality
+
 - **Automatic Genre Updating:** Determines and updates the dominant genre for each artist based on sophisticated track
-  analysis algorithms.
+  analysis algorithms with configurable thresholds.
 - **Automatic Year Updating:** Retrieves and updates accurate release years from multiple music databases (MusicBrainz,
-  Discogs, Last.fm).
-- **Batch Processing:** Efficiently handles large music libraries (30,000+ tracks) using intelligent batch processing.
-- **Contextual Logging:** Provides detailed, contextual logs showing artist | album | track information for better
-  monitoring.
-- **Asynchronous Processing:** Utilizes asynchronous operations to handle large music libraries efficiently.
+  Discogs, Last.fm) with intelligent scoring.
+- **Batch Processing:** Efficiently handles large music libraries (30,000+ tracks) using intelligent batch processing with
+  automatic parse failure tolerance.
+- **Contextual Logging:** Provides detailed, contextual logs showing `artist | album | track` information for better
+  monitoring and debugging.
 - **Smart Filtering:** Automatically detects and skips read-only tracks (prerelease, cloud status filtering).
-- **API Integration:** Integrates with multiple music databases with intelligent rate limiting and scoring algorithms.
-- **Analytics Module:** Tracks execution time, overhead, and call counts for key functions, generating an optional HTML
-  report.
-- **YAML Configuration:** Easily configurable through a `config.yaml` file with comprehensive settings.
-- **Scheduled Execution:** Uses `launchctl` to schedule regular updates automatically.
-- **CSV Reporting:** Generates CSV reports of track details and changes made.
-- **Exception Handling:** Supports exceptions to prevent certain artists or albums from being modified.
-- **Robust Error Handling:** Retries failed updates with configurable parameters and comprehensive validation.
+
+### Performance & Scalability (New in v2.0)
+
+- **Library Snapshot Caching:** Avoid full library rescans - load 30K+ tracks in <1 second from disk snapshot
+- **Incremental Delta Updates:** Process only changed tracks since last run (date-based filtering)
+- **Multi-Tier Caching:** Memory → Disk → Snapshot for optimal performance
+- **Async/Await Architecture:** All I/O operations are async for maximum throughput
+- **Parse Failure Tolerance:** Automatic recovery from up to 3 consecutive parse failures
+
+### Security & Verification (New in v2.0)
+
+- **Encrypted Configuration:** Secure storage for sensitive API keys using cryptography library
+- **Key Rotation:** Built-in command to rotate encryption keys (`rotate_keys`)
+- **Database Verification:** Integrity checks for track database (`verify_database` command)
+- **Input Validation:** Security validators for all user-provided data and AppleScript inputs
+
+### Developer Experience
+
+- **YAML Configuration:** Comprehensive `config.yaml` with 50+ settings organized by category
+- **Analytics Module:** Tracks execution time, overhead, and call counts with optional HTML reports
+- **CSV Reporting:** Generates detailed CSV reports of all track changes
+- **Exception Handling:** Supports artist/album exceptions to prevent unwanted modifications
+- **Robust Error Handling:** Retries failed updates with exponential backoff and detailed error logging
+- **Modern Tooling:** Uses `uv` for fast dependency management, `trunk` for linting
 
 ## Prerequisites
 
 Before installing the Music Genre Updater, ensure you have the following:
 
-- **Operating System:** macOS
-- **Python:** Version 3.8 or higher
-- **Apple Music:** Installed and configured
-- **Homebrew:** Recommended for managing packages (optional but recommended)
+- **Operating System:** macOS 10.15 (Catalina) or higher
+- **Python:** Version 3.13 or higher (required)
+- **uv:** Modern Python package manager (recommended for installation)
+- **Apple Music:** Installed and running
+- **Homebrew:** Recommended for managing packages (optional)
 
 ## Installation
 
-### Clone the Repository
+### Method 1: Using uv (Recommended)
 
-Begin by cloning the repository to your local machine:
+[uv](https://github.com/astral-sh/uv) is a modern, fast Python package manager. This is the recommended installation method.
 
 ```bash
-git clone https://github.com/yourusername/music-genre-updater.git
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/barad1tos/music-genre-updater.git
 cd music-genre-updater
+
+# Install all dependencies (automatically creates virtual environment)
+uv sync
+
+# Verify installation
+uv run python main.py --help
 ```
 
-### Set Up a Virtual Environment
+### Method 2: Traditional pip/venv
 
-It’s recommended to use a Python virtual environment to manage dependencies:
+If you prefer traditional Python tooling:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+# Clone the repository
+git clone https://github.com/barad1tos/music-genre-updater.git
+cd music-genre-updater
+
+# Create virtual environment
+python3.13 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -e .
+
+# Verify installation
+python main.py --help
 ```
 
-## Install Dependencies
-
-Install the required Python packages using pip:
-
-```bash
-pip install PyYaml
-```
-
-All other dependencies are the built-in Python libraries, starting from the 3.3 version.
+**Note:** All project dependencies are managed through `pyproject.toml`. The application requires Python 3.13+ and includes 15+ packages for async processing, API integration, caching, and monitoring.
 
 ### Configuration
 
@@ -227,50 +303,92 @@ python music_genre_updater.py
 
 ### Command-Line Arguments
 
-The script supports several command-Line arguments to customize its behavior:
+The application supports multiple commands and global flags:
 
-- `--force`: Force the execution, bypassing incremental checks and processing the entire music library.
-- `--dry-run`: Preview changes without actually modifying your music library.
-- `--test-mode`: Use test artists from configuration for safe testing.
-- `clean_artist --artist "Artist Name"`: Clean track and album names for a specified artist.
-- `revert_years --artist "Artist" [--album "Album"] [--backup-csv "/path/to/track_list.csv"]`: Revert year changes for
-  an artist (optionally a single album). If `--backup-csv` is provided, years are taken from that CSV; otherwise, the
-  latest `changes_report.csv` is used.
+**Global Flags (work with all commands):**
+
+- `--force`: Force execution, bypass incremental checks
+- `--dry-run`: Preview changes without modifying library
+- `--test-mode`: Use test artists from configuration
+- `--config PATH`: Use custom config file
+
+**Available Commands:**
+
+| Command           | Aliases  | Description                                        |
+| ----------------- | -------- | -------------------------------------------------- |
+| _(default)_       | -        | Full library genre and year update                 |
+| `clean_artist`    | `clean`  | Clean metadata for specific artist                 |
+| `update_years`    | `years`  | Fetch release years from external APIs             |
+| `revert_years`    | `revert` | Rollback previously applied year changes           |
+| `verify_database` | -        | Verify track database integrity                    |
+| `verify_pending`  | -        | Check pending verification queue                   |
+| `batch`           | -        | Batch processing for large libraries (30K+ tracks) |
+| `rotate_keys`     | -        | Rotate encryption keys for secure config           |
+
+**Command-Specific Arguments:**
+
+- **clean_artist**: `--artist "Name"` (required)
+- **update_years**: `--artist "Name"` (optional, processes all if omitted)
+- **revert_years**: `--artist "Name"` (required), `--album "Album"` (optional), `--backup-csv PATH` (optional)
+- **batch**: `--batch-size N` (default: 1000)
 
 ### Examples
 
-**Force Run the Full Library Update:**
+**Default: Full Library Update**
 
 ```bash
-python music_genre_updater.py --force
-```
+# Using uv (recommended)
+uv run python main.py
 
-**Preview Changes (Dry Run):**
-
-```bash
-python music_genre_updater.py --dry-run
-```
-
-**Test with Specific Artists:**
-
-```bash
-python music_genre_updater.py --test-mode
-```
-
-**Clean Track and Album Names for a Specific Artist:**
-
-```bash
-python music_genre_updater.py clean_artist --artist "Rabbit Junk"
-```
-
-**Modern Python Execution (Recommended):**
-
-```bash
-# Using uv (fastest)
+# With force flag (bypass incremental)
 uv run python main.py --force
 
-# Using standard Python
-python3 main.py --dry-run
+# Dry run (preview only)
+uv run python main.py --dry-run
+```
+
+**Clean Artist Metadata**
+
+```bash
+# Clean promotional text for specific artist
+uv run python main.py clean_artist --artist "Pink Floyd"
+
+# Dry run to preview cleaning
+uv run python main.py clean_artist --artist "Rabbit Junk" --dry-run
+```
+
+**Update Release Years**
+
+```bash
+# Update years for all albums
+uv run python main.py update_years --force
+
+# Update years for specific artist
+uv run python main.py update_years --artist "Otep"
+```
+
+**Batch Processing (Large Libraries)**
+
+```bash
+# Process 30K+ tracks in batches
+uv run python main.py batch --batch-size 2000
+```
+
+**Database Verification**
+
+```bash
+# Verify track database integrity
+uv run python main.py verify_database
+
+# Check pending verification queue
+uv run python main.py verify_pending
+```
+
+**Security Operations**
+
+```bash
+# Rotate encryption keys
+uv run python main.py rotate_keys
 ```
 
 ### Revert and Repair
@@ -311,24 +429,46 @@ The `config.yaml` file contains all the configuration settings for the Music Gen
 explanation of each parameter:
 
 ```yaml
-# my-config.yaml
+# my-config.yaml - Main configuration file
+
+# === Core Paths ===
 music_library_path: /Users/romanborodavkin/Music/Music/Music Library.musiclibrary
-apple_scripts_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/applescripts
+apple_scripts_dir: /path/to/applescripts
+logs_base_dir: /path/to/logs
 
-# Base directory for all logs and reports.
-logs_base_dir: /Users/romanborodavkin/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs
+# === AppleScript Settings ===
+apple_script_concurrency: 2 # Max concurrent AppleScript operations
+cache_ttl_seconds: 1200 # Cache TTL for API responses (20 minutes)
 
-apple_script_concurrency: 2
-cache_ttl_seconds: 1200
+# AppleScript timeout configuration (NEW in v2.0)
+applescript_timeouts:
+  single_artist_fetch: 600 # 10 minutes for single artist
+  full_library_fetch: 3600 # 1 hour for full library
+  batch_update: 60 # 1 minute for batch updates
 
+# === Batch Processing (NEW in v2.0) ===
+batch_processing:
+  ids_batch_size: 200 # Tracks per batch for ID-based fetch
+  enabled: true # Enable batch processing
+
+# === Library Snapshot Caching (NEW in v2.0) ===
+library_snapshot:
+  enabled: true # Enable snapshot caching
+  snapshot_dir: cache/snapshots
+  delta_enabled: true # Incremental delta updates
+  hash_algorithm: sha256 # Hash algorithm for integrity
+
+# === Incremental Updates ===
 incremental_interval_minutes: 15
 
+# === Retry Configuration ===
 max_retries: 2
 retry_delay_seconds: 1
 
-test_artists: []
+# === Test Artists (for --test-mode) ===
+test_artists: [] # Add artist names for testing
 
-# Logging section
+# === Logging Configuration ===
 logging:
   max_bytes: 5000000
   backup_count: 1
@@ -337,23 +477,16 @@ logging:
   main_log_file: main/main.log
   year_changes_log_file: main/year_changes.log
 
-  # Dry run logs
-  dry_run_cleaning_file: csv/dry_run_cleaning.csv
-  dry_run_genre_file: csv/dry_run_genre_update.csv
-
-  # CSV DBs
+  # CSV reports
   csv_output_file: csv/track_list.csv
   changes_report_file: csv/changes_report.csv
   dry_run_report_file: csv/dry_run_report.csv
 
-  # Analytics logs and reports
+  # Analytics
   analytics_log_file: analytics/analytics.log
   html_report_file: analytics/reports/analytics.html
 
-  # Last incremental run log
-  last_incremental_run_file: last_incremental_run.log
-
-# Cleaning section
+# === Cleaning Configuration ===
 cleaning:
   remaster_keywords:
     - remaster
@@ -367,13 +500,13 @@ cleaning:
     - " - EP"
     - " - Single"
 
-# Exceptions for cleaning
+# === Exceptions ===
 exceptions:
   track_cleaning:
-    - artist: Rabbit Junk
-      album: Xenospheres
+    - artist: Example Artist
+      album: Example Album
 
-# Analytics section
+# === Analytics ===
 analytics:
   colors:
     short: "#90EE90"
@@ -383,6 +516,11 @@ analytics:
     short_max: 2
     medium_max: 5
     long_max: 10
+
+# === Experimental Features (NEW in v2.0) ===
+experimental:
+  batch_updates_enabled: false # Enable batch AppleScript updates (10x faster)
+  max_batch_size: 5 # Max properties per batch
 ```
 
 Parameter Descriptions:
@@ -402,9 +540,91 @@ Parameter Descriptions:
 - `cleaning.album_suffixes_to_remove`: Suffixes to remove from album names.
 - `exceptions.track_cleaning`: List of artist and album combinations to exclude from cleaning.
 
+## Performance Optimizations
+
+### Caching Strategy
+
+The application uses a **three-tier caching system** for optimal performance:
+
+1. **Memory Cache** (L1)
+   - In-memory dictionary for hot data
+   - Zero latency for repeated access
+   - Cleared on application restart
+
+2. **Disk Cache** (L2)
+   - JSON/pickle files for persistent storage
+   - 20-minute TTL for API responses
+   - Survives application restarts
+
+3. **Library Snapshot** (L3)
+   - Full library state persisted to disk
+   - SHA-256 integrity verification
+   - Delta updates for incremental processing
+
+**Cache Hit Performance:**
+
+- Memory cache: <1ms
+- Disk cache: 10-50ms
+- Snapshot load (30K tracks): <1 second
+- Full AppleScript fetch (30K tracks): 10-15 minutes
+
+### Batch Processing
+
+For libraries with 30,000+ tracks, use the `batch` command:
+
+```bash
+uv run python main.py batch --batch-size 2000
+```
+
+**Features:**
+
+- Processes 2000 tracks per batch (configurable)
+- Automatic parse failure tolerance (max 3 consecutive failures)
+- Memory-efficient streaming (doesn't load entire library into RAM)
+- Progress logging after each batch
+
+**When to Use:**
+
+- First-time library processing
+- After major library changes
+- When incremental updates fail
+
+### Monitoring & Analytics
+
+**Real-Time Monitoring:**
+
+```bash
+# Enable contextual logging (default)
+tail -f ~/path/to/logs/main/main.log
+```
+
+Every log entry includes `artist | album | track` context for easy debugging.
+
+**Performance Reports:**
+
+The analytics module generates an HTML dashboard with:
+
+- Function durations (color-coded by threshold)
+- Call counts and success rates
+- Decorator overhead analysis
+- Timeline visualization
+
+**Access report:**
+
+```bash
+open ~/path/to/logs/analytics/reports/analytics.html
+```
+
+**Performance Metrics:**
+
+- **Short functions**: <2s (green)
+- **Medium functions**: 2-5s (gray)
+- **Long functions**: 5-10s (pink)
+- **Very long functions**: >10s (requires optimization)
+
 ## Logging
 
-The project utilizes two loggers for comprehensive logging:
+The project utilizes three specialized loggers for comprehensive logging:
 
 1. Console Logger (console_logger):
    - Logs messages with a severity level of INFO and above to the console.
@@ -457,28 +677,45 @@ properties.
 
 ### AppleScript Scripts
 
-1. fetch_tracks.scpt:
-   - Purpose: Retrieves information about tracks from Apple Music.
-   - Functionality:
-     - Fetches track details such as ID, name, artist, album, genre, date added, and status.
-     - Supports filtering by a specific artist if provided as an argument.
-     - Formats the output in a structured manner for the Python script to parse.
-2. update_property.applescript:
-   - Purpose: Updates specified properties (name, album, genre) of a track in Apple Music.
-   - Functionality:
-     - Takes a track ID, property name, and new property value as arguments.
-     - Updates the specified property of the given track.
-     - Returns a success or error message based on the operation outcome.
+The application uses 4 AppleScript files located in the `applescripts/` directory:
 
-Location:
+1. **fetch_tracks.scpt**
+   - **Purpose**: Retrieve track metadata from Music.app library
+   - **Functionality**:
+     - Fetches 11 fields: ID, name, artist, album, genre, year, date_added, track_status, album_artist, etc.
+     - Supports artist filtering, batch processing (offset/limit), and date filtering
+     - Uses ASCII separators (field: \x1E, line: \x1D) for reliable parsing
+     - Filters out read-only tracks (prerelease, cloud status)
+   - **Timeout**: Configurable via `applescript_timeouts.full_library_fetch` (default: 3600s)
 
-- Both scripts are stored in the directory specified by the apple_scripts_dir parameter in config.yaml.
+2. **fetch_tracks_by_ids.scpt**
+   - **Purpose**: Fetch specific tracks by ID list (targeted updates)
+   - **Functionality**:
+     - Input: Comma-separated track IDs (e.g., "123,456,789")
+     - Returns same 11-field format as `fetch_tracks.scpt`
+     - Processes up to 200 IDs per batch (configurable via `batch_processing.ids_batch_size`)
+   - **Use case**: Verification workflows, selective updates
 
-Usage:
+3. **update_property.applescript**
+   - **Purpose**: Update single track property atomically
+   - **Functionality**:
+     - Supported properties: `name`, `album`, `genre`, `year`, `artist`, `album_artist`
+     - Returns status: `"Success: <details>"` or `"No Change: already set"`
+     - Includes contextual logging support (artist/album/track context)
+   - **Timeout**: 30 seconds per update
 
-- The Python script music_genre_updater.py invokes these AppleScript scripts using the osascript command to perform
-  necessary operations on the Apple
-  Music library.
+4. **batch_update_tracks.applescript** (Experimental)
+   - **Purpose**: Update multiple properties in one AppleScript call (~10x faster)
+   - **Functionality**:
+     - Input format: `"trackID:property:value;trackID:property:value"`
+     - Example: `"123:genre:Rock;123:year:2020"`
+     - Processes multiple updates transactionally
+   - **Status**: Disabled by default (enable via `experimental.batch_updates_enabled: true`)
+   - **Timeout**: Configurable via `applescript_timeouts.batch_update` (default: 60s)
+
+**Location**: All scripts are in the `applescripts/` directory (set via `apple_scripts_dir` in config).
+
+**Integration**: The `AppleScriptClient` (`src/infrastructure/applescript_client.py`) invokes these scripts with proper error handling, timeouts, and retry logic.
 
 ## Contributing
 
