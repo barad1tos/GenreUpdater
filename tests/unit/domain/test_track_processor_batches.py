@@ -69,12 +69,12 @@ async def test_fetch_tracks_in_batches_populates_cache() -> None:
         TrackDict(id="2", name="Song B", artist="Artist", album="Album", genre="Rock", year="2001"),
     ]
 
-    async def fake_process_single_batch(_self: TrackProcessor, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool] | None:
+    async def fake_process_single_batch(_self: TrackProcessor, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
         """Mock single batch processing."""
         assert batch_count == 1
         assert offset == 1
         assert batch_size == 50
-        return sample_tracks, False
+        return sample_tracks, False, False  # tracks, should_continue, parse_failed
 
     # Mock private method for testing - accessing private member is acceptable in tests
     track_processor._process_single_batch = types.MethodType(fake_process_single_batch, track_processor)  # type: ignore[method-assign] # noqa: SLF001
