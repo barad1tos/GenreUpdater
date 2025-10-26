@@ -3,7 +3,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, TypeVar, cast, overload
+from typing import Any, TypeVar, overload
 
 from src.shared.core.config import load_config as load_yaml_config
 
@@ -133,7 +133,7 @@ class Config:
 
         for k in keys:
             if isinstance(current, dict) and k in current:
-                current = cast(Any, current[k])
+                current = current[k]
             else:
                 return default
         return current
@@ -167,7 +167,7 @@ class Config:
         result: list[Any] = default if default is not None else []
         value: Any = self.get(key, result)
 
-        return list(cast(list[Any], value)) if isinstance(value, list) else result
+        return list(value) if isinstance(value, list) else result
 
     def get_dict(self, key: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get configuration dict value.
@@ -183,7 +183,7 @@ class Config:
         result: dict[str, Any] = default if default is not None else {}
         value: Any = self.get(key, result)
 
-        return dict(cast(dict[str, Any], value)) if isinstance(value, dict) else result
+        return dict(value) if isinstance(value, dict) else result
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         """Get configuration boolean value.
