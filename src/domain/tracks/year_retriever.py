@@ -16,7 +16,7 @@ from src.shared.data.protocols import (
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
-from src.shared.data.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status
+from src.shared.data.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status, is_subscription_status
 from src.shared.data.validators import is_valid_year
 from src.shared.monitoring import Analytics
 
@@ -1146,6 +1146,24 @@ class YearRetriever:
             changes_log: List to append change entries to
 
         """
+        # Filter to only subscription tracks - year updates are only for subscription tracks
+        subscription_tracks = [
+            track
+            for track in album_tracks
+            if is_subscription_status(track.track_status if isinstance(track.track_status, str) else None)
+        ]
+
+        if not subscription_tracks:
+            self.console_logger.debug(
+                "Skipping album '%s - %s': no subscription tracks (all tracks have non-subscription status)",
+                artist,
+                album,
+            )
+            return
+
+        # Continue processing with subscription tracks only
+        album_tracks = subscription_tracks
+
         self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
         # Safety guard: suspicious album names with many unique years

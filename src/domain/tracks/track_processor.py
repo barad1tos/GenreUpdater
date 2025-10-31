@@ -546,18 +546,20 @@ class TrackProcessor:
         return result or []
 
     @Analytics.track_instance_method("track_fetch_batches")
-    async def fetch_tracks_in_batches(self, batch_size: int = 1000) -> list[TrackDict]:
+    async def fetch_tracks_in_batches(self, batch_size: int = 1000, skip_snapshot_check: bool = False) -> list[TrackDict]:
         """Fetch all tracks from Music.app in batches to avoid timeout.
 
         Args:
             batch_size: Number of tracks to fetch per batch
+            skip_snapshot_check: Skip snapshot validation check (used when already validated upstream)
 
         Returns:
             List of all track dictionaries
 
         """
         # Try loading from snapshot first (with delta updates if available)
-        if self._can_use_snapshot(artist=None):
+        # Skip if already validated upstream (e.g., Smart Delta fallback path)
+        if not skip_snapshot_check and self._can_use_snapshot(artist=None):
             snapshot_tracks = await self._load_tracks_from_snapshot()
             if snapshot_tracks is not None:
                 self.console_logger.info("✓ Loaded %d tracks from snapshot cache; skipping batch fetch", len(snapshot_tracks))
