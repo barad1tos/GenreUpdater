@@ -13,9 +13,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.applescript_client import AppleScriptClient
 
 from src.infrastructure.cache.json_utils import dumps_json, loads_json
+from src.infrastructure.track_delta_service import TrackDelta, compute_track_delta
 from src.shared.core.logger import ensure_directory
 from src.shared.data.models import TrackDict
 
@@ -178,32 +182,57 @@ class LibrarySnapshotService:
         return snapshot_hash
 
     async def is_snapshot_valid(self) -> bool:
-        """Check whether snapshot meets freshness and integrity requirements."""
+        """Check whether snapshot meets freshness and integrity requirements.
+
+        Priority logic:
+        1. If library_mtime unchanged → snapshot valid (ignore age)
+        2. If library_mtime changed → check age and other constraints
+        """
+        # Check metadata existence and version
         metadata = await self.get_snapshot_metadata()
         if not metadata:
+            self.logger.warning("Snapshot metadata not found; treating snapshot as invalid")
             return False
+
         if metadata.version != SNAPSHOT_VERSION:
-            self.logger.info("Snapshot version mismatch (found %s)", metadata.version)
+            self.logger.warning("Snapshot version mismatch (found %s, expected %s)", metadata.version, SNAPSHOT_VERSION)
             return False
 
-        if self.max_age.total_seconds() > 0:
-            age = _now() - metadata.last_full_scan
-            if age > self.max_age:
-                self.logger.info("Snapshot expired: age %s exceeds %s", age, self.max_age)
-                return False
-
+        # Check library modification time (PRIMARY CHECK)
         try:
             library_mtime = await self.get_library_mtime()
         except FileNotFoundError:
             self.logger.warning("Music library path not found; treating snapshot as stale")
             return False
 
-        if library_mtime > metadata.library_mtime:
-            self.logger.info("Music library modified after snapshot creation")
+        # If library hasn't changed since snapshot → snapshot is valid regardless of age
+        library_unchanged = library_mtime <= metadata.library_mtime
+        if library_unchanged:
+            self.logger.info(
+                "✓ Library unchanged since snapshot creation; using cached snapshot (age: %s)",
+                _now() - metadata.last_full_scan,
+            )
+        else:
+            # Library has changed - log it and proceed with additional checks
+            time_diff = library_mtime - metadata.library_mtime
+            self.logger.warning(
+                "Music library was modified %.1f seconds after snapshot creation",
+                time_diff.total_seconds(),
+            )
+
+            # Check age limit (only relevant if library changed)
+            if self.max_age.total_seconds() > 0:
+                age = _now() - metadata.last_full_scan
+                if age > self.max_age:
+                    self.logger.warning("Snapshot expired: age %s exceeds %s", age, self.max_age)
+                    return False
+
+        # Final check: snapshot file exists
+        if not self._snapshot_path.exists():
+            self.logger.warning("Snapshot file not found at %s", self._snapshot_path)
             return False
 
-        snapshot_path = self._snapshot_path
-        return bool(snapshot_path.exists())
+        return True
 
     async def get_snapshot_metadata(self) -> LibraryCacheMetadata | None:
         """Load snapshot metadata."""
@@ -267,6 +296,83 @@ class LibrarySnapshotService:
             raise FileNotFoundError(str(exc)) from exc
 
         return datetime.fromtimestamp(stat_result.st_mtime)
+
+    async def compute_smart_delta(
+        self,
+        applescript_client: AppleScriptClient,
+        batch_size: int = 1000,
+    ) -> TrackDelta | None:
+        """Compute track delta using Smart Delta approach (fetch by IDs).
+
+        This method:
+        1. Loads the snapshot from disk
+        2. Fetches current metadata for all track IDs from Music.app
+        3. Computes delta between current and snapshot
+
+        Args:
+            applescript_client: AppleScriptClient instance for fetching tracks
+            batch_size: Number of track IDs to fetch per batch
+
+        Returns:
+            TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
+
+        """
+        self.logger.info("🔍 Computing Smart Delta...")
+
+        # Load snapshot
+        snapshot_tracks = await self.load_snapshot()
+        if not snapshot_tracks:
+            self.logger.warning("⚠️  No snapshot available for Smart Delta")
+            return None
+
+        snapshot_map = {str(track.id): track for track in snapshot_tracks}
+        track_ids = list(snapshot_map.keys())
+
+        self.logger.info(
+            "✓ Loaded snapshot with %d tracks, fetching current metadata...",
+            len(track_ids),
+        )
+
+        # Fetch current tracks by ID
+        raw_tracks = await applescript_client.fetch_tracks_by_ids(track_ids, batch_size=batch_size)
+
+        # Convert dict to TrackDict
+        current_tracks: list[TrackDict] = []
+        for raw_track in raw_tracks:
+            try:
+                year_value = raw_track.get("year")
+                track_dict = TrackDict(
+                    id=raw_track.get("id", ""),
+                    name=raw_track.get("name", ""),
+                    artist=raw_track.get("artist", ""),
+                    album_artist=raw_track.get("album_artist"),
+                    album=raw_track.get("album", ""),
+                    genre=raw_track.get("genre"),
+                    date_added=raw_track.get("date_added"),
+                    track_status=raw_track.get("track_status"),
+                    year=year_value if year_value and year_value.strip() else None,
+                    release_year=raw_track.get("release_year"),
+                    new_year=raw_track.get("new_year"),
+                    last_modified=None,  # Not available from fetch_by_ids
+                )
+                current_tracks.append(track_dict)
+            except (KeyError, ValueError) as exc:
+                self.logger.warning("⚠️  Failed to parse track %s: %s", raw_track.get("id"), exc)
+                continue
+
+        self.logger.info("✓ Fetched %d tracks from Music.app", len(current_tracks))
+
+        # Compute delta
+        delta = compute_track_delta(current_tracks, snapshot_map)
+
+        self.logger.info(
+            "✓ Smart Delta computed: %d new, %d updated, %d removed",
+            len(delta.new_ids),
+            len(delta.updated_ids),
+            len(delta.removed_ids),
+        )
+
+        return delta
 
     def is_enabled(self) -> bool:
         """Check whether snapshot caching is enabled."""

@@ -829,6 +829,107 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         return await self._run_osascript(cmd, "inline-script", timeout_float)
 
+    @Analytics.track_instance_method("applescript_fetch_by_ids")
+    async def fetch_tracks_by_ids(
+        self,
+        track_ids: list[str],
+        batch_size: int = 1000,
+        timeout: float | None = None,
+    ) -> list[dict[str, str]]:
+        """Fetch tracks by their IDs using fetch_tracks_by_ids.scpt.
+
+        Args:
+            track_ids: List of track IDs to fetch
+            batch_size: Maximum number of IDs per batch (default: 1000)
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track dictionaries with metadata
+
+        """
+        if not track_ids:
+            return []
+
+        if timeout is None:
+            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
+
+        timeout_float = float(timeout) if timeout is not None else 3600.0
+
+        all_tracks: list[dict[str, str]] = []
+
+        # Process in batches to avoid command-line length limits
+        for i in range(0, len(track_ids), batch_size):
+            batch = track_ids[i : i + batch_size]
+            ids_csv = ",".join(batch)
+
+            self.console_logger.info(
+                "🔍 Fetching %d tracks by ID (batch %d-%d of %d)",
+                len(batch),
+                i + 1,
+                min(i + batch_size, len(track_ids)),
+                len(track_ids),
+            )
+
+            raw_output = await self.run_script(
+                "fetch_tracks_by_ids.scpt",
+                [ids_csv],
+                timeout=timeout_float,
+            )
+
+            if not raw_output or raw_output == "NO_TRACKS_FOUND":
+                continue
+
+            # Parse output using same format as fetch_tracks.scpt
+            batch_tracks = self._parse_track_output(raw_output)
+            all_tracks.extend(batch_tracks)
+
+        self.console_logger.info("✓ Fetched %d tracks by ID (requested: %d)", len(all_tracks), len(track_ids))
+        return all_tracks
+
+    def _parse_track_output(self, raw_output: str) -> list[dict[str, str]]:
+        """Parse AppleScript track output into track dictionaries.
+
+        Args:
+            raw_output: Raw AppleScript output with ASCII 30/29 separators
+
+        Returns:
+            List of track dictionaries
+
+        """
+        FIELD_SEPARATOR = "\x1e"  # ASCII 30
+        LINE_SEPARATOR = "\x1d"  # ASCII 29
+
+        tracks: list[dict[str, str]] = []
+
+        # Split by line separator
+        lines = raw_output.split(LINE_SEPARATOR)
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            fields = line.split(FIELD_SEPARATOR)
+
+            # Expected fields: id, name, artist, album_artist, album, genre, date_added,
+            # track_status, year, release_year, new_year
+            if len(fields) >= 11:
+                track = {
+                    "id": fields[0],
+                    "name": fields[1],
+                    "artist": fields[2],
+                    "album_artist": fields[3],
+                    "album": fields[4],
+                    "genre": fields[5],
+                    "date_added": fields[6],
+                    "track_status": fields[7],
+                    "year": fields[8],
+                    "release_year": fields[9],
+                    "new_year": fields[10],
+                }
+                tracks.append(track)
+
+        return tracks
+
     async def _run_osascript(
         self,
         cmd: list[str],
