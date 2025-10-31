@@ -17,7 +17,7 @@ from src.domain.tracks.year_retriever import YearRetriever
 from src.shared.core.logger import get_full_log_path
 from src.shared.core.run_tracking import IncrementalRunTracker
 from src.shared.data.metadata import clean_names, is_music_app_running
-from src.shared.data.models import ChangeLogEntry, TrackDict
+from src.shared.data.models import ChangeLogEntry, TrackDict, TrackFieldValue
 from src.shared.monitoring.reports import (
     save_changes_report,
     sync_track_list_with_current,
@@ -238,6 +238,36 @@ class MusicUpdater:
 
         return updated_tracks, changes_log
 
+    def _extract_and_clean_track_metadata(
+        self, track: "TrackDict"
+    ) -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
+        """Extract and clean track metadata.
+
+        Args:
+            track: Track data to process
+
+        Returns:
+            Tuple of (track_id, artist_name, track_name, album_name,
+                     cleaned_track_name, cleaned_album_name)
+
+        """
+        artist_name = str(track.get("artist", ""))
+        track_name = track.get("name", "")
+        album_name = track.get("album", "")
+        track_id = track.get("id", "")
+
+        # Clean names using the existing utility
+        cleaned_track_name, cleaned_album_name = clean_names(
+            artist=artist_name,
+            track_name=str(track_name),
+            album_name=str(album_name),
+            config=self.config,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+        )
+
+        return track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name
+
     async def _process_single_track_cleaning(self, track: "TrackDict", artist: str) -> tuple[Any | None, ChangeLogEntry | None]:
         """Process a single track for cleaning.
 
@@ -249,28 +279,15 @@ class MusicUpdater:
             Tuple of (updated_track, change_entry) or (None, None) if no update needed
 
         """
-        # Extract track metadata
-        artist_name = str(track.get("artist", ""))
-        track_name_value = track.get("name", "")
-        album_name_value = track.get("album", "")
-        track_id = track.get("id", "")
+        # Extract and clean track metadata
+        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = (
+            self._extract_and_clean_track_metadata(track)
+        )
 
         if not track_id:
             return None, None
 
-        # Clean names using the existing utility
-        cleaned_track_name, cleaned_album_name = clean_names(
-            artist=artist_name,
-            track_name=str(track_name_value),
-            album_name=str(album_name_value),
-            config=self.config,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
-        )
-
         # Check if update needed
-        track_name = track.get("name", "")
-        album_name = track.get("album", "")
         if cleaned_track_name == track_name and cleaned_album_name == album_name:
             return None, None
 
@@ -796,23 +813,13 @@ class MusicUpdater:
             Tuple of (updated_track, change_entry) or (None, None) if no update needed
 
         """
-        artist_name = str(track.get("artist", ""))
-        track_name = track.get("name", "")
-        album_name = track.get("album", "")
-        track_id = track.get("id", "")
+        # Extract and clean track metadata
+        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = (
+            self._extract_and_clean_track_metadata(track)
+        )
 
         if not track_id:
             return None, None
-
-        # Clean names
-        cleaned_track_name, cleaned_album_name = clean_names(
-            artist=artist_name,
-            track_name=str(track_name),
-            album_name=str(album_name),
-            config=self.config,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
-        )
 
         # Check if update needed
         if cleaned_track_name == track_name and cleaned_album_name == album_name:
