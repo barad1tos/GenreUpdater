@@ -408,6 +408,25 @@ class AppleScriptClientProtocol(Protocol):
         """
         ...
 
+    async def fetch_tracks_by_ids(
+        self,
+        track_ids: list[str],
+        batch_size: int = 1000,
+        timeout: float | None = None,
+    ) -> list[dict[str, str]]:
+        """Fetch tracks by their IDs using fetch_tracks_by_ids.scpt.
+
+        Args:
+            track_ids: List of track IDs to fetch
+            batch_size: Maximum number of IDs per batch (default: 1000)
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track dictionaries with metadata
+
+        """
+        ...
+
 
 @runtime_checkable
 class PendingVerificationServiceProtocol(Protocol):

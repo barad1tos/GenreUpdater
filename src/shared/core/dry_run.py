@@ -154,6 +154,26 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
             )
             return None
 
+    async def fetch_tracks_by_ids(
+        self,
+        track_ids: list[str],
+        batch_size: int = 1000,
+        timeout: float | None = None,
+    ) -> list[dict[str, str]]:
+        """Fetch tracks by IDs - delegates to real client in dry-run mode.
+
+        Args:
+            track_ids: List of track IDs to fetch
+            batch_size: Maximum number of IDs per batch (default: 1000)
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track dictionaries with metadata
+
+        """
+        self.console_logger.info("DRY-RUN: Fetching %d tracks by ID (delegating to real client)", len(track_ids))
+        return await self._real_client.fetch_tracks_by_ids(track_ids, batch_size=batch_size, timeout=timeout)
+
     def get_actions(self) -> list[dict[str, Any]]:
         """Get the list of actions performed during the dry run."""
         return self.actions

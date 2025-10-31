@@ -636,6 +636,63 @@ class MusicUpdater:
         """Check if the test artist filter should be applied."""
         return bool(self.dry_run_test_artists) and self.deps.dry_run
 
+    async def _try_smart_delta_fetch(self) -> list["TrackDict"] | None:
+        """Attempt to use Smart Delta to fetch only changed tracks.
+
+        Returns:
+            List of tracks if Smart Delta succeeded, None otherwise
+
+        """
+        # Check if snapshot service and AppleScript client are available
+        snapshot_service = self.deps.library_snapshot_service
+        ap_client = self.deps.ap_client
+
+        if not snapshot_service or not snapshot_service.is_enabled():
+            self.console_logger.debug("Snapshot service not enabled, skipping Smart Delta")
+            return None
+
+        # Check if snapshot is valid
+        if not await snapshot_service.is_snapshot_valid():
+            self.console_logger.info("Snapshot invalid or expired, skipping Smart Delta")
+            return None
+
+        self.console_logger.info("🔍 Attempting Smart Delta approach...")
+
+        try:
+            # Compute delta using Smart Delta
+            delta = await snapshot_service.compute_smart_delta(ap_client, batch_size=1000)
+
+            if delta is None:
+                self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
+                return None
+
+            # Check if there are any changes
+            if delta.is_empty():
+                self.console_logger.info("✓ Smart Delta: No changes detected, reusing snapshot")
+                # Load snapshot and return it (may be None if load fails)
+                snapshot_tracks = await snapshot_service.load_snapshot()
+                if snapshot_tracks:
+                    self.console_logger.info("✓ Loaded %d tracks from snapshot", len(snapshot_tracks))
+                return snapshot_tracks
+
+            # Log delta summary
+            self.console_logger.info(
+                "✓ Smart Delta detected changes: %d new, %d updated, %d removed",
+                len(delta.new_ids),
+                len(delta.updated_ids),
+                len(delta.removed_ids),
+            )
+
+            # For now, if there are changes, fall back to batch scan
+            # TODO: Implement partial update logic to fetch only changed tracks
+            self.console_logger.info("Changes detected - using batch scan to process all tracks")
+            return None
+
+        except Exception as exc:
+            self.console_logger.exception("Smart Delta failed: %s", exc)
+            self.error_logger.exception("Smart Delta error")
+            return None
+
     async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
 
@@ -645,7 +702,13 @@ class MusicUpdater:
         """
         # Fetch all tracks if not in test mode
         if not self.dry_run_test_artists:
-            # Use batch processing for full library to avoid timeout
+            # Try Smart Delta first
+            smart_delta_tracks = await self._try_smart_delta_fetch()
+            if smart_delta_tracks is not None:
+                self._set_pipeline_snapshot(smart_delta_tracks)
+                return smart_delta_tracks
+
+            # Fall back to batch processing for full library
             self.console_logger.info("Using batch processing for full library fetch")
             batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
             tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size)

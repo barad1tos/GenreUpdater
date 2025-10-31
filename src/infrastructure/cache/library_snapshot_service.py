@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.infrastructure.applescript_client import AppleScriptClient
+    from src.shared.data.protocols import AppleScriptClientProtocol
 
 from src.infrastructure.cache.json_utils import dumps_json, loads_json
 from src.infrastructure.track_delta_service import TrackDelta, compute_track_delta
@@ -299,7 +299,7 @@ class LibrarySnapshotService:
 
     async def compute_smart_delta(
         self,
-        applescript_client: AppleScriptClient,
+        applescript_client: AppleScriptClientProtocol,
         batch_size: int = 1000,
     ) -> TrackDelta | None:
         """Compute track delta using Smart Delta approach (fetch by IDs).
