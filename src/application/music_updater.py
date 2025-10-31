@@ -25,6 +25,7 @@ from src.shared.monitoring.reports import (
 
 if TYPE_CHECKING:
     from src.infrastructure.dependencies_service import DependencyContainer
+    from src.infrastructure.track_delta_service import TrackDelta
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -238,9 +239,7 @@ class MusicUpdater:
 
         return updated_tracks, changes_log
 
-    def _extract_and_clean_track_metadata(
-        self, track: "TrackDict"
-    ) -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
+    def _extract_and_clean_track_metadata(self, track: "TrackDict") -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
         """Extract and clean track metadata.
 
         Args:
@@ -280,9 +279,7 @@ class MusicUpdater:
 
         """
         # Extract and clean track metadata
-        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = (
-            self._extract_and_clean_track_metadata(track)
-        )
+        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = self._extract_and_clean_track_metadata(track)
 
         if not track_id:
             return None, None
@@ -653,14 +650,9 @@ class MusicUpdater:
         """Check if the test artist filter should be applied."""
         return bool(self.dry_run_test_artists) and self.deps.dry_run
 
+    # noinspection PyUnusedLocal
     async def _try_smart_delta_fetch(self) -> list["TrackDict"] | None:
-        """Attempt to use Smart Delta to fetch only changed tracks.
-
-        Returns:
-            List of tracks if Smart Delta succeeded, None otherwise
-
-        """
-        # Check if snapshot service and AppleScript client are available
+        """Attempt to use Smart Delta to fetch only changed tracks."""
         snapshot_service = self.deps.library_snapshot_service
         ap_client = self.deps.ap_client
 
@@ -668,47 +660,97 @@ class MusicUpdater:
             self.console_logger.debug("Snapshot service not enabled, skipping Smart Delta")
             return None
 
-        # Check if snapshot is valid
         if not await snapshot_service.is_snapshot_valid():
             self.console_logger.info("Snapshot invalid or expired, skipping Smart Delta")
             return None
 
         self.console_logger.info("🔍 Attempting Smart Delta approach...")
 
+        result: list[TrackDict] | None = None
         try:
-            # Compute delta using Smart Delta
             delta = await snapshot_service.compute_smart_delta(ap_client, batch_size=1000)
-
             if delta is None:
                 self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
                 return None
 
-            # Check if there are any changes
+            snapshot_tracks = await snapshot_service.load_snapshot()
+            if snapshot_tracks is None:
+                self.console_logger.warning("Smart Delta snapshot unavailable, falling back to batch scan")
+                return None
+
             if delta.is_empty():
                 self.console_logger.info("✓ Smart Delta: No changes detected, reusing snapshot")
-                # Load snapshot and return it (may be None if load fails)
-                snapshot_tracks = await snapshot_service.load_snapshot()
-                if snapshot_tracks:
-                    self.console_logger.info("✓ Loaded %d tracks from snapshot", len(snapshot_tracks))
-                return snapshot_tracks
-
-            # Log delta summary
-            self.console_logger.info(
-                "✓ Smart Delta detected changes: %d new, %d updated, %d removed",
-                len(delta.new_ids),
-                len(delta.updated_ids),
-                len(delta.removed_ids),
-            )
-
-            # For now, if there are changes, fall back to batch scan
-            # TODO: Implement partial update logic to fetch only changed tracks
-            self.console_logger.info("Changes detected - using batch scan to process all tracks")
-            return None
-
+                self.console_logger.info("✓ Loaded %d tracks from snapshot", len(snapshot_tracks))
+                result = snapshot_tracks
+            else:
+                self.console_logger.info(
+                    "✓ Smart Delta detected changes: %d new, %d updated, %d removed",
+                    len(delta.new_ids),
+                    len(delta.updated_ids),
+                    len(delta.removed_ids),
+                )
+                result = await self._merge_smart_delta_snapshot(snapshot_tracks, delta)
         except Exception as exc:
             self.console_logger.exception("Smart Delta failed: %s", exc)
             self.error_logger.exception("Smart Delta error")
-            return None
+            result = None
+
+        return result
+
+    async def _merge_smart_delta_snapshot(
+        self,
+        snapshot_tracks: list["TrackDict"],
+        delta: "TrackDelta",
+    ) -> list["TrackDict"] | None:
+        """Merge snapshot with Smart Delta changes.
+
+        Returns:
+            Updated list of tracks if successful, otherwise None to indicate fallback should be used.
+        """
+
+        removed_ids = {str(track_id) for track_id in delta.removed_ids if track_id}
+        changed_ids = [str(track_id) for track_id in delta.updated_ids if track_id]
+        new_ids = [str(track_id) for track_id in delta.new_ids if track_id]
+
+        fetch_order: list[str] = list(dict.fromkeys(new_ids + changed_ids))
+
+        fetched_map: dict[str, TrackDict]
+        if fetch_order:
+            fetched_tracks = await self.track_processor.fetch_tracks_by_ids(fetch_order)
+            fetched_map = {str(track.id): track for track in fetched_tracks}
+            if missing_ids := [track_id for track_id in fetch_order if track_id not in fetched_map]:
+                self.console_logger.warning(
+                    "Smart Delta missing %d changed tracks (%s); falling back to batch scan",
+                    len(missing_ids),
+                    ", ".join(missing_ids[:5]),
+                )
+                return None
+        else:
+            fetched_map = {}
+
+        merged_tracks: list[TrackDict] = []
+        seen_ids: set[str] = set()
+
+        for track in snapshot_tracks:
+            track_id = str(track.id)
+            if track_id in removed_ids:
+                continue
+            merged_tracks.append(fetched_map.get(track_id, track))
+            seen_ids.add(track_id)
+
+        for track_id, track in fetched_map.items():
+            if track_id not in seen_ids:
+                merged_tracks.append(track)
+                seen_ids.add(track_id)
+
+        self.console_logger.info(
+            "✓ Smart Delta merged snapshot with %d updated, %d new, %d removed tracks",
+            len(changed_ids),
+            len(new_ids),
+            len(removed_ids),
+        )
+
+        return merged_tracks
 
     async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
@@ -726,9 +768,13 @@ class MusicUpdater:
                 return smart_delta_tracks
 
             # Fall back to batch processing for full library
+            # Skip snapshot check since Smart Delta already validated it
             self.console_logger.info("Using batch processing for full library fetch")
             batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
-            tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(batch_size=batch_size)
+            tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(
+                batch_size=batch_size,
+                skip_snapshot_check=True,  # Already validated in Smart Delta
+            )
             self._set_pipeline_snapshot(tracks)
             return tracks
 
@@ -814,9 +860,7 @@ class MusicUpdater:
 
         """
         # Extract and clean track metadata
-        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = (
-            self._extract_and_clean_track_metadata(track)
-        )
+        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = self._extract_and_clean_track_metadata(track)
 
         if not track_id:
             return None, None
