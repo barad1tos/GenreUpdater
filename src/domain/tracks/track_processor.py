@@ -5,8 +5,8 @@ and updating track properties.
 """
 
 import logging
-from datetime import UTC, datetime
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.domain.tracks.artist_renamer import ArtistRenamer
@@ -216,8 +216,7 @@ class TrackProcessor:
             return 0
         line_separator = "\x1d" if "\x1d" in raw_output else None
         rows = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
-        return sum(bool(row)
-               for row in rows)
+        return sum(bool(row) for row in rows)
 
     async def _load_tracks_from_snapshot(self) -> list[TrackDict] | None:
         """Attempt to serve tracks via snapshot and incremental delta updates."""
@@ -231,13 +230,19 @@ class TrackProcessor:
             return None
 
         if await service.is_snapshot_valid():
-            self.console_logger.debug("Snapshot cache valid; returning %d tracks", len(snapshot_tracks))
+            # Snapshot valid - logged in is_snapshot_valid()
             return snapshot_tracks
 
+        # Snapshot is invalid
         if not service.is_delta_enabled():
-            self.console_logger.info("Snapshot invalid and delta disabled; full rescan required")
+            self.console_logger.warning("Snapshot stale and delta updates disabled; full rescan required")
             return None
 
+        # Delta enabled - attempt incremental refresh
+        self.console_logger.info(
+            "Attempting delta update: %d cached tracks + new changes since last scan",
+            len(snapshot_tracks),
+        )
         merged_tracks = await self._refresh_snapshot_from_delta(snapshot_tracks, service)
         return merged_tracks if merged_tracks is not None else None
 
@@ -251,11 +256,7 @@ class TrackProcessor:
         min_date = metadata.last_full_scan if metadata else None
 
         delta_cache = await snapshot_service.load_delta()
-        if delta_cache and (candidates := [
-            candidate
-            for candidate in (min_date, delta_cache.last_run)
-            if candidate is not None
-        ]):
+        if delta_cache and (candidates := [candidate for candidate in (min_date, delta_cache.last_run) if candidate is not None]):
             min_date = max(candidates)
 
         if min_date is None:
@@ -301,9 +302,7 @@ class TrackProcessor:
             delta_cache = LibraryDeltaCache(last_run=current_time)
 
         delta_cache.last_run = current_time
-        if processed_track_ids and (ids_as_str := [
-            str(track_id) for track_id in processed_track_ids if str(track_id)
-        ]):
+        if processed_track_ids and (ids_as_str := [str(track_id) for track_id in processed_track_ids if str(track_id)]):
             delta_cache.add_processed_ids(ids_as_str)
         await self.snapshot_service.save_delta(delta_cache)
 
@@ -557,6 +556,14 @@ class TrackProcessor:
             List of all track dictionaries
 
         """
+        # Try loading from snapshot first (with delta updates if available)
+        if self._can_use_snapshot(artist=None):
+            snapshot_tracks = await self._load_tracks_from_snapshot()
+            if snapshot_tracks is not None:
+                self.console_logger.info("✓ Loaded %d tracks from snapshot cache; skipping batch fetch", len(snapshot_tracks))
+                return snapshot_tracks
+
+        # Snapshot not available or invalid - proceed with batch processing
         all_tracks: list[TrackDict] = []
         offset = 1  # AppleScript indices start from 1
         batch_count = 0
@@ -576,26 +583,13 @@ class TrackProcessor:
 
                 validated_tracks, should_continue, parse_failed = batch_result
 
-                # Track consecutive parse failures
-                if parse_failed:
-                    consecutive_parse_failures += 1
-                    self.error_logger.warning(
-                        "Parse failure %d/%d for batch %d",
-                        consecutive_parse_failures,
-                        self.MAX_CONSECUTIVE_PARSE_FAILURES,
-                        batch_count,
-                    )
-
-                    # Abort if too many consecutive failures
-                    if consecutive_parse_failures >= self.MAX_CONSECUTIVE_PARSE_FAILURES:
-                        self.error_logger.error(
-                            "Aborting batch processing: %d consecutive parse failures indicate systematic issue",
-                            consecutive_parse_failures,
-                        )
-                        break
-                else:
-                    # Reset counter on successful parse
-                    consecutive_parse_failures = 0
+                consecutive_parse_failures, should_continue_loop = self._handle_parse_failure_state(
+                    consecutive_parse_failures,
+                    parse_failed,
+                    batch_count,
+                )
+                if not should_continue_loop:
+                    break
 
                 all_tracks.extend(validated_tracks)
 
@@ -615,7 +609,41 @@ class TrackProcessor:
         await self.cache_service.set_async("tracks_all", all_tracks)
         self.console_logger.info("Cached %d tracks for key: tracks_all", len(all_tracks))
 
+        # Persist snapshot so future runs can start from cached state instead of full scans
+        if all_tracks and self._can_use_snapshot(None) and not self.dry_run:
+            try:
+                await self._update_snapshot(all_tracks, [track.id for track in all_tracks])
+            except Exception as exc:
+                self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", exc)
+
         return all_tracks
+
+    def _handle_parse_failure_state(
+        self,
+        consecutive_parse_failures: int,
+        parse_failed: bool,
+        batch_count: int,
+    ) -> tuple[int, bool]:
+        """Update parse failure tracking and signal if batch processing should continue."""
+        if not parse_failed:
+            return 0, True
+
+        next_failures = consecutive_parse_failures + 1
+        self.error_logger.warning(
+            "Parse failure %d/%d for batch %d",
+            next_failures,
+            self.MAX_CONSECUTIVE_PARSE_FAILURES,
+            batch_count,
+        )
+
+        if next_failures >= self.MAX_CONSECUTIVE_PARSE_FAILURES:
+            self.error_logger.error(
+                "Aborting batch processing: %d consecutive parse failures indicate systematic issue",
+                next_failures,
+            )
+            return next_failures, False
+
+        return next_failures, True
 
     async def _process_single_batch(self, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
         """Process a single batch of tracks.
@@ -691,7 +719,7 @@ class TrackProcessor:
                 batch_size,
             )
 
-        return validated_tracks, should_continue, False  # Tracks fetched, should continue, no parse failure
+        return validated_tracks, should_continue, False
 
     async def _update_property(
         self,
@@ -1124,11 +1152,12 @@ class TrackProcessor:
             )
             batch_timeout = 60.0
         if batch_timeout <= 0:
-            self.console_logger.warning(
-                "Non-positive 'applescript_timeouts.batch_update' value '%s'; falling back to 60.0 seconds",
+            self.console_logger.error(
+                "Non-positive 'applescript_timeouts.batch_update' value '%s'; this is a misconfiguration.",
                 timeout_value,
             )
-            batch_timeout = 60.0
+            msg = f"Non-positive 'applescript_timeouts.batch_update' value '{timeout_value}'; please check your configuration."
+            raise ValueError(msg)
 
         # Execute batch update with configured timeout (defaults to 60s)
         result = await self.ap_client.run_script(

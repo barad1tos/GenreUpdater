@@ -2,7 +2,7 @@
 
 import logging
 import types
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 from src.domain.tracks.track_processor import TrackProcessor
@@ -93,6 +93,148 @@ async def test_fetch_tracks_in_batches_populates_cache() -> None:
 
     cached_result = await track_processor.fetch_tracks_async()
     assert [track.id for track in cached_result] == [track.id for track in sample_tracks]
+
+
+@pytest.mark.asyncio
+async def test_fetch_tracks_in_batches_updates_snapshot_when_enabled() -> None:
+    """Ensure batch fetching persists snapshot when service is available."""
+    logger = logging.getLogger("test.track_processor.snapshot")
+    logger.addHandler(logging.NullHandler())
+
+    config: dict[str, Any] = {
+        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
+        "development": {"test_artists": []},
+    }
+    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    cache_service = DummyCacheService()
+
+    track_processor = TrackProcessor(
+        ap_client=DummyAppleScriptClient(),  # type: ignore[arg-type]
+        cache_service=cache_service,  # type: ignore[arg-type]
+        console_logger=logger,
+        error_logger=logger,
+        config=config,
+        analytics=analytics,
+    )
+
+    sample_tracks = [
+        TrackDict(id="1", name="Song A", artist="Artist", album="Album", genre="Rock", year="2000"),
+        TrackDict(id="2", name="Song B", artist="Artist", album="Album", genre="Rock", year="2001"),
+    ]
+
+    async def fake_process_single_batch(_self: TrackProcessor, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
+        """Mock single batch processing."""
+        assert batch_count == 1
+        assert offset == 1
+        assert batch_size == 25
+        return sample_tracks, False, False
+
+    track_processor._process_single_batch = types.MethodType(fake_process_single_batch, track_processor)  # type: ignore[method-assign] # noqa: SLF001
+
+    class DummySnapshotService:
+        """Minimal snapshot service stub."""
+
+        @staticmethod
+        def is_enabled() -> bool:
+            """Snapshot service is enabled."""
+            return True
+
+        @staticmethod
+        async def load_snapshot() -> None:
+            """Return None to simulate no cached snapshot."""
+            return None
+
+        @staticmethod
+        async def is_snapshot_valid() -> bool:
+            """Return False to force batch processing."""
+            return False
+
+    track_processor.snapshot_service = DummySnapshotService()  # type: ignore[assignment]
+
+    snapshot_calls: list[tuple[list[TrackDict], list[str]]] = []
+
+    async def fake_update_snapshot(_self: TrackProcessor, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
+        """Capture snapshot update arguments."""
+        snapshot_calls.append((tracks, list(processed_track_ids or [])))
+
+    track_processor._update_snapshot = types.MethodType(fake_update_snapshot, track_processor)  # type: ignore[method-assign] # noqa: SLF001
+
+    await track_processor.fetch_tracks_in_batches(25)
+
+    assert len(snapshot_calls) == 1
+    recorded_tracks, recorded_ids = snapshot_calls[0]
+    assert recorded_tracks == sample_tracks
+    assert recorded_ids == ["1", "2"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_tracks_in_batches_handles_snapshot_failure(caplog: pytest.LogCaptureFixture) -> None:
+    """Ensure snapshot failures do not break batch fetch."""
+    logger = logging.getLogger("test.track_processor.snapshot_fail")
+    logger.addHandler(logging.NullHandler())
+    logger.propagate = True
+
+    config: dict[str, Any] = {
+        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
+        "development": {"test_artists": []},
+    }
+    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    cache_service = DummyCacheService()
+
+    track_processor = TrackProcessor(
+        ap_client=DummyAppleScriptClient(),  # type: ignore[arg-type]
+        cache_service=cache_service,  # type: ignore[arg-type]
+        console_logger=logger,
+        error_logger=logger,
+        config=config,
+        analytics=analytics,
+    )
+
+    sample_tracks = [
+        TrackDict(id="1", name="Song A", artist="Artist", album="Album", genre="Rock", year="2000"),
+        TrackDict(id="2", name="Song B", artist="Artist", album="Album", genre="Rock", year="2001"),
+    ]
+
+    async def fake_process_single_batch(_self: TrackProcessor, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
+        """Mock single batch processing."""
+        assert batch_count == 1
+        assert offset == 1
+        assert batch_size == 25
+        return sample_tracks, False, False
+
+    track_processor._process_single_batch = types.MethodType(fake_process_single_batch, track_processor)  # type: ignore[method-assign] # noqa: SLF001
+
+    class DummySnapshotService:
+        """Minimal snapshot service stub."""
+
+        @staticmethod
+        def is_enabled() -> bool:
+            """Snapshot service is enabled."""
+            return True
+
+        @staticmethod
+        async def load_snapshot() -> None:
+            """Return None to simulate no cached snapshot."""
+            return None
+
+        @staticmethod
+        async def is_snapshot_valid() -> bool:
+            """Return False to force batch processing."""
+            return False
+
+    track_processor.snapshot_service = DummySnapshotService()  # type: ignore[assignment]
+
+    async def failing_update_snapshot(_self: TrackProcessor, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
+        """Simulate snapshot persistence failure."""
+        raise RuntimeError("snapshot write failed")
+
+    track_processor._update_snapshot = types.MethodType(failing_update_snapshot, track_processor)  # type: ignore[method-assign] # noqa: SLF001
+
+    with caplog.at_level(logging.WARNING):
+        tracks = await track_processor.fetch_tracks_in_batches(25)
+
+    assert tracks == sample_tracks
+    assert "Failed to persist library snapshot after batch fetch" in caplog.text
 
 
 @pytest.mark.asyncio
