@@ -21,15 +21,15 @@ classifiers = [
 ]
 dependencies = [
   "pydantic==2.12.3",                # Core data validation and models
-  "python-dotenv>=1.0.0",            # Configuration and environment
+  "python-dotenv==1.2.1",            # Configuration and environment
   "pyyaml==6.0.3",                   # YAML configuration parsing
-  "aiohttp==3.13.1",                 # HTTP client for API requests
+  "aiohttp==3.13.2",                 # HTTP client for API requests
   "certifi==2025.10.5",              # SSL certificates for secure HTTPS connections
   "cryptography==46.0.3",            # Cryptography for secure token handling
   "aiofiles==25.1.0",                # File operations
   "orjson>=3.10.0",                  # Fast JSON serialization
   "rich==14.2.0",                    # Console output formatting
-  "ruff==0.14.2",                    # Linting and code quality
+  "ruff==0.14.3",                    # Linting and code quality
   "pytest>=8.4.2",                   # Testing framework
   "pytest-cov>=7.0.0",               # Test coverage
   "mypy==1.18.2",                    # Static type checking
@@ -39,6 +39,7 @@ dependencies = [
   "coverage==7.11.0",
   "cst-lsp==0.1.3",
   "types-aiofiles==25.1.0.20251011",
+  "sourcery>=1.41.1",
 ]
 
 [dependency-groups]
