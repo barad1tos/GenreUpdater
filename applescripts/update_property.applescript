@@ -30,13 +30,22 @@ on run argv
             return "Error: Missing track ID"
         end if
 
-        set propName to item 2 of argv
+        set rawPropName to item 2 of argv
+        set propDisplayName to do shell script "/usr/bin/python3 -c 'import sys;print(sys.argv[1].strip())' " & quoted form of rawPropName
+        if propDisplayName is "" then
+            return "Error: Missing property name"
+        end if
+        set normalizedPropName to do shell script "/usr/bin/python3 -c 'import sys;name = sys.argv[1];name = name.strip().lower();name = \"_\".join(name.replace(\"-\", \" \").split());print(name)' " & quoted form of propDisplayName
+        set supportedProps to {"name", "album", "artist", "album_artist", "genre", "year"}
         -- Verify it's one of the supported properties
-        if propName is not in {"name", "album", "artist", "album_artist", "genre", "year"} then
-            return "Error: Unsupported property '" & propName & "'. Must be name, album, artist, album_artist, genre, or year."
+        if normalizedPropName is not in supportedProps then
+            return "Error: Unsupported property '" & propDisplayName & "'. Must be name, album, artist, album_artist, genre, or year."
         end if
 
-        set propValue to item 3 of argv
+        set propIdentifier to normalizedPropName
+
+        set rawPropValue to item 3 of argv
+        set propValue to do shell script "/usr/bin/python3 -c 'import sys;print(sys.argv[1].strip())' " & quoted form of rawPropValue
         if propValue is "" then
             return "Error: Empty property value"
         end if
@@ -54,37 +63,37 @@ on run argv
             if trackExists then
                 -- Get current property value for comparison
                 set currentValue to ""
-                if propName is "name" then
+                if propIdentifier is "name" then
                     set currentValue to name of trackRef
-                else if propName is "album" then
+                else if propIdentifier is "album" then
                     set currentValue to album of trackRef
-                else if propName is "artist" then
+                else if propIdentifier is "artist" then
                     set currentValue to artist of trackRef
-                else if propName is "album_artist" then
+                else if propIdentifier is "album_artist" then
                     set currentValue to album artist of trackRef
-                else if propName is "genre" then
+                else if propIdentifier is "genre" then
                     set currentValue to genre of trackRef
-                else if propName is "year" then
+                else if propIdentifier is "year" then
                     set currentValue to (year of trackRef) as string
                 end if
                 
                 -- Check if value is actually different
                 if currentValue is equal to propValue then
-                    return "No Change: Track " & tID & " " & propName & " already set to " & propValue
+                    return "No Change: Track " & tID & " " & propDisplayName & " already set to " & propValue
                 end if
                 
                 -- Update the appropriate property based on propName
-                if propName is "name" then
+                if propIdentifier is "name" then
                     set name of trackRef to propValue
-                else if propName is "album" then
+                else if propIdentifier is "album" then
                     set album of trackRef to propValue
-                else if propName is "artist" then
+                else if propIdentifier is "artist" then
                     set artist of trackRef to propValue
-                else if propName is "album_artist" then
+                else if propIdentifier is "album_artist" then
                     set album artist of trackRef to propValue
-                else if propName is "genre" then
+                else if propIdentifier is "genre" then
                     set genre of trackRef to propValue
-                else if propName is "year" then
+                else if propIdentifier is "year" then
                     try
                         set propValueInt to propValue as integer
 
@@ -100,7 +109,7 @@ on run argv
                         return "Error: Failed to set year '" & propValue & "': " & yearErr
                     end try
                 end if
-                return "Success: Updated track " & tID & " " & propName & " from '" & currentValue & "' to '" & propValue & "'"
+                return "Success: Updated track " & tID & " " & propDisplayName & " from '" & currentValue & "' to '" & propValue & "'"
             end if
         end tell
     on error errMsg
