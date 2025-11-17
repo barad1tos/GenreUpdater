@@ -60,6 +60,8 @@ cleaning:
     - Bonus Tracks
     - Digital Version
     - Original Soundtrack
+    - Re-release
+    - Anniversary
 
   album_suffixes_to_remove:
     - Remaster
@@ -67,6 +69,7 @@ cleaning:
     - EP
     - Single
     - Deluxe
+    - Non-LP Track
 
 artist_renamer:
   config_path: artist-renames.yaml
@@ -86,7 +89,7 @@ database_verification:
 
 # Development and testing settings
 development:
-  test_artists: [] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  test_artists: [ ] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
   debug_mode: true # 🎛️ GLOBAL DEBUG TOGGLE - Controls all [*_DEBUG] logs throughout the application
 
 # Reporting configuration
@@ -226,7 +229,7 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
         "cz",
         "ua",
       ]
-    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"]
+    major_market_codes: [ "us", "gb", "uk", "de", "jp", "fr", "ca", "au" ]
 
   # --- Reissue Detection ---
   reissue_detection:
@@ -253,41 +256,41 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
   # --- Script-based API Prioritization ---
   script_api_priorities:
     cyrillic:
-      primary: ["itunes", "applemusic"] # Local services for CIS region
-      fallback: ["musicbrainz", "discogs", "lastfm"]
+      primary: [ "itunes", "applemusic" ] # Local services for CIS region
+      fallback: [ "musicbrainz", "discogs", "lastfm" ]
     chinese:
-      primary: ["musicbrainz"] # Chinese music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Chinese music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     japanese:
-      primary: ["musicbrainz"] # Japanese music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Japanese music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     korean:
-      primary: ["musicbrainz"] # Korean music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Korean music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     arabic:
-      primary: ["musicbrainz"] # Arabic music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Arabic music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     hebrew:
-      primary: ["musicbrainz"] # Hebrew music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Hebrew music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     greek:
-      primary: ["musicbrainz"] # Greek music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Greek music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     thai:
-      primary: ["musicbrainz"] # Thai music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Thai music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     devanagari:
-      primary: ["musicbrainz"] # Indian music databases would go here
-      fallback: ["itunes", "discogs", "lastfm"]
+      primary: [ "musicbrainz" ] # Indian music databases would go here
+      fallback: [ "itunes", "discogs", "lastfm" ]
     latin:
-      primary: ["musicbrainz", "discogs", "lastfm"]
-      fallback: ["itunes"]
+      primary: [ "musicbrainz", "discogs", "lastfm" ]
+      fallback: [ "itunes" ]
     mixed:
-      primary: ["musicbrainz", "discogs"]
-      fallback: ["lastfm", "itunes"]
+      primary: [ "musicbrainz", "discogs" ]
+      fallback: [ "lastfm", "itunes" ]
     default:
-      primary: ["musicbrainz", "discogs"]
-      fallback: ["lastfm", "itunes"]
+      primary: [ "musicbrainz", "discogs" ]
+      fallback: [ "lastfm", "itunes" ]
 
   # --- Scoring Parameters ---
   scoring: # Values adjusted based on previous analysis
