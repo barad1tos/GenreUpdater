@@ -50,6 +50,11 @@ on run argv
             return "Error: Empty property value"
         end if
 
+        -- Get current year BEFORE tell block to avoid Music.app scope conflict
+        -- (Music.app's 'year' property overrides Standard Additions' date 'year')
+        set currentYear to year of (current date)
+        set maxValidYear to currentYear + 2
+
         tell application "Music"
             -- First verify track exists to avoid wasting time
             try
@@ -99,9 +104,8 @@ on run argv
 
                         -- Soft validation: reject obviously invalid years
                         -- Allow future years (up to +2 years) for pre-releases and scheduled albums
-                        set currentYear to year of (current date)
-                        if propValueInt < 1900 or propValueInt > (currentYear + 2) then
-                            return "Error: Year value '" & propValueInt & "' is out of reasonable range (1900-" & (currentYear + 2) & ")"
+                        if propValueInt < 1900 or propValueInt > maxValidYear then
+                            return "Error: Year value '" & propValueInt & "' is out of reasonable range (1900-" & maxValidYear & ")"
                         end if
 
                         set year of trackRef to propValueInt
