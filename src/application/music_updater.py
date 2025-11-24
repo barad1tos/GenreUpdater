@@ -185,7 +185,7 @@ class MusicUpdater:
 
         Args:
             artist: Artist name to process
-            _force: Force processing even if recently done (currently unused)
+            _force: Reserved for future use (API compatibility)
 
         """
         self.console_logger.info("Starting clean operation for artist: %s", artist)
