@@ -137,3 +137,4 @@ dmypy.json
 /requirements/
 !requirements/index.md
 !requirements/.current-requirement
+.trunk/
