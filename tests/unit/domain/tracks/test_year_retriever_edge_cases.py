@@ -529,12 +529,16 @@ class TestYearFallbackLogic:
         pending_verification: Any = None,
         fallback_enabled: bool = True,
         year_difference_threshold: int = 5,
+        absurd_year_threshold: int = 1970,
     ) -> YearRetriever:
         """Create YearRetriever with fallback configuration."""
         config = {
             "year_retrieval": {
                 "api_timeout": 30,
                 "processing": {"batch_size": 50},
+                "logic": {
+                    "absurd_year_threshold": absurd_year_threshold,
+                },
                 "fallback": {
                     "enabled": fallback_enabled,
                     "year_difference_threshold": year_difference_threshold,
@@ -860,3 +864,329 @@ class TestYearFallbackLogic:
         assert result == "1998", "Original behavior: apply API year"
         # Still marks for verification (original behavior for low confidence)
         assert len(mock_pending.marked_albums) == 1
+
+
+@allure.epic("Music Genre Updater")
+@allure.feature("Year Retrieval Fallback")
+@allure.story("Absurd Year Detection (Rule 2)")
+class TestAbsurdYearDetection:
+    """Tests for absurd year detection (Rule 2 in fallback decision tree).
+
+    Rule 2: IF proposed_year < absurd_threshold AND no existing year → MARK + SKIP
+
+    This catches cases like:
+    - Gorillaz → 1974 (band formed 1998)
+    - HIM → 1980 (band formed 1991)
+
+    When there's no existing year to compare against, we use a configurable
+    threshold (default: 1970) to filter out absurd years.
+    """
+
+    @staticmethod
+    def create_retriever_with_absurd_threshold(
+        absurd_year_threshold: int = 1970,
+        pending_verification: Any = None,
+    ) -> YearRetriever:
+        """Create YearRetriever with specific absurd year threshold."""
+        return TestYearFallbackLogic.create_retriever_with_fallback(
+            pending_verification=pending_verification,
+            absurd_year_threshold=absurd_year_threshold,
+        )
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Absurd year threshold is loaded from config")
+    def test_absurd_threshold_config_loaded(self) -> None:
+        """Test that absurd_year_threshold is properly loaded from config."""
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1980,  # Non-default
+        )
+
+        assert retriever.absurd_year_threshold == 1980
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Default absurd year threshold is 1970")
+    def test_default_absurd_threshold(self) -> None:
+        """Test that default absurd_year_threshold is 1970."""
+        # Create retriever without explicit threshold
+        config = {"year_retrieval": {"api_timeout": 30}}
+        retriever = TestYearRetrieverEdgeCases.create_year_retriever(config=config)
+
+        assert retriever.absurd_year_threshold == 1970
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Rule 2: Absurd year + no existing → SKIP")
+    @pytest.mark.asyncio
+    async def test_absurd_year_no_existing_skips(self) -> None:
+        """Test that absurd year with no existing year is skipped.
+
+        Case: Gorillaz - The Mountain → 1974 (no existing year)
+        Expected: SKIP update, mark for verification
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        # Track with NO existing year
+        tracks = [
+            TrackDict(id="1", name="The Mountain", artist="Gorillaz",
+                      album="The Mountain", year=""),  # No existing year
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1965",  # Before 1970 threshold
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Gorillaz",
+            album="The Mountain",
+        )
+
+        assert result is None, "Absurd year should be skipped"
+        assert len(mock_pending.marked_albums) == 1, "Should be marked for verification"
+        # marked_albums is a tuple: (artist, album, reason, metadata)
+        assert mock_pending.marked_albums[0][2] == "absurd_year_no_existing"
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Rule 2: Year above threshold → continues to Rule 3")
+    @pytest.mark.asyncio
+    async def test_year_above_threshold_continues(self) -> None:
+        """Test that year above threshold passes to next rule.
+
+        Case: Album with year 1990 (> 1970 threshold)
+        Expected: Continue to Rule 3 (no existing year → APPLY)
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Artist",
+                      album="Album", year=""),  # No existing year
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1990",  # Above 1970 threshold
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Artist",
+            album="Album",
+        )
+
+        # Should apply (Rule 3: no existing year)
+        assert result == "1990"
+        assert len(mock_pending.marked_albums) == 0
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Rule 2: Absurd year WITH existing → continues (handled by Rule 5)")
+    @pytest.mark.asyncio
+    async def test_absurd_year_with_existing_continues(self) -> None:
+        """Test that absurd year with existing year continues to dramatic change rule.
+
+        Case: Album with existing year 2000, proposed year 1965
+        Expected: Skip Rule 2 (has existing), proceed to Rule 5 (dramatic change)
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Artist",
+                      album="Album", year="2000"),  # HAS existing year
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1965",  # Absurd, but has existing year
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Artist",
+            album="Album",
+        )
+
+        # Should be caught by Rule 5 (dramatic change: 2000 → 1965 = 35 years)
+        assert result is None
+        assert len(mock_pending.marked_albums) == 1
+        # Reason should be dramatic change, not absurd year
+        # marked_albums is a tuple: (artist, album, reason, metadata)
+        assert mock_pending.marked_albums[0][2] == "suspicious_year_change"
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Rule 2: Edge case - year exactly at threshold")
+    @pytest.mark.asyncio
+    async def test_year_at_threshold_boundary(self) -> None:
+        """Test boundary condition: year exactly at threshold.
+
+        Year 1970 with threshold 1970 should NOT be skipped (< not <=)
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Artist",
+                      album="Album", year=""),
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1970",  # Exactly at threshold
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Artist",
+            album="Album",
+        )
+
+        # 1970 >= 1970, should NOT be absurd, should apply
+        assert result == "1970"
+        assert len(mock_pending.marked_albums) == 0
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Rule 1 takes precedence: High confidence bypasses absurd check")
+    @pytest.mark.asyncio
+    async def test_high_confidence_bypasses_absurd_check(self) -> None:
+        """Test that high confidence (is_definitive=True) bypasses Rule 2.
+
+        When API is confident, even absurd years are applied (Rule 1).
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Artist",
+                      album="Album", year=""),
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1960",  # Absurd year
+            album_tracks=tracks,
+            is_definitive=True,  # But high confidence!
+            artist="Artist",
+            album="Album",
+        )
+
+        # Rule 1: High confidence → apply
+        assert result == "1960"
+        assert len(mock_pending.marked_albums) == 0
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Custom threshold - configurable protection level")
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("threshold", "proposed", "expected_result"),
+        [
+            (1970, "1969", None),   # Below default threshold
+            (1970, "1971", "1971"),  # Above default threshold
+            (1980, "1975", None),   # Below custom threshold
+            (1980, "1985", "1985"),  # Above custom threshold
+            (1950, "1960", "1960"),  # Lower threshold = more permissive
+        ],
+    )
+    async def test_custom_threshold_levels(
+        self,
+        threshold: int,
+        proposed: str,
+        expected_result: str | None,
+    ) -> None:
+        """Test that custom threshold affects detection."""
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=threshold,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Artist",
+                      album="Album", year=""),  # No existing
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year=proposed,
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result == expected_result
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Real case: Gorillaz - 1974 should be skipped")
+    @pytest.mark.asyncio
+    async def test_real_case_gorillaz_1974(self) -> None:
+        """Test real-world case: Gorillaz getting 1974 year (band formed 1998).
+
+        Note: With threshold 1970, this would NOT be caught.
+        This case is caught by scoring system's artist_period_context.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="The Mountain", artist="Gorillaz",
+                      album="Plastic Beach", year=""),
+        ]
+
+        result = await retriever._apply_year_fallback(
+            proposed_year="1974",  # 1974 > 1970, so not "absurd" by this rule
+            album_tracks=tracks,
+            is_definitive=False,
+            artist="Gorillaz",
+            album="Plastic Beach",
+        )
+
+        # 1974 > 1970 threshold, so it passes Rule 2
+        # Rule 3: No existing year → apply
+        # NOTE: This case should be caught by scoring system, not fallback
+        assert result == "1974"
+
+        allure.attach(
+            "NOTE: 1974 for Gorillaz is caught by the SCORING system,\n"
+            "not the fallback absurd threshold.\n"
+            "The scoring system has artist_period_context with start_year=1998.\n"
+            "This applies year_before_start_penalty of up to -50 points.",
+            "Implementation Note",
+            allure.attachment_type.TEXT,
+        )
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Pre-rock era years are always absurd")
+    @pytest.mark.asyncio
+    async def test_pre_rock_era_years_blocked(self) -> None:
+        """Test that pre-rock era years (< 1950) are blocked.
+
+        Years like 1920, 1940 are clearly absurd for modern music libraries.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_absurd_threshold(
+            absurd_year_threshold=1970,
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track", artist="Modern Band",
+                      album="Album", year=""),
+        ]
+
+        # Test various clearly absurd years
+        for absurd_year in ["1920", "1940", "1950", "1960", "1969"]:
+            mock_pending.marked_albums.clear()
+
+            result = await retriever._apply_year_fallback(
+                proposed_year=absurd_year,
+                album_tracks=tracks,
+                is_definitive=False,
+                artist="Modern Band",
+                album="Album",
+            )
+
+            assert result is None, f"Year {absurd_year} should be blocked"
+            assert len(mock_pending.marked_albums) == 1
