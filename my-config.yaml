@@ -200,6 +200,9 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
   # --- Year Validation & Logic ---
   logic:
     min_valid_year: 1900
+    # Absurd year threshold: if proposed year < this AND no existing year, mark for verification
+    # Catches cases like Gorillaz→1974 (band formed 1998) without artist period data
+    absurd_year_threshold: 1970
     definitive_score_threshold: 50 # Increased from 20 to avoid false positives
     definitive_score_diff: 15 # Reduced from 15 to handle close scores
     preferred_countries:
@@ -327,7 +330,81 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     future_year_penalty: -10
 
 # -----------------------------------------------------------------------
-# 6. GENRE UPDATE CONFIGURATION
+# 6. ALBUM TYPE DETECTION (for year fallback logic)
+# -----------------------------------------------------------------------
+# Patterns to detect special album types that require different year handling.
+# NOTE: Use hyphenated forms - matching normalizes hyphens to spaces.
+
+album_type_detection:
+  # Special albums (B-Sides, Demos, etc.) - skip year updates entirely
+  special_patterns:
+    - b-sides
+    - b-side
+    - d-sides
+    - d-side
+    - demo
+    - demos
+    - vault
+    - rarities
+    - rarity
+    - archive
+    - archives
+    - outtakes
+    - outtake
+    - unreleased
+    - sessions
+    - session
+    - bonus-tracks
+    - bonus
+    - extras
+    - bootleg
+    - bootlegs
+    - alternate
+    - alternates
+    - acoustic-versions
+    - live-sessions
+    - remixes
+    - remix
+
+  # Compilation albums - skip year updates (compilation year ≠ track year)
+  compilation_patterns:
+    - greatest hits
+    - best of
+    - collection
+    - anthology
+    - compilation
+    - complete
+    - essential
+    - definitive
+    - ultimate
+    - gold
+    - platinum
+    - hits
+    - singles
+    - collected
+    - retrospective
+    - хіти   # Ukrainian: "hits"
+    - хіт    # Ukrainian: "hit"
+
+  # Reissue albums - mark but still update (reissue year is often correct)
+  reissue_patterns:
+    - remaster
+    - remastered
+    - anniversary
+    - deluxe
+    - expanded
+    - special edition
+    - collector
+    - redux
+    - revisited
+    - re-release
+    - re-issue
+    - reissue
+    - rerelease
+    - remanufacture
+
+# -----------------------------------------------------------------------
+# 7. GENRE UPDATE CONFIGURATION
 # -----------------------------------------------------------------------
 genre_update:
   batch_size: 50 # Number of tracks to process in each batch
