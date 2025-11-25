@@ -6,6 +6,16 @@ handling during year updates.
 
 The detection helps prevent incorrect year assignments when API services
 return compilation/reissue years instead of original release years.
+
+Pattern Configuration:
+    Patterns can be configured via YAML config file under `album_type_detection`:
+    ```yaml
+    album_type_detection:
+      special_patterns: [...]
+      compilation_patterns: [...]
+      reissue_patterns: [...]
+    ```
+    If config is not provided, default patterns are used.
 """
 
 from __future__ import annotations
@@ -13,18 +23,22 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
+from typing import Any, Final
 
 __all__ = [
-    "COMPILATION_PATTERNS",
-    "REISSUE_PATTERNS",
-    "SPECIAL_ALBUM_PATTERNS",
     "AlbumType",
     "AlbumTypeInfo",
+    "AlbumTypePatterns",
     "YearHandlingStrategy",
+    "configure_patterns",
     "detect_album_type",
+    "get_compilation_patterns",
+    "get_patterns",
+    "get_reissue_patterns",
+    "get_special_patterns",
     "get_year_handling_strategy",
     "is_special_album",
+    "reset_patterns",
 ]
 
 
@@ -54,12 +68,18 @@ class AlbumTypeInfo:
     strategy: YearHandlingStrategy
 
 
+# ============================================================================
+# DEFAULT PATTERNS (used when config is not provided)
+# ============================================================================
+
 # Patterns that indicate special albums (B-Sides, Demo collections, etc.)
 # These albums often have compilation years that differ from original tracks
 # NOTE: Use hyphenated forms - matching normalizes hyphens to spaces
-SPECIAL_ALBUM_PATTERNS: Final[frozenset[str]] = frozenset({
+_DEFAULT_SPECIAL_PATTERNS: Final[frozenset[str]] = frozenset({
     "b-sides",
     "b-side",
+    "d-sides",
+    "d-side",
     "demo",
     "demos",
     "vault",
@@ -81,11 +101,13 @@ SPECIAL_ALBUM_PATTERNS: Final[frozenset[str]] = frozenset({
     "alternates",
     "acoustic-versions",
     "live-sessions",
+    "remixes",
+    "remix",
 })
 
 # Patterns that indicate compilation albums
 # These usually have their own release year separate from individual tracks
-COMPILATION_PATTERNS: Final[frozenset[str]] = frozenset({
+_DEFAULT_COMPILATION_PATTERNS: Final[frozenset[str]] = frozenset({
     "greatest hits",
     "best of",
     "collection",
@@ -101,11 +123,13 @@ COMPILATION_PATTERNS: Final[frozenset[str]] = frozenset({
     "singles",
     "collected",
     "retrospective",
+    "хіти",  # Ukrainian: "hits"
+    "хіт",  # Ukrainian: "hit"
 })
 
 # Patterns that indicate reissued/remastered albums
 # May have reissue year instead of original release year
-REISSUE_PATTERNS: Final[frozenset[str]] = frozenset({
+_DEFAULT_REISSUE_PATTERNS: Final[frozenset[str]] = frozenset({
     "remaster",
     "remastered",
     "anniversary",
@@ -118,7 +142,109 @@ REISSUE_PATTERNS: Final[frozenset[str]] = frozenset({
     "re-release",
     "re-issue",
     "reissue",
+    "rerelease",
+    "remanufacture",
 })
+
+
+# ============================================================================
+# CONFIGURABLE PATTERNS CLASS
+# ============================================================================
+
+
+@dataclass
+class AlbumTypePatterns:
+    """Configurable album type patterns.
+
+    Stores the patterns used for album type detection.
+    Can be initialized from config or uses defaults.
+    """
+
+    special: frozenset[str]
+    compilation: frozenset[str]
+    reissue: frozenset[str]
+
+    @classmethod
+    def from_defaults(cls) -> AlbumTypePatterns:
+        """Create patterns using default values."""
+        return cls(
+            special=_DEFAULT_SPECIAL_PATTERNS,
+            compilation=_DEFAULT_COMPILATION_PATTERNS,
+            reissue=_DEFAULT_REISSUE_PATTERNS,
+        )
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any]) -> AlbumTypePatterns:
+        """Create patterns from configuration dict.
+
+        Args:
+            config: Application configuration dictionary
+
+        Returns:
+            AlbumTypePatterns loaded from config (with defaults as fallback)
+
+        Config format:
+            ```yaml
+            album_type_detection:
+              special_patterns: [...]
+              compilation_patterns: [...]
+              reissue_patterns: [...]
+            ```
+        """
+        album_type_config = config.get("album_type_detection", {})
+
+        special_list = album_type_config.get(
+            "special_patterns",
+            list(_DEFAULT_SPECIAL_PATTERNS),
+        )
+        compilation_list = album_type_config.get(
+            "compilation_patterns",
+            list(_DEFAULT_COMPILATION_PATTERNS),
+        )
+        reissue_list = album_type_config.get(
+            "reissue_patterns",
+            list(_DEFAULT_REISSUE_PATTERNS),
+        )
+
+        return cls(
+            special=frozenset(special_list),
+            compilation=frozenset(compilation_list),
+            reissue=frozenset(reissue_list),
+        )
+
+
+# Module-level singleton for configured patterns
+_configured_patterns: AlbumTypePatterns | None = None
+
+
+def configure_patterns(config: dict[str, Any]) -> None:
+    """Configure album type patterns from application config.
+
+    This should be called during application initialization.
+    After calling, all detection functions will use the configured patterns.
+
+    Args:
+        config: Application configuration dictionary
+
+    Example:
+        >>> from src.shared.data.album_type_detection import configure_patterns
+        >>> configure_patterns({"album_type_detection": {"special_patterns": ["demo"]}})
+    """
+    global _configured_patterns  # noqa: PLW0603
+    _configured_patterns = AlbumTypePatterns.from_config(config)
+
+
+def get_patterns() -> AlbumTypePatterns:
+    """Get the current album type patterns.
+
+    Returns configured patterns if available, otherwise defaults.
+
+    Returns:
+        AlbumTypePatterns instance
+    """
+    if _configured_patterns is not None:
+        return _configured_patterns
+    return AlbumTypePatterns.from_defaults()
 
 
 def _normalize_for_matching(text: str) -> str:
@@ -163,7 +289,8 @@ def detect_album_type(album_name: str) -> AlbumTypeInfo:
     """Detect the type of album based on its name.
 
     Analyzes album name for patterns indicating special handling
-    is needed for year updates.
+    is needed for year updates. Uses configured patterns if available,
+    otherwise falls back to defaults.
 
     Args:
         album_name: The album name to analyze
@@ -189,9 +316,10 @@ def detect_album_type(album_name: str) -> AlbumTypeInfo:
         )
 
     normalized = _normalize_for_matching(album_name)
+    patterns = get_patterns()
 
     # Check special patterns first (highest priority - always skip)
-    pattern = _find_pattern_match(normalized, SPECIAL_ALBUM_PATTERNS)
+    pattern = _find_pattern_match(normalized, patterns.special)
     if pattern:
         return AlbumTypeInfo(
             album_type=AlbumType.SPECIAL,
@@ -200,7 +328,7 @@ def detect_album_type(album_name: str) -> AlbumTypeInfo:
         )
 
     # Check compilation patterns (mark and skip)
-    pattern = _find_pattern_match(normalized, COMPILATION_PATTERNS)
+    pattern = _find_pattern_match(normalized, patterns.compilation)
     if pattern:
         return AlbumTypeInfo(
             album_type=AlbumType.COMPILATION,
@@ -209,7 +337,7 @@ def detect_album_type(album_name: str) -> AlbumTypeInfo:
         )
 
     # Check reissue patterns (mark but still update - reissue year is often correct)
-    pattern = _find_pattern_match(normalized, REISSUE_PATTERNS)
+    pattern = _find_pattern_match(normalized, patterns.reissue)
     if pattern:
         return AlbumTypeInfo(
             album_type=AlbumType.REISSUE,
@@ -272,3 +400,33 @@ def get_year_handling_strategy(album_name: str) -> YearHandlingStrategy:
     """
     info = detect_album_type(album_name)
     return info.strategy
+
+
+def reset_patterns() -> None:
+    """Reset patterns to defaults (useful for testing).
+
+    This clears any configured patterns, causing `get_patterns()`
+    to return default patterns on next call.
+    """
+    global _configured_patterns  # noqa: PLW0603
+    _configured_patterns = None
+
+
+# ============================================================================
+# BACKWARDS-COMPATIBLE PATTERN ACCESSORS
+# ============================================================================
+
+
+def get_special_patterns() -> frozenset[str]:
+    """Get current special album patterns (configured or default)."""
+    return get_patterns().special
+
+
+def get_compilation_patterns() -> frozenset[str]:
+    """Get current compilation album patterns (configured or default)."""
+    return get_patterns().compilation
+
+
+def get_reissue_patterns() -> frozenset[str]:
+    """Get current reissue album patterns (configured or default)."""
+    return get_patterns().reissue
