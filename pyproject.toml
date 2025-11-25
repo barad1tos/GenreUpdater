@@ -169,7 +169,7 @@ docstring-code-format = true           # Reformat code blocks in docstrings.
 docstring-code-line-length = "dynamic" # Like Black, wrap docstring code blocks to the configured line length.
 
 [tool.ruff.lint.pylint]
-max-returns = 7  # Allow 7 returns for guard clause patterns (default: 6)
+max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
