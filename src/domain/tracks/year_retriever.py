@@ -80,6 +80,7 @@ class YearRetriever:
     # Year fallback configuration defaults (can be overridden via config)
     DEFAULT_YEAR_DIFFERENCE_THRESHOLD = 5  # Max years difference before flagging as suspicious
     DEFAULT_FALLBACK_ENABLED = True  # Enable fallback system by default
+    DEFAULT_ABSURD_YEAR_THRESHOLD = 1970  # Years before this are suspicious for modern artists
 
     @staticmethod
     def _resolve_non_negative_int(value: Any, default: int) -> int:
@@ -155,6 +156,13 @@ class YearRetriever:
 
         self.track_retry_attempts = YearRetriever._resolve_positive_int(self.config.get("max_retries"), default=3)
         self.track_retry_delay = YearRetriever._resolve_non_negative_float(self.config.get("retry_delay_seconds"), default=1.0)
+
+        # Logic configuration (year validation thresholds)
+        logic_config = year_config.get("logic", {}) if isinstance(year_config, dict) else {}
+        self.absurd_year_threshold = YearRetriever._resolve_positive_int(
+            logic_config.get("absurd_year_threshold"),
+            default=self.DEFAULT_ABSURD_YEAR_THRESHOLD,
+        )
 
         # Fallback configuration (for handling uncertain year updates)
         fallback_config = year_config.get("fallback", {}) if isinstance(year_config, dict) else {}
@@ -1003,11 +1011,13 @@ class YearRetriever:
         """Combined fallback logic for year decisions.
 
         Decision Tree:
-        1. IF is_definitive=True → APPLY year (confident)
-        2. IF existing year is EMPTY → APPLY year (nothing to preserve)
-        3. IF is_special_album_type → MARK for verification + SKIP update
-        4. IF |proposed - existing| > THRESHOLD → MARK + PRESERVE existing
-        5. ELSE → APPLY year
+        1. IF is_definitive=True → APPLY year (high confidence from API)
+        2. IF proposed_year < absurd_threshold AND no existing year → MARK + SKIP
+           (Catches absurd years like Gorillaz→1974 when no existing to compare)
+        3. IF existing year is EMPTY → APPLY year (nothing to preserve, year is reasonable)
+        4. IF is_special_album_type → MARK for verification + SKIP/UPDATE
+        5. IF |proposed - existing| > THRESHOLD → MARK + PRESERVE existing
+        6. ELSE → APPLY year
 
         Args:
             proposed_year: Year from API
@@ -1033,10 +1043,36 @@ class YearRetriever:
             )
             return proposed_year
 
-        # Get existing year from tracks
+        # Get existing year from tracks (needed for subsequent rules)
         existing_year = self._get_existing_year_from_tracks(album_tracks)
 
-        # Rule 2: No existing year - nothing to preserve
+        # Rule 2: Absurd year detection (when no existing year to compare)
+        # Catches cases like Gorillaz→1974 (band formed 1998) without artist period data
+        try:
+            proposed_int = int(proposed_year)
+            is_absurd = proposed_int < self.absurd_year_threshold
+        except (ValueError, TypeError):
+            is_absurd = False
+
+        if is_absurd and not existing_year:
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="absurd_year_no_existing",
+                metadata={
+                    "proposed_year": proposed_year,
+                    "absurd_threshold": self.absurd_year_threshold,
+                    "confidence": "very_low",
+                },
+            )
+            self.console_logger.warning(
+                "[FALLBACK] Skipping absurd year %s for %s - %s "
+                "(year < %d threshold, no existing year to validate)",
+                proposed_year, artist, album, self.absurd_year_threshold
+            )
+            return None  # Skip update - absurd year with no baseline
+
+        # Rule 3: No existing year - nothing to preserve (year passed absurd check)
         if not existing_year:
             self.console_logger.debug(
                 "[FALLBACK] Applying year %s for %s - %s (no existing year to preserve)",
@@ -1044,7 +1080,7 @@ class YearRetriever:
             )
             return proposed_year
 
-        # Rule 3: Check for special album types
+        # Rule 4: Check for special album types
         album_info = detect_album_type(album)
         if album_info.album_type != AlbumType.NORMAL:
             reason = f"special_album_{album_info.album_type.value}"
@@ -1077,7 +1113,7 @@ class YearRetriever:
             )
             return proposed_year
 
-        # Rule 4: Check for dramatic year change
+        # Rule 5: Check for dramatic year change
         if self._is_year_change_dramatic(existing_year, proposed_year):
             await self.pending_verification.mark_for_verification(
                 artist=artist,
@@ -1098,7 +1134,7 @@ class YearRetriever:
             )
             return None  # Skip update, preserve existing
 
-        # Rule 5: Apply year (low confidence but reasonable change)
+        # Rule 6: Apply year (low confidence but reasonable change)
         self.console_logger.debug(
             "[FALLBACK] Applying year %s for %s - %s (low confidence but reasonable change)",
             proposed_year, artist, album
