@@ -19,6 +19,7 @@ import yaml
 
 from src.shared.core.config import load_config
 from src.shared.core.dry_run import DryRunAppleScriptClient
+from src.shared.data.album_type_detection import configure_patterns as configure_album_patterns
 from src.shared.monitoring.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
@@ -282,6 +283,9 @@ class DependencyContainer:
         # Load configuration first
         if not self._config:
             self._config = self._load_config()
+
+        # Configure album type detection patterns from config
+        configure_album_patterns(self._config)
 
         # Construct missing service instances
         if self._analytics is None:
