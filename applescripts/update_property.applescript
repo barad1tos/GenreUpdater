@@ -66,52 +66,59 @@ on run argv
             end try
 
             if trackExists then
-                -- Get current property value for comparison
+                -- Combined read-compare-write logic for each property
                 set currentValue to ""
+
                 if propIdentifier is "name" then
                     set currentValue to name of trackRef
+                    if currentValue is not equal to propValue then
+                        set name of trackRef to propValue
+                    end if
+
                 else if propIdentifier is "album" then
                     set currentValue to album of trackRef
+                    if currentValue is not equal to propValue then
+                        set album of trackRef to propValue
+                    end if
+
                 else if propIdentifier is "artist" then
                     set currentValue to artist of trackRef
+                    if currentValue is not equal to propValue then
+                        set artist of trackRef to propValue
+                    end if
+
                 else if propIdentifier is "album_artist" then
                     set currentValue to album artist of trackRef
+                    if currentValue is not equal to propValue then
+                        set album artist of trackRef to propValue
+                    end if
+
                 else if propIdentifier is "genre" then
                     set currentValue to genre of trackRef
+                    if currentValue is not equal to propValue then
+                        set genre of trackRef to propValue
+                    end if
+
                 else if propIdentifier is "year" then
                     set currentValue to (year of trackRef) as string
+                    if currentValue is not equal to propValue then
+                        try
+                            set propValueInt to propValue as integer
+                            -- Soft validation: reject obviously invalid years
+                            -- Allow future years (up to +2 years) for pre-releases and scheduled albums
+                            if propValueInt < 1900 or propValueInt > maxValidYear then
+                                return "Error: Year value '" & propValueInt & "' is out of reasonable range (1900-" & maxValidYear & ")"
+                            end if
+                            set year of trackRef to propValueInt
+                        on error yearErr
+                            return "Error: Failed to set year '" & propValue & "': " & yearErr
+                        end try
+                    end if
                 end if
-                
-                -- Check if value is actually different
+
+                -- Return appropriate message
                 if currentValue is equal to propValue then
                     return "No Change: Track " & tID & " " & propDisplayName & " already set to " & propValue
-                end if
-                
-                -- Update the appropriate property based on propName
-                if propIdentifier is "name" then
-                    set name of trackRef to propValue
-                else if propIdentifier is "album" then
-                    set album of trackRef to propValue
-                else if propIdentifier is "artist" then
-                    set artist of trackRef to propValue
-                else if propIdentifier is "album_artist" then
-                    set album artist of trackRef to propValue
-                else if propIdentifier is "genre" then
-                    set genre of trackRef to propValue
-                else if propIdentifier is "year" then
-                    try
-                        set propValueInt to propValue as integer
-
-                        -- Soft validation: reject obviously invalid years
-                        -- Allow future years (up to +2 years) for pre-releases and scheduled albums
-                        if propValueInt < 1900 or propValueInt > maxValidYear then
-                            return "Error: Year value '" & propValueInt & "' is out of reasonable range (1900-" & maxValidYear & ")"
-                        end if
-
-                        set year of trackRef to propValueInt
-                    on error yearErr
-                        return "Error: Failed to set year '" & propValue & "': " & yearErr
-                    end try
                 end if
                 return "Success: Updated track " & tID & " " & propDisplayName & " from '" & currentValue & "' to '" & propValue & "'"
             end if

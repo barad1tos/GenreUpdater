@@ -12,6 +12,10 @@ on run argv
     set command_separator to ";"
     set part_separator to ":"
 
+    -- Get current year BEFORE tell block to avoid Music.app scope conflict
+    set currentYear to year of (current date)
+    set maxValidYear to currentYear + 2
+
     -- Save current delimiters to avoid breaking other scripts
     set old_delimiters to AppleScript's text item delimiters
 
@@ -40,7 +44,13 @@ on run argv
                         if propName is "genre" then
                             set genre of the_track to propValue
                         else if propName is "year" then
-                            set year of the_track to (propValue as integer)
+                            set propValueInt to propValue as integer
+                            -- Validate year range
+                            if propValueInt < 1900 or propValueInt > maxValidYear then
+                                log "Year " & propValue & " out of range for track " & trackID
+                            else
+                                set year of the_track to propValueInt
+                            end if
                         else if propName is "name" then
                             set name of the_track to propValue
                         else if propName is "album" then
