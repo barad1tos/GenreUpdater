@@ -113,6 +113,13 @@ class TestFullApplicationPipelineE2E:
         mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
         mock_deps.pending_verification.mark_for_verification = AsyncMock()
 
+        # Library snapshot service mock (required for smart delta fetch)
+        mock_deps.library_snapshot_service = MagicMock()
+        mock_deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=False)
+        mock_deps.library_snapshot_service.get_track_ids_from_snapshot = AsyncMock(return_value=set())
+        mock_deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=None)
+        mock_deps.library_snapshot_service.save_snapshot = AsyncMock()
+
         return mock_deps
 
     @staticmethod
