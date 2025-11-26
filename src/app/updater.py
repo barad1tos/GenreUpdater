@@ -290,12 +290,12 @@ class MusicUpdater:
 
         # Update track
         success = await self.track_processor.update_track_async(
-            track_id=track_id,
+            track_id=str(track_id),
             new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
             new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
             original_artist=artist_name,
-            original_album=album_name,
-            original_track=track_name,
+            original_album=str(album_name) if album_name is not None else None,
+            original_track=str(track_name) if track_name is not None else None,
         )
 
         if not success:
@@ -873,12 +873,12 @@ class MusicUpdater:
 
         # Update track
         success = await self.track_processor.update_track_async(
-            track_id=track_id,
+            track_id=str(track_id),
             new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
             new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
             original_artist=artist_name,
-            original_album=str(album_name),
-            original_track=str(track_name),
+            original_album=str(album_name) if album_name is not None else None,
+            original_track=str(track_name) if track_name is not None else None,
         )
 
         if not success:
@@ -892,8 +892,8 @@ class MusicUpdater:
         # Create change entry
         change_entry = self._create_change_log_entry(
             artist=artist_name,
-            original_track_name=str(track_name),
-            original_album_name=str(album_name),
+            original_track_name=str(track_name) if track_name is not None else "",
+            original_album_name=str(album_name) if album_name is not None else "",
             cleaned_track_name=cleaned_track_name,
             cleaned_album_name=cleaned_album_name,
         )
@@ -929,12 +929,12 @@ class MusicUpdater:
             return None
 
         success = await self.track_processor.update_track_async(
-            track_id=track_id,
+            track_id=str(track_id),
             new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
             new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
             original_artist=str(track.get("artist", "")),
-            original_album=album_name,
-            original_track=track_name,
+            original_album=str(album_name) if album_name is not None else None,
+            original_track=str(track_name) if track_name is not None else None,
         )
 
         if not success:
