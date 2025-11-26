@@ -15,7 +15,7 @@ from pathlib import Path
 import asyncio.subprocess
 from typing import TYPE_CHECKING
 
-from src.services.apple_file_validator import AppleScriptFileValidator
+from src.services.apple.file_validator import AppleScriptFileValidator
 
 if TYPE_CHECKING:
     import logging
