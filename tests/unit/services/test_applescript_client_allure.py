@@ -505,11 +505,11 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
         with allure.step("Test path validation"):
             # Test valid path
-            valid = client._validate_script_path("/test/scripts/test.scpt")  # noqa: SLF001
+            valid = client.file_validator.validate_script_path("/test/scripts/test.scpt")
             assert valid is True
 
             # Test invalid path (traversal attempt)
-            invalid = client._validate_script_path("/test/scripts/../../../etc/passwd")  # noqa: SLF001
+            invalid = client.file_validator.validate_script_path("/test/scripts/../../../etc/passwd")
             assert invalid is False
 
             allure.attach("/test/scripts/test.scpt", "Valid Path", allure.attachment_type.TEXT)
