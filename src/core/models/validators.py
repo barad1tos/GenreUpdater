@@ -48,6 +48,19 @@ def is_valid_year(year_str: str | float | None, min_year: int | None = None, cur
         return False
 
 
+def is_empty_year(year_value: Any) -> bool:
+    """Check if a year value is considered empty.
+
+    Args:
+        year_value: Year value to check
+
+    Returns:
+        True if the year is empty (None, empty string, or whitespace-only)
+
+    """
+    return not year_value or not str(year_value).strip()
+
+
 def _convert_to_track_dict(item: Any) -> dict[str, Any] | None:
     """Convert item to dict format, validating structure."""
     if isinstance(item, dict):
