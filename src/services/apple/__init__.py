@@ -1,0 +1,29 @@
+"""AppleScript integration module.
+
+This module provides a high-level interface for executing AppleScript commands
+to interact with Apple Music via the Music.app application.
+
+Public API:
+    - AppleScriptClient: Main client for executing AppleScript commands
+    - AppleScriptSanitizer: Security validator for AppleScript code
+    - AppleScriptSanitizationError: Exception for security violations
+    - EnhancedRateLimiter: Rate limiting for AppleScript execution
+"""
+
+from src.services.apple.client import AppleScriptClient
+from src.services.apple.rate_limiter import EnhancedRateLimiter
+from src.services.apple.sanitizer import (
+    MAX_SCRIPT_SIZE,
+    MAX_TRACK_ID_LENGTH,
+    AppleScriptSanitizationError,
+    AppleScriptSanitizer,
+)
+
+__all__ = [
+    "AppleScriptClient",
+    "AppleScriptSanitizer",
+    "AppleScriptSanitizationError",
+    "EnhancedRateLimiter",
+    "MAX_SCRIPT_SIZE",
+    "MAX_TRACK_ID_LENGTH",
+]

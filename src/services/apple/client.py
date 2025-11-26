@@ -7,335 +7,28 @@ handles errors, applies concurrency limits via semaphore-based control, and ensu
 The module supports both executing AppleScript files and inline AppleScript code.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
-from src.services.apple_executor import AppleScriptExecutor
-from src.services.apple_file_validator import AppleScriptFileValidator
+from src.services.apple.executor import AppleScriptExecutor
+from src.services.apple.file_validator import AppleScriptFileValidator
+from src.services.apple.sanitizer import (
+    AppleScriptSanitizationError,
+    AppleScriptSanitizer,
+    DANGEROUS_ARGUMENT_CHARACTERS,
+)
 
-RESULT_PREVIEW_LEN = 50  # characters shown when previewing small script results
-LOG_PREVIEW_LEN = 200  # characters shown when previewing long outputs/stderr
-DANGEROUS_ARG_CHARS = [";", "&", "|", "`", "$", ">", "<", "!"]
-
-# Security constants for AppleScript sanitization
-APPLESCRIPT_RESERVED_WORDS = {
-    "do shell script",
-    "system events",
-    "system attribute",
-    "load script",
-    "store script",
-    "tell application finder",
-    "delete",
-    "move",
-    "create",
-    "set value",
-    "keystroke",
-    "key code",
-    "choose file",
-    "choose folder",
-    "display dialog",
-    "display notification",
-    "open location",
-}
-
-DANGEROUS_APPLESCRIPT_PATTERNS = [
-    r"do\s+shell\s+script",  # Shell execution
-    r"tell\s+application\s+\"Finder\"",  # File system access
-    r"tell\s+application\s+\"System\s+Events\"",  # System manipulation
-    r"load\s+script",  # External script loading
-    r"store\s+script",  # Script writing
-    r"choose\s+file",  # File system browsing
-    r"choose\s+folder",  # Directory browsing
-    r"open\s+location",  # URL/file opening
-    r"keystroke|key\s+code",  # Keyboard input simulation
-    r"system\s+attribute",  # System information access
-]
-
-# Security limits
-MAX_TRACK_ID_LENGTH = 100
-MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
-
-
-class AppleScriptSanitizationError(Exception):
-    """Exception raised when AppleScript code fails security validation."""
-
-    def __init__(self, message: str, dangerous_pattern: str | None = None) -> None:
-        """Initialize the sanitization error.
-
-        Args:
-            message: Error message describing the security violation
-            dangerous_pattern: The specific pattern that triggered the error
-
-        """
-        super().__init__(message)
-        self.dangerous_pattern = dangerous_pattern
-
-
-class AppleScriptSanitizer:
-    """Security-focused AppleScript code sanitizer and validator.
-
-    This class provides methods to sanitize and validate AppleScript code
-    to prevent command injection and other security vulnerabilities.
-    Implements defense-in-depth through multiple validation layers.
-    """
-
-    def __init__(self, logger: logging.Logger | None = None) -> None:
-        """Initialize the AppleScript sanitizer.
-
-        Args:
-            logger: Optional logger instance for security event logging
-
-        """
-        self.logger = logger or logging.getLogger(__name__)
-        self._compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in DANGEROUS_APPLESCRIPT_PATTERNS]
-
-    def sanitize_string(self, value: Any) -> str:
-        """Sanitize a string value for safe use in AppleScript.
-
-        Escapes special characters that could be used for injection attacks.
-
-        Args:
-            value: The string value to sanitize
-
-        Returns:
-            str: The sanitized string safe for AppleScript execution
-
-        Raises:
-            ValueError: If the input value is None or not a string
-
-        """
-        if value is None:
-            msg = "Cannot sanitize None value"
-            raise ValueError(msg)
-
-        if not isinstance(value, str):
-            msg = f"Expected string, got {type(value).__name__}"
-            raise TypeError(msg)
-
-        # Escape backslashes first to prevent double-escaping
-        sanitized = value.replace("\\", "\\\\")
-
-        # Escape double quotes for AppleScript string literals
-        sanitized = sanitized.replace('"', '\\"')
-
-        # Escape single quotes
-        sanitized = sanitized.replace("'", "\\'")
-
-        # Log any escaping changes for audit purposes
-        if value != sanitized:
-            self.logger.debug(
-                "Escaped AppleScript string: %d characters processed, %d changes made",
-                len(value),
-                len([c for c, s in zip(value, sanitized, strict=False) if c != s]),
-            )
-
-        return sanitized
-
-    def validate_track_id(self, track_id: str) -> bool:
-        """Validate a track ID for safe use in AppleScript.
-
-        Args:
-            track_id: The track ID to validate
-
-        Returns:
-            bool: True if the track ID is safe to use
-
-        """
-        # Track IDs should be numeric or alphanumeric
-        if not re.match(r"^[a-zA-Z0-9\-_]+$", track_id):
-            self.logger.warning("Invalid track ID format: %s", track_id)
-            return False
-
-        # Reasonable length limits
-        if len(track_id) > MAX_TRACK_ID_LENGTH:
-            self.logger.warning("Track ID too long: %d characters", len(track_id))
-            return False
-
-        # Check for suspicious patterns
-        if any(char in track_id for char in DANGEROUS_ARG_CHARS):
-            self.logger.warning("Dangerous characters in track ID: %s", track_id)
-            return False
-
-        return True
-
-    def validate_script_code(self, script_code: str | None, allow_music_app: bool = True) -> None:
-        """Validate AppleScript code for security vulnerabilities.
-
-        Args:
-            script_code: The AppleScript code to validate
-            allow_music_app: Whether to allow Music.app operations (default: True)
-
-        Raises:
-            AppleScriptSanitizationError: If dangerous patterns are detected
-            ValueError: If script_code is invalid
-
-        """
-        if not script_code:
-            msg = "Script code must be a non-empty string"
-            raise ValueError(msg)
-
-        # Normalize the code for pattern matching
-        normalized_code = re.sub(r"\s+", " ", script_code.lower().strip())
-
-        # Check for dangerous patterns
-        for pattern in self._compiled_patterns:
-            if match := pattern.search(normalized_code):
-                dangerous_text = match.group()
-                error_msg = f"Dangerous AppleScript pattern detected: '{dangerous_text}'"
-                self.logger.error("Security violation: %s in code: %s", error_msg, script_code[:100])
-                raise AppleScriptSanitizationError(error_msg, dangerous_text)
-
-        # Check for reserved words that could be dangerous
-        for reserved_word in APPLESCRIPT_RESERVED_WORDS:
-            if reserved_word.lower() in normalized_code:
-                # Allow Music.app specific operations if permitted
-                if allow_music_app and "music" in reserved_word.lower():
-                    continue
-
-                error_msg = f"Restricted AppleScript command detected: '{reserved_word}'"
-                self.logger.error("Security violation: %s", error_msg)
-                raise AppleScriptSanitizationError(error_msg, reserved_word)
-
-        # Additional validation for script length (prevent DoS)
-        if len(script_code) > MAX_SCRIPT_SIZE:
-            error_msg = f"AppleScript code too large: {len(script_code)} characters"
-            self.logger.error("Security violation: %s", error_msg)
-            raise AppleScriptSanitizationError(error_msg)
-
-        self.logger.debug(
-            "AppleScript code passed security validation: %d characters",
-            len(script_code),
-        )
-
-    def create_safe_command(self, script_code: str, arguments: list[str] | None = None) -> list[str]:
-        """Create a safe osascript command with validated inputs.
-
-        Args:
-            script_code: The AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-
-        Returns:
-            list[str]: Safe command list for subprocess execution
-
-        Raises:
-            AppleScriptSanitizationError: If validation fails
-            ValueError: If inputs are invalid
-
-        """
-        # Validate the script code first
-        self.validate_script_code(script_code)
-
-        # Start with base command
-        cmd = ["osascript", "-e", script_code]
-
-        # Add arguments if provided
-        if arguments:
-            sanitized_args: list[str] = []
-            for arg in arguments:
-                # Validate and sanitize each argument
-                if any(char in arg for char in DANGEROUS_ARG_CHARS):
-                    msg = f"Dangerous characters in argument: {arg}"
-                    raise AppleScriptSanitizationError(msg, arg)
-
-                sanitized_args.append(self.sanitize_string(arg))
-
-            cmd.extend(sanitized_args)
-
-        self.logger.debug("Created safe AppleScript command with %d components", len(cmd))
-        return cmd
-
-
-class EnhancedRateLimiter:
-    """Advanced rate limiter using a moving window approach."""
-
-    def __init__(
-        self,
-        requests_per_window: int,
-        window_size: float,
-        max_concurrent: int = 3,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        """Initialize the rate limiter."""
-        if requests_per_window <= 0:
-            msg = "requests_per_window must be a positive integer"
-            raise ValueError(msg)
-        if window_size <= 0:
-            msg = "window_size must be a positive number"
-            raise ValueError(msg)
-        if max_concurrent <= 0:
-            msg = "max_concurrent must be a positive integer"
-            raise ValueError(msg)
-
-        self.requests_per_window = requests_per_window
-        self.window_size = window_size
-        self.request_timestamps: list[float] = []
-        self.semaphore: asyncio.Semaphore | None = None
-        self.max_concurrent = max_concurrent
-        self.logger = logger or logging.getLogger(__name__)
-        self.total_requests: int = 0
-        self.total_wait_time: float = 0.0
-
-    async def initialize(self) -> None:
-        """Initialize the rate limiter."""
-        if self.semaphore is None:
-            try:
-                self.semaphore = asyncio.Semaphore(self.max_concurrent)
-                self.logger.debug(f"RateLimiter initialized with max_concurrent: {self.max_concurrent}")
-                # Yield control to event loop to make this properly async
-                await asyncio.sleep(0)
-            except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
-                self.logger.exception("Error initializing RateLimiter semaphore: %s", e)
-                raise
-
-    async def acquire(self) -> float:
-        """Acquire permission to make a request, waiting if necessary due to rate limits or concurrency limits."""
-        if self.semaphore is None:
-            msg = "RateLimiter not initialized"
-            raise RuntimeError(msg)
-        rate_limit_wait_time = await self._wait_if_needed()
-        self.total_requests += 1
-        self.total_wait_time += rate_limit_wait_time
-        await self.semaphore.acquire()
-        return rate_limit_wait_time
-
-    def release(self) -> None:
-        """Release the semaphore, allowing another request to proceed."""
-        if self.semaphore is None:
-            return
-        self.semaphore.release()
-
-    async def _wait_if_needed(self) -> float:
-        now = time.monotonic()
-        while self.request_timestamps and now - self.request_timestamps[0] > self.window_size:
-            self.request_timestamps.pop(0)
-        if len(self.request_timestamps) >= self.requests_per_window:
-            oldest_timestamp = self.request_timestamps[0]
-            wait_duration = (oldest_timestamp + self.window_size) - now
-            if wait_duration > 0:
-                self.logger.debug(f"Rate limit reached. Waiting {wait_duration:.3f}s")
-                await asyncio.sleep(wait_duration)
-                return wait_duration + await self._wait_if_needed()
-        self.request_timestamps.append(time.monotonic())
-        return 0.0
-
-    def get_stats(self) -> dict[str, Any]:
-        """Get statistics about rate limiter usage."""
-        now = time.monotonic()
-        self.request_timestamps = [ts for ts in self.request_timestamps if now - ts <= self.window_size]
-        return {
-            "total_requests": self.total_requests,
-            "total_wait_time": self.total_wait_time,
-            "avg_wait_time": self.total_wait_time / max(1, self.total_requests),
-            "current_window_usage": len(self.request_timestamps),
-            "max_requests_per_window": self.requests_per_window,
-        }
+# Logging constants
+RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
+LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
 
 
 # noinspection PyUnboundLocalVariable
@@ -356,7 +49,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
     def __init__(
         self,
         config: dict[str, Any],
-        analytics: "Analytics",
+        analytics: Analytics,
         console_logger: logging.Logger | None = None,
         error_logger: logging.Logger | None = None,
     ) -> None:
@@ -468,7 +161,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             safe_args: list[str] = []
             for arg in arguments:
                 # Basic safety check for potentially dangerous characters
-                if any(c in arg for c in DANGEROUS_ARG_CHARS):
+                if any(c in arg for c in DANGEROUS_ARGUMENT_CHARACTERS):
                     self.error_logger.error("❌ Potentially dangerous characters in argument: %s", arg)
                     return None
                 safe_args.append(arg)
@@ -486,7 +179,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         if result is not None:
             self.console_logger.debug("✅ AppleScript execution completed successfully. Result length: %d characters", len(result))
             if result.strip():
-                self.console_logger.debug("📝 Script output: %s%s", result[:LOG_PREVIEW_LEN], "..." if len(result) > LOG_PREVIEW_LEN else "")
+                self.console_logger.debug("📝 Script output: %s%s", result[:LOG_PREVIEW_LENGTH], "..." if len(result) > LOG_PREVIEW_LENGTH else "")
         else:
             self.console_logger.warning("⚠️ AppleScript execution returned None")
 
