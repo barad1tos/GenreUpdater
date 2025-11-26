@@ -14,7 +14,6 @@ import re
 import subprocess
 import time
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -67,10 +66,6 @@ MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
 COMPLEX_SCRIPT_THRESHOLD = 2000  # Use temp file for scripts > 2KB
 COMPLEX_PATTERN_COUNT = 5  # Use a temp file if the script has > 5 complex patterns
 MAX_TELL_BLOCKS = 3  # Use the temp file if the script has > 3 tell blocks
-
-
-# Re-export for backward compatibility
-from src.core.utils.datetime_utils import datetime_to_applescript_timestamp as datetime_to_applescript_timestamp
 
 
 class AppleScriptSanitizationError(Exception):
@@ -882,7 +877,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self.console_logger.info("✓ Fetched %d tracks by ID (requested: %d)", len(all_tracks), len(track_ids))
         return all_tracks
 
-    def _parse_track_output(self, raw_output: str) -> list[dict[str, str]]:
+    @staticmethod
+    def _parse_track_output(raw_output: str) -> list[dict[str, str]]:
         """Parse AppleScript track output into track dictionaries.
 
         Args:
@@ -892,19 +888,19 @@ class AppleScriptClient(AppleScriptClientProtocol):
             List of track dictionaries
 
         """
-        FIELD_SEPARATOR = "\x1e"  # ASCII 30
-        LINE_SEPARATOR = "\x1d"  # ASCII 29
+        field_separator = "\x1e"  # ASCII 30
+        line_separator = "\x1d"  # ASCII 29
 
         tracks: list[dict[str, str]] = []
 
         # Split by line separator
-        lines = raw_output.split(LINE_SEPARATOR)
+        lines = raw_output.split(line_separator)
 
         for line in lines:
             if not line.strip():
                 continue
 
-            fields = line.split(FIELD_SEPARATOR)
+            fields = line.split(field_separator)
 
             # Expected fields: id, name, artist, album_artist, album, genre, date_added,
             # track_status, year, release_year, new_year
