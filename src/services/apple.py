@@ -9,7 +9,6 @@ The module supports both executing AppleScript files and inline AppleScript code
 
 import asyncio
 import logging
-import os
 import re
 import subprocess
 import time
@@ -19,6 +18,7 @@ from typing import Any
 
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
+from src.services.apple_file_validator import AppleScriptFileValidator
 
 RESULT_PREVIEW_LEN = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LEN = 200  # characters shown when previewing long outputs/stderr
@@ -382,6 +382,13 @@ class AppleScriptClient(AppleScriptClientProtocol):
         # Initialize the security sanitizer
         self.sanitizer = AppleScriptSanitizer(self.console_logger)
 
+        # Initialize the file validator
+        self.file_validator = AppleScriptFileValidator(
+            self.apple_scripts_dir,
+            self.error_logger,
+            self.console_logger,
+        )
+
     async def initialize(self) -> None:
         """Asynchronously initializes the AppleScriptClient by creating the semaphore.
 
@@ -439,82 +446,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
             self.console_logger.debug("INFO: Semaphore already initialized")
 
         self.console_logger.info("✨ AppleScriptClient initialization complete")
-
-    def _validate_script_path(self, script_path: str) -> bool:
-        """Validate that the script path is safe to execute.
-
-        :param script_path: Path to the script to validate
-        :return: True if the path is safe, False otherwise
-        """
-        try:
-            if not script_path or not self.apple_scripts_dir:
-                return False
-
-            # Resolve the path to prevent directory traversal
-            resolved_path = Path(script_path).resolve()
-            scripts_dir = Path(self.apple_scripts_dir).resolve()
-
-            # Ensure the path is within the allowed directory (safe from path traversal)
-            try:
-                resolved_path.relative_to(scripts_dir)
-            except ValueError:
-                self.error_logger.exception("Script path is outside allowed directory: %s", script_path)
-                return False
-
-            # Check for suspicious patterns
-            if any(part.startswith((".", "~")) or part == ".." for part in Path(script_path).parts):
-                self.error_logger.error("Suspicious script path: %s", script_path)
-                return False
-
-            return True
-
-        except (ValueError, TypeError) as e:
-            self.error_logger.exception("Invalid script path %s: %s", script_path, e)
-            return False
-
-    @staticmethod
-    def _write_temp_file_sync(file_path: str, content: str) -> None:
-        """Write content to a temporary file synchronously."""
-        with Path(file_path).open("w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-
-    def _validate_script_file_access(self, script_path: str) -> bool:
-        """Validate script file exists and is accessible.
-
-        Args:
-            script_path: Path to the script file
-
-        Returns:
-            bool: True if the file is valid and accessible
-
-        """
-        script_file = Path(script_path)
-
-        # Reject symlinks to prevent path traversal attacks
-        if script_file.is_symlink():
-            self.error_logger.error("❌ Symlinks not allowed: %s", script_path)
-            return False
-
-        # Check if file exists (without following symlinks)
-        if not script_file.is_file():
-            self.error_logger.error("❌ AppleScript file does not exist: %s", script_path)
-
-            # List directory contents for debugging
-            try:
-                if self.apple_scripts_dir:
-                    dir_contents = [f.name for f in Path(self.apple_scripts_dir).iterdir()]
-                    self.console_logger.debug("📂 Directory contents: %s", dir_contents)
-            except OSError as e:
-                self.console_logger.exception("⚠️ Could not list directory contents: %s", e)
-            return False
-
-        # Check if the file is readable
-        if not os.access(script_path, os.R_OK):
-            self.error_logger.error("❌ AppleScript file is not readable: %s", script_path)
-            return False
-
-        return True
 
     def _build_command_with_args(self, script_path: str, arguments: list[str] | None) -> list[str] | None:
         """Build osascript command with validated arguments.
@@ -687,12 +618,12 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self.console_logger.debug("📜 Resolved script path: %s", script_path)
 
         # Validate the script path is within the allowed directory
-        if not self._validate_script_path(script_path):
+        if not self.file_validator.validate_script_path(script_path):
             self.error_logger.error("❌ Invalid script path (security check failed): %s", script_path)
             return None
 
         # Validate file access
-        if not self._validate_script_file_access(script_path):
+        if not self.file_validator.validate_script_file_access(script_path):
             return None
 
         # Build command with validated arguments
@@ -1078,7 +1009,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
-                AppleScriptClient._write_temp_file_sync,
+                AppleScriptFileValidator.write_temp_file_sync,
                 temp_file_path,
                 script_code,
             )
