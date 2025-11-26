@@ -51,6 +51,8 @@ from src.metrics.track_sync import (
 )
 
 __all__ = [
+    # Change reports
+    "save_changes_report",
     # Track sync
     "load_track_list",
     # HTML reports
