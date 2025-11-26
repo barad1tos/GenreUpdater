@@ -90,8 +90,11 @@ class FakeTrackProcessor:
     def set_dry_run_context(*_args: Any, **_kwargs: Any) -> None:
         """Mock set_dry_run_context method."""
 
-    async def fetch_tracks_in_batches(self, batch_size: int = 1000) -> list[TrackDict]:
+    async def fetch_tracks_in_batches(
+        self, batch_size: int = 1000, skip_snapshot_check: bool = False
+    ) -> list[TrackDict]:
         """Mock fetch_tracks_in_batches method."""
+        del skip_snapshot_check  # Explicitly mark as unused
         self.fetch_batches_calls += 1
         assert batch_size == 10
         return self.tracks
