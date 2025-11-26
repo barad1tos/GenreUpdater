@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from src.core.debug import debug
 from src.core.models.track import ChangeLogEntry, TrackDict
 from src.core.models.protocols import (
     CacheServiceProtocol,
@@ -791,11 +792,12 @@ class YearRetriever:
             Year string if found, None otherwise
 
         """
-        self.console_logger.info(
-            "[YEAR_DEBUG] _determine_album_year called: artist='%s' album='%s'",
-            artist,
-            album,
-        )
+        if debug.year:
+            self.console_logger.info(
+                "_determine_album_year called: artist='%s' album='%s'",
+                artist,
+                album,
+            )
 
         if dominant_year := self._get_dominant_year(album_tracks):
             # Using dominant year from tracks (noise reduction)
@@ -819,8 +821,9 @@ class YearRetriever:
             year_result, is_definitive = await self.external_api.get_album_year(artist, album)
             # API returned result (noise reduction)
         except (OSError, ValueError, RuntimeError) as e:
-            self.console_logger.exception("[YEAR_DEBUG] Exception in get_album_year: %s", e)
-            self.error_logger.exception("[YEAR_DEBUG] Full exception details:")
+            if debug.year:
+                self.console_logger.exception("Exception in get_album_year: %s", e)
+                self.error_logger.exception("Full exception details:")
             return None
 
         if year_result:

@@ -40,6 +40,7 @@ from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
 from src.services.cache.orchestrator import CacheOrchestrator
 from src.services.pending import PendingVerificationService
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from src.core.debug import debug
 from src.core.models.script_detection import ScriptType, detect_primary_script
 from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
@@ -115,7 +116,7 @@ class ExternalApiOrchestrator:
     """
 
     # Class constants
-    _SUSPICIOUS_CURRENT_YEAR_MSG = "[YEAR_DEBUG] Rejecting suspicious current_library_year=%s (matches system year) for '%s - %s'"
+    _SUSPICIOUS_CURRENT_YEAR_MSG = "Rejecting suspicious current_library_year=%s (matches system year) for '%s - %s'"
 
     @staticmethod
     def _coerce_non_negative_int(value: Any, default: int) -> int:
@@ -1355,7 +1356,8 @@ class ExternalApiOrchestrator:
             if not inputs:
                 return None, False
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            self.error_logger.exception("[YEAR_DEBUG] Error in get_album_year initialization: %s", e)
+            if debug.year:
+                self.error_logger.exception("Error in get_album_year initialization: %s", e)
             return None, False
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
@@ -1379,7 +1381,8 @@ class ExternalApiOrchestrator:
         self, artist: str, album: str, current_library_year: str | None
     ) -> tuple[str, str, str, str, str | None] | None:
         """Initialize year search with logging and context setup."""
-        self.console_logger.info("[YEAR_DEBUG] get_album_year called with artist='%s' album='%s'", artist, album)
+        if debug.year:
+            self.console_logger.info("get_album_year called with artist='%s' album='%s'", artist, album)
 
         # Debug mode for script-specific text processing
         script_type = detect_primary_script(artist)
@@ -1399,6 +1402,9 @@ class ExternalApiOrchestrator:
 
     def _log_script_debug(self, script_type: ScriptType) -> None:
         """Log debug information for script-specific text processing."""
+        if not debug.api:
+            return
+
         script_emoji_map = {
             ScriptType.CYRILLIC: "🇺🇦",
             ScriptType.CHINESE: "🇨🇳",
@@ -1413,32 +1419,35 @@ class ExternalApiOrchestrator:
         }
 
         emoji = script_emoji_map.get(script_type, "🌍")
-        self.console_logger.info(f"{emoji} [SCRIPT_DEBUG] Processing {script_type.value} artist")
+        self.console_logger.info(f"{emoji} Processing {script_type.value} artist")
         self.console_logger.info(
-            f"{emoji} [SCRIPT_DEBUG] Token status: Discogs=%s, LastFM=%s",
+            f"{emoji} Token status: Discogs=%s, LastFM=%s",
             "LOADED" if self.discogs_token else "MISSING",
             "LOADED" if self.lastfm_api_key else "MISSING",
         )
 
         script_priorities = self._get_script_config_priorities(script_type)
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
-        self.console_logger.info(f"{emoji} [SCRIPT_DEBUG] Primary APIs for {script_type.value}: {primary_apis}")
+        self.console_logger.info(f"{emoji} Primary APIs for {script_type.value}: {primary_apis}")
 
     def _log_search_initialization(
         self, log_artist: str, log_album: str, current_library_year: str | None, artist_norm: str, album_norm: str
     ) -> None:
         """Log search initialization details."""
-        self.console_logger.info("[YEAR_DEBUG] Starting normalization...")
-        self.console_logger.info("[YEAR_DEBUG] Normalization complete: artist_norm='%s' album_norm='%s'", artist_norm, album_norm)
+        if not debug.year:
+            return
+
+        self.console_logger.info("Starting normalization...")
+        self.console_logger.info("Normalization complete: artist_norm='%s' album_norm='%s'", artist_norm, album_norm)
         self.console_logger.info(
-            "[YEAR_DEBUG] Starting year determination: artist='%s' album='%s' current_library_year='%s' current_system_year=%d",
+            "Starting year determination: artist='%s' album='%s' current_library_year='%s' current_system_year=%d",
             log_artist,
             log_album,
             current_library_year or "None",
             self.current_year,
         )
         self.console_logger.info(
-            "[YEAR_DEBUG] Searching for original release year: '%s - %s' (current: %s)",
+            "Searching for original release year: '%s - %s' (current: %s)",
             log_artist,
             log_album,
             current_library_year or "none",
@@ -1479,9 +1488,11 @@ class ExternalApiOrchestrator:
         """Set up artist context for release scoring."""
         try:
             # Get artist's activity period for context (cached)
-            self.console_logger.info("[YEAR_DEBUG] Fetching artist activity period for '%s'...", artist_norm)
+            if debug.year:
+                self.console_logger.info("Fetching artist activity period for '%s'...", artist_norm)
             activity_result = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
-            self.console_logger.info("[YEAR_DEBUG] Activity period result: %s", activity_result)
+            if debug.year:
+                self.console_logger.info("Activity period result: %s", activity_result)
             start_year, end_year = None, None
 
             if activity_result and len(activity_result) == ACTIVITY_PERIOD_TUPLE_LENGTH:
@@ -1535,13 +1546,16 @@ class ExternalApiOrchestrator:
 
     def _log_api_search_start(self, artist_norm: str, album_norm: str, artist_region: str | None, log_artist: str, log_album: str) -> None:
         """Log API search initialization."""
+        if not debug.api:
+            return
+
         self.console_logger.info(
-            "[API_DEBUG] Starting API search with parameters: artist_norm='%s', album_norm='%s', artist_region='%s'",
+            "Starting API search with parameters: artist_norm='%s', album_norm='%s', artist_region='%s'",
             artist_norm,
             album_norm,
             artist_region or "None",
         )
-        self.console_logger.info("[API_DEBUG] Original names: artist='%s', album='%s'", log_artist, log_album)
+        self.console_logger.info("Original names: artist='%s', album='%s'", log_artist, log_album)
 
     async def _try_script_optimized_search(
         self,
@@ -1551,7 +1565,8 @@ class ExternalApiOrchestrator:
         artist_region: str | None,
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
-        self.console_logger.info(f"[API_DEBUG] {script_type.value} detected - trying script-optimized search")
+        if debug.api:
+            self.console_logger.info(f"{script_type.value} detected - trying script-optimized search")
 
         api_lists = self._get_script_api_priorities(script_type)
 
@@ -1561,7 +1576,8 @@ class ExternalApiOrchestrator:
             return results
 
         # Try fallback APIs if primary failed
-        self.console_logger.info(f"[API_DEBUG] Primary APIs failed for {script_type.value} - trying fallback")
+        if debug.api:
+            self.console_logger.info(f"Primary APIs failed for {script_type.value} - trying fallback")
         return await self._try_api_list(api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True)
 
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
@@ -1611,20 +1627,23 @@ class ExternalApiOrchestrator:
         try:
             api_client = self._get_api_client(api_name)
             if not api_client:
-                if not is_fallback:
-                    self.console_logger.debug(f"[API_DEBUG] {api_name} client not available, skipping")
+                if debug.api and not is_fallback:
+                    self.console_logger.debug(f"{api_name} client not available, skipping")
                 return None
 
-            self.console_logger.info(f"[API_DEBUG] Trying {api_name} for {script_type.value} text")
+            if debug.api:
+                self.console_logger.info(f"Trying {api_name} for {script_type.value} text")
             results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
 
             if results:
-                result_type = "Fallback" if is_fallback else "Primary"
-                self.console_logger.info(f"[API_DEBUG] {result_type} {api_name} found %d results for {script_type.value}", len(results))
+                if debug.api:
+                    result_type = "Fallback" if is_fallback else "Primary"
+                    self.console_logger.info(f"{result_type} {api_name} found %d results for {script_type.value}", len(results))
                 return results
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
-            self.console_logger.warning(f"[API_DEBUG] {api_name} failed for {script_type.value}: %s", e)
+            if debug.api:
+                self.console_logger.warning(f"{api_name} failed for {script_type.value}: %s", e)
 
         return None
 
@@ -1719,8 +1738,11 @@ class ExternalApiOrchestrator:
 
     def _log_empty_api_result(self, api_name: str, log_artist: str, log_album: str, artist_norm: str, album_norm: str) -> None:
         """Log empty API result details."""
+        if not debug.api:
+            return
+
         self.console_logger.warning(
-            "[API_DEBUG] %s returned EMPTY results for '%s - %s' (search params: artist_norm='%s', album_norm='%s')",
+            "%s returned EMPTY results for '%s - %s' (search params: artist_norm='%s', album_norm='%s')",
             api_name.title(),
             log_artist,
             log_album,
@@ -1730,8 +1752,11 @@ class ExternalApiOrchestrator:
 
     def _log_api_summary(self, log_artist: str, log_album: str, total_releases: int) -> None:
         """Log API search summary."""
+        if not debug.api:
+            return
+
         self.console_logger.info(
-            "[API_DEBUG] API summary for '%s - %s': Total releases found: %d (MusicBrainz, Discogs, iTunes%s)",
+            "API summary for '%s - %s': Total releases found: %d (MusicBrainz, Discogs, iTunes%s)",
             log_artist,
             log_album,
             total_releases,
