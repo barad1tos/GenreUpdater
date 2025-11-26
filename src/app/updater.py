@@ -3,12 +3,12 @@
 This is a streamlined version that uses the new modular components.
 """
 
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.app.features.verify.database import DatabaseVerifier
+from src.app.pipeline_snapshot import PipelineSnapshotManager
 from src.core.tracks.artist import ArtistRenamer
 from src.core.tracks.genre import GenreManager
 from src.core.tracks.filter import IncrementalFilterService
@@ -25,7 +25,6 @@ from src.metrics.reports import (
 
 if TYPE_CHECKING:
     from src.services.deps import DependencyContainer
-    from src.core.tracks.delta import TrackDelta
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -104,11 +103,15 @@ class MusicUpdater:
             dry_run=deps.dry_run,
         )
 
+        # Pipeline snapshot manager
+        self.snapshot_manager = PipelineSnapshotManager(
+            track_processor=self.track_processor,
+            console_logger=deps.console_logger,
+        )
+
         # Dry run context
         self.dry_run_mode = ""
         self.dry_run_test_artists: set[str] = set()
-        self._pipeline_tracks_snapshot: list[TrackDict] | None = None
-        self._pipeline_tracks_index: dict[str, TrackDict] = {}
 
     def set_dry_run_context(self, mode: str, test_artists: set[str]) -> None:
         """Set the dry-run context for the updater.
@@ -123,10 +126,6 @@ class MusicUpdater:
         # Also set context on track_processor
         self.track_processor.set_dry_run_context(mode, test_artists)
 
-    def _reset_pipeline_snapshot(self) -> None:
-        """Reset cached pipeline tracks before a fresh run."""
-        self._pipeline_tracks_snapshot = None
-        self._pipeline_tracks_index = {}
 
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
         """Resolve absolute path to artist rename configuration file."""
@@ -142,43 +141,6 @@ class MusicUpdater:
         else:
             config_root = Path.cwd()
         return config_root / candidate
-
-    def _set_pipeline_snapshot(self, tracks: list["TrackDict"]) -> None:
-        """Store the current pipeline track snapshot for downstream reuse."""
-        self._pipeline_tracks_snapshot = tracks
-        self._pipeline_tracks_index = {}
-        for track in tracks:
-            if track_id := str(track.get("id", "")):
-                self._pipeline_tracks_index[track_id] = track
-
-    def _update_snapshot_tracks(self, updated_tracks: Iterable["TrackDict"]) -> None:
-        """Apply field updates from processed tracks to the cached snapshot."""
-        if not self._pipeline_tracks_index:
-            return
-
-        for updated in updated_tracks:
-            track_id = str(updated.get("id", ""))
-            if not track_id:
-                continue
-
-            current_track = self._pipeline_tracks_index.get(track_id)
-            if current_track is None:
-                continue
-
-            for field, value in updated.model_dump().items():
-                try:
-                    setattr(current_track, field, value)
-                except (AttributeError, TypeError, ValueError):
-                    current_track.__dict__[field] = value
-
-    def _get_pipeline_snapshot(self) -> list["TrackDict"] | None:
-        """Return the currently cached pipeline track snapshot."""
-        return self._pipeline_tracks_snapshot
-
-    def _clear_pipeline_snapshot(self) -> None:
-        """Release cached pipeline track data after finishing the run."""
-        self._pipeline_tracks_snapshot = None
-        self._pipeline_tracks_index = {}
 
     async def run_clean_artist(self, artist: str, _force: bool) -> None:
         """Clean track names for a specific artist.
@@ -571,7 +533,7 @@ class MusicUpdater:
 
         """
         self.console_logger.info("Starting main update pipeline")
-        self._reset_pipeline_snapshot()
+        self.snapshot_manager.reset()
 
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode()
@@ -625,7 +587,7 @@ class MusicUpdater:
         if self._should_update_run_timestamp(force, incremental_tracks):
             await self.database_verifier.update_last_incremental_run()
 
-        self._clear_pipeline_snapshot()
+        self.snapshot_manager.clear()
         self.console_logger.info("Main update pipeline completed successfully")
 
     @staticmethod
@@ -689,7 +651,7 @@ class MusicUpdater:
                     len(delta.updated_ids),
                     len(delta.removed_ids),
                 )
-                result = await self._merge_smart_delta_snapshot(snapshot_tracks, delta)
+                result = await self.snapshot_manager.merge_smart_delta(snapshot_tracks, delta)
         except (OSError, RuntimeError, ValueError, KeyError) as exc:
             # Broad catch intentional: Smart Delta is an optimization, not critical path.
             # Any failure should gracefully fall back to full batch scan.
@@ -699,60 +661,6 @@ class MusicUpdater:
 
         return result
 
-    async def _merge_smart_delta_snapshot(
-        self,
-        snapshot_tracks: list["TrackDict"],
-        delta: "TrackDelta",
-    ) -> list["TrackDict"] | None:
-        """Merge snapshot with Smart Delta changes.
-
-        Returns:
-            Updated list of tracks if successful, otherwise None to indicate fallback should be used.
-        """
-
-        removed_ids = {str(track_id) for track_id in delta.removed_ids if track_id}
-        changed_ids = [str(track_id) for track_id in delta.updated_ids if track_id]
-        new_ids = [str(track_id) for track_id in delta.new_ids if track_id]
-
-        fetch_order: list[str] = list(dict.fromkeys(new_ids + changed_ids))
-
-        fetched_map: dict[str, TrackDict]
-        if fetch_order:
-            fetched_tracks = await self.track_processor.fetch_tracks_by_ids(fetch_order)
-            fetched_map = {str(track.id): track for track in fetched_tracks}
-            if missing_ids := [track_id for track_id in fetch_order if track_id not in fetched_map]:
-                self.console_logger.warning(
-                    "Smart Delta missing %d changed tracks (%s); falling back to batch scan",
-                    len(missing_ids),
-                    ", ".join(missing_ids[:5]),
-                )
-                return None
-        else:
-            fetched_map = {}
-
-        merged_tracks: list[TrackDict] = []
-        seen_ids: set[str] = set()
-
-        for track in snapshot_tracks:
-            track_id = str(track.id)
-            if track_id in removed_ids:
-                continue
-            merged_tracks.append(fetched_map.get(track_id, track))
-            seen_ids.add(track_id)
-
-        for track_id, track in fetched_map.items():
-            if track_id not in seen_ids:
-                merged_tracks.append(track)
-                seen_ids.add(track_id)
-
-        self.console_logger.info(
-            "✓ Smart Delta merged snapshot with %d updated, %d new, %d removed tracks",
-            len(changed_ids),
-            len(new_ids),
-            len(removed_ids),
-        )
-
-        return merged_tracks
 
     async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
@@ -766,7 +674,7 @@ class MusicUpdater:
             # Try Smart Delta first
             smart_delta_tracks = await self._try_smart_delta_fetch()
             if smart_delta_tracks is not None:
-                self._set_pipeline_snapshot(smart_delta_tracks)
+                self.snapshot_manager.set_snapshot(smart_delta_tracks)
                 return smart_delta_tracks
 
             # Fall back to batch processing for full library
@@ -777,7 +685,7 @@ class MusicUpdater:
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Already validated in Smart Delta
             )
-            self._set_pipeline_snapshot(tracks)
+            self.snapshot_manager.set_snapshot(tracks)
             return tracks
 
         # In test artist mode, fetch tracks only for test artists
@@ -789,7 +697,7 @@ class MusicUpdater:
         for artist in self.dry_run_test_artists:
             artist_tracks = await self.track_processor.fetch_tracks_async(artist=artist)
             collected_tracks.extend(artist_tracks)
-        self._set_pipeline_snapshot(collected_tracks)
+        self.snapshot_manager.set_snapshot(collected_tracks)
         return collected_tracks
 
     async def _get_last_run_time(self, force: bool) -> datetime | None:
@@ -845,7 +753,7 @@ class MusicUpdater:
         for track in tracks:
             cleaned_track, change_entry = await self._process_single_track_cleaning_with_log(track)
             if cleaned_track is not None and change_entry is not None:
-                self._update_snapshot_tracks([cleaned_track])
+                self.snapshot_manager.update_tracks([cleaned_track])
                 changes_log.append(change_entry)
 
         self.console_logger.info("Cleaned %d tracks with %d changes", len(changes_log), len(changes_log))
@@ -944,7 +852,7 @@ class MusicUpdater:
         updated_track = track.copy()
         updated_track.name = cleaned_track_name
         updated_track.album = cleaned_album_name
-        self._update_snapshot_tracks([updated_track])
+        self.snapshot_manager.update_tracks([updated_track])
         return updated_track
 
     async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list[ChangeLogEntry]:
@@ -966,7 +874,7 @@ class MusicUpdater:
         """
         self.console_logger.info("Step 3/4: Updating genres")
         updated_genre_tracks, genre_changes = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
-        self._update_snapshot_tracks(updated_genre_tracks)
+        self.snapshot_manager.update_tracks(updated_genre_tracks)
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
 
@@ -982,7 +890,7 @@ class MusicUpdater:
         self.console_logger.info("Step 4/4: Updating album years")
         try:
             await self.year_retriever.process_album_years(tracks, force=force)
-            self._update_snapshot_tracks(self.year_retriever.get_last_updated_tracks())
+            self.snapshot_manager.update_tracks(self.year_retriever.get_last_updated_tracks())
             self.console_logger.info("=== AFTER Step 4 completed successfully ===")
         except Exception:
             self.error_logger.exception("=== ERROR in Step 4 ===")
@@ -1016,7 +924,7 @@ class MusicUpdater:
                 if hasattr(self.year_retriever, "get_last_updated_tracks"):
                     updated_tracks = self.year_retriever.get_last_updated_tracks()
 
-            self._update_snapshot_tracks(updated_tracks)
+            self.snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes
             self.console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))
         except Exception as e:
@@ -1067,7 +975,7 @@ class MusicUpdater:
             self.console_logger.info("Change breakdown: %s", ", ".join(f"{k}: {v}" for k, v in sorted(change_types.items())))
 
         # Use cached snapshot when available to avoid a second AppleScript fetch
-        snapshot_tracks = self._get_pipeline_snapshot()
+        snapshot_tracks = self.snapshot_manager.get_snapshot()
         if snapshot_tracks is not None:
             all_current_tracks = snapshot_tracks
         else:

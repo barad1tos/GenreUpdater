@@ -158,28 +158,28 @@ class TestMusicUpdaterAllure:
             tracks = [track1, track2]
 
         with allure.step("Set pipeline snapshot"):
-            updater._set_pipeline_snapshot(tracks)  # noqa: SLF001
+            updater.snapshot_manager.set_snapshot(tracks)
 
         with allure.step("Verify snapshot is stored"):
-            snapshot = updater._get_pipeline_snapshot()  # noqa: SLF001
+            snapshot = updater.snapshot_manager.get_snapshot()
             assert snapshot is not None
             assert len(snapshot) == 2
-            assert "1" in updater._pipeline_tracks_index  # noqa: SLF001
-            assert "2" in updater._pipeline_tracks_index  # noqa: SLF001
+            assert "1" in updater.snapshot_manager._tracks_index  # noqa: SLF001
+            assert "2" in updater.snapshot_manager._tracks_index  # noqa: SLF001
 
         with allure.step("Update snapshot tracks"):
             updated_track1 = DummyTrackData.create(track_id="1", name="Track 1", artist="Artist 1", genre="Metal")
-            updater._update_snapshot_tracks([updated_track1])  # noqa: SLF001
+            updater.snapshot_manager.update_tracks([updated_track1])
 
         with allure.step("Verify updates applied"):
-            updated_snapshot = updater._pipeline_tracks_index.get("1")  # noqa: SLF001
+            updated_snapshot = updater.snapshot_manager._tracks_index.get("1")  # noqa: SLF001
             assert updated_snapshot is not None
             assert updated_snapshot.genre == "Metal"
 
         with allure.step("Clear snapshot"):
-            updater._clear_pipeline_snapshot()  # noqa: SLF001
-            assert updater._get_pipeline_snapshot() is None  # noqa: SLF001
-            assert len(updater._pipeline_tracks_index) == 0  # noqa: SLF001
+            updater.snapshot_manager.clear()
+            assert updater.snapshot_manager.get_snapshot() is None
+            assert len(updater.snapshot_manager._tracks_index) == 0  # noqa: SLF001
 
             allure.attach("Pipeline snapshot managed successfully", "Snapshot Result", allure.attachment_type.TEXT)
 
