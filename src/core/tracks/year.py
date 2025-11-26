@@ -862,9 +862,7 @@ class YearRetriever:
             return False
 
         prerelease_tracks = [
-            track
-            for track in album_tracks
-            if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
+            track for track in album_tracks if is_prerelease_status(track.track_status if isinstance(track.track_status, str) else None)
         ]
         if prerelease_tracks:
             self.console_logger.info(
@@ -992,9 +990,7 @@ class YearRetriever:
             artist=artist,
             album_name=album,
             track_name=str(track.get("name", "")),
-            old_year=(
-                str(track.get("year")) if track.get("year") is not None else ""
-            ),
+            old_year=(str(track.get("year")) if track.get("year") is not None else ""),
             new_year=year if year is not None else "",
         )
 
@@ -1180,9 +1176,7 @@ class YearRetriever:
         """
         # Filter to only subscription tracks - year updates are only for subscription tracks
         subscription_tracks = [
-            track
-            for track in album_tracks
-            if is_subscription_status(track.track_status if isinstance(track.track_status, str) else None)
+            track for track in album_tracks if is_subscription_status(track.track_status if isinstance(track.track_status, str) else None)
         ]
 
         if not subscription_tracks:
