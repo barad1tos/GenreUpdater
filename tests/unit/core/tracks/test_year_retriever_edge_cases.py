@@ -491,7 +491,7 @@ class TestDominantYearEdgeCases:
             for i in range(9, 11)
         ]
 
-        dominant = retriever._get_dominant_year(album_tracks)
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
 
         # 5/10 = 50% < 60% threshold
         assert dominant is None, (
@@ -513,7 +513,7 @@ class TestDominantYearEdgeCases:
             for i in range(8, 11)
         ]
 
-        dominant = retriever._get_dominant_year(album_tracks)
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
 
         assert dominant == "2020", "70% majority should establish dominant year"
 
