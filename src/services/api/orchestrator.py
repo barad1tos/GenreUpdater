@@ -1003,8 +1003,9 @@ class ExternalApiOrchestrator:
         log_album = album if album != album_norm else album_norm
         return artist_norm, album_norm, log_artist, log_album
 
+    @staticmethod
     def _parse_activity_period(
-        self, activity_result: tuple[int | None, int | None] | None
+            activity_result: tuple[int | None, int | None] | None
     ) -> tuple[int | None, int | None]:
         """Parse activity period result into start/end years."""
         if not activity_result or len(activity_result) != ACTIVITY_PERIOD_TUPLE_LENGTH:
