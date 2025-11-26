@@ -26,7 +26,7 @@ from collections import defaultdict
 from collections.abc import Coroutine
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, NoReturn, TypedDict, cast
+from typing import Any, NoReturn, TypedDict
 
 import aiohttp
 import certifi
@@ -723,12 +723,10 @@ class ExternalApiOrchestrator:
             return None
 
         # For API requests, cached_response should be dict[str, Any] based on how we store it
-        # Use type assertion to help type checker resolve the union type ambiguity
-        cached_response_dict = cast(dict[str, Any] | None, cached_response)
-        if isinstance(cached_response_dict, dict):
-            if cached_response_dict != {}:
+        if isinstance(cached_response, dict):
+            if cached_response != {}:
                 self.console_logger.debug("Using cached response for %s request to %s", api_name, url)
-                return cached_response_dict
+                return cached_response
             self.console_logger.debug("Cached empty response for %s request to %s", api_name, url)
             return {}  # Return an empty dict to signal "no result but cached"
 
@@ -1101,7 +1099,7 @@ class ExternalApiOrchestrator:
         try:
             data = await response.json()
             if isinstance(data, dict):
-                return cast(dict[str, Any], data)
+                return data
             self.error_logger.warning(
                 "[%s] JSON response is not a dict (type: %s) from %s. Snippet: %s",
                 api_name,
@@ -1123,13 +1121,12 @@ class ExternalApiOrchestrator:
                     )
                     data = json.loads(text_content)
                     if isinstance(data, dict):
-                        typed_data = cast(dict[str, Any], data)
                         self.console_logger.debug(
                             "[%s] Successfully parsed iTunes JSON: %d results",
                             api_name,
-                            typed_data.get("resultCount", 0),
+                            data.get("resultCount", 0),
                         )
-                        return typed_data
+                        return data
                     self.error_logger.warning(
                         "[%s] Parsed JSON is not a dict (type: %s) from %s",
                         api_name,
@@ -1660,15 +1657,16 @@ class ExternalApiOrchestrator:
         artist_region: str | None,
     ) -> list[ScoredRelease]:
         """Call API with proper parameters based on what the API accepts."""
+        result: list[ScoredRelease]
         if api_name in {"musicbrainz", "discogs"}:
-            # Type narrowing: cast to APIs that accept artist_region parameter
-            client_with_region = cast(MusicBrainzClient | DiscogsClient, api_client)
-            result = await client_with_region.get_scored_releases(artist_norm, album_norm, artist_region)
-            return cast(list[ScoredRelease], result)
-        # Type narrowing: cast to APIs that don't accept artist_region parameter
-        client_without_region = cast(LastFmClient | AppleMusicClient, api_client)
-        result = await client_without_region.get_scored_releases(artist_norm, album_norm)
-        return cast(list[ScoredRelease], result)
+            # MusicBrainz and Discogs accept artist_region parameter
+            assert isinstance(api_client, MusicBrainzClient | DiscogsClient)
+            result = await api_client.get_scored_releases(artist_norm, album_norm, artist_region)
+        else:
+            # LastFm and AppleMusic don't accept artist_region parameter
+            assert isinstance(api_client, LastFmClient | AppleMusicClient)
+            result = await api_client.get_scored_releases(artist_norm, album_norm)
+        return result
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
         """Get API client by name."""
@@ -1720,9 +1718,8 @@ class ExternalApiOrchestrator:
             if isinstance(result, Exception):
                 self._log_api_error(api_name, log_artist, log_album, result)
             elif isinstance(result, list) and result:
-                scored_releases: list[ScoredRelease] = cast(list[ScoredRelease], result)
-                all_releases.extend(scored_releases)
-                self.console_logger.info("Received %d scored releases from %s", len(scored_releases), api_name.title())
+                all_releases.extend(result)
+                self.console_logger.info("Received %d scored releases from %s", len(result), api_name.title())
             elif not result:
                 self._log_empty_api_result(api_name, log_artist, log_album, artist_norm, album_norm)
 
@@ -2187,8 +2184,8 @@ class ExternalApiOrchestrator:
         album_norm = normalize_name(album)
 
         # Delegate to the Discogs client
-        result = await self.discogs_client.get_year_from_discogs(artist_norm, album_norm)
-        return cast("str | None", result)
+        result: str | None = await self.discogs_client.get_year_from_discogs(artist_norm, album_norm)
+        return result
 
 
 # Factory function for easy instantiation
