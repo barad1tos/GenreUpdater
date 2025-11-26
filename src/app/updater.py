@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from src.app.features.verify.database import DatabaseVerifier
 from src.app.pipeline_snapshot import PipelineSnapshotManager
 from src.app.track_cleaning import TrackCleaningService
+from src.app.year_update import YearUpdateService
 from src.core.tracks.artist import ArtistRenamer
 from src.core.tracks.genre import GenreManager
 from src.core.tracks.filter import IncrementalFilterService
@@ -118,6 +119,16 @@ class MusicUpdater:
             error_logger=deps.error_logger,
         )
 
+        # Year update service
+        self.year_service = YearUpdateService(
+            track_processor=self.track_processor,
+            year_retriever=self.year_retriever,
+            snapshot_manager=self.snapshot_manager,
+            config=deps.config,
+            console_logger=deps.console_logger,
+            error_logger=deps.error_logger,
+        )
+
         # Dry run context
         self.dry_run_mode = ""
         self.dry_run_test_artists: set[str] = set()
@@ -192,47 +203,7 @@ class MusicUpdater:
 
         Uses backup CSV if provided; otherwise uses the latest changes_report.csv.
         """
-        from src.core.models import repair as repair_utils  # noqa: PLC0415
-
-        self.console_logger.info(
-            "Starting revert of year changes for '%s'%s",
-            artist,
-            f" - {album}" if album else " (all albums)",
-        )
-
-        targets = repair_utils.build_revert_targets(
-            config=self.config,
-            artist=artist,
-            album=album,
-            backup_csv_path=backup_csv,
-        )
-
-        if not targets:
-            self.console_logger.warning(
-                "No revert targets found for '%s'%s",
-                artist,
-                f" - {album}" if album else "",
-            )
-            return
-
-        updated, missing, changes_log = await repair_utils.apply_year_reverts(
-            track_processor=self.track_processor,
-            artist=artist,
-            targets=targets,
-        )
-
-        self.console_logger.info("Revert complete: %d tracks updated, %d not found", updated, missing)
-
-        if changes_log:
-            revert_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_revert.csv")
-            save_changes_report(
-                changes=changes_log,
-                file_path=revert_path,
-                console_logger=self.console_logger,
-                error_logger=self.error_logger,
-                compact_mode=True,
-            )
-            self.console_logger.info("Revert changes report saved to %s", revert_path)
+        await self.year_service.run_revert_years(artist, album, backup_csv)
 
     @staticmethod
     def _create_change_log_entry(
@@ -300,67 +271,14 @@ class MusicUpdater:
                 compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
             )
 
-    @staticmethod
-    async def _filter_tracks_for_artist(all_tracks: list["TrackDict"], artist: str) -> list["TrackDict"]:
-        """Filter tracks to include main artist and collaborations."""
-        filtered_tracks = []
-        for track in all_tracks:
-            track_artist = str(track.get("artist", ""))
-            normalized_artist = YearRetriever.normalize_collaboration_artist(track_artist)
-            if normalized_artist == artist:
-                filtered_tracks.append(track)
-        return filtered_tracks
-
-    # Otep-specific album repair removed. Use generic tools in utils.data.repair if needed.
-
-    async def _get_tracks_for_year_update(self, artist: str | None) -> list["TrackDict"] | None:
-        """Get tracks for year update based on artist filter."""
-        if artist:
-            # Get all tracks (no AppleScript filter)
-            all_tracks = await self.track_processor.fetch_tracks_async()
-            if not all_tracks:
-                self.console_logger.warning("No tracks found")
-                return None
-
-            # Filter tracks to include main artist and collaborations
-            filtered_tracks = await self._filter_tracks_for_artist(all_tracks, artist)
-            if not filtered_tracks:
-                self.console_logger.warning(f"No tracks found for artist: {artist} (including collaborations)")
-                return None
-
-            self.console_logger.info(f"Found {len(filtered_tracks)} tracks for artist '{artist}' (including collaborations)")
-            return filtered_tracks
-        # Fetch all tracks normally
-        fetched_tracks: list[TrackDict] = await self.track_processor.fetch_tracks_async(artist=artist)
-        if not fetched_tracks:
-            self.console_logger.warning("No tracks found")
-            return None
-        return fetched_tracks
-
     async def run_update_years(self, artist: str | None, force: bool) -> None:
         """Update album years for all or specific artist.
 
         Args:
             artist: Optional artist filter
             force: Force update even if year exists
-
         """
-        self.console_logger.info(
-            "Starting year update operation%s",
-            f" for artist: {artist}" if artist else " for all artists",
-        )
-
-        tracks = await self._get_tracks_for_year_update(artist)
-        if not tracks:
-            return
-
-        # Process album years
-        success = await self.year_retriever.process_album_years(tracks, force=force)
-
-        if success:
-            self.console_logger.info("Year update operation completed successfully")
-        else:
-            self.error_logger.error("Year update operation failed")
+        await self.year_service.run_update_years(artist, force)
 
     async def run_verify_pending(self, _force: bool = False) -> None:
         """Re-verify albums that are pending year verification.
@@ -653,17 +571,8 @@ class MusicUpdater:
         Args:
             tracks: List of tracks to process
             force: Force all operations
-
         """
-        self.console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
-        self.console_logger.info("Step 4/4: Updating album years")
-        try:
-            await self.year_retriever.process_album_years(tracks, force=force)
-            self.snapshot_manager.update_tracks(self.year_retriever.get_last_updated_tracks())
-            self.console_logger.info("=== AFTER Step 4 completed successfully ===")
-        except Exception:
-            self.error_logger.exception("=== ERROR in Step 4 ===")
-            raise
+        await self.year_service.update_all_years(tracks, force)
 
     async def _update_all_years_with_logs(self, tracks: list["TrackDict"], _force: bool) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 3 of pipeline).
@@ -674,46 +583,8 @@ class MusicUpdater:
 
         Returns:
             List of change log entries
-
         """
-        self.console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
-        self.console_logger.info("Step 4/4: Updating album years")
-        changes_log: list[ChangeLogEntry] = []
-
-        try:
-            updated_tracks: list[TrackDict] = []
-            year_changes: list[ChangeLogEntry] = []
-
-            if hasattr(self.year_retriever, "get_album_years_with_logs"):
-                updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)
-                if hasattr(self.year_retriever, "set_last_updated_tracks"):
-                    self.year_retriever.set_last_updated_tracks(updated_tracks)
-            else:
-                await self.year_retriever.process_album_years(tracks, force=_force)
-                if hasattr(self.year_retriever, "get_last_updated_tracks"):
-                    updated_tracks = self.year_retriever.get_last_updated_tracks()
-
-            self.snapshot_manager.update_tracks(updated_tracks)
-            changes_log = year_changes
-            self.console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))
-        except Exception as e:
-            self.error_logger.exception("=== ERROR in Step 3 ===")
-            # Add error marker to ensure data consistency
-            now = datetime.now(UTC)
-            changes_log.append(
-                ChangeLogEntry(
-                    timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
-                    change_type="year_update_error",
-                    track_id="",
-                    artist="ERROR",
-                    album_name=f"Year update failed: {type(e).__name__}",
-                    track_name=str(e)[:100],
-                    old_year="",
-                    new_year="",
-                )
-            )
-
-        return changes_log
+        return await self.year_service.update_all_years_with_logs(tracks, _force)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.
