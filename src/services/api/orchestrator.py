@@ -27,6 +27,10 @@ from typing import Any, NoReturn, TypedDict
 import aiohttp
 import certifi
 
+from src.core.debug import debug
+from src.core.models.script_detection import ScriptType, detect_primary_script
+from src.core.models.validators import is_valid_year
+from src.metrics import Analytics
 from src.services.api.applemusic import AppleMusicClient
 from src.services.api.base import EnhancedRateLimiter, ScoredRelease
 from src.services.api.discogs import DiscogsClient
@@ -39,10 +43,6 @@ from src.services.api.year_search_coordinator import YearSearchCoordinator
 from src.services.cache.orchestrator import CacheOrchestrator
 from src.services.pending import PendingVerificationService
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
-from src.core.debug import debug
-from src.core.models.script_detection import ScriptType, detect_primary_script
-from src.core.models.validators import is_valid_year
-from src.metrics import Analytics
 
 
 def normalize_name(name: str) -> str:
@@ -1003,6 +1003,26 @@ class ExternalApiOrchestrator:
         log_album = album if album != album_norm else album_norm
         return artist_norm, album_norm, log_artist, log_album
 
+    def _parse_activity_period(
+        self, activity_result: tuple[int | None, int | None] | None
+    ) -> tuple[int | None, int | None]:
+        """Parse activity period result into start/end years."""
+        if not activity_result or len(activity_result) != ACTIVITY_PERIOD_TUPLE_LENGTH:
+            return None, None
+        start_year_val, end_year_val = activity_result
+        start_year = int(start_year_val) if start_year_val else None
+        end_year = int(end_year_val) if end_year_val else None
+        return start_year, end_year
+
+    def _log_activity_period(self, start_year: int | None, end_year: int | None) -> None:
+        """Log the artist activity period."""
+        activity_log = (
+            f"({start_year or '?'} - {end_year or 'present'})"
+            if start_year or end_year
+            else "(activity period unknown)"
+        )
+        self.console_logger.info("Artist activity period context: %s", activity_log)
+
     async def _setup_artist_context(self, artist_norm: str, log_artist: str) -> str | None:
         """Set up artist context for release scoring."""
         try:
@@ -1012,26 +1032,18 @@ class ExternalApiOrchestrator:
             activity_result = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
             if debug.year:
                 self.console_logger.info("Activity period result: %s", activity_result)
-            start_year, end_year = None, None
 
-            if activity_result and len(activity_result) == ACTIVITY_PERIOD_TUPLE_LENGTH:
-                start_year_val, end_year_val = activity_result
-                start_year = int(start_year_val) if start_year_val else None
-                end_year = int(end_year_val) if end_year_val else None
+            start_year, end_year = self._parse_activity_period(activity_result)
 
-            # Store as ArtistPeriodContext
+            # Store as ArtistPeriodContext and set in scorer
             self.artist_period_context = ArtistPeriodContext(start_year=start_year, end_year=end_year)
-            activity_log = f"({start_year or '?'} - {end_year or 'present'})" if start_year or end_year else "(activity period unknown)"
-            self.console_logger.info("Artist activity period context: %s", activity_log)
+            self._log_activity_period(start_year, end_year)
+            self.release_scorer.set_artist_period_context(self.artist_period_context)
 
             # Get the artist's likely region for scoring context (cached)
             artist_region = await self.musicbrainz_client.get_artist_region(artist_norm)
             if artist_region:
                 self.console_logger.info("Artist region context: %s", artist_region.upper())
-
-            # Set the artist period context in the scorer
-            if self.artist_period_context:
-                self.release_scorer.set_artist_period_context(self.artist_period_context)
 
             return str(artist_region) if artist_region else None
 
@@ -1049,7 +1061,11 @@ class ExternalApiOrchestrator:
     ) -> list[ScoredRelease]:
         """Fetch scored releases from all API providers with script-aware logic."""
         return await self.year_search_coordinator.fetch_all_api_results(
-            artist_norm, album_norm, artist_region, log_artist, log_album
+            artist_norm,
+            album_norm,
+            artist_region,
+            log_artist,
+            log_album
         )
 
     async def _handle_no_results(
