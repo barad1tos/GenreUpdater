@@ -349,56 +349,95 @@ def _group_changes_by_type(changes: list[dict[str, Any]]) -> dict[str, list[dict
     return grouped
 
 
-def _render_compact_change(console: Console, change_type: str, record: dict[str, Any]) -> None:
-    """Render a single change record in compact arrow format."""
+def _print_change_line(
+    console: Console,
+    item: str,
+    old_val: str,
+    new_val: str,
+    *,
+    suffix: str = "",
+    highlight: bool = True,
+) -> None:
+    """Print a single change line with consistent formatting."""
+    old_display = old_val or "(empty)"
+    suffix_str = f" [dim]{suffix}[/dim]" if suffix else ""
+    if highlight:
+        console.print(
+            f"  {item}{suffix_str}: [dim]{old_display}[/dim] → [bold yellow]{new_val}[/bold yellow]"
+        )
+    else:
+        console.print(f"  {item}{suffix_str}: {old_display} → {new_val}")
+
+
+def _render_genre_change(console: Console, record: dict[str, Any]) -> None:
+    """Render genre update change."""
+    artist = record.get(Key.ARTIST, "")
+    track = record.get(Key.TRACK_NAME, "")
+    album = record.get(Key.ALBUM, "")
+    item = f"{artist} - {track or album}"
+    _print_change_line(
+        console, item, record.get(Key.OLD_GENRE, ""), record.get(Key.NEW_GENRE, "")
+    )
+
+
+def _render_year_change(console: Console, record: dict[str, Any]) -> None:
+    """Render year update change."""
     artist = record.get(Key.ARTIST, "")
     album = record.get(Key.ALBUM, "")
-    track = record.get(Key.TRACK_NAME, "")
+    old_val = record.get(Key.OLD_YEAR, "")
+    new_val = record.get(Key.NEW_YEAR, "")
+    item = f"{artist} - {album}"
+    _print_change_line(console, item, old_val, new_val, highlight=(old_val != new_val))
 
-    if change_type == "genre_update":
-        old_val = record.get(Key.OLD_GENRE, "")
-        new_val = record.get(Key.NEW_GENRE, "")
-        item = f"{artist} - {track or album}"
-        console.print(f"  {item}: [dim]{old_val}[/dim] → [bold yellow]{new_val}[/bold yellow]")
-    elif change_type == "year_update":
-        old_val = record.get(Key.OLD_YEAR, "")
-        new_val = record.get(Key.NEW_YEAR, "")
+
+def _render_name_change(console: Console, record: dict[str, Any]) -> None:
+    """Render name change (track or album)."""
+    artist = record.get(Key.ARTIST, "")
+    if record.get(Key.OLD_TRACK_NAME):
+        old_val = record.get(Key.OLD_TRACK_NAME, "")
+        new_val = record.get(Key.NEW_TRACK_NAME, "")
+        item = f"{artist} - Track"
+    else:
+        old_val = record.get(Key.OLD_ALBUM_NAME, "")
+        new_val = record.get(Key.NEW_ALBUM_NAME, "")
+        item = f"{artist} - Album"
+    _print_change_line(console, item, old_val, new_val)
+
+
+def _render_metadata_cleaning(console: Console, record: dict[str, Any]) -> None:
+    """Render metadata cleaning change."""
+    artist = record.get(Key.ARTIST, "")
+    album = record.get(Key.ALBUM, "")
+    track_name = record.get(Key.TRACK_NAME, "")
+
+    # Display album cleaning if changed
+    old_album = record.get(Key.OLD_ALBUM_NAME, "")
+    new_album = record.get(Key.NEW_ALBUM_NAME, "")
+    if old_album != new_album:
+        item = f"{artist} - {track_name}"
+        _print_change_line(console, item, old_album, new_album, suffix="(album)")
+
+    # Display track name cleaning if changed
+    old_track = record.get(Key.OLD_TRACK_NAME, "")
+    new_track = record.get(Key.NEW_TRACK_NAME, "")
+    if old_track != new_track:
         item = f"{artist} - {album}"
-        # Only highlight in yellow if the year actually changed
-        if old_val != new_val:
-            console.print(f"  {item}: [dim]{old_val or '(empty)'}[/dim] → [bold yellow]{new_val}[/bold yellow]")
-        else:
-            console.print(f"  {item}: {old_val or '(empty)'} → {new_val}")
-    elif change_type == "name_change":
-        if record.get(Key.OLD_TRACK_NAME):
-            old_val = record.get(Key.OLD_TRACK_NAME, "")
-            new_val = record.get(Key.NEW_TRACK_NAME, "")
-            item = f"{artist} - Track"
-        else:
-            old_val = record.get(Key.OLD_ALBUM_NAME, "")
-            new_val = record.get(Key.NEW_ALBUM_NAME, "")
-            item = f"{artist} - Album"
-        console.print(f"  {item}: [dim]{old_val}[/dim] → [bold yellow]{new_val}[/bold yellow]")
-    elif change_type == "metadata_cleaning":
-        # Check which metadata was cleaned
-        album_changed = record.get(Key.OLD_ALBUM_NAME) != record.get(Key.NEW_ALBUM_NAME)
-        track_changed = record.get(Key.OLD_TRACK_NAME) != record.get(Key.NEW_TRACK_NAME)
+        _print_change_line(console, item, old_track, new_track, suffix="(track)")
 
-        # Display album cleaning
-        if album_changed:
-            old_album = record.get(Key.OLD_ALBUM_NAME, "")
-            new_album = record.get(Key.NEW_ALBUM_NAME, "")
-            track_name = record.get(Key.TRACK_NAME, "")
-            item = f"{artist} - {track_name}"
-            console.print(f"  {item} [dim](album)[/dim]: [dim]{old_album}[/dim] → [bold yellow]{new_album}[/bold yellow]")
 
-        # Display track name cleaning
-        if track_changed:
-            old_track = record.get(Key.OLD_TRACK_NAME, "")
-            new_track = record.get(Key.NEW_TRACK_NAME, "")
-            item = f"{artist} - {album}"
-            console.print(f"  {item} [dim](track)[/dim]: [dim]{old_track}[/dim] → [bold yellow]{new_track}[/bold yellow]")
+# Mapping of change types to their render functions
+_CHANGE_RENDERERS: dict[str, Callable[[Console, dict[str, Any]], None]] = {
+    "genre_update": _render_genre_change,
+    "year_update": _render_year_change,
+    "name_change": _render_name_change,
+    "metadata_cleaning": _render_metadata_cleaning,
+}
 
+
+def _render_compact_change(console: Console, change_type: str, record: dict[str, Any]) -> None:
+    """Render a single change record in compact arrow format."""
+    if renderer := _CHANGE_RENDERERS.get(change_type):
+        renderer(console, record)
 
 def _render_compact_group(console: Console, change_type: str, records: list[dict[str, str]]) -> None:
     """Render a group of changes in compact mode with arrows."""
@@ -791,3 +830,5 @@ def save_unified_dry_run(
         error_logger,
         "dry run report",
     )
+
+
