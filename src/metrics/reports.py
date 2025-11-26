@@ -35,7 +35,8 @@ from rich.table import Table
 from src.core.logger import ensure_directory
 from src.core.models.track import ChangeLogEntry
 from src.core.models.types import TrackDict
-from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv as _save_csv
+from src.metrics.csv_utils import TRACK_FIELDNAMES
+from src.metrics.csv_utils import save_csv as _save_csv
 
 # Re-export HTML report functions for backward compatibility
 from src.metrics.html_reports import (
@@ -51,10 +52,10 @@ from src.metrics.track_sync import (
 )
 
 __all__ = [
-    # Change reports
-    "save_changes_report",
     # Track sync
     "load_track_list",
+    # Change reports
+    "save_changes_report",
     # HTML reports
     "save_detailed_dry_run_report",
     "save_html_report",
