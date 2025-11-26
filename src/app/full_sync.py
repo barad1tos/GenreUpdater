@@ -99,8 +99,8 @@ async def run_full_resync(
         console_logger.info("✨ Full resync completed successfully!")
         console_logger.info("🎯 Database synchronized: %d tracks", len(all_tracks))
 
-    except Exception:
-        error_logger.exception("❌ Full resync failed with error")
+    except (OSError, RuntimeError, ValueError) as e:
+        error_logger.exception("❌ Full resync failed: %s", e)
         raise
 
 
