@@ -35,6 +35,7 @@ from src.services.api.musicbrainz import MusicBrainzClient
 from src.services.api.request_executor import ApiRequestExecutor
 from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
 from src.services.api.year_score_resolver import YearScoreResolver
+from src.services.api.year_search_coordinator import YearSearchCoordinator
 from src.services.cache.orchestrator import CacheOrchestrator
 from src.services.pending import PendingVerificationService
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
@@ -519,6 +520,21 @@ class ExternalApiOrchestrator:
             definitive_score_diff=self.definitive_score_diff,
         )
 
+    def _initialize_year_search_coordinator(self) -> None:
+        """Initialize the year search coordinator (after API clients are ready)."""
+        self.year_search_coordinator = YearSearchCoordinator(
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+            config=self.config,
+            preferred_api=self.preferred_api,
+            use_lastfm=self.use_lastfm,
+            musicbrainz_client=self.musicbrainz_client,
+            discogs_client=self.discogs_client,
+            lastfm_client=self.lastfm_client,
+            applemusic_client=self.applemusic_client,
+            release_scorer=self.release_scorer,
+        )
+
         # Scoring function is now properly injected during API client initialization
 
     def _ensure_session_initialized(self) -> None:
@@ -550,6 +566,7 @@ class ExternalApiOrchestrator:
 
             # Initialize API clients after the session is created
             self._initialize_api_clients()
+            self._initialize_year_search_coordinator()
             self.console_logger.debug("API clients initialized")
 
             # Mark as initialized
@@ -924,7 +941,11 @@ class ExternalApiOrchestrator:
             "LOADED" if self.lastfm_api_key else "MISSING",
         )
 
-        script_priorities = self._get_script_config_priorities(script_type)
+        # Get script-specific API priorities from config
+        year_config = self.config.get("year_retrieval", {})
+        script_api_priorities = year_config.get("script_api_priorities", {})
+        default_config = script_api_priorities.get("default", {})
+        script_priorities = script_api_priorities.get(script_type.value, default_config)
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
         self.console_logger.info(f"{emoji} Primary APIs for {script_type.value}: {primary_apis}")
 
@@ -1026,239 +1047,9 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
-        """Fetch scored releases from all API providers with Cyrillic-aware logic."""
-        self._log_api_search_start(artist_norm, album_norm, artist_region, log_artist, log_album)
-
-        # Try script-optimized search first
-        artist_script = detect_primary_script(log_artist)
-        album_script = detect_primary_script(log_album)
-        primary_script = artist_script if artist_script != ScriptType.UNKNOWN else album_script
-
-        if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
-            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_region)
-            if script_results:
-                return script_results
-
-        # Standard API search (all providers concurrently)
-        return await self._execute_standard_api_search(artist_norm, album_norm, artist_region, log_artist, log_album)
-
-    def _log_api_search_start(self, artist_norm: str, album_norm: str, artist_region: str | None, log_artist: str, log_album: str) -> None:
-        """Log API search initialization."""
-        if not debug.api:
-            return
-
-        self.console_logger.info(
-            "Starting API search with parameters: artist_norm='%s', album_norm='%s', artist_region='%s'",
-            artist_norm,
-            album_norm,
-            artist_region or "None",
-        )
-        self.console_logger.info("Original names: artist='%s', album='%s'", log_artist, log_album)
-
-    async def _try_script_optimized_search(
-        self,
-        script_type: ScriptType,
-        artist_norm: str,
-        album_norm: str,
-        artist_region: str | None,
-    ) -> list[ScoredRelease] | None:
-        """Try script-optimized API search based on detected script type."""
-        if debug.api:
-            self.console_logger.info(f"{script_type.value} detected - trying script-optimized search")
-
-        api_lists = self._get_script_api_priorities(script_type)
-
-        # Try primary APIs first
-        results = await self._try_api_list(api_lists["primary"], artist_norm, album_norm, artist_region, script_type, is_fallback=False)
-        if results:
-            return results
-
-        # Try fallback APIs if primary failed
-        if debug.api:
-            self.console_logger.info(f"Primary APIs failed for {script_type.value} - trying fallback")
-        return await self._try_api_list(api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True)
-
-    def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
-        """Get script-specific API priorities from config."""
-        script_priorities = self._get_script_config_priorities(script_type)
-        primary_raw = script_priorities.get("primary", ["musicbrainz"])
-        fallback_raw = script_priorities.get("fallback", ["lastfm"])
-
-        primary = primary_raw if isinstance(primary_raw, list) else ["musicbrainz"]
-        fallback = fallback_raw if isinstance(fallback_raw, list) else ["lastfm"]
-
-        return {
-            "primary": self._apply_preferred_order(primary),
-            "fallback": self._apply_preferred_order(fallback),
-        }
-
-    def _get_script_config_priorities(self, script_type: ScriptType) -> dict[str, Any]:
-        """Get script-specific API priorities from configuration file.
-
-        Args:
-            script_type: The script type (e.g., CYRILLIC, LATIN, etc.)
-
-        Returns:
-            Dictionary containing primary and fallback API configurations for the script type
-        """
-        year_config = self.config.get("year_retrieval", {})
-        script_api_priorities = year_config.get("script_api_priorities", {})
-        default_config = script_api_priorities.get("default", {})
-        script_priorities: dict[str, Any] = script_api_priorities.get(script_type.value, default_config)
-        return script_priorities
-
-    async def _try_api_list(
-        self, api_names: list[str], artist_norm: str, album_norm: str, artist_region: str | None, script_type: ScriptType, is_fallback: bool
-    ) -> list[ScoredRelease] | None:
-        """Try a list of API names and return the first successful result."""
-        normalized_names = [self._normalize_api_name(name) for name in api_names]
-        for api_name in normalized_names:
-            results = await self._try_single_api(api_name, artist_norm, album_norm, artist_region, script_type, is_fallback)
-            if results:
-                return results
-        return None
-
-    async def _try_single_api(
-        self, api_name: str, artist_norm: str, album_norm: str, artist_region: str | None, script_type: ScriptType, is_fallback: bool
-    ) -> list[ScoredRelease] | None:
-        """Try a single API and return results if successful."""
-        try:
-            api_client = self._get_api_client(api_name)
-            if not api_client:
-                if debug.api and not is_fallback:
-                    self.console_logger.debug(f"{api_name} client not available, skipping")
-                return None
-
-            if debug.api:
-                self.console_logger.info(f"Trying {api_name} for {script_type.value} text")
-            results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
-
-            if results:
-                if debug.api:
-                    result_type = "Fallback" if is_fallback else "Primary"
-                    self.console_logger.info(f"{result_type} {api_name} found %d results for {script_type.value}", len(results))
-                return results
-
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
-            if debug.api:
-                self.console_logger.warning(f"{api_name} failed for {script_type.value}: %s", e)
-
-        return None
-
-    @staticmethod
-    async def _call_api_with_proper_params(
-        api_client: MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient,
-        api_name: str,
-        artist_norm: str,
-        album_norm: str,
-        artist_region: str | None,
-    ) -> list[ScoredRelease]:
-        """Call API with proper parameters based on what the API accepts."""
-        result: list[ScoredRelease]
-        if api_name in {"musicbrainz", "discogs"}:
-            # MusicBrainz and Discogs accept artist_region parameter
-            assert isinstance(api_client, MusicBrainzClient | DiscogsClient)
-            result = await api_client.get_scored_releases(artist_norm, album_norm, artist_region)
-        else:
-            # LastFm and AppleMusic don't accept artist_region parameter
-            assert isinstance(api_client, LastFmClient | AppleMusicClient)
-            result = await api_client.get_scored_releases(artist_norm, album_norm)
-        return result
-
-    def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
-        """Get API client by name."""
-        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient] = {
-            "musicbrainz": self.musicbrainz_client,
-            "discogs": self.discogs_client,
-            "lastfm": self.lastfm_client,
-            "itunes": self.applemusic_client,
-            "applemusic": self.applemusic_client,
-        }
-        return api_mapping.get(api_name)
-
-    async def _execute_standard_api_search(
-        self, artist_norm: str, album_norm: str, artist_region: str | None, log_artist: str, log_album: str
-    ) -> list[ScoredRelease]:
-        """Execute standard concurrent API search across all providers."""
-        api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else []))
-        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = []
-        ordered_names: list[str] = []
-
-        for api_name in api_order:
-            api_client = self._get_api_client(api_name)
-            if not api_client:
-                continue
-            api_tasks.append(
-                self._call_api_with_proper_params(
-                    api_client,
-                    api_name,
-                    artist_norm,
-                    album_norm,
-                    artist_region,
-                )
-            )
-            ordered_names.append(api_name)
-
-        if not api_tasks:
-            return []
-
-        results = await asyncio.gather(*api_tasks, return_exceptions=True)
-        return self._process_api_task_results(results, ordered_names, log_artist, log_album, artist_norm, album_norm)
-
-    def _process_api_task_results(
-        self, results: list[Any], api_names: list[str], log_artist: str, log_album: str, artist_norm: str, album_norm: str
-    ) -> list[ScoredRelease]:
-        """Process results from concurrent API tasks."""
-        all_releases: list[ScoredRelease] = []
-
-        for api_name, result in zip(api_names, results, strict=True):
-            if isinstance(result, Exception):
-                self._log_api_error(api_name, log_artist, log_album, result)
-            elif isinstance(result, list) and result:
-                all_releases.extend(result)
-                self.console_logger.info("Received %d scored releases from %s", len(result), api_name.title())
-            elif not result:
-                self._log_empty_api_result(api_name, log_artist, log_album, artist_norm, album_norm)
-
-        self._log_api_summary(log_artist, log_album, len(all_releases))
-        return all_releases
-
-    def _log_api_error(self, api_name: str, log_artist: str, log_album: str, error: Exception) -> None:
-        """Log API error details."""
-        self.error_logger.warning(
-            "API call to %s failed for '%s - %s': %s: %s",
-            api_name,
-            log_artist,
-            log_album,
-            type(error).__name__,
-            error,
-        )
-
-    def _log_empty_api_result(self, api_name: str, log_artist: str, log_album: str, artist_norm: str, album_norm: str) -> None:
-        """Log empty API result details."""
-        if not debug.api:
-            return
-
-        self.console_logger.warning(
-            "%s returned EMPTY results for '%s - %s' (search params: artist_norm='%s', album_norm='%s')",
-            api_name.title(),
-            log_artist,
-            log_album,
-            artist_norm,
-            album_norm,
-        )
-
-    def _log_api_summary(self, log_artist: str, log_album: str, total_releases: int) -> None:
-        """Log API search summary."""
-        if not debug.api:
-            return
-
-        self.console_logger.info(
-            "API summary for '%s - %s': Total releases found: %d (MusicBrainz, Discogs, iTunes%s)",
-            log_artist,
-            log_album,
-            total_releases,
-            ", Last.fm" if self.use_lastfm else "",
+        """Fetch scored releases from all API providers with script-aware logic."""
+        return await self.year_search_coordinator.fetch_all_api_results(
+            artist_norm, album_norm, artist_region, log_artist, log_album
         )
 
     async def _handle_no_results(
