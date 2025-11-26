@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 
-from src.application.music_updater import MusicUpdater
-from src.infrastructure.dependencies_service import DependencyContainer
-from src.shared.data.models import TrackDict
+from src.app.updater import MusicUpdater
+from src.services.deps import DependencyContainer
+from src.core.models.track import TrackDict
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 

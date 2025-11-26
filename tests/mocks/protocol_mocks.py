@@ -1,6 +1,6 @@
 """Mock implementations of protocol interfaces for testing.
 
-These mocks properly implement the protocol interfaces defined in src.shared.data.protocols.
+These mocks properly implement the protocol interfaces defined in src.core.models.protocols.
 """
 
 
@@ -10,12 +10,12 @@ import contextlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from src.shared.data.models import CachedApiResult, TrackDict
+from src.core.models.track import CachedApiResult, TrackDict
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from src.shared.data.protocols import (
+    from src.core.models.protocols import (
         AppleScriptClientProtocol,
         CacheableKey,
         CacheableValue,
