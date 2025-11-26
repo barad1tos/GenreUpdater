@@ -46,9 +46,11 @@ from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
 
 
-# Temporary stub for normalize_name - just return as-is until normalization is needed
 def normalize_name(name: str) -> str:
-    """Temporary stub - returns name unchanged until normalization module is enabled."""
+    """Normalize artist/album name for matching. Currently returns unchanged.
+
+    TODO: Implement normalization when needed (lowercase, & → and, remove punctuation).
+    """
     return name
 
 

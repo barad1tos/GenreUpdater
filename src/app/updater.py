@@ -690,7 +690,9 @@ class MusicUpdater:
                     len(delta.removed_ids),
                 )
                 result = await self._merge_smart_delta_snapshot(snapshot_tracks, delta)
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, KeyError) as exc:
+            # Broad catch intentional: Smart Delta is an optimization, not critical path.
+            # Any failure should gracefully fall back to full batch scan.
             self.console_logger.exception("Smart Delta failed: %s", exc)
             self.error_logger.exception("Smart Delta error")
             result = None
