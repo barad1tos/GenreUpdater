@@ -10,12 +10,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.tracks.artist import ArtistRenamer
+from src.core.tracks.cache_manager import TrackCacheManager
 from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
-from src.services.cache.snapshot import LibraryCacheMetadata, LibraryDeltaCache, LibrarySnapshotService
+from src.services.cache.snapshot import LibrarySnapshotService
 from src.core.models.metadata import parse_tracks
 from src.core.models.track import TrackDict
 from src.core.models.status import can_edit_metadata
-from src.core.models.validators import SecurityValidationError, SecurityValidator, is_valid_track_item
+from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.metrics import Analytics
 
 if TYPE_CHECKING:
@@ -70,6 +71,14 @@ class TrackProcessor:
         self.dry_run_mode: str = ""
         self.dry_run_test_artists: set[str] = set()
         self.artist_renamer: ArtistRenamer | None = None
+
+        # Initialize cache manager for snapshot/cache operations
+        self.cache_manager = TrackCacheManager(
+            cache_service=cache_service,
+            snapshot_service=library_snapshot_service,
+            console_logger=console_logger,
+            current_time_func=self._current_time,
+        )
 
     def set_dry_run_context(self, mode: str, test_artists: set[str]) -> None:
         """Set dry run context for test mode filtering.
@@ -137,34 +146,8 @@ class TrackProcessor:
 
         Returns:
             List of tracks if found and valid, None otherwise
-
         """
-        cached_value = await self.cache_service.get_async(cache_key)
-        if cached_value is None:
-            return None
-
-        # With improved overloads, cached_value is guaranteed to be list[TrackDict] for string keys
-        cached_list = cached_value
-
-        # Build validated track list with proper typing
-        validated_tracks: list[TrackDict] = []
-
-        # Validate each item in the cached list
-        for i, item in enumerate(cached_list):
-            # Since we typed cached_list as list[dict[str, Any]], each item should be dict[str, Any]
-            # But we still need runtime validation for data integrity from cache
-            if not is_valid_track_item(item):
-                self.console_logger.warning(
-                    "Cached data for %s contains invalid track dict at index %d. Ignoring cache.",
-                    cache_key,
-                    i,
-                )
-                return None
-
-            # The item is valid after type guard check, add it to the result
-            validated_tracks.append(item)
-
-        return validated_tracks
+        return await self.cache_manager.get_cached_tracks(cache_key)
 
     async def _materialize_cached_tracks(self, cache_key: str, artist: str | None) -> list[TrackDict] | None:
         """Return validated cached tracks if available."""
@@ -207,7 +190,7 @@ class TrackProcessor:
 
     def _can_use_snapshot(self, artist: str | None) -> bool:
         """Return True when snapshot caching can be used for this request."""
-        return artist is None and self.snapshot_service is not None and self.snapshot_service.is_enabled()
+        return artist is None and self.cache_manager.can_use_snapshot()
 
     @staticmethod
     def _count_raw_track_rows(raw_output: str) -> int:
@@ -280,53 +263,12 @@ class TrackProcessor:
 
     async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
         """Persist the latest snapshot, metadata, and delta state."""
-        if self.snapshot_service is None or not self.snapshot_service.is_enabled():
-            return
-
-        snapshot_hash = await self.snapshot_service.save_snapshot(tracks)
-        current_time = self._current_time()
-        library_mtime = await self.snapshot_service.get_library_mtime()
-        metadata = LibraryCacheMetadata(
-            last_full_scan=current_time,
-            library_mtime=library_mtime,
-            track_count=len(tracks),
-            snapshot_hash=snapshot_hash,
-        )
-        await self.snapshot_service.update_snapshot_metadata(metadata)
-
-        if not self.snapshot_service.is_delta_enabled():
-            return
-
-        delta_cache = await self.snapshot_service.load_delta()
-        if delta_cache is None:
-            delta_cache = LibraryDeltaCache(last_run=current_time)
-
-        delta_cache.last_run = current_time
-        if processed_track_ids and (ids_as_str := [str(track_id) for track_id in processed_track_ids if str(track_id)]):
-            delta_cache.add_processed_ids(ids_as_str)
-        await self.snapshot_service.save_delta(delta_cache)
+        await self.cache_manager.update_snapshot(tracks, processed_track_ids)
 
     @staticmethod
     def _merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
         """Merge delta updates into the existing snapshot while preserving order."""
-        update_map = {str(track.id): track for track in updates}
-        merged: list[TrackDict] = []
-        seen_ids: set[str] = set()
-
-        for track in existing:
-            track_id = str(track.id)
-            if track_id in update_map:
-                merged.append(update_map[track_id])
-            else:
-                merged.append(track)
-            seen_ids.add(track_id)
-        for track in updates:
-            track_id = str(track.id)
-            if track_id not in seen_ids:
-                merged.append(track)
-                seen_ids.add(track_id)
-
-        return merged
+        return TrackCacheManager.merge_tracks(existing, updates)
 
     def _validate_tracks_security(self, tracks: list[TrackDict]) -> list[TrackDict]:
         """Validate tracks for security and convert to proper format.
