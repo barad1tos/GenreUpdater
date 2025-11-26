@@ -717,7 +717,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             mock_proc.wait = AsyncMock(side_effect=TimeoutError)
 
             # Should handle cleanup gracefully
-            await client._cleanup_process(mock_proc, "test_process")  # noqa: SLF001
+            await client.executor.cleanup_process(mock_proc, "test_process")
 
             allure.attach("Process cleanup handled gracefully", "Cleanup Result", allure.attachment_type.TEXT)
 
