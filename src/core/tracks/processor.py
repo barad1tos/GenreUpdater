@@ -81,7 +81,7 @@ class TrackProcessor:
         )
 
         # Initialize update executor for track update operations
-        self.update_executor = TrackUpdateExecutor(
+        self.update_executor: TrackUpdateExecutor = TrackUpdateExecutor(
             ap_client=ap_client,
             cache_service=cache_service,
             security_validator=self.security_validator,
@@ -560,18 +560,30 @@ class TrackProcessor:
 
         self.console_logger.info("Batch processing completed: %d batches processed, %d total tracks fetched", batch_count, len(all_tracks))
 
-        # Populate cache so subsequent fetches can reuse the same snapshot without hitting AppleScript again
-        await self.cache_service.set_async("tracks_all", all_tracks)
-        self.console_logger.info("Cached %d tracks for key: tracks_all", len(all_tracks))
-
-        # Persist snapshot so future runs can start from cached state instead of full scans
-        if all_tracks and self._can_use_snapshot(None) and not self.dry_run:
-            try:
-                await self._update_snapshot(all_tracks, [track.id for track in all_tracks])
-            except Exception as exc:
-                self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", exc)
+        # Cache and persist results
+        await self._cache_and_persist_batch_results(all_tracks)
 
         return all_tracks
+
+    async def _cache_and_persist_batch_results(self, tracks: list[TrackDict]) -> None:
+        """Cache fetched tracks in memory and persist to snapshot on disk.
+
+        Args:
+            tracks: List of fetched tracks to cache and persist
+        """
+        # Populate cache so subsequent fetches can reuse the same snapshot without hitting AppleScript again
+        await self.cache_service.set_async("tracks_all", tracks)
+        self.console_logger.info("Cached %d tracks for key: tracks_all", len(tracks))
+
+        # Persist snapshot so future runs can start from cached state instead of full scans
+        should_persist = tracks and self._can_use_snapshot(None) and not self.dry_run
+        if not should_persist:
+            return
+
+        try:
+            await self._update_snapshot(tracks, [track.id for track in tracks])
+        except Exception as exc:
+            self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", exc)
 
     def _handle_parse_failure_state(
         self,
@@ -708,7 +720,7 @@ class TrackProcessor:
         Returns:
             True if all updates are successful, False if any failed
         """
-        return await self.update_executor.update_track_async(
+        result: bool = await self.update_executor.update_track_async(
             track_id=track_id,
             new_track_name=new_track_name,
             new_album_name=new_album_name,
@@ -719,6 +731,7 @@ class TrackProcessor:
             original_album=original_album,
             original_track=original_track,
         )
+        return result
 
     async def update_artist_async(
         self,
@@ -741,12 +754,13 @@ class TrackProcessor:
         Returns:
             True if update succeeded, False otherwise
         """
-        return await self.update_executor.update_artist_async(
+        result: bool = await self.update_executor.update_artist_async(
             track=track,
             new_artist_name=new_artist_name,
             original_artist=original_artist,
             update_album_artist=update_album_artist,
         )
+        return result
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Get the list of dry-run actions recorded.
