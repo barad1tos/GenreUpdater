@@ -36,6 +36,7 @@ from src.services.api.base import EnhancedRateLimiter, ScoredRelease
 from src.services.api.discogs import DiscogsClient
 from src.services.api.lastfm import LastFmClient
 from src.services.api.musicbrainz import MusicBrainzClient
+from src.services.api.request_executor import ApiRequestExecutor
 from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
 from src.services.cache.orchestrator import CacheOrchestrator
 from src.services.pending import PendingVerificationService
@@ -216,17 +217,25 @@ class ExternalApiOrchestrator:
         # Initialize rate limiters
         self._initialize_rate_limiters()
 
+        # Initialize API request executor (handles HTTP requests with retry/caching)
+        self.request_executor = ApiRequestExecutor(
+            cache_service=cache_service,
+            rate_limiters=self.rate_limiters,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            user_agent=self.user_agent,
+            discogs_token=self.discogs_token,
+            cache_ttl_days=self.cache_ttl_days,
+            default_max_retries=self.default_api_max_retries,
+            default_retry_delay=self.default_api_retry_delay,
+        )
+
         # Initialize the scoring system first (needed for API client injection)
         self._initialize_scoring_system()
 
-        # Initialize statistics tracking
-        self.request_counts = {"discogs": 0, "musicbrainz": 0, "lastfm": 0, "itunes": 0}
-        self.api_call_durations: dict[str, list[float]] = {
-            "discogs": [],
-            "musicbrainz": [],
-            "lastfm": [],
-            "itunes": [],
-        }
+        # Statistics tracking - delegate to request_executor
+        self.request_counts = self.request_executor.request_counts
+        self.api_call_durations = self.request_executor.api_call_durations
 
         # Initialize state flag
         self._initialized = False
@@ -533,6 +542,7 @@ class ExternalApiOrchestrator:
 
         if self.session is None:
             self.session = self._create_client_session()
+            self.request_executor.set_session(self.session)
             forced_text = " (forced)" if force else ""
             self.console_logger.info(
                 "External API session initialized with User-Agent: %s%s",
@@ -653,63 +663,23 @@ class ExternalApiOrchestrator:
         base_delay: float | None = None,
         timeout_override: float | None = None,
     ) -> dict[str, Any] | None:
-        """Make an API request with rate limiting, error handling, and retry logic."""
-        # Debug logging for iTunes requests
-        if api_name == "itunes":
-            self.console_logger.debug("[%s] Making API request to %s with params: %s", api_name, url, params)
+        """Make an API request with rate limiting, error handling, and retry logic.
 
-        # Build the cache key and check the cache first
-        cache_key_tuple = (
-            "api_request",
-            api_name,
-            url,
-            tuple(sorted((params or {}).items())),
-        )
-        cache_key = f"{cache_key_tuple[0]}_{cache_key_tuple[1]}_{hash(cache_key_tuple)}"
-        cached_result = await self._check_and_validate_cache(cache_key, api_name, url)
-        if cached_result is not None:
-            if api_name == "itunes":
-                self.console_logger.debug("[%s] Using cached result", api_name)
-            return cached_result
-
-        # Prepare request components
-        prepared_request = self._prepare_request_components(api_name, url, headers_override, timeout_override)
-        if prepared_request is None:
-            return None
-
-        request_headers, limiter, request_timeout = prepared_request
-
-        # Execute request with retry logic
-        retry_attempts = max_retries if isinstance(max_retries, int) and max_retries > 0 else self.default_api_max_retries
-        retry_delay = base_delay if isinstance(base_delay, (int, float)) and base_delay >= 0 else self.default_api_retry_delay
-
-        result = await self._execute_request_with_retry(
-            api_name,
-            url,
-            params,
-            request_headers=request_headers,
-            request_timeout=request_timeout,
-            limiter=limiter,
-            max_retries=retry_attempts,
-            base_delay=retry_delay,
+        Delegates to ApiRequestExecutor for HTTP handling.
+        """
+        return await self.request_executor.execute_request(
+            api_name=api_name,
+            url=url,
+            params=params,
+            headers_override=headers_override,
+            max_retries=max_retries,
+            base_delay=base_delay,
+            timeout_override=timeout_override,
         )
 
-        # Debug logging for iTunes results
-        if api_name == "itunes":
-            self.console_logger.debug(
-                "[%s] Request execution result: %s",
-                api_name,
-                "Success" if result is not None else "Failed/None",
-            )
-
-        # Cache the result
-        cache_ttl_seconds = self.cache_ttl_days * 86400
-        await self.cache_service.set_async(
-            cache_key,
-            result if result is not None else {},
-            ttl=cache_ttl_seconds,
-        )
-        return result
+    # NOTE: Methods below are now unused but kept for reference.
+    # They have been moved to ApiRequestExecutor.
+    # TODO: Remove in future cleanup commit.
 
     async def _check_and_validate_cache(self, cache_key: str, api_name: str, url: str) -> dict[str, Any] | None:
         """Check the cache and validate the cached response.
