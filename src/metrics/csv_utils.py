@@ -16,6 +16,21 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+# Shared fieldnames for track CSV files (used by reports and track_sync)
+TRACK_FIELDNAMES: list[str] = [
+    "id",
+    "name",
+    "artist",
+    "album",
+    "genre",
+    "date_added",
+    "last_modified",
+    "track_status",
+    "old_year",
+    "new_year",
+]
+
+
 def save_csv(
     data: Sequence[dict[str, str]],
     fieldnames: Sequence[str],

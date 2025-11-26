@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.core.models.types import TrackDict
-from src.metrics.csv_utils import save_csv
+from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -25,20 +25,7 @@ if TYPE_CHECKING:
     )
 
 
-def _get_expected_track_fieldnames() -> list[str]:
-    """Return expected CSV field names for track list."""
-    return [
-        "id",
-        "name",
-        "artist",
-        "album",
-        "genre",
-        "date_added",
-        "last_modified",
-        "track_status",
-        "old_year",
-        "new_year",
-    ]
+# Note: TRACK_FIELDNAMES is imported from csv_utils for shared fieldname definition
 
 
 def _validate_csv_header(
@@ -117,7 +104,7 @@ def load_track_list(csv_path: str) -> dict[str, TrackDict]:
         return track_map
 
     logger = logging.getLogger("console_logger")
-    expected_fieldnames = _get_expected_track_fieldnames()
+    expected_fieldnames = TRACK_FIELDNAMES
 
     try:
         with Path(csv_path).open(encoding="utf-8") as f:
@@ -634,7 +621,7 @@ async def sync_track_list_with_current(
     console_logger.info("Final CSV track count after sync: %s", len(final_list))
 
     # Define the fieldnames for the output CSV file
-    fieldnames = _get_expected_track_fieldnames()
+    fieldnames = TRACK_FIELDNAMES
 
     # Convert TrackDict to dict[str, str] for save_csv with proper field mapping
     track_dicts: list[dict[str, str]] = []
@@ -677,5 +664,5 @@ def save_track_map_to_csv(
     """Persist the provided track map to CSV using standard field ordering."""
     sorted_tracks = sorted(track_map.values(), key=lambda t: t.id)
     track_dicts = [_convert_track_to_csv_dict(track) for track in sorted_tracks]
-    fieldnames = _get_expected_track_fieldnames()
+    fieldnames = TRACK_FIELDNAMES
     save_csv(track_dicts, fieldnames, csv_path, console_logger, error_logger, "tracks")
