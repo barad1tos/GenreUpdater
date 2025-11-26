@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from src.infrastructure.cache.cache_orchestrator import CacheOrchestrator
+from src.services.cache.orchestrator import CacheOrchestrator
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

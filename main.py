@@ -14,11 +14,11 @@ import time
 import warnings
 from pathlib import Path
 
-from src.application.cli import CLI
-from src.application.config import Config
-from src.application.orchestrator import Orchestrator
-from src.infrastructure.dependencies_service import DependencyContainer
-from src.shared.core.logger import SafeQueueListener, get_loggers
+from src.app.cli import CLI
+from src.app.config import Config
+from src.app.orchestrator import Orchestrator
+from src.services.deps import DependencyContainer
+from src.core.logger import SafeQueueListener, get_loggers
 
 # Suppress Pydantic migration warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._migration")

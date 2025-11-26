@@ -5,15 +5,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.shared.monitoring import Analytics
-from src.shared.monitoring.analytics import LoggerContainer
+from src.metrics import Analytics
+from src.metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
-    from src.shared.data.models import TrackDict
+    from src.core.models.track import TrackDict
 
 
 class MockLoadTrackList:
-    """Mock for src.shared.monitoring.reports.load_track_list function."""
+    """Mock for src.metrics.reports.load_track_list function."""
 
     def __init__(self, tracks_to_return: list[TrackDict] | None = None) -> None:
         """Initialize with tracks that should be 'loaded' from CSV."""
@@ -36,7 +36,7 @@ class MockLoadTrackList:
 
 
 class MockGetFullLogPath:
-    """Mock for src.shared.core.logger.get_full_log_path function."""
+    """Mock for src.core.logger.get_full_log_path function."""
 
     def __init__(self, path_to_return: str = "/fake/path/track_list.csv") -> None:
         """Initialize with path that should be returned."""
