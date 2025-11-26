@@ -587,7 +587,7 @@ class TestYearFallbackLogic:
             year_difference_threshold=threshold,
         )
 
-        is_dramatic = retriever._is_year_change_dramatic(existing, proposed)
+        is_dramatic = retriever.year_fallback_handler.is_year_change_dramatic(existing, proposed)
 
         assert is_dramatic == expected_dramatic, (
             f"Expected {existing}→{proposed} to be "
@@ -609,7 +609,7 @@ class TestYearFallbackLogic:
             TrackDict(id="5", name="T5", artist="A", album="B", year="2012"),
         ]
 
-        existing_year = retriever._get_existing_year_from_tracks(tracks)
+        existing_year = retriever.year_fallback_handler.get_existing_year_from_tracks(tracks)
         assert existing_year == "2011"
 
     @allure.story("Existing Year Extraction")
@@ -623,7 +623,7 @@ class TestYearFallbackLogic:
             TrackDict(id="2", name="T2", artist="A", album="B", year=None),
         ]
 
-        existing_year = retriever._get_existing_year_from_tracks(tracks)
+        existing_year = retriever.year_fallback_handler.get_existing_year_from_tracks(tracks)
         assert existing_year is None
 
     @allure.story("Fallback Decision")
@@ -648,7 +648,7 @@ class TestYearFallbackLogic:
         ]
 
         with allure.step("Apply fallback with dramatic year change"):
-            result = await retriever._apply_year_fallback(
+            result = await retriever.year_fallback_handler.apply_year_fallback(
                 proposed_year="1998",
                 album_tracks=tracks,
                 is_definitive=False,
@@ -699,7 +699,7 @@ class TestYearFallbackLogic:
         ]
 
         with allure.step("Apply fallback for B-Sides album"):
-            result = await retriever._apply_year_fallback(
+            result = await retriever.year_fallback_handler.apply_year_fallback(
                 proposed_year="2013",
                 album_tracks=tracks,
                 is_definitive=False,  # Low confidence
@@ -745,7 +745,7 @@ class TestYearFallbackLogic:
                       album="Demo Vault: Wasteland", year="2003"),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="2021",
             album_tracks=tracks,
             is_definitive=False,
@@ -771,7 +771,7 @@ class TestYearFallbackLogic:
             TrackDict(id="1", name="T1", artist="Artist", album="Album", year="2018"),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1998",  # Dramatic change!
             album_tracks=tracks,
             is_definitive=True,  # But high confidence
@@ -796,7 +796,7 @@ class TestYearFallbackLogic:
             TrackDict(id="2", name="T2", artist="Artist", album="Album", year=None),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
@@ -823,7 +823,7 @@ class TestYearFallbackLogic:
                       album="Album (Remastered)", year="2000"),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
@@ -853,7 +853,7 @@ class TestYearFallbackLogic:
         ]
 
         # With fallback disabled, dramatic changes are allowed
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1998",
             album_tracks=tracks,
             is_definitive=False,
@@ -934,7 +934,7 @@ class TestAbsurdYearDetection:
                       album="The Mountain", year=""),  # No existing year
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1965",  # Before 1970 threshold
             album_tracks=tracks,
             is_definitive=False,
@@ -967,7 +967,7 @@ class TestAbsurdYearDetection:
                       album="Album", year=""),  # No existing year
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1990",  # Above 1970 threshold
             album_tracks=tracks,
             is_definitive=False,
@@ -999,7 +999,7 @@ class TestAbsurdYearDetection:
                       album="Album", year="2000"),  # HAS existing year
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1965",  # Absurd, but has existing year
             album_tracks=tracks,
             is_definitive=False,
@@ -1033,7 +1033,7 @@ class TestAbsurdYearDetection:
                       album="Album", year=""),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1970",  # Exactly at threshold
             album_tracks=tracks,
             is_definitive=False,
@@ -1064,7 +1064,7 @@ class TestAbsurdYearDetection:
                       album="Album", year=""),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1960",  # Absurd year
             album_tracks=tracks,
             is_definitive=True,  # But high confidence!
@@ -1105,7 +1105,7 @@ class TestAbsurdYearDetection:
                       album="Album", year=""),  # No existing
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year=proposed,
             album_tracks=tracks,
             is_definitive=False,
@@ -1135,7 +1135,7 @@ class TestAbsurdYearDetection:
                       album="Plastic Beach", year=""),
         ]
 
-        result = await retriever._apply_year_fallback(
+        result = await retriever.year_fallback_handler.apply_year_fallback(
             proposed_year="1974",  # 1974 > 1970, so not "absurd" by this rule
             album_tracks=tracks,
             is_definitive=False,
@@ -1180,7 +1180,7 @@ class TestAbsurdYearDetection:
         for absurd_year in ["1920", "1940", "1950", "1960", "1969"]:
             mock_pending.marked_albums.clear()
 
-            result = await retriever._apply_year_fallback(
+            result = await retriever.year_fallback_handler.apply_year_fallback(
                 proposed_year=absurd_year,
                 album_tracks=tracks,
                 is_definitive=False,
