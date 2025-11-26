@@ -25,7 +25,7 @@ from src.metrics.reports import (
 
 if TYPE_CHECKING:
     from src.services.deps import DependencyContainer
-    from src.services.delta import TrackDelta
+    from src.core.tracks.delta import TrackDelta
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker

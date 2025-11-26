@@ -69,12 +69,8 @@ COMPLEX_PATTERN_COUNT = 5  # Use a temp file if the script has > 5 complex patte
 MAX_TELL_BLOCKS = 3  # Use the temp file if the script has > 3 tell blocks
 
 
-def datetime_to_applescript_timestamp(dt: datetime) -> int:
-    """Convert datetime to Unix timestamp string expected by AppleScript filters."""
-    aware_dt = dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    utc_dt = aware_dt.astimezone(UTC)
-    floored = utc_dt.replace(second=0, microsecond=0)
-    return int(floored.timestamp())
+# Re-export for backward compatibility
+from src.core.utils.datetime_utils import datetime_to_applescript_timestamp as datetime_to_applescript_timestamp
 
 
 class AppleScriptSanitizationError(Exception):

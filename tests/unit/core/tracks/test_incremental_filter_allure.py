@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 from src.core.tracks.filter import IncrementalFilterService
-from src.services.delta import TrackDelta
+from src.core.tracks.delta import TrackDelta
 from src.core.models.track import TrackDict
 
 from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger

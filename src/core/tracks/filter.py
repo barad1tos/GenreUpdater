@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.tracks.base import BaseProcessor
-from src.services.delta import compute_track_delta
+from src.core.tracks.delta import compute_track_delta
 from src.core.logger import get_full_log_path
 from src.metrics.reports import load_track_list
 
