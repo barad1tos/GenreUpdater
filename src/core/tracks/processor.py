@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.tracks.artist import ArtistRenamer
+from src.core.tracks.batch_fetcher import BatchTrackFetcher
 from src.core.tracks.cache_manager import TrackCacheManager
 from src.core.tracks.update_executor import TrackUpdateExecutor
 from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
@@ -25,9 +26,6 @@ if TYPE_CHECKING:
 
 class TrackProcessor:
     """Handles track fetching and updating operations."""
-
-    # Maximum consecutive parse failures before aborting batch processing
-    MAX_CONSECUTIVE_PARSE_FAILURES = 3
 
     def __init__(
         self,
@@ -88,6 +86,21 @@ class TrackProcessor:
             config=config,
             console_logger=console_logger,
             error_logger=error_logger,
+            dry_run=dry_run,
+        )
+
+        # Initialize batch fetcher for large library processing
+        self.batch_fetcher: BatchTrackFetcher = BatchTrackFetcher(
+            ap_client=ap_client,
+            cache_service=cache_service,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            config=config,
+            track_validator=self._validate_tracks_security,
+            artist_processor=self._apply_artist_renames,
+            snapshot_loader=self._load_tracks_from_snapshot,
+            snapshot_persister=self._update_snapshot,
+            can_use_snapshot=self._can_use_snapshot,
             dry_run=dry_run,
         )
 
@@ -202,15 +215,6 @@ class TrackProcessor:
     def _can_use_snapshot(self, artist: str | None) -> bool:
         """Return True when snapshot caching can be used for this request."""
         return artist is None and self.cache_manager.can_use_snapshot()
-
-    @staticmethod
-    def _count_raw_track_rows(raw_output: str) -> int:
-        """Count non-empty raw track rows returned by AppleScript."""
-        if not raw_output:
-            return 0
-        line_separator = "\x1d" if "\x1d" in raw_output else None
-        rows = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
-        return sum(bool(row) for row in rows)
 
     async def _load_tracks_from_snapshot(self) -> list[TrackDict] | None:
         """Attempt to serve tracks via snapshot and incremental delta updates."""
@@ -499,194 +503,27 @@ class TrackProcessor:
         return result or []
 
     @Analytics.track_instance_method("track_fetch_batches")
-    async def fetch_tracks_in_batches(self, batch_size: int = 1000, skip_snapshot_check: bool = False) -> list[TrackDict]:
+    async def fetch_tracks_in_batches(
+        self,
+        batch_size: int = 1000,
+        *,
+        skip_snapshot_check: bool = False,
+    ) -> list[TrackDict]:
         """Fetch all tracks from Music.app in batches to avoid timeout.
+
+        Delegates to BatchTrackFetcher for batch-based fetching with snapshot support.
 
         Args:
             batch_size: Number of tracks to fetch per batch
-            skip_snapshot_check: Skip snapshot validation check (used when already validated upstream)
+            skip_snapshot_check: Skip snapshot validation (used when already validated upstream)
 
         Returns:
             List of all track dictionaries
-
         """
-        # Try loading from snapshot first (with delta updates if available)
-        # Skip if already validated upstream (e.g., Smart Delta fallback path)
-        if not skip_snapshot_check and self._can_use_snapshot(artist=None):
-            snapshot_tracks = await self._load_tracks_from_snapshot()
-            if snapshot_tracks is not None:
-                self.console_logger.info("✓ Loaded %d tracks from snapshot cache; skipping batch fetch", len(snapshot_tracks))
-                return snapshot_tracks
-
-        # Snapshot not available or invalid - proceed with batch processing
-        all_tracks: list[TrackDict] = []
-        offset = 1  # AppleScript indices start from 1
-        batch_count = 0
-        consecutive_parse_failures = 0
-
-        self.console_logger.info("Starting batch processing with batch_size=%d", batch_size)
-
-        while True:
-            batch_count += 1
-            self.console_logger.info("Fetching batch %d (offset=%d, limit=%d)...", batch_count, offset, batch_size)
-
-            try:
-                batch_result = await self._process_single_batch(batch_count, offset, batch_size)
-                if batch_result is None:
-                    # Error occurred or reached end
-                    break
-
-                validated_tracks, should_continue, parse_failed = batch_result
-
-                consecutive_parse_failures, should_continue_loop = self._handle_parse_failure_state(
-                    consecutive_parse_failures,
-                    parse_failed,
-                    batch_count,
-                )
-                if not should_continue_loop:
-                    break
-
-                all_tracks.extend(validated_tracks)
-
-                if not should_continue:
-                    break
-
-                # Move to the next batch
-                offset += batch_size
-
-            except (OSError, ValueError, RuntimeError) as e:
-                self.error_logger.exception("Error in batch %d (offset=%d): %s", batch_count, offset, e)
-                break
-
-        self.console_logger.info("Batch processing completed: %d batches processed, %d total tracks fetched", batch_count, len(all_tracks))
-
-        # Cache and persist results
-        await self._cache_and_persist_batch_results(all_tracks)
-
-        return all_tracks
-
-    async def _cache_and_persist_batch_results(self, tracks: list[TrackDict]) -> None:
-        """Cache fetched tracks in memory and persist to snapshot on disk.
-
-        Args:
-            tracks: List of fetched tracks to cache and persist
-        """
-        # Populate cache so subsequent fetches can reuse the same snapshot without hitting AppleScript again
-        await self.cache_service.set_async("tracks_all", tracks)
-        self.console_logger.info("Cached %d tracks for key: tracks_all", len(tracks))
-
-        # Persist snapshot so future runs can start from cached state instead of full scans
-        should_persist = tracks and self._can_use_snapshot(None) and not self.dry_run
-        if not should_persist:
-            return
-
-        try:
-            await self._update_snapshot(tracks, [track.id for track in tracks])
-        except Exception as exc:
-            self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", exc)
-
-    def _handle_parse_failure_state(
-        self,
-        consecutive_parse_failures: int,
-        parse_failed: bool,
-        batch_count: int,
-    ) -> tuple[int, bool]:
-        """Update parse failure tracking and signal if batch processing should continue."""
-        if not parse_failed:
-            return 0, True
-
-        next_failures = consecutive_parse_failures + 1
-        self.error_logger.warning(
-            "Parse failure %d/%d for batch %d",
-            next_failures,
-            self.MAX_CONSECUTIVE_PARSE_FAILURES,
-            batch_count,
+        return await self.batch_fetcher.fetch_all_tracks(
+            batch_size,
+            skip_snapshot_check=skip_snapshot_check,
         )
-
-        if next_failures >= self.MAX_CONSECUTIVE_PARSE_FAILURES:
-            self.error_logger.error(
-                "Aborting batch processing: %d consecutive parse failures indicate systematic issue",
-                next_failures,
-            )
-            return next_failures, False
-
-        return next_failures, True
-
-    async def _process_single_batch(self, batch_count: int, offset: int, batch_size: int) -> tuple[list[TrackDict], bool, bool] | None:
-        """Process a single batch of tracks.
-
-        Args:
-            batch_count: Current batch number for logging
-            offset: Starting offset for this batch
-            batch_size: Number of tracks to fetch in this batch
-
-        Returns:
-            Tuple of (validated_tracks, should_continue, parse_failed) or None if error/end
-            - validated_tracks: List of successfully parsed and validated tracks
-            - should_continue: Whether to continue fetching more batches
-            - parse_failed: True if parsing failed despite having raw data
-        """
-        # Call AppleScript with batch parameters
-        args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
-
-        raw_output = await self.ap_client.run_script(
-            "fetch_tracks.scpt",
-            args,
-            timeout=300,  # 5 minutes per batch should be enough for 1000 tracks
-        )
-
-        if not raw_output:
-            self.console_logger.info("Batch %d returned empty result, assuming end of tracks", batch_count)
-            return None
-
-        # Check for AppleScript status codes
-        if raw_output.startswith("ERROR:"):
-            self.error_logger.error(f"Batch {batch_count} AppleScript error: {raw_output}")
-            return None
-        if raw_output == "NO_TRACKS_FOUND":
-            self.console_logger.info("Batch %d: no tracks found", batch_count)
-            return None
-
-        # Parse the batch
-        batch_tracks = parse_tracks(raw_output, self.error_logger)
-
-        if not batch_tracks:
-            raw_row_count = self._count_raw_track_rows(raw_output)
-            if raw_row_count == 0:
-                self.console_logger.info("Batch %d contained no raw track rows, assuming end", batch_count)
-                return None
-
-            self.error_logger.warning(
-                "Batch %d produced %d raw rows but none parsed successfully",
-                batch_count,
-                raw_row_count,
-            )
-            return [], True, True  # Empty tracks, should continue, parse failed
-
-        # Validate each track for security
-        validated_tracks = self._validate_tracks_security(batch_tracks)
-        await self._apply_artist_renames(validated_tracks)
-
-        self.console_logger.info(
-            "Batch %d: fetched %d tracks, validated %d/%d",
-            batch_count,
-            len(batch_tracks),
-            len(validated_tracks),
-            len(batch_tracks),
-        )
-
-        # Safety check - only stop if we got 0 tracks (actual end of library)
-        # Note: AppleScript may return fewer tracks due to filtering, not end of library
-        should_continue = True
-        if len(batch_tracks) < batch_size:
-            self.console_logger.info(
-                "Batch %d returned %d < %d tracks (some tracks filtered by AppleScript), continuing...",
-                batch_count,
-                len(batch_tracks),
-                batch_size,
-            )
-
-        return validated_tracks, should_continue, False
 
     # ==================== Update Operations (delegated to TrackUpdateExecutor) ====================
 
