@@ -5,10 +5,11 @@ This is a streamlined version that uses the new modular components.
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from src.app.features.verify.database import DatabaseVerifier
 from src.app.pipeline_snapshot import PipelineSnapshotManager
+from src.app.track_cleaning import TrackCleaningService
 from src.core.tracks.artist import ArtistRenamer
 from src.core.tracks.genre import GenreManager
 from src.core.tracks.filter import IncrementalFilterService
@@ -16,8 +17,8 @@ from src.core.tracks.processor import TrackProcessor
 from src.core.tracks.year import YearRetriever
 from src.core.logger import get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
-from src.core.models.metadata import clean_names, is_music_app_running
-from src.core.models.track import ChangeLogEntry, TrackDict, TrackFieldValue
+from src.core.models.metadata import is_music_app_running
+from src.core.models.track import ChangeLogEntry, TrackDict
 from src.metrics.reports import (
     save_changes_report,
     sync_track_list_with_current,
@@ -109,6 +110,14 @@ class MusicUpdater:
             console_logger=deps.console_logger,
         )
 
+        # Track cleaning service
+        self.cleaning_service = TrackCleaningService(
+            track_processor=self.track_processor,
+            config=deps.config,
+            console_logger=deps.console_logger,
+            error_logger=deps.error_logger,
+        )
+
         # Dry run context
         self.dry_run_mode = ""
         self.dry_run_test_artists: set[str] = set()
@@ -166,7 +175,7 @@ class MusicUpdater:
         self.console_logger.info("Found %d tracks for artist %s", len(tracks), artist)
 
         # Process tracks and collect results
-        updated_tracks, changes_log = await self._process_all_tracks_for_cleaning(tracks, artist)
+        updated_tracks, changes_log = await self.cleaning_service.process_all_tracks(tracks, artist)
 
         # Save results if any tracks were updated
         if updated_tracks:
@@ -177,107 +186,6 @@ class MusicUpdater:
             len(updated_tracks),
             artist,
         )
-
-    async def _process_all_tracks_for_cleaning(self, tracks: list["TrackDict"], artist: str) -> tuple[list[Any], list[ChangeLogEntry]]:
-        """Process all tracks for cleaning and return updated tracks and changes log.
-
-        Args:
-            tracks: List of tracks to process
-            artist: Artist name for logging
-
-        Returns:
-            Tuple of (updated_tracks, changes_log)
-
-        """
-        updated_tracks: list[Any] = []
-        changes_log: list[ChangeLogEntry] = []
-
-        for track in tracks:
-            updated_track, change_entry = await self._process_single_track_cleaning(track, artist)
-            if updated_track is not None:
-                updated_tracks.append(updated_track)
-            if change_entry is not None:
-                changes_log.append(change_entry)
-
-        return updated_tracks, changes_log
-
-    def _extract_and_clean_track_metadata(self, track: "TrackDict") -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
-        """Extract and clean track metadata.
-
-        Args:
-            track: Track data to process
-
-        Returns:
-            Tuple of (track_id, artist_name, track_name, album_name,
-                     cleaned_track_name, cleaned_album_name)
-
-        """
-        artist_name = str(track.get("artist", ""))
-        track_name = track.get("name", "")
-        album_name = track.get("album", "")
-        track_id = track.get("id", "")
-
-        # Clean names using the existing utility
-        cleaned_track_name, cleaned_album_name = clean_names(
-            artist=artist_name,
-            track_name=str(track_name),
-            album_name=str(album_name),
-            config=self.config,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
-        )
-
-        return track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name
-
-    async def _process_single_track_cleaning(self, track: "TrackDict", artist: str) -> tuple[Any | None, ChangeLogEntry | None]:
-        """Process a single track for cleaning.
-
-        Args:
-            track: Track data to process
-            artist: Artist name for logging
-
-        Returns:
-            Tuple of (updated_track, change_entry) or (None, None) if no update needed
-
-        """
-        # Extract and clean track metadata
-        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = self._extract_and_clean_track_metadata(track)
-
-        if not track_id:
-            return None, None
-
-        # Check if update needed
-        if cleaned_track_name == track_name and cleaned_album_name == album_name:
-            return None, None
-
-        # Update track
-        success = await self.track_processor.update_track_async(
-            track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
-            original_artist=artist_name,
-            original_album=str(album_name) if album_name is not None else None,
-            original_track=str(track_name) if track_name is not None else None,
-        )
-
-        if not success:
-            return None, None
-
-        # Create updated track record by copying the model and updating fields
-        updated_track = track.copy()
-        updated_track.name = cleaned_track_name
-        updated_track.album = cleaned_album_name
-
-        # Create change log entry with safe type conversion
-        change_entry = self._create_change_log_entry(
-            artist=artist,
-            original_track_name=str(track_name) if track_name is not None else "",
-            original_album_name=str(album_name) if album_name is not None else "",
-            cleaned_track_name=cleaned_track_name,
-            cleaned_album_name=cleaned_album_name,
-        )
-
-        return updated_track, change_entry
 
     async def run_revert_years(self, artist: str, album: str | None, backup_csv: str | None = None) -> None:
         """Revert year updates for an artist (optionally per album).
@@ -559,7 +467,7 @@ class MusicUpdater:
         all_changes: list[ChangeLogEntry] = []
 
         # Step 1: Clean metadata
-        cleaning_changes = await self._clean_all_tracks_metadata_with_logs(incremental_tracks)
+        cleaning_changes = await self.cleaning_service.clean_all_metadata_with_logs(incremental_tracks)
         all_changes.extend(cleaning_changes)
 
         # Step 2: Rename artists (if configured)
@@ -715,145 +623,6 @@ class MusicUpdater:
 
         tracker = IncrementalRunTracker(self.config)
         return await tracker.get_last_run_timestamp()
-
-    async def _clean_all_tracks_metadata(self, tracks: list["TrackDict"]) -> list["TrackDict"]:
-        """Clean metadata for all tracks (Step 1 of pipeline).
-
-        Args:
-            tracks: List of tracks to process
-
-        Returns:
-            List of updated tracks
-
-        """
-        self.console_logger.info("Step 1/4: Cleaning metadata")
-        cleaned_tracks: list[TrackDict] = []
-
-        for track in tracks:
-            cleaned_track = await self._process_single_track_for_pipeline_cleaning(track)
-            if cleaned_track is not None:
-                cleaned_tracks.append(cleaned_track)
-
-        self.console_logger.info("Cleaned %d tracks", len(cleaned_tracks))
-        return cleaned_tracks
-
-    async def _clean_all_tracks_metadata_with_logs(self, tracks: list["TrackDict"]) -> list[ChangeLogEntry]:
-        """Clean metadata for all tracks and return change logs (Step 1 of pipeline).
-
-        Args:
-            tracks: List of tracks to process
-
-        Returns:
-            List of change log entries
-
-        """
-        self.console_logger.info("Step 1/4: Cleaning metadata")
-        changes_log: list[ChangeLogEntry] = []
-
-        for track in tracks:
-            cleaned_track, change_entry = await self._process_single_track_cleaning_with_log(track)
-            if cleaned_track is not None and change_entry is not None:
-                self.snapshot_manager.update_tracks([cleaned_track])
-                changes_log.append(change_entry)
-
-        self.console_logger.info("Cleaned %d tracks with %d changes", len(changes_log), len(changes_log))
-        return changes_log
-
-    async def _process_single_track_cleaning_with_log(self, track: "TrackDict") -> tuple["TrackDict | None", ChangeLogEntry | None]:
-        """Process a single track for pipeline cleaning with change logging.
-
-        Args:
-            track: Track data to process
-
-        Returns:
-            Tuple of (updated_track, change_entry) or (None, None) if no update needed
-
-        """
-        # Extract and clean track metadata
-        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = self._extract_and_clean_track_metadata(track)
-
-        if not track_id:
-            return None, None
-
-        # Check if update needed
-        if cleaned_track_name == track_name and cleaned_album_name == album_name:
-            return None, None
-
-        # Update track
-        success = await self.track_processor.update_track_async(
-            track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
-            original_artist=artist_name,
-            original_album=str(album_name) if album_name is not None else None,
-            original_track=str(track_name) if track_name is not None else None,
-        )
-
-        if not success:
-            return None, None
-
-        # Create updated track
-        updated_track = track.copy()
-        updated_track.name = cleaned_track_name
-        updated_track.album = cleaned_album_name
-
-        # Create change entry
-        change_entry = self._create_change_log_entry(
-            artist=artist_name,
-            original_track_name=str(track_name) if track_name is not None else "",
-            original_album_name=str(album_name) if album_name is not None else "",
-            cleaned_track_name=cleaned_track_name,
-            cleaned_album_name=cleaned_album_name,
-        )
-
-        return updated_track, change_entry
-
-    async def _process_single_track_for_pipeline_cleaning(self, track: "TrackDict") -> "TrackDict | None":
-        """Process a single track for pipeline cleaning.
-
-        Args:
-            track: Track data to process
-
-        Returns:
-            Updated track or None if no update needed
-
-        """
-        cleaned_track_name, cleaned_album_name = clean_names(
-            artist=str(track.get("artist", "")),
-            track_name=str(track.get("name", "")),
-            album_name=str(track.get("album", "")),
-            config=self.config,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
-        )
-
-        track_name = track.get("name", "")
-        album_name = track.get("album", "")
-        if cleaned_track_name == track_name and cleaned_album_name == album_name:
-            return None
-
-        track_id = track.get("id", "")
-        if not track_id:
-            return None
-
-        success = await self.track_processor.update_track_async(
-            track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
-            original_artist=str(track.get("artist", "")),
-            original_album=str(album_name) if album_name is not None else None,
-            original_track=str(track_name) if track_name is not None else None,
-        )
-
-        if not success:
-            return None
-
-        # Create updated track record by copying the model and updating fields
-        updated_track = track.copy()
-        updated_track.name = cleaned_track_name
-        updated_track.album = cleaned_album_name
-        self.snapshot_manager.update_tracks([updated_track])
-        return updated_track
 
     async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list[ChangeLogEntry]:
         """Update genres for all tracks (Step 2 of pipeline).
