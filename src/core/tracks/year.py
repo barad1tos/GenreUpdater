@@ -11,13 +11,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.debug import debug
-from src.core.models.track import ChangeLogEntry, TrackDict
 from src.core.models.protocols import (
     CacheServiceProtocol,
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
 from src.core.models.status import can_edit_metadata, filter_available_tracks, is_prerelease_status, is_subscription_status
+from src.core.models.track import ChangeLogEntry, TrackDict
 from src.core.models.validators import is_empty_year, is_valid_year
 from src.metrics import Analytics
 
