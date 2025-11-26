@@ -217,7 +217,6 @@ class TestMusicUpdaterAllure:
 
         with allure.step("Execute clean artist operation"), patch(
             "src.app.updater.save_changes_report",
-            new_callable=AsyncMock,
         ) as mock_save:
             await updater.run_clean_artist("Test Artist", False)
 
@@ -284,7 +283,6 @@ class TestMusicUpdaterAllure:
             new_callable=AsyncMock,
         ) as _mock_sync, patch(
             "src.metrics.reports.save_changes_report",
-            new_callable=AsyncMock,
         ) as _mock_save:
             await updater.run_update_years("Test Artist", force=False)
 
