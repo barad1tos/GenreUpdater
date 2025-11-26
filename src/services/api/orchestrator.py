@@ -369,8 +369,9 @@ class ExternalApiOrchestrator:
 
     def _decrypt_token(self, encrypted_token: str, key: str) -> str:
         """Decrypt an encrypted token."""
+        assert self.secure_config is not None  # Caller ensures this
         try:
-            decrypted_token = self.secure_config.decrypt_token(encrypted_token, key)  # type: ignore[union-attr]
+            decrypted_token = self.secure_config.decrypt_token(encrypted_token, key)
             self.console_logger.debug("Successfully decrypted %s", key)
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to decrypt %s, using as plaintext: %s", key, e)
@@ -380,8 +381,9 @@ class ExternalApiOrchestrator:
 
     def _encrypt_token_for_future_storage(self, raw_token: str, key: str) -> None:
         """Encrypt a plaintext token and log the encrypted value for future use."""
+        assert self.secure_config is not None  # Caller ensures this
         try:
-            encrypted_token = self.secure_config.encrypt_token(raw_token, key)  # type: ignore[union-attr]
+            encrypted_token = self.secure_config.encrypt_token(raw_token, key)
             self.console_logger.info(
                 "Encrypted %s token for secure storage. Consider updating config to use encrypted value: %s",
                 key,
@@ -931,8 +933,8 @@ class ExternalApiOrchestrator:
             self.request_counts[api_name] = self.request_counts.get(api_name, 0) + 1
 
             await self._ensure_session()
-            # _ensure_session() guarantees that self.session is not None
-            async with self.session.get(  # type: ignore[union-attr]
+            assert self.session is not None  # _ensure_session() guarantees this
+            async with self.session.get(
                 url,
                 params=params,
                 headers=request_headers,
