@@ -12,12 +12,12 @@ import logging
 import re
 import subprocess
 import time
-import uuid
 from pathlib import Path
 from typing import Any
 
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
+from src.services.apple_executor import AppleScriptExecutor
 from src.services.apple_file_validator import AppleScriptFileValidator
 
 RESULT_PREVIEW_LEN = 50  # characters shown when previewing small script results
@@ -61,11 +61,6 @@ DANGEROUS_APPLESCRIPT_PATTERNS = [
 # Security limits
 MAX_TRACK_ID_LENGTH = 100
 MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
-
-# Thresholds for using temporary file execution
-COMPLEX_SCRIPT_THRESHOLD = 2000  # Use temp file for scripts > 2KB
-COMPLEX_PATTERN_COUNT = 5  # Use a temp file if the script has > 5 complex patterns
-MAX_TELL_BLOCKS = 3  # Use the temp file if the script has > 3 tell blocks
 
 
 class AppleScriptSanitizationError(Exception):
@@ -389,6 +384,14 @@ class AppleScriptClient(AppleScriptClientProtocol):
             self.console_logger,
         )
 
+        # Initialize the executor (semaphore will be set in initialize())
+        self.executor = AppleScriptExecutor(
+            semaphore=None,
+            apple_scripts_directory=self.apple_scripts_dir,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+        )
+
     async def initialize(self) -> None:
         """Asynchronously initializes the AppleScriptClient by creating the semaphore.
 
@@ -438,6 +441,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
                 self.console_logger.debug("🔒 Creating semaphore with concurrency limit: %d", concurrent_limit)
                 self.semaphore = asyncio.Semaphore(concurrent_limit)
+                self.executor.update_semaphore(self.semaphore)
                 self.console_logger.info("✅ AppleScriptClient semaphore initialized with concurrency: %d", concurrent_limit)
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
                 self.error_logger.exception("❌ Error initializing AppleScriptClient semaphore: %s", e)
@@ -485,105 +489,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 self.console_logger.debug("📝 Script output: %s%s", result[:LOG_PREVIEW_LEN], "..." if len(result) > LOG_PREVIEW_LEN else "")
         else:
             self.console_logger.warning("⚠️ AppleScript execution returned None")
-
-    def _log_script_success(self, label: str, script_result: str, elapsed: float) -> None:
-        """Log successful script execution with appropriate formatting.
-
-        Args:
-            label: Script label for logging
-            script_result: Script output
-            elapsed: Execution time in seconds
-
-        """
-        if label == "fetch_tracks.scpt":
-            # Count tracks by counting line separators (ASCII 29)
-            track_count = script_result.count("\x1d")
-            size_bytes = len(script_result.encode())
-            size_kb = size_bytes / 1024
-
-            self.console_logger.info(
-                "◁ %s: %d tracks (%.1fKB, %.1fs)",
-                label,
-                track_count,
-                size_kb,
-                elapsed,
-            )
-        else:
-            # Create a preview for logging - this can be stripped
-            preview_text = script_result.strip()
-            preview = f"{preview_text[:RESULT_PREVIEW_LEN]}..." if len(preview_text) > RESULT_PREVIEW_LEN else preview_text
-            # Log at appropriate level based on result content
-            log_level = self.console_logger.debug if "No Change" in preview else self.console_logger.info
-            log_level(
-                "◁ %s (%dB, %.1fs) %s",
-                label,
-                len(script_result.encode()),
-                elapsed,
-                preview,
-            )
-
-    async def _handle_subprocess_execution(self, cmd: list[str], label: str, timeout: float) -> str | None:
-        """Handle subprocess execution with timeout and error handling.
-
-        Args:
-            cmd: Command to execute as a list of strings
-            label: Label for logging
-            timeout: Timeout in seconds
-
-        Returns:
-            str | None: Command output if successful, None otherwise
-
-        """
-        try:
-            start_time = time.time()
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-                elapsed = time.time() - start_time
-
-                # Process stderr if present
-                if stderr:
-                    stderr_text = stderr.decode().strip()
-                    self.console_logger.warning("◁ %s stderr: %s", label, stderr_text[:LOG_PREVIEW_LEN])
-
-                # Handle process completion
-                if proc.returncode == 0:
-                    # Don't strip() here as it removes special separator characters
-                    script_result: str = stdout.decode()
-                    self._log_script_success(label, script_result, elapsed)
-                    return script_result
-
-                self.error_logger.error(
-                    "◁ %s failed with return code %s: %s",
-                    label,
-                    proc.returncode,
-                    stderr.decode().strip() if stderr else "",
-                )
-                return None
-
-            except TimeoutError:
-                self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout)
-                return None
-
-            except (subprocess.SubprocessError, OSError) as e:
-                self.error_logger.exception("⊗ %s error during execution: %s", label, e)
-                return None
-
-            except asyncio.CancelledError:
-                self.console_logger.info("⊗ %s cancelled", label)
-                raise
-
-            except (UnicodeDecodeError, MemoryError, RuntimeError) as e:
-                self.error_logger.exception("⊗ %s unexpected error during communicate/wait: %s", label, e)
-                return None
-
-            finally:
-                await self._cleanup_process(proc, label)
-
-        except OSError as e:
-            self.error_logger.exception("⊗ %s subprocess error: %s", label, e)
-            return None
 
     @Analytics.track_instance_method("applescript_run_script")
     async def run_script(
@@ -666,7 +571,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             )
 
         try:
-            result = await self._run_osascript(cmd, script_name, timeout_float)
+            result = await self.executor.run_osascript(cmd, script_name, timeout_float)
             self._log_script_result(result)
             return result
         except TimeoutError:
@@ -710,7 +615,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             else float(self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600))
         )
 
-        if self._should_use_temp_file(script_code):
+        if self.executor.should_use_temp_file(script_code):
             # Validate the script before writing to the temp file
             try:
                 self.sanitizer.validate_script_code(script_code)
@@ -728,7 +633,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 code_preview,
             )
 
-            return await self._run_via_temp_file(script_code, arguments, timeout_float)
+            return await self.executor.run_via_temp_file(script_code, arguments, timeout_float)
         # Use traditional -e flag execution for simple scripts
         try:
             cmd = self.sanitizer.create_safe_command(script_code, arguments)
@@ -749,7 +654,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             code_preview,
         )
 
-        return await self._run_osascript(cmd, "inline-script", timeout_float)
+        return await self.executor.run_osascript(cmd, "inline-script", timeout_float)
 
     @Analytics.track_instance_method("applescript_fetch_by_ids")
     async def fetch_tracks_by_ids(
@@ -853,55 +758,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         return tracks
 
-    async def _run_osascript(
-        self,
-        cmd: list[str],
-        label: str,
-        timeout: float,
-    ) -> str | None:
-        """Run an osascript command and return output.
-
-        Args:
-            cmd: Command to execute as a list of strings
-            label: Label for logging
-            timeout: Timeout in seconds
-
-        Returns:
-            str: Command output if successful, None otherwise
-
-        """
-        if self.semaphore is None:
-            self.error_logger.error("AppleScriptClient semaphore not initialized. Call initialize() first.")
-            return None
-
-        async with self.semaphore:
-            return await self._handle_subprocess_execution(cmd, label, timeout)
-
-    async def _cleanup_process(self, proc: "asyncio.subprocess.Process", label: str) -> None:
-        """Clean up process resources.
-
-        Args:
-            proc: Process to clean up
-            label: Label for logging
-
-        """
-        try:
-            # Wait briefly for process to exit naturally
-            await asyncio.wait_for(proc.wait(), timeout=0.5)
-            self.console_logger.debug("Process for %s exited naturally and cleaned up", label)
-        except TimeoutError:
-            # If still running, kill and wait for cleanup
-            try:
-                proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=5)
-                self.console_logger.debug("Process for %s killed and cleaned up", label)
-            except (TimeoutError, ProcessLookupError) as e:
-                self.console_logger.warning(
-                    "Could not kill or wait for process %s during cleanup: %s",
-                    label,
-                    str(e),
-                )
-
     def _format_script_preview(self, script_code: str) -> str:
         """Format AppleScript code for log output, showing only essential parts.
 
@@ -929,119 +785,3 @@ class AppleScriptClient(AppleScriptClientProtocol):
         except (AttributeError, IndexError, TypeError, ValueError, re.error) as e:
             self.error_logger.exception("Error formatting script preview: %s", e)
             return "[Script preview error]"
-
-    def _should_use_temp_file(self, script_code: str) -> bool:
-        """Determine if a script should be executed via a temporary file.
-
-        Large or complex scripts benefit from temporary file execution to avoid
-        shell escaping issues and command-line length limitations.
-
-        Args:
-            script_code: The AppleScript code to evaluate
-
-        Returns:
-            bool: True if the script should use temporary file execution
-
-        """
-        # Check script size
-        script_size = len(script_code.encode())
-        if script_size > COMPLEX_SCRIPT_THRESHOLD:
-            self.console_logger.debug("Script size %d exceeds threshold %d, using temp file", script_size, COMPLEX_SCRIPT_THRESHOLD)
-            return True
-
-        # Check for complex patterns that might cause escaping issues
-        complex_patterns = [
-            r"\"",  # Escaped quotes
-            r"\\",  # Escaped backslashes
-            r"\n",  # Newlines in strings
-            r"\t",  # Tabs
-            r"[^\x20-\x7E]",  # Non-ASCII characters
-            r"(?s).{100,}",  # Very long single lines
-        ]
-
-        pattern_count = 0
-        for pattern in complex_patterns:
-            if re.search(pattern, script_code):
-                pattern_count += 1
-                if pattern_count > COMPLEX_PATTERN_COUNT:
-                    self.console_logger.debug("Script has %d complex patterns, using temp file", pattern_count)
-                    return True
-
-        # Check for multiple nested tell blocks (complex structure)
-        tell_count = len(re.findall(r"tell\s+application", script_code, re.IGNORECASE))
-        if tell_count > MAX_TELL_BLOCKS:
-            self.console_logger.debug("Script has %d tell blocks, using temp file", tell_count)
-            return True
-
-        return False
-
-    async def _run_via_temp_file(
-        self,
-        script_code: str,
-        arguments: list[str] | None,
-        timeout: float,
-    ) -> str | None:
-        """Execute AppleScript via a temporary file.
-
-        This method writes the script to a temporary file and executes it,
-        which is more reliable for complex scripts than using the -e flag.
-
-        Args:
-            script_code: The AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout: Timeout in seconds for script execution
-
-        Returns:
-            str: The output of the script, or None if an error occurred
-
-        """
-        temp_file_path: str | None = None
-        try:
-            # Check if apple_scripts_dir is set
-            if self.apple_scripts_dir is None:
-                self.error_logger.error("❌ AppleScript directory is not set. Cannot create temporary file.")
-                return None
-
-            # Create a temporary file with .applescript extension using an async-friendly approach
-            temp_filename = f"temp_script_{uuid.uuid4().hex}.applescript"
-            temp_file_path = str(Path(self.apple_scripts_dir) / temp_filename)
-            # Write the script content asynchronously using an executor
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                AppleScriptFileValidator.write_temp_file_sync,
-                temp_file_path,
-                script_code,
-            )
-
-            self.console_logger.debug("Created temporary script file: %s", Path(temp_file_path).name)
-
-            # Build command with the temp file
-            cmd = ["osascript", temp_file_path]
-            if arguments:
-                # Validate arguments
-                for arg in arguments:
-                    if any(c in arg for c in DANGEROUS_ARG_CHARS):
-                        self.error_logger.error("Potentially dangerous characters in argument: %s", arg)
-                        return None
-                cmd.extend(arguments)
-
-            return await self._run_osascript(
-                cmd,
-                f"tempfile-script ({Path(temp_file_path).name})",
-                timeout,
-            )
-        except OSError as e:
-            self.error_logger.exception("Error creating temporary file: %s", e)
-            return None
-        except (ValueError, TypeError, subprocess.SubprocessError) as e:
-            self.error_logger.exception("Error in temp file execution: %s", e)
-            return None
-        finally:
-            # Clean up temporary file
-            if temp_file_path:
-                try:
-                    Path(temp_file_path).unlink()
-                    self.console_logger.debug("Cleaned up temporary file: %s", Path(temp_file_path).name)
-                except OSError as e:
-                    self.console_logger.warning("Could not delete temporary file %s: %s", temp_file_path, e)
