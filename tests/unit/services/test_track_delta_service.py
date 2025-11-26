@@ -7,7 +7,7 @@ that are used for incremental track synchronization.
 from __future__ import annotations
 
 import pytest
-from src.services.delta import TrackDelta, compute_track_delta
+from src.core.tracks.delta import TrackDelta, compute_track_delta
 from src.core.models.track import TrackDict
 
 

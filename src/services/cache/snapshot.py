@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from src.core.models.protocols import AppleScriptClientProtocol
 
 from src.services.cache.json_utils import dumps_json, loads_json
-from src.services.delta import TrackDelta, compute_track_delta
+from src.core.tracks.delta import TrackDelta, compute_track_delta
 from src.core.logger import ensure_directory
 from src.core.models.track import TrackDict
 

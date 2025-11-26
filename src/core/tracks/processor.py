@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.tracks.artist import ArtistRenamer
-from src.services.apple import datetime_to_applescript_timestamp
+from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
 from src.services.cache.snapshot import LibraryCacheMetadata, LibraryDeltaCache, LibrarySnapshotService
 from src.core.models.metadata import parse_tracks
 from src.core.models.track import TrackDict
