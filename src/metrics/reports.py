@@ -35,7 +35,7 @@ from rich.table import Table
 from src.core.logger import ensure_directory
 from src.core.models.track import ChangeLogEntry
 from src.core.models.types import TrackDict
-from src.metrics.csv_utils import save_csv as _save_csv
+from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv as _save_csv
 
 # Re-export HTML report functions for backward compatibility
 from src.metrics.html_reports import (
@@ -141,25 +141,11 @@ def save_to_csv(
     if error_logger is None:
         error_logger = logging.getLogger("error_logger")
 
-    # Updated fieldnames to ensure we capture all necessary fields
-    # These fields should match the structure expected by load_track_list
-    fieldnames = [
-        "id",
-        "name",
-        "artist",
-        "album",
-        "genre",
-        "date_added",
-        "last_modified",
-        "track_status",
-        "old_year",
-        "new_year",
-    ]
     # Convert TrackDict models to plain dictionaries with string values
-    track_dicts = [{field: str(track.get(field) or "") for field in fieldnames} for track in tracks]
+    track_dicts = [{field: str(track.get(field) or "") for field in TRACK_FIELDNAMES} for track in tracks]
     _save_csv(
         track_dicts,
-        fieldnames,
+        TRACK_FIELDNAMES,
         file_path,
         console_logger,
         error_logger,
