@@ -1008,13 +1008,13 @@ class MusicUpdater:
             year_changes: list[ChangeLogEntry] = []
 
             if hasattr(self.year_retriever, "get_album_years_with_logs"):
-                updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)  # type: ignore[call-arg]
+                updated_tracks, year_changes = await self.year_retriever.get_album_years_with_logs(tracks)
                 if hasattr(self.year_retriever, "set_last_updated_tracks"):
-                    self.year_retriever.set_last_updated_tracks(updated_tracks)  # type: ignore[call-arg]
+                    self.year_retriever.set_last_updated_tracks(updated_tracks)
             else:
                 await self.year_retriever.process_album_years(tracks, force=_force)
                 if hasattr(self.year_retriever, "get_last_updated_tracks"):
-                    updated_tracks = self.year_retriever.get_last_updated_tracks()  # type: ignore[call-arg]
+                    updated_tracks = self.year_retriever.get_last_updated_tracks()
 
             self._update_snapshot_tracks(updated_tracks)
             changes_log = year_changes

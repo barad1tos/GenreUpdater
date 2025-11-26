@@ -159,7 +159,7 @@ class ArtistRenamer:
             except TypeError as exc:
                 if "update_album_artist" not in str(exc):
                     raise
-                success = await self._track_processor.update_artist_async(  # type: ignore[call-arg]
+                success = await self._track_processor.update_artist_async(
                     track,
                     new_artist,
                     original_artist=current_artist,

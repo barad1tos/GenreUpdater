@@ -222,12 +222,9 @@ class LastFmClient(BaseApiClient):
                 # Handle both dict (LastFmTag) and string cases from API
                 if isinstance(tag, str):
                     tag_name = tag
-                elif isinstance(tag, dict):
-                    tag_name = tag.get("name", "")
                 else:
-                    # Unexpected tag type - log and skip
-                    self.console_logger.debug("LastFM: Unexpected tag type %s, skipping", type(tag).__name__)
-                    continue
+                    # tag is LastFmTag (dict)
+                    tag_name = tag.get("name", "")
 
                 # Check if the tag is a year
                 if tag_name and self._is_valid_year(tag_name):
