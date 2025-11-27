@@ -1,0 +1,377 @@
+"""Tests for CryptographyManager - Fernet-based encryption."""
+
+import base64
+import logging
+import os
+import tempfile
+from pathlib import Path
+
+import pytest
+from cryptography.fernet import Fernet
+
+from src.app.features.crypto.encryption import (
+    FERNET_KEY_LENGTH,
+    FERNET_TOKEN_MIN_ENCODED_LENGTH,
+    CryptographyManager,
+)
+from src.app.features.crypto.exceptions import (
+    DecryptionError,
+    EncryptionError,
+    InvalidKeyError,
+    InvalidTokenError,
+    KeyGenerationError,
+)
+
+
+@pytest.fixture
+def logger() -> logging.Logger:
+    """Create a test logger."""
+    return logging.getLogger("test.crypto")
+
+
+@pytest.fixture
+def temp_key_file(tmp_path: Path) -> Path:
+    """Create a temporary key file path."""
+    return tmp_path / "test_encryption.key"
+
+
+@pytest.fixture
+def crypto_manager(logger: logging.Logger, temp_key_file: Path) -> CryptographyManager:
+    """Create a CryptographyManager instance."""
+    return CryptographyManager(logger, str(temp_key_file))
+
+
+@pytest.fixture
+def crypto_manager_with_key(
+    logger: logging.Logger, temp_key_file: Path
+) -> CryptographyManager:
+    """Create a CryptographyManager with initialized key."""
+    # Create a valid Fernet key file
+    key = Fernet.generate_key()
+    temp_key_file.write_bytes(key)
+    temp_key_file.chmod(0o600)
+    return CryptographyManager(logger, str(temp_key_file))
+
+
+class TestKeyGeneration:
+    """Tests for key generation."""
+
+    def test_generate_key_from_password(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test generating key from password."""
+        key = crypto_manager._generate_key_from_password("test_password")
+
+        assert isinstance(key, bytes)
+        assert len(key) == FERNET_KEY_LENGTH  # Base64-encoded 32 bytes
+
+    def test_same_password_same_key(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test same password produces same key (deterministic)."""
+        key1 = crypto_manager._generate_key_from_password("test_password")
+        key2 = crypto_manager._generate_key_from_password("test_password")
+
+        assert key1 == key2
+
+    def test_different_passwords_different_keys(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test different passwords produce different keys."""
+        key1 = crypto_manager._generate_key_from_password("password1")
+        key2 = crypto_manager._generate_key_from_password("password2")
+
+        assert key1 != key2
+
+
+class TestKeyLoadingAndCreation:
+    """Tests for key loading and creation."""
+
+    def test_create_new_key_when_file_missing(
+        self, crypto_manager: CryptographyManager, temp_key_file: Path
+    ) -> None:
+        """Test new key is created when file doesn't exist."""
+        assert not temp_key_file.exists()
+
+        key = crypto_manager._load_or_create_key()
+
+        assert temp_key_file.exists()
+        assert len(key) == FERNET_KEY_LENGTH
+
+    def test_load_existing_key(
+        self, logger: logging.Logger, temp_key_file: Path
+    ) -> None:
+        """Test existing key is loaded."""
+        # Create a valid key file
+        existing_key = Fernet.generate_key()
+        temp_key_file.write_bytes(existing_key)
+
+        manager = CryptographyManager(logger, str(temp_key_file))
+        loaded_key = manager._load_or_create_key()
+
+        assert loaded_key == existing_key
+
+    def test_key_file_has_secure_permissions(
+        self, crypto_manager: CryptographyManager, temp_key_file: Path
+    ) -> None:
+        """Test key file is created with secure permissions."""
+        crypto_manager._load_or_create_key()
+
+        # Check permissions (owner read/write only)
+        mode = temp_key_file.stat().st_mode & 0o777
+        assert mode == 0o600
+
+    def test_invalid_key_file_raises_error(
+        self, logger: logging.Logger, temp_key_file: Path
+    ) -> None:
+        """Test invalid key file raises ValueError."""
+        # Write invalid key data
+        temp_key_file.write_bytes(b"invalid_key_data")
+
+        manager = CryptographyManager(logger, str(temp_key_file))
+
+        with pytest.raises(KeyGenerationError):
+            manager._load_or_create_key()
+
+
+class TestEncryption:
+    """Tests for token encryption."""
+
+    def test_encrypt_token(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test basic token encryption."""
+        token = "my_secret_token"
+        encrypted = crypto_manager_with_key.encrypt_token(token)
+
+        assert isinstance(encrypted, str)
+        assert encrypted != token
+        assert len(encrypted) >= FERNET_TOKEN_MIN_ENCODED_LENGTH
+
+    def test_encrypt_empty_token_raises_error(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test encrypting empty token raises error."""
+        with pytest.raises(EncryptionError, match="cannot be empty"):
+            crypto_manager_with_key.encrypt_token("")
+
+    def test_encrypt_with_password(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test encryption with password."""
+        token = "my_secret_token"
+        encrypted = crypto_manager.encrypt_token(token, password="my_password")
+
+        assert encrypted != token
+
+    def test_encrypt_with_key(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test encryption with explicit key."""
+        token = "my_secret_token"
+        key = Fernet.generate_key().decode()
+        encrypted = crypto_manager.encrypt_token(token, key=key)
+
+        assert encrypted != token
+
+
+class TestDecryption:
+    """Tests for token decryption."""
+
+    def test_decrypt_token(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test basic token decryption."""
+        original_token = "my_secret_token"
+        encrypted = crypto_manager_with_key.encrypt_token(original_token)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted)
+
+        assert decrypted == original_token
+
+    def test_decrypt_empty_token_raises_error(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test decrypting empty token raises error."""
+        with pytest.raises(InvalidTokenError, match="cannot be empty"):
+            crypto_manager_with_key.decrypt_token("")
+
+    def test_decrypt_invalid_base64_raises_error(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test decrypting invalid base64 raises error."""
+        with pytest.raises(InvalidTokenError, match="not valid base64"):
+            crypto_manager_with_key.decrypt_token("not!valid@base64#")
+
+    def test_decrypt_wrong_key_raises_error(
+        self, crypto_manager_with_key: CryptographyManager, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test decrypting with wrong key raises error."""
+        original_token = "my_secret_token"
+        encrypted = crypto_manager_with_key.encrypt_token(original_token)
+
+        # Try to decrypt with different key
+        with pytest.raises(DecryptionError):
+            crypto_manager.decrypt_token(encrypted, password="wrong_password")
+
+    def test_roundtrip_with_password(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test encryption/decryption roundtrip with password."""
+        original_token = "secret_api_key_12345"
+        password = "strong_password"
+
+        encrypted = crypto_manager.encrypt_token(original_token, password=password)
+        decrypted = crypto_manager.decrypt_token(encrypted, password=password)
+
+        assert decrypted == original_token
+
+
+class TestIsTokenEncrypted:
+    """Tests for encrypted token detection."""
+
+    def test_encrypted_token_detected(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test encrypted token is detected."""
+        encrypted = crypto_manager_with_key.encrypt_token("secret")
+
+        assert CryptographyManager.is_token_encrypted(encrypted) is True
+
+    def test_plain_text_not_detected(self) -> None:
+        """Test plain text is not detected as encrypted."""
+        assert CryptographyManager.is_token_encrypted("plain_text") is False
+
+    def test_short_string_not_detected(self) -> None:
+        """Test short string is not detected as encrypted."""
+        assert CryptographyManager.is_token_encrypted("abc") is False
+
+    def test_empty_string_not_detected(self) -> None:
+        """Test empty string is not detected as encrypted."""
+        assert CryptographyManager.is_token_encrypted("") is False
+
+    def test_random_base64_not_detected(self) -> None:
+        """Test random base64 is not detected as encrypted."""
+        random_b64 = base64.urlsafe_b64encode(b"x" * 100).decode()
+        assert CryptographyManager.is_token_encrypted(random_b64) is False
+
+
+class TestKeyRotation:
+    """Tests for key rotation."""
+
+    def test_rotate_key_creates_backup(
+        self, crypto_manager_with_key: CryptographyManager, temp_key_file: Path
+    ) -> None:
+        """Test key rotation creates backup."""
+        # Ensure key file exists
+        _ = crypto_manager_with_key._load_or_create_key()
+
+        crypto_manager_with_key.rotate_key()
+
+        backup_path = temp_key_file.with_suffix(".key.backup")
+        assert backup_path.exists()
+
+    def test_rotate_key_without_backup(
+        self, crypto_manager_with_key: CryptographyManager, temp_key_file: Path
+    ) -> None:
+        """Test key rotation without backup."""
+        # Ensure key file exists
+        _ = crypto_manager_with_key._load_or_create_key()
+
+        crypto_manager_with_key.rotate_key(backup_old_key=False)
+
+        backup_path = temp_key_file.with_suffix(".key.backup")
+        assert not backup_path.exists()
+
+    def test_rotate_key_with_password(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test key rotation with password."""
+        crypto_manager_with_key.rotate_key(new_password="new_password")
+
+        # Should be able to encrypt with new password-derived key
+        encrypted = crypto_manager_with_key.encrypt_token("test", password="new_password")
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted, password="new_password")
+
+        assert decrypted == "test"
+
+
+class TestGetSecureConfigStatus:
+    """Tests for security status reporting."""
+
+    def test_status_before_initialization(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test status before key initialization."""
+        status = crypto_manager.get_secure_config_status()
+
+        assert status["encryption_initialized"] is False
+        assert status["key_file_exists"] is False
+
+    def test_status_after_initialization(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test status after key initialization."""
+        # Initialize encryption
+        crypto_manager_with_key.encrypt_token("test")
+
+        status = crypto_manager_with_key.get_secure_config_status()
+
+        assert status["encryption_initialized"] is True
+        assert status["key_file_exists"] is True
+        assert status["key_file_permissions"] == "600"
+
+
+class TestGetFernet:
+    """Tests for Fernet instance management."""
+
+    def test_get_fernet_with_valid_key(
+        self, crypto_manager: CryptographyManager
+    ) -> None:
+        """Test getting Fernet with valid base64 key."""
+        key = Fernet.generate_key().decode()
+        fernet = crypto_manager._get_fernet(key=key)
+
+        assert isinstance(fernet, Fernet)
+
+    def test_get_fernet_caches_instance(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test Fernet instance is cached."""
+        fernet1 = crypto_manager_with_key._get_fernet()
+        fernet2 = crypto_manager_with_key._get_fernet()
+
+        assert fernet1 is fernet2
+
+
+class TestEdgeCases:
+    """Tests for edge cases."""
+
+    def test_encrypt_unicode_token(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test encrypting unicode token."""
+        token = "秘密のトークン"  # Japanese "secret token"
+        encrypted = crypto_manager_with_key.encrypt_token(token)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted)
+
+        assert decrypted == token
+
+    def test_encrypt_long_token(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test encrypting long token."""
+        token = "x" * 10000
+        encrypted = crypto_manager_with_key.encrypt_token(token)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted)
+
+        assert decrypted == token
+
+    def test_encrypt_special_characters(
+        self, crypto_manager_with_key: CryptographyManager
+    ) -> None:
+        """Test encrypting token with special characters."""
+        token = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+        encrypted = crypto_manager_with_key.encrypt_token(token)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted)
+
+        assert decrypted == token
