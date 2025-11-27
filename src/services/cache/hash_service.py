@@ -86,12 +86,11 @@ class UnifiedHashService:
         args_string = "|".join(json.dumps(arg, sort_keys=True) for arg in args)
 
         # Build kwargs string from sorted key-value pairs
-        kwargs_parts: list[str] = []
-        kwargs_parts.extend(
-            f"{key}={json.dumps(value, sort_keys=True)}"
-            for key, value in sorted(kwargs.items())
+        kwargs_string = (
+            "|".join(f"{k}={json.dumps(v, sort_keys=True)}" for k, v in sorted(kwargs.items()))
+            if kwargs
+            else ""
         )
-        kwargs_string = "|".join(kwargs_parts)
 
         combined_string = f"{args_string}|{kwargs_string}".strip("|")
 
