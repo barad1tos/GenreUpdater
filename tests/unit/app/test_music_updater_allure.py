@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
 import pytest
-from src.app.music_updater import MusicUpdater
 
+from src.app.music_updater import MusicUpdater
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
     MockAppleScriptClient,
@@ -164,23 +164,22 @@ class TestMusicUpdaterAllure:
             snapshot = updater.snapshot_manager.get_snapshot()
             assert snapshot is not None
             assert len(snapshot) == 2
-            assert "1" in updater.snapshot_manager._tracks_index  # noqa: SLF001
-            assert "2" in updater.snapshot_manager._tracks_index  # noqa: SLF001
+            assert "1" in updater.snapshot_manager._tracks_index
+            assert "2" in updater.snapshot_manager._tracks_index
 
         with allure.step("Update snapshot tracks"):
             updated_track1 = DummyTrackData.create(track_id="1", name="Track 1", artist="Artist 1", genre="Metal")
             updater.snapshot_manager.update_tracks([updated_track1])
 
         with allure.step("Verify updates applied"):
-            updated_snapshot = updater.snapshot_manager._tracks_index.get("1")  # noqa: SLF001
+            updated_snapshot = updater.snapshot_manager._tracks_index.get("1")
             assert updated_snapshot is not None
             assert updated_snapshot.genre == "Metal"
 
         with allure.step("Clear snapshot"):
             updater.snapshot_manager.clear()
             assert updater.snapshot_manager.get_snapshot() is None
-            assert len(updater.snapshot_manager._tracks_index) == 0  # noqa: SLF001
-
+            assert len(updater.snapshot_manager._tracks_index) == 0
             allure.attach("Pipeline snapshot managed successfully", "Snapshot Result", allure.attachment_type.TEXT)
 
     @allure.story("Clean Artist Operation")
@@ -401,7 +400,11 @@ class TestMusicUpdaterAllure:
             updater = MusicUpdater(deps)
 
             # Mock the database verifier's verify method
-            updater.database_verifier.verify_and_clean_track_database = AsyncMock(return_value=5)
+            object.__setattr__(
+                updater.database_verifier,
+                "verify_and_clean_track_database",
+                AsyncMock(return_value=5),
+            )
 
         with allure.step("Execute database verification"):
             await updater.run_verify_database()

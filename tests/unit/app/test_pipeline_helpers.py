@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any
-
-import pytest
+from typing import TYPE_CHECKING, Any
 
 from src.app.pipeline_helpers import (
     check_paths,
@@ -17,15 +14,18 @@ from src.app.pipeline_helpers import (
 )
 from src.core.models.track_models import CodeActionExtended, ScriptActionExtended
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
+
 
 class TestActionTypeGuards:
     """Tests for action type guard functions."""
 
     def test_is_script_action_returns_true_for_script(self) -> None:
         """is_script_action should return True for ScriptAction."""
-        action = ScriptActionExtended(
-            type="script", script_path="/path/to/test.scpt", content="script content"
-        )
+        action = ScriptActionExtended(type="script", script_path="/path/to/test.scpt", content="script content")
         assert is_script_action(action) is True
 
     def test_is_script_action_returns_false_for_code(self) -> None:
@@ -40,9 +40,7 @@ class TestActionTypeGuards:
 
     def test_is_code_action_returns_false_for_script(self) -> None:
         """is_code_action should return False for ScriptAction."""
-        action = ScriptActionExtended(
-            type="script", script_path="/path/to/test.scpt", content="script content"
-        )
+        action = ScriptActionExtended(type="script", script_path="/path/to/test.scpt", content="script content")
         assert is_code_action(action) is False
 
 
@@ -105,9 +103,7 @@ class TestResolveEnvVars:
 class TestCheckPaths:
     """Tests for check_paths function."""
 
-    def test_logs_warning_for_nonexistent_paths(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_logs_warning_for_nonexistent_paths(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Should log warnings for paths that don't exist."""
         logger = logging.getLogger("test_check_paths")
         nonexistent_paths = [
@@ -121,9 +117,7 @@ class TestCheckPaths:
         assert "nonexistent1" in caplog.text
         assert "nonexistent2" in caplog.text
 
-    def test_no_warning_for_existing_paths(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_no_warning_for_existing_paths(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Should not log warnings for existing paths."""
         logger = logging.getLogger("test_check_paths")
         existing_file = tmp_path / "exists.txt"
@@ -134,9 +128,7 @@ class TestCheckPaths:
 
         assert "exists.txt" not in caplog.text
 
-    def test_mixed_existing_and_nonexistent(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_mixed_existing_and_nonexistent(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Should only log warnings for nonexistent paths."""
         logger = logging.getLogger("test_check_paths")
         existing_file = tmp_path / "exists.txt"
