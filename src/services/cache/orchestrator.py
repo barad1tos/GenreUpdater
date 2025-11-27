@@ -16,10 +16,10 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
-from src.services.cache.album import AlbumCacheService
-from src.services.cache.api import ApiCacheService
+from src.services.cache.album_cache import AlbumCacheService
+from src.services.cache.api_cache import ApiCacheService
 from src.services.cache.config import CacheEvent, CacheEventType
-from src.services.cache.generic import GenericCacheService
+from src.services.cache.generic_cache import GenericCacheService
 from src.services.cache.hash import UnifiedHashService
 from src.core.models.track import CachedApiResult, TrackDict
 from src.core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol

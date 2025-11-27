@@ -17,7 +17,7 @@ from src.core.models.metadata import (
 from src.core.models.track import ChangeLogEntry, TrackDict
 from src.core.models.status import can_edit_metadata, normalize_track_status
 
-from .base import BaseProcessor
+from .track_base import BaseProcessor
 
 if TYPE_CHECKING:
     from src.metrics import Analytics

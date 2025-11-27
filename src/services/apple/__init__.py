@@ -10,7 +10,7 @@ Public API:
     - EnhancedRateLimiter: Rate limiting for AppleScript execution
 """
 
-from src.services.apple.client import AppleScriptClient
+from src.services.apple.applescript_client import AppleScriptClient
 from src.services.apple.rate_limiter import EnhancedRateLimiter
 from src.services.apple.sanitizer import (
     MAX_SCRIPT_SIZE,

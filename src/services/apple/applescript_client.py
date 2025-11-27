@@ -18,7 +18,7 @@ from typing import Any
 
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
-from src.services.apple.executor import AppleScriptExecutor
+from src.services.apple.applescript_executor import AppleScriptExecutor
 from src.services.apple.file_validator import AppleScriptFileValidator
 from src.services.apple.sanitizer import (
     AppleScriptSanitizationError,

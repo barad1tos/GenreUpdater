@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.app.features.verify.database import DatabaseVerifier
+from src.app.features.verify.database_verifier import DatabaseVerifier
 from src.app.pipeline_snapshot import PipelineSnapshotManager
 from src.app.track_cleaning import TrackCleaningService
 from src.app.year_update import YearUpdateService
 from src.core.tracks.artist import ArtistRenamer
-from src.core.tracks.genre import GenreManager
-from src.core.tracks.filter import IncrementalFilterService
+from src.core.tracks.genre_manager import GenreManager
+from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.tracks.processor import TrackProcessor
 from src.core.tracks.year import YearRetriever
 from src.core.logger import get_full_log_path
