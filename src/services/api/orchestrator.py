@@ -41,7 +41,7 @@ from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
 from src.services.api.year_score_resolver import YearScoreResolver
 from src.services.api.year_search_coordinator import YearSearchCoordinator
 from src.services.cache.orchestrator import CacheOrchestrator
-from src.services.pending import PendingVerificationService
+from src.services.pending_verification import PendingVerificationService
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
