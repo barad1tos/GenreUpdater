@@ -374,6 +374,35 @@ class MusicBrainzClient(BaseApiClient):
         self.console_logger.debug("[musicbrainz] Attempt 1 failed. Trying fallbacks.")
         return []
 
+    async def _search_release_groups(
+        self,
+        query: str,
+        artist_norm: str,
+        attempt_num: int,
+    ) -> list[MBApiData]:
+        """Search for release groups and filter by artist.
+
+        Args:
+            query: Search query string
+            artist_norm: Normalized artist name for filtering
+            attempt_num: Attempt number for logging
+
+        Returns:
+            List of filtered release groups
+
+        """
+        base_search_url = "https://musicbrainz.org/ws/2/release-group/"
+        params = {"fmt": "json", "limit": "10", "query": query}
+
+        rg_data = await self._make_api_request("musicbrainz", base_search_url, params=params)
+
+        if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
+            filtered_rgs = self._filter_release_groups_by_artist(rg_data["release-groups"], artist_norm)
+            self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} successful. Found {len(filtered_rgs)} matching groups after filtering.")
+            return filtered_rgs
+
+        return []
+
     async def _perform_fallback_searches(
         self,
         artist_norm: str,
@@ -393,35 +422,14 @@ class MusicBrainzClient(BaseApiClient):
             List of release groups from fallback searches
 
         """
-        all_groups: list[MBApiData] = []
-        base_search_url = "https://musicbrainz.org/ws/2/release-group/"
-
-        # Attempt 2: Broader search
         artist_fb = artist_orig or artist_norm
         album_fb = album_orig or album_norm
-        secondary_query = f"{artist_fb} {album_fb}"
-        params_rg2 = {"fmt": "json", "limit": "10", "query": secondary_query}
 
-        rg_data2 = await self._make_api_request("musicbrainz", base_search_url, params=params_rg2)
-
-        if rg_data2 and rg_data2.get("count", 0) > 0 and rg_data2.get("release-groups"):
-            filtered_rgs = self._filter_release_groups_by_artist(rg_data2["release-groups"], artist_norm)
-            self.console_logger.debug(f"[musicbrainz] Attempt 2 successful. Found {len(filtered_rgs)} matching groups after filtering.")
-            all_groups.extend(filtered_rgs)
-
-        if not all_groups:
-            # Attempt 3: Album title only
-            tertiary_query = f"{album_fb}"
-            params_rg3 = {"fmt": "json", "limit": "10", "query": tertiary_query}
-
-            rg_data3 = await self._make_api_request("musicbrainz", base_search_url, params=params_rg3)
-
-            if rg_data3 and rg_data3.get("count", 0) > 0 and rg_data3.get("release-groups"):
-                filtered_rgs = self._filter_release_groups_by_artist(rg_data3["release-groups"], artist_norm)
-                self.console_logger.debug(f"[musicbrainz] Attempt 3 successful. Found {len(filtered_rgs)} matching groups after filtering.")
-                all_groups.extend(filtered_rgs)
-
-        return all_groups
+        # Attempt 2: Broader search (artist + album), fallback to Attempt 3: Album title only
+        return (
+            await self._search_release_groups(f"{artist_fb} {album_fb}", artist_norm, attempt_num=2)
+            or await self._search_release_groups(album_fb, artist_norm, attempt_num=3)
+        )
 
     async def _fetch_releases_for_groups(self, release_groups: list[MBApiData]) -> list[tuple[MBApiData | None, MBApiData]]:
         """Fetch releases for given release groups.
@@ -556,8 +564,8 @@ class MusicBrainzClient(BaseApiClient):
             "country": release.get("country", "") or "",
             "status": release.get("status", "Official"),
             "format": self._get_format_from_media(release.get("media")),
-            "label": self._get_label_name(cast("list[LabelInfo] | None", release.get("label-info"))),
-            "catalog_number": self._get_catalog_number(cast("list[LabelInfo] | None", release.get("label-info"))),
+            "label": self._get_label_name(release.get("label-info")),
+            "catalog_number": self._get_catalog_number(release.get("label-info")),
             "barcode": release.get("barcode"),
             "disambiguation": release.get("disambiguation"),
             "source": "musicbrainz",
@@ -671,6 +679,6 @@ class MusicBrainzClient(BaseApiClient):
         for info in label_info:
             # Access using dict key since API returns with dash, not underscore
             if isinstance(info, dict) and (catalog := info.get("catalog-number")):
-                return cast("str", catalog)
+                return str(catalog)
 
         return None

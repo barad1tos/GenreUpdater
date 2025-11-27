@@ -1,10 +1,8 @@
 # Type stubs for pydantic v1.x to improve type checking
 
 from collections.abc import Callable
-from typing import Any, Self, TypeVar, overload
+from typing import Any, Self, overload
 
-T = TypeVar("T")
-Model = TypeVar("Model", bound=BaseModel)
 
 class BaseModel:
     def __init__(self, **data: Any) -> None: ...
@@ -17,7 +15,8 @@ class BaseModel:
 
 def field(default: Any = ..., **kwargs: Any) -> Any: ...
 def validator(
-    __field: str,
+    field_name: str,
+    /,
     *fields: str,
     pre: bool = False,
     each_item: bool = False,

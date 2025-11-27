@@ -5,10 +5,10 @@ Manages track snapshots during pipeline execution for efficient delta processing
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import logging
     from collections.abc import Iterable
 
     from src.core.models.track_models import TrackDict
@@ -25,7 +25,7 @@ class PipelineSnapshotManager:
 
     def __init__(
         self,
-        track_processor: "TrackProcessor",
+        track_processor: TrackProcessor,
         console_logger: logging.Logger,
     ) -> None:
         """Initialize the snapshot manager.
@@ -44,7 +44,7 @@ class PipelineSnapshotManager:
         self._tracks_snapshot = None
         self._tracks_index = {}
 
-    def set_snapshot(self, tracks: list["TrackDict"]) -> None:
+    def set_snapshot(self, tracks: list[TrackDict]) -> None:
         """Store the current pipeline track snapshot for downstream reuse."""
         self._tracks_snapshot = tracks
         self._tracks_index = {}
@@ -52,7 +52,7 @@ class PipelineSnapshotManager:
             if track_id := str(track.get("id", "")):
                 self._tracks_index[track_id] = track
 
-    def update_tracks(self, updated_tracks: "Iterable[TrackDict]") -> None:
+    def update_tracks(self, updated_tracks: Iterable[TrackDict]) -> None:
         """Apply field updates from processed tracks to the cached snapshot."""
         if not self._tracks_index:
             return
@@ -72,7 +72,7 @@ class PipelineSnapshotManager:
                 except (AttributeError, TypeError, ValueError):
                     current_track.__dict__[field] = value
 
-    def get_snapshot(self) -> list["TrackDict"] | None:
+    def get_snapshot(self) -> list[TrackDict] | None:
         """Return the currently cached pipeline track snapshot."""
         return self._tracks_snapshot
 
@@ -83,9 +83,9 @@ class PipelineSnapshotManager:
 
     async def merge_smart_delta(
         self,
-        snapshot_tracks: list["TrackDict"],
-        delta: "TrackDelta",
-    ) -> list["TrackDict"] | None:
+        snapshot_tracks: list[TrackDict],
+        delta: TrackDelta,
+    ) -> list[TrackDict] | None:
         """Merge snapshot with Smart Delta changes.
 
         Args:

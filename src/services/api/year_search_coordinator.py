@@ -7,7 +7,7 @@ information from multiple providers (MusicBrainz, Discogs, Last.fm, Apple Music)
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from src.core.debug_utils import debug
 from src.core.models.script_detection import ScriptType, detect_primary_script
@@ -22,6 +22,26 @@ if TYPE_CHECKING:
     from src.services.api.lastfm import LastFmClient
     from src.services.api.musicbrainz import MusicBrainzClient
     from src.services.api.year_scoring import ReleaseScorer
+
+
+class _RegionAwareApi(Protocol):
+    """Protocol for APIs that accept artist_region parameter."""
+
+    async def get_scored_releases(
+        self, artist_norm: str, album_norm: str, artist_region: str | None
+    ) -> list[ScoredRelease]:
+        """Get scored releases with region awareness."""
+        ...
+
+
+class _SimpleApi(Protocol):
+    """Protocol for APIs that don't accept artist_region parameter."""
+
+    async def get_scored_releases(
+        self, artist_norm: str, album_norm: str
+    ) -> list[ScoredRelease]:
+        """Get scored releases."""
+        ...
 
 
 class YearSearchCoordinator:
@@ -257,12 +277,13 @@ class YearSearchCoordinator:
         MusicBrainz and Discogs accept artist_region parameter.
         LastFm and AppleMusic don't accept artist_region parameter.
         """
-        result: list[ScoredRelease]
         if api_name in {"musicbrainz", "discogs"}:
-            result = await api_client.get_scored_releases(artist_norm, album_norm, artist_region)  # type: ignore[call-arg]
-        else:
-            result = await api_client.get_scored_releases(artist_norm, album_norm)
-        return result
+            # Cast to protocol that accepts artist_region
+            return await cast(_RegionAwareApi, api_client).get_scored_releases(
+                artist_norm, album_norm, artist_region
+            )
+        # Cast to protocol that doesn't accept artist_region
+        return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
 
     def _get_api_client(
         self, api_name: str
@@ -289,16 +310,11 @@ class YearSearchCoordinator:
         api_order = self._apply_preferred_order(
             ["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else [])
         )
-        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = []
-
-        for api_name in api_order:
-            api_client = self._get_api_client(api_name)
-            if api_client:
-                api_tasks.append(
-                    self._call_api_with_proper_params(
-                        api_client, api_name, artist_norm, album_norm, artist_region
-                    )
-                )
+        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = [
+            self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
+            for api_name in api_order
+            if (api_client := self._get_api_client(api_name))
+        ]
 
         # Execute all API calls concurrently
         results = await asyncio.gather(*api_tasks, return_exceptions=True)

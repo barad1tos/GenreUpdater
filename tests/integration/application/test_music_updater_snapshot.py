@@ -132,22 +132,21 @@ class FakeGenreManager:
         return updated_tracks, []
 
 
-class FakeYearRetriever:
-    """Fake year retriever for testing."""
+class FakeYearService:
+    """Fake year service for testing."""
 
-    def __init__(self) -> None:
-        """Initialize fake year retriever."""
-        self._updated_tracks: list[TrackDict] = []
+    def __init__(self, snapshot_manager: Any) -> None:
+        """Initialize fake year service."""
+        self._snapshot_manager = snapshot_manager
 
-    async def process_album_years(self, tracks: list[TrackDict], force: bool = False) -> bool:
-        """Mock process_album_years method."""
+    async def update_all_years_with_logs(
+        self, tracks: list[TrackDict], force: bool = False
+    ) -> list[dict[str, Any]]:
+        """Mock update_all_years_with_logs method."""
         assert force
-        self._updated_tracks = [track.copy(year="2024") for track in tracks]
-        return True
-
-    def get_last_updated_tracks(self) -> list[TrackDict]:
-        """Mock get_last_updated_tracks method."""
-        return self._updated_tracks
+        updated_tracks = [track.copy(year="2024") for track in tracks]
+        self._snapshot_manager.update_tracks(updated_tracks)
+        return []
 
 
 class FakeDatabaseVerifier:
@@ -205,13 +204,15 @@ async def test_main_pipeline_reuses_track_snapshot(
 
     fake_tp = FakeTrackProcessor(tracks)
     fake_genre_manager = FakeGenreManager()
-    fake_year_retriever = FakeYearRetriever()
     fake_db_verifier = FakeDatabaseVerifier()
 
     music_updater.track_processor = fake_tp  # type: ignore[assignment]
     music_updater.genre_manager = fake_genre_manager  # type: ignore[assignment]
-    music_updater.year_retriever = fake_year_retriever  # type: ignore[assignment]
     music_updater.database_verifier = fake_db_verifier  # type: ignore[assignment]
+
+    # Create FakeYearService with the music_updater's snapshot_manager
+    fake_year_service = FakeYearService(music_updater.snapshot_manager)
+    music_updater.year_service = fake_year_service  # type: ignore[assignment]
 
     captured: dict[str, Any] = {}
 

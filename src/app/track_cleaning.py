@@ -14,6 +14,7 @@ from src.core.models.track_models import ChangeLogEntry, TrackFieldValue
 
 if TYPE_CHECKING:
     import logging
+
     from src.core.models.track_models import TrackDict
     from src.core.tracks.track_processor import TrackProcessor
 
@@ -45,9 +46,7 @@ class TrackCleaningService:
         self._console_logger = console_logger
         self._error_logger = error_logger
 
-    def extract_and_clean_metadata(
-        self, track: TrackDict
-    ) -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
+    def extract_and_clean_metadata(self, track: TrackDict) -> tuple[TrackFieldValue, str, TrackFieldValue, TrackFieldValue, str, str]:
         """Extract and clean track metadata.
 
         Args:
@@ -73,8 +72,8 @@ class TrackCleaningService:
 
         return track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name
 
+    @staticmethod
     def _create_change_log_entry(
-        self,
         track_id: str,
         artist: str,
         original_track_name: str,
@@ -126,9 +125,7 @@ class TrackCleaningService:
             Tuple of (updated_track, change_entry) or (None, None) if no update needed.
         """
         # Extract and clean track metadata
-        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = (
-            self.extract_and_clean_metadata(track)
-        )
+        track_id, artist_name, track_name, album_name, cleaned_track_name, cleaned_album_name = self.extract_and_clean_metadata(track)
 
         if not track_id:
             return None, None
@@ -258,9 +255,7 @@ class TrackCleaningService:
 
         return cleaned_tracks
 
-    async def clean_all_metadata_with_logs(
-        self, tracks: list[TrackDict]
-    ) -> list[ChangeLogEntry]:
+    async def clean_all_metadata_with_logs(self, tracks: list[TrackDict]) -> list[ChangeLogEntry]:
         """Clean metadata for all tracks with change logging.
 
         Args:

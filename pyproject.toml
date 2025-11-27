@@ -176,6 +176,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
   "PLR2004", # Tests can use magic values
   "S101",    # Tests can use assertions
   "PLR0913", # Tests can have many arguments
+  "SLF001",  # Tests can access private members
 ]
 "src/services/api/orchestrator.py" = [
   "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
