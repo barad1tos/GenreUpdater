@@ -12,7 +12,6 @@ import logging
 import secrets
 import time
 import urllib.parse
-from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -181,9 +180,9 @@ class ApiRequestExecutor:
         await self._cache_result(cache_key, result)
         return result
 
+    @staticmethod
     def _build_cache_key(
-        self,
-        api_name: str,
+            api_name: str,
         url: str,
         params: dict[str, str] | None,
     ) -> str:
@@ -402,7 +401,7 @@ class ApiRequestExecutor:
         start_time = time.monotonic()
 
         try:
-            await self._ensure_session()
+            self._ensure_session()
             wait_time = await limiter.acquire()
             if wait_time > WAIT_TIME_LOG_THRESHOLD:
                 self.console_logger.debug(
@@ -413,7 +412,7 @@ class ApiRequestExecutor:
 
             self.request_counts[api_name] = self.request_counts.get(api_name, 0) + 1
 
-            await self._ensure_session()
+            self._ensure_session()
             assert self.session is not None  # _ensure_session() guarantees this
             async with self.session.get(
                 url,
@@ -431,7 +430,7 @@ class ApiRequestExecutor:
         finally:
             limiter.release()
 
-    async def _ensure_session(self) -> None:
+    def _ensure_session(self) -> None:
         """Ensure session is available, raise if not."""
         if self.session is None or self.session.closed:
             msg = "HTTP session not initialized or closed"

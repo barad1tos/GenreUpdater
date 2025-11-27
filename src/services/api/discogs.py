@@ -8,7 +8,7 @@ import logging
 import re
 import urllib.parse
 from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from src.metrics import Analytics
 
@@ -228,7 +228,7 @@ class DiscogsClient(BaseApiClient):
         if cached_data is not None:
             if isinstance(cached_data, list):
                 self.console_logger.debug(f"Using cached Discogs results for cache key: {cache_key}")
-                return cast("list[ScoredRelease]", cached_data)
+                return cached_data
             self.console_logger.warning("Cached Discogs data has unexpected type. Ignoring cache.")
         return None
 

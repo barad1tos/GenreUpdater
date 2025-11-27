@@ -30,16 +30,12 @@ class LastFmTag(TypedDict, total=False):
     count: int | None
 
 
-class LastFmBio(TypedDict, total=False):
-    """Type definition for biography from Last.fm."""
+class LastFmTextContent(TypedDict, total=False):
+    """Type definition for text content (bio/wiki) from Last.fm.
 
-    published: str | None
-    summary: str | None
-    content: str | None
-
-
-class LastFmWiki(TypedDict, total=False):
-    """Type definition for wiki from Last.fm."""
+    Used for both artist biographies and album/track wiki entries,
+    as the API returns identical structures for both.
+    """
 
     published: str | None
     summary: str | None
@@ -73,8 +69,8 @@ class LastFmArtist(TypedDict, total=False):
     stats: LastFmStats | None
     similar: dict[str, list[LastFmSimilarArtist]] | None
     tags: dict[str, list[LastFmTag]] | None
-    bio: LastFmBio | None
-    wiki: LastFmWiki | None
+    bio: LastFmTextContent | None
+    wiki: LastFmTextContent | None
 
 
 class LastFmTrack(TypedDict, total=False):
@@ -89,7 +85,7 @@ class LastFmTrack(TypedDict, total=False):
     artist: LastFmArtist | None
     album: dict[str, Any] | None
     toptags: dict[str, list[LastFmTag]] | None
-    wiki: LastFmWiki | None
+    wiki: LastFmTextContent | None
 
 
 class LastFmAlbum(TypedDict, total=False):
@@ -104,7 +100,7 @@ class LastFmAlbum(TypedDict, total=False):
     playcount: str | None
     tracks: dict[str, list[LastFmTrack]] | None
     tags: dict[str, list[LastFmTag]] | None
-    wiki: LastFmWiki | None
+    wiki: LastFmTextContent | None
     releasedate: str | None
 
 
@@ -214,18 +210,11 @@ class LastFmClient(BaseApiClient):
         if not (tags and isinstance(tags, dict)):
             return None
 
-        # Cast tags to the proper type after isinstance check
         # Note: LastFM API sometimes returns list[str] instead of list[LastFmTag]
-        tags_typed = cast("dict[str, list[LastFmTag | str]]", tags)
-        if tag_list := tags_typed.get("tag", []):
+        if tag_list := tags.get("tag", []):
             for tag in tag_list:
                 # Handle both dict (LastFmTag) and string cases from API
-                if isinstance(tag, str):
-                    tag_name = tag
-                else:
-                    # tag is LastFmTag (dict)
-                    tag_name = tag.get("name", "")
-
+                tag_name = tag if isinstance(tag, str) else tag.get("name", "")
                 # Check if the tag is a year
                 if tag_name and self._is_valid_year(tag_name):
                     self.console_logger.debug("LastFM Year: %s from tags", tag_name)

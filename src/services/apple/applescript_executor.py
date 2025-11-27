@@ -112,13 +112,15 @@ class AppleScriptExecutor:
         """
         try:
             # Wait briefly for process to exit naturally
-            await asyncio.wait_for(proc.wait(), timeout=0.5)
+            async with asyncio.timeout(0.5):
+                await proc.wait()
             self.console_logger.debug("Process for %s exited naturally and cleaned up", label)
         except TimeoutError:
             # If still running, kill and wait for cleanup
             try:
                 proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=5)
+                async with asyncio.timeout(5):
+                    await proc.wait()
                 self.console_logger.debug("Process for %s killed and cleaned up", label)
             except (TimeoutError, ProcessLookupError) as e:
                 self.console_logger.warning(
@@ -131,14 +133,14 @@ class AppleScriptExecutor:
         self,
         cmd: list[str],
         label: str,
-        timeout: float,
+        timeout_seconds: float,
     ) -> str | None:
         """Handle subprocess execution with timeout and error handling.
 
         Args:
             cmd: Command to execute as a list of strings
             label: Label for logging
-            timeout: Timeout in seconds
+            timeout_seconds: Timeout in seconds
 
         Returns:
             Command output if successful, None otherwise
@@ -152,7 +154,8 @@ class AppleScriptExecutor:
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                async with asyncio.timeout(timeout_seconds):
+                    stdout, stderr = await proc.communicate()
                 elapsed = time.time() - start_time
 
                 # Process stderr if present
@@ -176,7 +179,7 @@ class AppleScriptExecutor:
                 return None
 
             except TimeoutError:
-                self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout)
+                self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout_seconds)
                 return None
 
             except (subprocess.SubprocessError, OSError) as e:
@@ -202,14 +205,14 @@ class AppleScriptExecutor:
         self,
         cmd: list[str],
         label: str,
-        timeout: float,
+        timeout_seconds: float,
     ) -> str | None:
         """Run an osascript command and return output.
 
         Args:
             cmd: Command to execute as a list of strings
             label: Label for logging
-            timeout: Timeout in seconds
+            timeout_seconds: Timeout in seconds
 
         Returns:
             Command output if successful, None otherwise
@@ -219,7 +222,7 @@ class AppleScriptExecutor:
             return None
 
         async with self.semaphore:
-            return await self.handle_subprocess_execution(cmd, label, timeout)
+            return await self.handle_subprocess_execution(cmd, label, timeout_seconds)
 
     def should_use_temp_file(self, script_code: str) -> bool:
         """Determine if a script should be executed via a temporary file.
@@ -273,7 +276,7 @@ class AppleScriptExecutor:
         self,
         script_code: str,
         arguments: list[str] | None,
-        timeout: float,
+        timeout_seconds: float,
     ) -> str | None:
         """Execute AppleScript via a temporary file.
 
@@ -283,7 +286,7 @@ class AppleScriptExecutor:
         Args:
             script_code: The AppleScript code to execute
             arguments: Optional arguments to pass to the script
-            timeout: Timeout in seconds for script execution
+            timeout_seconds: Timeout in seconds for script execution
 
         Returns:
             The output of the script, or None if an error occurred
@@ -322,7 +325,7 @@ class AppleScriptExecutor:
             return await self.run_osascript(
                 cmd,
                 f"tempfile-script ({Path(temp_file_path).name})",
-                timeout,
+                timeout_seconds,
             )
         except OSError as e:
             self.error_logger.exception("Error creating temporary file: %s", e)

@@ -93,9 +93,7 @@ class YearUpdateService:
             # Filter tracks to include main artist and collaborations
             filtered_tracks = self.filter_tracks_for_artist(all_tracks, artist)
             if not filtered_tracks:
-                self._console_logger.warning(
-                    "No tracks found for artist: %s (including collaborations)", artist
-                )
+                self._console_logger.warning("No tracks found for artist: %s (including collaborations)", artist)
                 return None
 
             self._console_logger.info(
@@ -136,9 +134,7 @@ class YearUpdateService:
         else:
             self._error_logger.error("Year update operation failed")
 
-    async def run_revert_years(
-        self, artist: str, album: str | None, backup_csv: str | None = None
-    ) -> None:
+    async def run_revert_years(self, artist: str, album: str | None, backup_csv: str | None = None) -> None:
         """Revert year updates for an artist (optionally per album).
 
         Uses backup CSV if provided; otherwise uses the latest changes_report.csv.
@@ -179,13 +175,7 @@ class YearUpdateService:
 
         if changes_log:
             revert_path = get_full_log_path(self._config, "changes_report_file", "csv/changes_revert.csv")
-            save_changes_report(
-                changes=changes_log,
-                file_path=revert_path,
-                console_logger=self._console_logger,
-                error_logger=self._error_logger,
-                compact_mode=True,
-            )
+            save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
 
     async def update_all_years(self, tracks: list[TrackDict], force: bool) -> None:
@@ -205,9 +195,7 @@ class YearUpdateService:
             self._error_logger.exception("=== ERROR in Step 4 ===")
             raise
 
-    async def update_all_years_with_logs(
-        self, tracks: list[TrackDict], _force: bool
-    ) -> list[ChangeLogEntry]:
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], _force: bool) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 3 of pipeline).
 
         Args:
@@ -236,9 +224,7 @@ class YearUpdateService:
 
             self._snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes
-            self._console_logger.info(
-                "=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log)
-            )
+            self._console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))
         except Exception as e:
             self._error_logger.exception("=== ERROR in Step 3 ===")
             # Add error marker to ensure data consistency

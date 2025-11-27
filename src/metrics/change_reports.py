@@ -52,13 +52,11 @@ from src.metrics.track_sync import (
 )
 
 __all__ = [
-    # Track sync
     "load_track_list",
-    # Change reports
     "save_changes_report",
-    # HTML reports
     "save_detailed_dry_run_report",
     "save_html_report",
+    "save_to_csv",
     "save_track_map_to_csv",
     "sync_track_list_with_current",
 ]

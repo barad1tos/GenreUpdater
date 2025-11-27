@@ -208,10 +208,8 @@ class TrackCacheManager:
             delta_cache = LibraryDeltaCache(last_run=current_time)
 
         delta_cache.last_run = current_time
-        if processed_track_ids:
-            ids_as_str = [str(track_id) for track_id in processed_track_ids if str(track_id)]
-            if ids_as_str:
-                delta_cache.add_processed_ids(ids_as_str)
+        if processed_track_ids and (ids_as_str := [str(track_id) for track_id in processed_track_ids if str(track_id)]):
+            delta_cache.add_processed_ids(ids_as_str)
 
         await self.snapshot_service.save_delta(delta_cache)
 
