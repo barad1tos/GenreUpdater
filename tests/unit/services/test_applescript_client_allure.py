@@ -15,6 +15,7 @@ from src.services.apple import (
     AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
+    EnhancedRateLimiter,
 )
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
@@ -802,11 +803,10 @@ Track 3|Artist 3|Album 3|2022|Pop"""
     @pytest.mark.asyncio
     async def test_rate_limiter_validation(self) -> None:
         """Test rate limiter parameter validation."""
-        from src.services.apple import EnhancedRateLimiter
-
-        with allure.step("Test invalid requests_per_window"):
-            with pytest.raises(ValueError, match="requests_per_window must be a positive integer"):
-                EnhancedRateLimiter(requests_per_window=0, window_size=1.0)
+        with allure.step("Test invalid requests_per_window"), pytest.raises(
+            ValueError, match="requests_per_window must be a positive integer"
+        ):
+            EnhancedRateLimiter(requests_per_window=0, window_size=1.0)
 
         with allure.step("Test invalid window_size"), pytest.raises(ValueError, match="window_size must be a positive number"):
             EnhancedRateLimiter(requests_per_window=10, window_size=0)
@@ -815,7 +815,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             EnhancedRateLimiter(requests_per_window=10, window_size=1.0, max_concurrent=0)
 
         with allure.step("Test valid initialization"):
-            limiter = EnhancedRateLimiter(requests_per_window=10, window_size=1.0, max_concurrent=3)
+            limiter = EnhancedRateLimiter(requests_per_window=10, window_size=1.0)
             await limiter.initialize()
             assert limiter.semaphore is not None
             assert limiter.total_requests == 0
@@ -829,8 +829,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
     @pytest.mark.asyncio
     async def test_rate_limiter_acquire_release(self) -> None:
         """Test rate limiter acquire and release."""
-        from src.services.apple import EnhancedRateLimiter
-
         limiter = EnhancedRateLimiter(requests_per_window=2, window_size=1.0, max_concurrent=1)
         await limiter.initialize()
 
@@ -847,7 +845,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             # Third request should trigger rate limiting
             # This will wait for the window to expire
             start_time = asyncio.get_event_loop().time()
-            wait_time3 = await limiter.acquire()
+            await limiter.acquire()
             elapsed = asyncio.get_event_loop().time() - start_time
 
             # Should have waited approximately 1 second (window_size)
@@ -895,14 +893,17 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         """Test validation of AppleScript reserved words."""
         sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
 
-        with allure.step("Test Finder operations are blocked"):
-            with pytest.raises(AppleScriptSanitizationError, match="Dangerous AppleScript pattern"):
-                sanitizer.validate_script_code('tell application "Finder" to delete file "test.txt"', allow_music_app=False)
+        with allure.step("Test Finder operations are blocked"), pytest.raises(
+            AppleScriptSanitizationError, match="Dangerous AppleScript pattern"
+        ):
+            sanitizer.validate_script_code(
+                'tell application "Finder" to delete file "test.txt"', allow_music_app=False
+            )
 
         with allure.step("Test Music.app operations allowed when enabled"):
-            # This should not raise an error
+            # This should not raise an error (allow_music_app=True is default)
             try:
-                sanitizer.validate_script_code('tell application "Music" to play', allow_music_app=True)
+                sanitizer.validate_script_code('tell application "Music" to play')
             except AppleScriptSanitizationError:
                 pytest.fail("Music.app operations should be allowed when allow_music_app=True")
 
