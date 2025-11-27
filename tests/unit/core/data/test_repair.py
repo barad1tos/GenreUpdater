@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from src.core.models import repair as repair_utils
+from src.core.models import year_repair as repair_utils
 
 
 def _make_changes_report(tmp_path: Path, rows: list[dict[str, str]]) -> dict[str, Any]:
