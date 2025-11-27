@@ -29,5 +29,5 @@ echo "  Dashboard URL: http://127.0.0.1:8080"
 echo "  Press Ctrl+C to stop the server"
 echo ""
 
-# Start Allure server
-allure serve reports/allure-results --port 8080
+# Start Allure server (use full path to avoid alias conflicts)
+/opt/homebrew/bin/allure serve reports/allure-results --port 8080
