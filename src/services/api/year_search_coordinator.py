@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from src.core.debug import debug
+from src.core.debug_utils import debug
 from src.core.models.script_detection import ScriptType, detect_primary_script
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from src.services.api.discogs import DiscogsClient
     from src.services.api.lastfm import LastFmClient
     from src.services.api.musicbrainz import MusicBrainzClient
-    from src.services.api.scoring import ReleaseScorer
+    from src.services.api.year_scoring import ReleaseScorer
 
 
 class YearSearchCoordinator:

@@ -27,7 +27,7 @@ from typing import Any, NoReturn, TypedDict
 import aiohttp
 import certifi
 
-from src.core.debug import debug
+from src.core.debug_utils import debug
 from src.core.models.script_detection import ScriptType, detect_primary_script
 from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
@@ -37,7 +37,7 @@ from src.services.api.discogs import DiscogsClient
 from src.services.api.lastfm import LastFmClient
 from src.services.api.musicbrainz import MusicBrainzClient
 from src.services.api.request_executor import ApiRequestExecutor
-from src.services.api.scoring import ArtistPeriodContext, create_release_scorer
+from src.services.api.year_scoring import ArtistPeriodContext, create_release_scorer
 from src.services.api.year_score_resolver import YearScoreResolver
 from src.services.api.year_search_coordinator import YearSearchCoordinator
 from src.services.cache.orchestrator import CacheOrchestrator

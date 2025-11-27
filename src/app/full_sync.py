@@ -28,8 +28,8 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Import after path setup to avoid import errors
-from src.app.updater import MusicUpdater  # noqa: E402
-from src.services.deps import DependencyContainer  # noqa: E402
+from src.app.music_updater import MusicUpdater  # noqa: E402
+from src.services.dependency_container import DependencyContainer  # noqa: E402
 from src.core.logger import get_full_log_path  # noqa: E402
 from src.core.models.metadata import is_music_app_running  # noqa: E402
 from src.metrics.reports import sync_track_list_with_current  # noqa: E402

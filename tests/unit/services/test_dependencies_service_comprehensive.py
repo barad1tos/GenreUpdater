@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from src.services.deps import (
+from src.services.dependency_container import (
     DependencyContainer,
 )
 

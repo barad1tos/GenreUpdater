@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from src.core.models.status import can_edit_metadata
+from src.core.models.track_status import can_edit_metadata
 from src.core.models.validators import SecurityValidationError
 
 if TYPE_CHECKING:

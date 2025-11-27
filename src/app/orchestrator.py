@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import yaml
 
 from src.app.features.batch.batch_processor import BatchProcessor
-from src.app.updater import MusicUpdater
+from src.app.music_updater import MusicUpdater
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
 from src.core.models.metadata import is_music_app_running
 
 if TYPE_CHECKING:
-    from src.services.deps import DependencyContainer
+    from src.services.dependency_container import DependencyContainer
 
 
 class Orchestrator:

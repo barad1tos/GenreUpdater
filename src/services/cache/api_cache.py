@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from src.services.cache.config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
+from src.services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from src.services.cache.hash import UnifiedHashService
 from src.core.logger import ensure_directory, get_full_log_path
 from src.core.models.track import CachedApiResult

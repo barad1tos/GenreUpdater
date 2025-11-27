@@ -14,7 +14,7 @@ import yaml
 
 from src.app.cli import CLI
 from src.app.orchestrator import Orchestrator
-from src.services.deps import DependencyContainer
+from src.services.dependency_container import DependencyContainer
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 

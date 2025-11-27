@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import allure
 import pytest
-from src.app.updater import MusicUpdater
+from src.app.music_updater import MusicUpdater
 from src.app.orchestrator import Orchestrator
 
 _TEST_PASSWORD = "test-password"  # noqa: S105 - test-only credential placeholder

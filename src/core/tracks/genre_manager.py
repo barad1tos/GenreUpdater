@@ -15,7 +15,7 @@ from src.core.models.metadata import (
     group_tracks_by_artist,
 )
 from src.core.models.track import ChangeLogEntry, TrackDict
-from src.core.models.status import can_edit_metadata, normalize_track_status
+from src.core.models.track_status import can_edit_metadata, normalize_track_status
 
 from .track_base import BaseProcessor
 
