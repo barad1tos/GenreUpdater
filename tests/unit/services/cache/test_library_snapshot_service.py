@@ -1,4 +1,7 @@
+"""Tests for LibrarySnapshotService."""
+
 from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta
 
@@ -41,7 +44,7 @@ def _make_tracks() -> list[TrackDict]:
 
 @pytest.mark.asyncio
 async def test_save_and_load_snapshot(tmp_path_factory: pytest.TempPathFactory) -> None:
-    config = _make_config(tmp_path_factory, compress=False)
+    config = _make_config(tmp_path_factory)
     service = LibrarySnapshotService(config, logging.getLogger("test.snapshot"))
     await service.initialize()
 
@@ -63,7 +66,7 @@ async def test_snapshot_with_gzip_compression(tmp_path_factory: pytest.TempPathF
     tracks = _make_tracks()
     await service.save_snapshot(tracks)
 
-    snapshot_path = service._snapshot_path  # noqa: SLF001 - safe within tests
+    snapshot_path = service._snapshot_path
     assert snapshot_path.suffix == ".gz"
     assert snapshot_path.exists()
 
@@ -74,14 +77,14 @@ async def test_snapshot_with_gzip_compression(tmp_path_factory: pytest.TempPathF
 
 @pytest.mark.asyncio
 async def test_corrupted_snapshot_returns_none(tmp_path_factory: pytest.TempPathFactory) -> None:
-    config = _make_config(tmp_path_factory, compress=False)
+    config = _make_config(tmp_path_factory)
     service = LibrarySnapshotService(config, logging.getLogger("test.snapshot.corrupt"))
     await service.initialize()
 
     tracks = _make_tracks()
     await service.save_snapshot(tracks)
 
-    snapshot_path = service._snapshot_path  # noqa: SLF001 - safe within tests
+    snapshot_path = service._snapshot_path
     snapshot_path.write_bytes(b"not-json")
 
     loaded = await service.load_snapshot()
@@ -90,7 +93,7 @@ async def test_corrupted_snapshot_returns_none(tmp_path_factory: pytest.TempPath
 
 @pytest.mark.asyncio
 async def test_delta_cache_persistence(tmp_path_factory: pytest.TempPathFactory) -> None:
-    config = _make_config(tmp_path_factory, compress=False)
+    config = _make_config(tmp_path_factory)
     service = LibrarySnapshotService(config, logging.getLogger("test.snapshot.delta"))
     await service.initialize()
 
