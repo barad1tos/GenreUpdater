@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 import pytest
 
 from src.services.cache.hash_service import UnifiedHashService
-from src.services.pending import PendingVerificationService
+from src.services.pending_verification import PendingVerificationService
 
 
 async def initialize_service_without_io(service: PendingVerificationService) -> None:

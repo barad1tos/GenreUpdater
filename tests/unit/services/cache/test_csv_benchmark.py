@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import pytest
-from src.services.cache.generic import GenericCacheService
+from src.services.cache.generic_cache import GenericCacheService
 
 if TYPE_CHECKING:
     from pathlib import Path

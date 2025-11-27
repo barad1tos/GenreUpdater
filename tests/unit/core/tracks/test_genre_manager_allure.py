@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
 import pytest
-from src.core.tracks.genre import GenreManager
+from src.core.tracks.genre_manager import GenreManager
 from src.core.models.track_models import ChangeLogEntry
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
@@ -281,8 +281,8 @@ class TestGenreManagerAllure:
 
         with (
             allure.step("Mock external dependencies"),
-            patch("src.core.tracks.genre.group_tracks_by_artist") as mock_group,
-            patch("src.core.tracks.genre.determine_dominant_genre_for_artist") as mock_determine,
+            patch("src.core.tracks.genre_manager.group_tracks_by_artist") as mock_group,
+            patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine,
         ):
             mock_group.return_value = {
                 "Artist1": tracks[:2],

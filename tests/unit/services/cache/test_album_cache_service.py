@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
-from src.services.cache.album import AlbumCacheEntry, AlbumCacheService
+from src.services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
 from src.services.cache.cache_config import CacheContentType
 from src.services.cache.hash_service import UnifiedHashService
 
@@ -126,12 +126,12 @@ class TestAlbumCacheService:
         ttl_seconds = service.policy.ttl_seconds
 
         with allure.step("Store album at base time"), patch(
-            "src.services.cache.album.time.time", return_value=base_time
+            "src.services.cache.album_cache.time.time", return_value=base_time
         ):
             await service.store_album_year("Artist", "Album", "2000")
 
         with allure.step("Advance time beyond TTL"), patch(
-            "src.services.cache.album.time.time", return_value=base_time + ttl_seconds + 5
+            "src.services.cache.album_cache.time.time", return_value=base_time + ttl_seconds + 5
         ):
             result = await service.get_album_year("Artist", "Album")
             assert result is None

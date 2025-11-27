@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from src.core.tracks.filter import IncrementalFilterService
+from src.core.tracks.incremental_filter import IncrementalFilterService
 
 from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger
 from tests.mocks.track_data import DummyTrackData
@@ -66,8 +66,8 @@ class TestIncrementalFilterService:
         mock_get_full_log_path = MockGetFullLogPath()
 
         with (
-            patch("src.core.tracks.filter.load_track_list", mock_load_track_list),
-            patch("src.core.tracks.filter.get_full_log_path", mock_get_full_log_path),
+            patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
         ):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
@@ -94,8 +94,8 @@ class TestIncrementalFilterService:
         mock_get_full_log_path = MockGetFullLogPath()
 
         with (
-            patch("src.core.tracks.filter.load_track_list", mock_load_track_list),
-            patch("src.core.tracks.filter.get_full_log_path", mock_get_full_log_path),
+            patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
         ):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
@@ -134,8 +134,8 @@ class TestIncrementalFilterService:
         mock_get_full_log_path = MockGetFullLogPath()
 
         with (
-            patch("src.core.tracks.filter.load_track_list", mock_load_track_list),
-            patch("src.core.tracks.filter.get_full_log_path", mock_get_full_log_path),
+            patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
         ):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
@@ -170,8 +170,8 @@ class TestIncrementalFilterService:
         mock_get_full_log_path = MockGetFullLogPath()
 
         with (
-            patch("src.core.tracks.filter.load_track_list", mock_load_track_list),
-            patch("src.core.tracks.filter.get_full_log_path", mock_get_full_log_path),
+            patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
+            patch("src.core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
         ):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,

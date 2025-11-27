@@ -124,7 +124,7 @@ class TestCLIE2E:
 
             with (
                 allure.step("Mock Music.app running check"),
-                patch("src.core.models.metadata.is_music_app_running", return_value=True),
+                patch("src.core.models.metadata_utils.is_music_app_running", return_value=True),
                 allure.step("Execute default command via orchestrator"),
             ):
                 orchestrator = Orchestrator(mock_deps)
@@ -170,7 +170,7 @@ class TestCLIE2E:
 
             with (
                 allure.step("Mock Music.app running check"),
-                patch("src.core.models.metadata.is_music_app_running", return_value=True),
+                patch("src.core.models.metadata_utils.is_music_app_running", return_value=True),
                 allure.step("Execute clean_artist command via orchestrator"),
             ):
                 orchestrator = Orchestrator(mock_deps)
@@ -218,7 +218,7 @@ class TestCLIE2E:
 
             with (
                 allure.step("Mock Music.app running check"),
-                patch("src.core.models.metadata.is_music_app_running", return_value=True),
+                patch("src.core.models.metadata_utils.is_music_app_running", return_value=True),
                 allure.step("Execute update_years command via orchestrator"),
             ):
                 orchestrator = Orchestrator(mock_deps)
@@ -268,7 +268,7 @@ class TestCLIE2E:
 
             with (
                 allure.step("Mock Music.app running check"),
-                patch("src.core.models.metadata.is_music_app_running", return_value=True),
+                patch("src.core.models.metadata_utils.is_music_app_running", return_value=True),
                 allure.step("Execute revert_years command via orchestrator"),
             ):
                 orchestrator = Orchestrator(mock_deps)
@@ -311,7 +311,7 @@ class TestCLIE2E:
                 args = cli.parse_args(["--config", config_path, "--dry-run"])
 
                 # Mock Music.app running check and execute command
-                with patch("src.core.models.metadata.is_music_app_running", return_value=True):
+                with patch("src.core.models.metadata_utils.is_music_app_running", return_value=True):
                     orchestrator = Orchestrator(mock_deps)
                     await orchestrator.run_command(args)
 
@@ -324,7 +324,7 @@ class TestCLIE2E:
                 args = cli.parse_args(["--config", config_path, "--dry-run", "clean_artist", "--artist", "Test Artist"])
 
                 # Mock Music.app running check and execute command
-                with patch("src.core.models.metadata.is_music_app_running", return_value=True):
+                with patch("src.core.models.metadata_utils.is_music_app_running", return_value=True):
                     orchestrator = Orchestrator(mock_deps)
                     await orchestrator.run_command(args)
 
@@ -337,7 +337,7 @@ class TestCLIE2E:
                 args = cli.parse_args(["--config", config_path, "--dry-run", "update_years", "--artist", "Test Artist"])
 
                 # Mock Music.app running check and execute command
-                with patch("src.core.models.metadata.is_music_app_running", return_value=True):
+                with patch("src.core.models.metadata_utils.is_music_app_running", return_value=True):
                     orchestrator = Orchestrator(mock_deps)
                     await orchestrator.run_command(args)
 
@@ -388,7 +388,7 @@ class TestCLIE2E:
 
                 allure.attach(f"Config argument: {args.config}", "Config Argument", allure.attachment_type.TEXT)
 
-            with allure.step("Execute command with custom config"), patch("src.core.models.metadata.is_music_app_running", return_value=True):
+            with allure.step("Execute command with custom config"), patch("src.core.models.metadata_utils.is_music_app_running", return_value=True):
                 # Mock Music.app running check and execute command
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
