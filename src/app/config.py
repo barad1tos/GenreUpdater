@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, TypeVar, overload
 
-from src.core.config import load_config as load_yaml_config
+from src.core.core_config import load_config as load_yaml_config
 
 try:
     from dotenv import load_dotenv

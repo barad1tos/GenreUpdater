@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from src.core.models.metadata import parse_tracks
+from src.core.models.metadata_utils import parse_tracks
 
 if TYPE_CHECKING:
     import logging

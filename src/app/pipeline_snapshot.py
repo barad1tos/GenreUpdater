@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from src.core.models.track import TrackDict
     from src.core.tracks.track_delta import TrackDelta
-    from src.core.tracks.processor import TrackProcessor
+    from src.core.tracks.track_processor import TrackProcessor
 
 
 class PipelineSnapshotManager:

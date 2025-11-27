@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
-from src.metrics.reports import save_html_report
+from src.metrics.change_reports import save_html_report
 
 if TYPE_CHECKING:
     from collections.abc import Callable

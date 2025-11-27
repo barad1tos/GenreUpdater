@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Coroutine
 
     from src.services.api.applemusic import AppleMusicClient
-    from src.services.api.base import ScoredRelease
+    from src.services.api.api_base import ScoredRelease
     from src.services.api.discogs import DiscogsClient
     from src.services.api.lastfm import LastFmClient
     from src.services.api.musicbrainz import MusicBrainzClient

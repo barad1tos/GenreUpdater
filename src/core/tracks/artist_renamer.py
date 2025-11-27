@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import logging
     from pathlib import Path
 
-    from src.core.tracks.processor import TrackProcessor
+    from src.core.tracks.track_processor import TrackProcessor
     from src.core.models.track import TrackDict
 
 

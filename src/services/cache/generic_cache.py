@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, TypeGuard, cast
 
 from src.services.cache.cache_config import CacheContentType, SmartCacheConfig
-from src.services.cache.hash import UnifiedHashService
+from src.services.cache.hash_service import UnifiedHashService
 from src.core.logger import ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:

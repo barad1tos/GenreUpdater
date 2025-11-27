@@ -14,13 +14,13 @@ from src.app.year_update import YearUpdateService
 from src.core.tracks.artist_renamer import ArtistRenamer
 from src.core.tracks.genre_manager import GenreManager
 from src.core.tracks.incremental_filter import IncrementalFilterService
-from src.core.tracks.processor import TrackProcessor
+from src.core.tracks.track_processor import TrackProcessor
 from src.core.tracks.year_retriever import YearRetriever
 from src.core.logger import get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
-from src.core.models.metadata import is_music_app_running
+from src.core.models.metadata_utils import is_music_app_running
 from src.core.models.track import ChangeLogEntry, TrackDict
-from src.metrics.reports import (
+from src.metrics.change_reports import (
     save_changes_report,
     sync_track_list_with_current,
 )

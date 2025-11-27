@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock
 import allure
 import pytest
 from src.core.tracks.genre import GenreManager
-from src.core.models.metadata import determine_dominant_genre_for_artist, group_tracks_by_artist
+from src.core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
 from src.core.models.track import TrackDict
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger

@@ -259,7 +259,7 @@ class TestIncrementalPipelineIntegration:
 
         with (
             allure.step("Execute incremental filtering with status changes"),
-            patch("src.metrics.reports.load_track_list", return_value=[]),
+            patch("src.metrics.change_reports.load_track_list", return_value=[]),
         ):
             # Mock the CSV loading to return empty list (for simplicity)
             filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run)
@@ -369,7 +369,7 @@ class TestIncrementalPipelineIntegration:
 
         with (
             allure.step("Execute incremental filtering with mixed scenarios"),
-            patch("src.metrics.reports.load_track_list", return_value=[]),
+            patch("src.metrics.change_reports.load_track_list", return_value=[]),
         ):
             filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run)
 
@@ -430,7 +430,7 @@ class TestIncrementalPipelineIntegration:
 
         with (
             allure.step("Execute incremental filtering with CSV integration"),
-            patch("src.metrics.reports.load_track_list", return_value=mock_csv_data),
+            patch("src.metrics.change_reports.load_track_list", return_value=mock_csv_data),
         ):
             # Mock CSV loading to return our test data
             filtered_tracks = filter_service.filter_tracks_for_incremental_update(tracks, last_run)

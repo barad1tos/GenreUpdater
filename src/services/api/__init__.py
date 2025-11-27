@@ -10,7 +10,7 @@ This package contains specialized clients for different music metadata APIs:
 """
 
 from .applemusic import AppleMusicClient
-from .base import BaseApiClient, EnhancedRateLimiter, ScoredRelease
+from .api_base import BaseApiClient, EnhancedRateLimiter, ScoredRelease
 from .discogs import DiscogsClient
 from .lastfm import LastFmClient
 from .musicbrainz import MusicBrainzClient
