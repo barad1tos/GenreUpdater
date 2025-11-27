@@ -292,42 +292,37 @@ class TestProcessApiTaskResults:
         self, coordinator: YearSearchCoordinator
     ) -> None:
         """Test processing successful results."""
-        results = [
+        results: list[Any] = [
             [{"title": "Album1", "year": "2020", "score": 85}],
             [{"title": "Album2", "year": "2021", "score": 90}],
         ]
-        api_order = ["musicbrainz", "discogs"]
-
-        processed = coordinator._process_api_task_results(
-            results, api_order, "Artist", "Album"  # type: ignore
-        )
-
-        assert len(processed) == 2
+        self._assert_processed_results_count(coordinator, results, 2)
 
     def test_handles_exceptions(self, coordinator: YearSearchCoordinator) -> None:
         """Test handling exceptions in results."""
-        results = [
+        results: list[Any] = [
             [{"title": "Album1", "year": "2020", "score": 85}],
             ValueError("API error"),
         ]
-        api_order = ["musicbrainz", "discogs"]
-
-        processed = coordinator._process_api_task_results(
-            results, api_order, "Artist", "Album"  # type: ignore
-        )
-
-        assert len(processed) == 1
+        self._assert_processed_results_count(coordinator, results, 1)
 
     def test_handles_empty_results(self, coordinator: YearSearchCoordinator) -> None:
         """Test handling empty results."""
-        results: list[list[dict[str, Any]]] = [[], []]
+        results: list[Any] = [[], []]
+        self._assert_processed_results_count(coordinator, results, 0)
+
+    @staticmethod
+    def _assert_processed_results_count(
+        coordinator: YearSearchCoordinator,
+        results: list[Any],
+        expected_count: int,
+    ) -> None:
+        """Assert that processing results yields expected count."""
         api_order = ["musicbrainz", "discogs"]
-
         processed = coordinator._process_api_task_results(
-            results, api_order, "Artist", "Album"  # type: ignore
+            results, api_order, "Artist", "Album"
         )
-
-        assert len(processed) == 0
+        assert len(processed) == expected_count
 
 
 class TestFetchAllApiResults:

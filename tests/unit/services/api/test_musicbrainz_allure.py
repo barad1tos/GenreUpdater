@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.services.api.musicbrainz import MusicBrainzClient
 
+from src.services.api.musicbrainz import MusicBrainzClient
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -107,7 +107,7 @@ class TestMusicBrainzClientAllure:
     async def test_search_artist_not_found(self) -> None:
         """Test artist not found scenario."""
         with allure.step("Setup empty artist search response"):
-            mock_response = {"artists": []}
+            mock_response = {"artists": []}  # Mock empty response
             mock_api_request = AsyncMock(return_value=mock_response)
             client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
@@ -245,7 +245,7 @@ class TestMusicBrainzClientAllure:
         with allure.step("Test Lucene escaping"):
             for input_str, expected in test_cases:
                 with allure.step(f"Escape '{input_str}'"):
-                    result = MusicBrainzClient._escape_lucene(input_str)  # noqa: SLF001
+                    result = MusicBrainzClient._escape_lucene(input_str)
                     assert result == expected, f"Expected '{expected}', got '{result}'"
 
                     allure.attach(

@@ -241,29 +241,25 @@ class TestReleaseScorer:
         )
         assert valid_score > 0
 
-        # Invalid format should score zero (too short)
+        self._assert_invalid_year_scores_zero("20", scorer)
+        self._assert_invalid_year_scores_zero("", scorer)
+
+    @staticmethod
+    def _assert_invalid_year_scores_zero(
+        year_value: str,
+        scorer: ReleaseScorer,
+    ) -> None:
+        """Assert that invalid year format scores zero."""
         invalid_release = {
             "title": "Album",
             "artist": "Artist",
-            "year": "20",  # Too short
-            "source": "test"
+            "year": year_value,
+            "source": "test",
         }
         invalid_score = scorer.score_original_release(
             invalid_release, "artist", "album", artist_region=None
         )
         assert invalid_score == 0
-
-        # Empty year should score zero
-        empty_release = {
-            "title": "Album",
-            "artist": "Artist",
-            "year": "",
-            "source": "test"
-        }
-        empty_score = scorer.score_original_release(
-            empty_release, "artist", "album", artist_region=None
-        )
-        assert empty_score == 0
 
     def test_artist_period_context(self, scorer: ReleaseScorer) -> None:
         """Test scoring with artist period context."""
