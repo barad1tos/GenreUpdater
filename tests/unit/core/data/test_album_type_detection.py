@@ -6,8 +6,13 @@ This module tests the pattern-based detection of special album types
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import allure
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 from src.core.models.album_type import (
     AlbumType,
@@ -232,7 +237,7 @@ class TestAlbumTypePatternConfiguration:
     """
 
     @pytest.fixture(autouse=True)
-    def reset_after_test(self) -> None:  # type: ignore[misc]
+    def reset_after_test(self) -> Generator[None]:
         """Reset patterns after each test to avoid state pollution."""
         yield
         reset_patterns()
@@ -449,7 +454,7 @@ class TestAlbumTypeDetectionEdgeCases:
     """Edge case tests for album type detection."""
 
     @pytest.fixture(autouse=True)
-    def reset_after_test(self) -> None:  # type: ignore[misc]
+    def reset_after_test(self) -> Generator[None]:
         """Reset patterns after each test."""
         yield
         reset_patterns()

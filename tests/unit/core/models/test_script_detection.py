@@ -1,7 +1,5 @@
 """Tests for script detection utilities."""
 
-import pytest
-
 from src.core.models.script_detection import (
     ScriptType,
     detect_primary_script,
@@ -413,7 +411,7 @@ class TestScriptTypeEnum:
     def test_enum_is_str(self) -> None:
         """Test ScriptType is str enum."""
         assert isinstance(ScriptType.LATIN, str)
-        assert ScriptType.LATIN == "latin"
+        assert ScriptType.LATIN.value == "latin"
 
 
 class TestEdgeCases:
@@ -443,7 +441,7 @@ class TestEdgeCases:
         """Test Ukrainian-specific Cyrillic characters."""
         assert has_cyrillic("ї") is True  # Ukrainian specific
         assert has_cyrillic("є") is True  # Ukrainian specific
-        assert has_cyrillic("і") is True  # Ukrainian specific
+        assert has_cyrillic("\u0456") is True  # Ukrainian i (U+0456)
 
     def test_arabic_numbers_not_arabic_script(self) -> None:
         """Test that Arabic numerals (0-9) are not detected as Arabic script."""
@@ -452,6 +450,6 @@ class TestEdgeCases:
 
     def test_greek_letters_in_math(self) -> None:
         """Test Greek letters commonly used in math."""
-        assert has_greek("α") is True
+        assert has_greek("\u03b1") is True  # Greek alpha (U+03B1)
         assert has_greek("β") is True
         assert has_greek("π") is True

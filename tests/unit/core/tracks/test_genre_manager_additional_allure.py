@@ -12,16 +12,47 @@ This file contains the 6 additional tests specified in the testing plan:
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.core.tracks.genre_manager import GenreManager
+
 from src.core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
 from src.core.models.track_models import TrackDict
+from src.core.tracks.genre_manager import GenreManager
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+
+def _create_mock_logger() -> MagicMock:
+    """Create a mock logger with message tracking."""
+    mock = MagicMock(spec=logging.Logger)
+    mock.info_messages = []
+    mock.warning_messages = []
+    mock.error_messages = []
+    mock.debug_messages = []
+
+    def track_info(msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track info log messages."""
+        mock.info_messages.append(str(msg) % args if args else str(msg))
+
+    def track_error(msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track error log messages."""
+        mock.error_messages.append(str(msg) % args if args else str(msg))
+
+    def track_debug(msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track debug log messages."""
+        mock.debug_messages.append(str(msg) % args if args else str(msg))
+
+    def track_warning(msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track warning log messages."""
+        mock.warning_messages.append(str(msg) % args if args else str(msg))
+
+    mock.info.side_effect = track_info
+    mock.error.side_effect = track_error
+    mock.debug.side_effect = track_debug
+    mock.warning.side_effect = track_warning
+    return mock
 
 
 @allure.epic("Music Genre Updater")
@@ -42,9 +73,9 @@ class TestGenreManagerCoreFunctionality:
 
         return GenreManager(
             track_processor=mock_track_processor,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=_create_mock_logger(),
+            error_logger=_create_mock_logger(),
+            analytics=MagicMock(),
             config=test_config,
             dry_run=dry_run,
         )
@@ -102,7 +133,7 @@ class TestGenreManagerCoreFunctionality:
             )
 
         with allure.step("Calculate dominant genre"):
-            error_logger = MockLogger()
+            error_logger = _create_mock_logger()
             dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
 
         with allure.step("Verify single track genre selected"):
@@ -145,7 +176,7 @@ class TestGenreManagerCoreFunctionality:
             )
 
         with allure.step("Calculate dominant genre with tie-breaking"):
-            error_logger = MockLogger()
+            error_logger = _create_mock_logger()
             dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
 
         with allure.step("Verify earliest album genre selected"):
@@ -179,7 +210,6 @@ class TestGenreManagerCoreFunctionality:
                             "album": track.album,
                             "genre": track.genre,
                             "date_added": track.date_added,
-                            "year": track.date_added[:4] if track.date_added else "",
                         }
                         for track in tracks
                     ],
@@ -190,7 +220,7 @@ class TestGenreManagerCoreFunctionality:
             )
 
         with allure.step("Calculate dominant genre"):
-            error_logger = MockLogger()
+            error_logger = _create_mock_logger()
             dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
 
         with allure.step("Verify earliest album genre selected (regardless of frequency)"):
@@ -212,7 +242,7 @@ class TestGenreManagerCoreFunctionality:
             allure.attach("[]", "Empty Track List", allure.attachment_type.TEXT)
 
         with allure.step("Calculate dominant genre for empty list"):
-            error_logger = MockLogger()
+            error_logger = _create_mock_logger()
             dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
 
         with allure.step("Verify default genre returned"):
@@ -259,7 +289,7 @@ class TestGenreManagerCoreFunctionality:
             grouped_tracks = group_tracks_by_artist(tracks)
 
         with allure.step("Process dominant genre for each artist"):
-            error_logger = MockLogger()
+            error_logger = _create_mock_logger()
             artist_genres = {}
 
             for artist, artist_tracks in grouped_tracks.items():

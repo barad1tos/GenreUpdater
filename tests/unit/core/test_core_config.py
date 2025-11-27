@@ -1,4 +1,8 @@
-"""Unit tests for core configuration module."""
+"""Unit tests for core configuration module.
+
+Note: This module tests internal config functions that are prefixed with underscore.
+Testing private functions is intentional to ensure correctness of internal logic.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ from src.core.core_config import (
 
 if TYPE_CHECKING:
     import pathlib
+    from pathlib import Path
 
 
 def _create_config_file(tmp_path: pathlib.Path, name: str, content: str) -> pathlib.Path:
@@ -84,15 +89,9 @@ class TestResolveEnvVars:
 class TestValidateConfigPath:
     """Tests for _validate_config_path function."""
 
-    def test_valid_config_in_cwd(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_valid_config_in_cwd(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should accept config file in current working directory."""
-        monkeypatch.chdir(tmp_path)
-        config_file = _create_config_file(tmp_path, "config.yaml", "key: value")
-
-        result = _validate_config_path(str(config_file))
-        assert result == config_file.resolve()
+        self._assert_config_path_valid(monkeypatch, tmp_path, "config.yaml")
 
     def test_raises_for_nonexistent_file(self, tmp_path: pathlib.Path) -> None:
         """Should raise FileNotFoundError for missing file."""
@@ -101,18 +100,14 @@ class TestValidateConfigPath:
         with pytest.raises(FileNotFoundError, match="Config file not found"):
             _validate_config_path(str(nonexistent))
 
-    def test_raises_for_directory(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raises_for_directory(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should raise FileNotFoundError if path is a directory."""
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(FileNotFoundError, match="does not point to a file"):
             _validate_config_path(str(tmp_path))
 
-    def test_raises_for_wrong_extension(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raises_for_wrong_extension(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should raise ValueError for non-YAML extension."""
         monkeypatch.chdir(tmp_path)
         config_file = _create_config_file(tmp_path, "config.txt", "key: value")
@@ -120,13 +115,19 @@ class TestValidateConfigPath:
         with pytest.raises(ValueError, match=r"must have a \.yaml or \.yml extension"):
             _validate_config_path(str(config_file))
 
-    def test_accepts_yml_extension(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_accepts_yml_extension(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should accept .yml extension."""
-        monkeypatch.chdir(tmp_path)
-        config_file = _create_config_file(tmp_path, "config.yml", "key: value")
+        self._assert_config_path_valid(monkeypatch, tmp_path, "config.yml")
 
+    @staticmethod
+    def _assert_config_path_valid(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        filename: str,
+    ) -> None:
+        """Assert that config path validation succeeds for given filename."""
+        monkeypatch.chdir(tmp_path)
+        config_file = _create_config_file(tmp_path, filename, "key: value")
         result = _validate_config_path(str(config_file))
         assert result == config_file.resolve()
 
@@ -136,9 +137,7 @@ class TestReadAndParseConfig:
 
     def test_reads_valid_yaml(self, tmp_path: pathlib.Path) -> None:
         """Should parse valid YAML file."""
-        config_file = _create_config_file(
-            tmp_path, "config.yaml", "database:\n  host: localhost\n  port: 5432\n"
-        )
+        config_file = _create_config_file(tmp_path, "config.yaml", "database:\n  host: localhost\n  port: 5432\n")
 
         result = _read_and_parse_config(config_file)
         assert isinstance(result, dict)
@@ -212,43 +211,44 @@ class TestValidateConfigDataType:
 class TestFormatPydanticErrors:
     """Tests for format_pydantic_errors function."""
 
+    @staticmethod
+    def _create_mock_validation_error(
+        errors: list[dict[str, Any]],
+    ) -> MagicMock:
+        """Create a mock ValidationError with given errors."""
+        mock_error = MagicMock(spec=ValidationError)
+        mock_error.errors.return_value = errors
+        return mock_error
+
     def test_formats_missing_field_error(self) -> None:
         """Should format missing field errors."""
-        mock_error = MagicMock(spec=ValidationError)
-        mock_error.errors.return_value = [
-            {"loc": ("database", "host"), "msg": "field required", "type": "missing"}
-        ]
+        mock_error = self._create_mock_validation_error([{"loc": ("database", "host"), "msg": "field required", "type": "missing"}])
 
         result = format_pydantic_errors(mock_error)
         assert "database.host: Missing required field" in result
 
     def test_formats_type_error(self) -> None:
         """Should format type errors."""
-        mock_error = MagicMock(spec=ValidationError)
-        mock_error.errors.return_value = [
-            {"loc": ("port",), "msg": "value is not a valid integer", "type": "type_error"}
-        ]
+        mock_error = self._create_mock_validation_error([{"loc": ("port",), "msg": "value is not a valid integer", "type": "type_error"}])
 
         result = format_pydantic_errors(mock_error)
         assert "port: value is not a valid integer" in result
 
     def test_formats_other_errors_with_type(self) -> None:
         """Should include type for other error types."""
-        mock_error = MagicMock(spec=ValidationError)
-        mock_error.errors.return_value = [
-            {"loc": ("field",), "msg": "custom error", "type": "custom_type"}
-        ]
+        mock_error = self._create_mock_validation_error([{"loc": ("field",), "msg": "custom error", "type": "custom_type"}])
 
         result = format_pydantic_errors(mock_error)
         assert "field: custom error (type: custom_type)" in result
 
     def test_formats_multiple_errors(self) -> None:
         """Should format multiple errors separated by newlines."""
-        mock_error = MagicMock(spec=ValidationError)
-        mock_error.errors.return_value = [
-            {"loc": ("field1",), "msg": "error1", "type": "missing"},
-            {"loc": ("field2",), "msg": "error2", "type": "missing"},
-        ]
+        mock_error = self._create_mock_validation_error(
+            [
+                {"loc": ("field1",), "msg": "error1", "type": "missing"},
+                {"loc": ("field2",), "msg": "error2", "type": "missing"},
+            ]
+        )
 
         result = format_pydantic_errors(mock_error)
         lines = result.split("\n")
@@ -359,7 +359,5 @@ class TestLoadConfigWithFallback:
 
             result = load_config_with_fallback("config.yaml", ["backup.yaml"])
 
-            mock_handler.load_config_with_fallback.assert_called_once_with(
-                "config.yaml", ["backup.yaml"]
-            )
+            mock_handler.load_config_with_fallback.assert_called_once_with("config.yaml", ["backup.yaml"])
             assert result == {"key": "value"}

@@ -9,7 +9,6 @@ Note: Tests access private methods (prefixed with _) which is intentional
 for unit testing internal behavior.
 """
 
-# ruff: noqa: SLF001
 # pyright: reportPrivateUsage=false
 
 from __future__ import annotations

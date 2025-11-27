@@ -1,4 +1,8 @@
-"""Unit tests for logger module."""
+"""Unit tests for logger module.
+
+Note: This module tests internal logger functions that are prefixed with underscore.
+Testing private functions is intentional to ensure correctness of internal logic.
+"""
 
 from __future__ import annotations
 
@@ -248,11 +252,11 @@ class TestShortenPath:
 class TestLoggerFilter:
     """Tests for LoggerFilter class."""
 
-    def test_allows_exact_match(self) -> None:
-        """Should allow records from exact logger match."""
-        filter_obj = LoggerFilter(["my_logger"])
-        record = logging.LogRecord(
-            name="my_logger",
+    @staticmethod
+    def _create_log_record(name: str) -> logging.LogRecord:
+        """Create a log record with the given logger name."""
+        return logging.LogRecord(
+            name=name,
             level=logging.INFO,
             pathname="",
             lineno=0,
@@ -261,60 +265,36 @@ class TestLoggerFilter:
             exc_info=None,
         )
 
-        assert filter_obj.filter(record) is True
+    def test_allows_exact_match(self) -> None:
+        """Should allow records from exact logger match."""
+        self._assert_filter_result("my_logger", "my_logger", expected=True)
 
     def test_allows_child_logger(self) -> None:
         """Should allow records from child loggers."""
-        filter_obj = LoggerFilter(["parent"])
-        record = logging.LogRecord(
-            name="parent.child",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="test",
-            args=(),
-            exc_info=None,
-        )
-
-        assert filter_obj.filter(record) is True
+        self._assert_filter_result("parent", "parent.child", expected=True)
 
     def test_rejects_non_matching_logger(self) -> None:
         """Should reject records from non-matching loggers."""
-        filter_obj = LoggerFilter(["allowed_logger"])
-        record = logging.LogRecord(
-            name="other_logger",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="test",
-            args=(),
-            exc_info=None,
-        )
+        self._assert_filter_result("allowed_logger", "other_logger", expected=False)
 
-        assert filter_obj.filter(record) is False
+    def _assert_filter_result(
+        self,
+        allowed_logger: str,
+        record_logger: str,
+        *,
+        expected: bool,
+    ) -> None:
+        """Assert that filter returns expected result for given loggers."""
+        filter_obj = LoggerFilter([allowed_logger])
+        record = self._create_log_record(record_logger)
+        assert filter_obj.filter(record) is expected
 
     def test_allows_multiple_loggers(self) -> None:
         """Should allow records from any of multiple allowed loggers."""
         filter_obj = LoggerFilter(["logger_a", "logger_b"])
 
-        record_a = logging.LogRecord(
-            name="logger_a",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="test",
-            args=(),
-            exc_info=None,
-        )
-        record_b = logging.LogRecord(
-            name="logger_b",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="test",
-            args=(),
-            exc_info=None,
-        )
+        record_a = self._create_log_record("logger_a")
+        record_b = self._create_log_record("logger_b")
 
         assert filter_obj.filter(record_a) is True
         assert filter_obj.filter(record_b) is True
@@ -350,7 +330,7 @@ class TestRunHandler:
 
     def test_trim_log_to_max_runs_does_nothing_when_no_file(self, tmp_path: Path) -> None:
         """Should do nothing when file doesn't exist."""
-        handler = RunHandler(max_runs=3)
+        handler = RunHandler()
         handler.trim_log_to_max_runs(str(tmp_path / "nonexistent.log"))
 
 
@@ -366,6 +346,7 @@ class TestCompactFormatter:
         """Should use custom format when provided."""
         custom_fmt = "%(message)s"
         formatter = CompactFormatter(fmt=custom_fmt)
+        assert formatter._fmt is not None
         assert custom_fmt in formatter._fmt
 
     def test_format_abbreviates_level(self) -> None:

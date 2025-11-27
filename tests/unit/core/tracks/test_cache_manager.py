@@ -2,14 +2,17 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.core.models.track_models import TrackDict
 from src.core.tracks.cache_manager import TrackCacheManager
-from src.services.cache.snapshot import LibraryCacheMetadata, LibraryDeltaCache
+from src.services.cache.snapshot import LibraryCacheMetadata
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import CacheServiceProtocol
 
 
 @pytest.fixture
@@ -52,7 +55,7 @@ def cache_manager(
 ) -> TrackCacheManager:
     """Create a TrackCacheManager instance."""
     return TrackCacheManager(
-        cache_service=mock_cache_service,
+        cache_service=cast("CacheServiceProtocol", mock_cache_service),
         snapshot_service=mock_snapshot_service,
         console_logger=logger,
     )
@@ -121,7 +124,7 @@ class TestLoadSnapshot:
     ) -> None:
         """Test returns None when snapshot service is not available."""
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -185,7 +188,7 @@ class TestGetSnapshotForDeltaUpdate:
     ) -> None:
         """Test returns (None, None) when no snapshot service."""
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -330,7 +333,7 @@ class TestUpdateSnapshot:
     ) -> None:
         """Test does nothing when no snapshot service."""
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -373,28 +376,27 @@ class TestUpdateSnapshot:
         sample_tracks: list[TrackDict],
     ) -> None:
         """Test updates delta cache."""
-        # Use naive datetime to match _now() in snapshot.py
-        fixed_time_naive = datetime(2025, 1, 1, 12, 0, 0)
-        fixed_time_aware = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        fixed_time = datetime(2025, 1, 1, 12, tzinfo=UTC)
 
-        # Create fresh mock - get_library_mtime returns aware, but delta uses naive internally
         mock_snapshot = AsyncMock()
         mock_snapshot.is_enabled = MagicMock(return_value=True)
         mock_snapshot.is_delta_enabled = MagicMock(return_value=True)
         mock_snapshot.save_snapshot = AsyncMock(return_value="hash")
-        mock_snapshot.get_library_mtime = AsyncMock(return_value=fixed_time_aware)
+        mock_snapshot.get_library_mtime = AsyncMock(return_value=fixed_time)
         mock_snapshot.update_snapshot_metadata = AsyncMock()
         mock_snapshot.load_delta = AsyncMock(return_value=None)
         mock_snapshot.save_delta = AsyncMock()
 
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=mock_snapshot,
             console_logger=logger,
-            current_time_func=lambda: fixed_time_naive,
+            current_time_func=lambda: fixed_time,
         )
 
-        await manager.update_snapshot(sample_tracks, processed_track_ids=["1", "2"])
+        # Patch _now() to return consistent time (avoids naive/aware mismatch)
+        with patch("src.services.cache.snapshot._now", return_value=fixed_time):
+            await manager.update_snapshot(sample_tracks, processed_track_ids=["1", "2"])
 
         mock_snapshot.save_delta.assert_called_once()
 
@@ -423,7 +425,7 @@ class TestCanUseSnapshot:
     ) -> None:
         """Test returns False when no snapshot service."""
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -463,10 +465,10 @@ class TestCustomTimeFunc:
         sample_tracks: list[TrackDict],
     ) -> None:
         """Test uses custom time function for timestamps."""
-        fixed_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        fixed_time = datetime(2025, 1, 1, 12, tzinfo=UTC)
 
         manager = TrackCacheManager(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             snapshot_service=mock_snapshot_service,
             console_logger=logger,
             current_time_func=lambda: fixed_time,

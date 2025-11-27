@@ -1,7 +1,7 @@
 """Tests for TrackUpdateExecutor - track metadata update operations."""
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +9,10 @@ import pytest
 from src.core.models.track_models import TrackDict
 from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.core.tracks.update_executor import TrackUpdateExecutor
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import CacheServiceProtocol
+    from src.core.models.types import AppleScriptClientProtocol
 
 
 @pytest.fixture
@@ -67,8 +71,8 @@ def executor(
 ) -> TrackUpdateExecutor:
     """Create a TrackUpdateExecutor instance."""
     return TrackUpdateExecutor(
-        ap_client=mock_ap_client,
-        cache_service=mock_cache_service,
+        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
+        cache_service=cast("CacheServiceProtocol", mock_cache_service),
         security_validator=mock_security_validator,
         config=config,
         console_logger=logger,
@@ -87,8 +91,8 @@ def dry_run_executor(
 ) -> TrackUpdateExecutor:
     """Create a TrackUpdateExecutor instance in dry-run mode."""
     return TrackUpdateExecutor(
-        ap_client=mock_ap_client,
-        cache_service=mock_cache_service,
+        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
+        cache_service=cast("CacheServiceProtocol", mock_cache_service),
         security_validator=mock_security_validator,
         config=config,
         console_logger=logger,
@@ -123,7 +127,7 @@ class TestSetDryRun:
         dry_run_executor._dry_run_actions = [{"action": "test"}]
         dry_run_executor.set_dry_run(False)
         assert dry_run_executor.dry_run is False
-        assert dry_run_executor._dry_run_actions == []
+        assert not dry_run_executor._dry_run_actions
 
 
 class TestGetDryRunActions:
@@ -494,7 +498,7 @@ class TestTryBatchUpdate:
         """Test invalid timeout configuration raises ValueError."""
         executor.config["applescript_timeouts"]["batch_update"] = -1
         updates = [("genre", "Rock")]
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Non-positive"):
             await executor._try_batch_update("123", updates)
 
     @pytest.mark.asyncio
