@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.core.models.track_models import TrackDict
+from src.core.models.track_models import TrackDict
 
 
 # NOTE: DummyTrackSummary class removed after track_delta_service.py refactoring
@@ -28,8 +25,6 @@ class DummyTrackData:
         track_status: str | None = "subscription",
     ) -> TrackDict:
         """Create a basic TrackDict with sensible defaults."""
-        from src.core.models.track_models import TrackDict
-
         return TrackDict(
             id=track_id,
             name=name,
