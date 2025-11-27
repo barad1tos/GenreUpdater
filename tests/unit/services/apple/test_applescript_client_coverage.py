@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -275,7 +274,7 @@ class TestRunScript:
         await client.initialize()
         with patch.object(client.executor, "run_osascript", new_callable=AsyncMock) as mock_run:
             mock_run.side_effect = OSError("Script failed")
-            with pytest.raises(OSError):
+            with pytest.raises(OSError, match="Script failed"):
                 await client.run_script("update_property.applescript")
 
 
@@ -308,13 +307,15 @@ class TestRunScriptCode:
         await client.initialize()
         # Use a moderately sized script that triggers temp file but passes validation
         script = 'return "result"'
-        with patch.object(client.executor, "should_use_temp_file", return_value=True):
-            with patch.object(client.sanitizer, "validate_script_code"):  # Mock validation
-                with patch.object(client.executor, "run_via_temp_file", new_callable=AsyncMock) as mock_run:
-                    mock_run.return_value = "result"
-                    result = await client.run_script_code(script)
-                    assert result == "result"
-                    mock_run.assert_called_once()
+        with (
+            patch.object(client.executor, "should_use_temp_file", return_value=True),
+            patch.object(client.sanitizer, "validate_script_code"),
+            patch.object(client.executor, "run_via_temp_file", new_callable=AsyncMock) as mock_run,
+        ):
+            mock_run.return_value = "result"
+            result = await client.run_script_code(script)
+            assert result == "result"
+            mock_run.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_none_for_security_violation_temp_file(
@@ -344,10 +345,12 @@ class TestRunScriptCode:
     ) -> None:
         """Test handles ValueError during sanitization."""
         await client.initialize()
-        with patch.object(client.executor, "should_use_temp_file", return_value=False):
-            with patch.object(client.sanitizer, "create_safe_command", side_effect=ValueError("Bad value")):
-                result = await client.run_script_code('return "test"')
-                assert result is None
+        with (
+            patch.object(client.executor, "should_use_temp_file", return_value=False),
+            patch.object(client.sanitizer, "create_safe_command", side_effect=ValueError("Bad value")),
+        ):
+            result = await client.run_script_code('return "test"')
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_executes_inline_for_small_script(
@@ -356,11 +359,13 @@ class TestRunScriptCode:
         """Test uses inline execution for small scripts."""
         await client.initialize()
         small_script = 'return "test"'
-        with patch.object(client.executor, "should_use_temp_file", return_value=False):
-            with patch.object(client.executor, "run_osascript", new_callable=AsyncMock) as mock_run:
-                mock_run.return_value = "test"
-                result = await client.run_script_code(small_script)
-                assert result == "test"
+        with (
+            patch.object(client.executor, "should_use_temp_file", return_value=False),
+            patch.object(client.executor, "run_osascript", new_callable=AsyncMock) as mock_run,
+        ):
+            mock_run.return_value = "test"
+            result = await client.run_script_code(small_script)
+            assert result == "test"
 
 
 class TestInitializeOSError:
@@ -407,10 +412,12 @@ class TestRunScriptFileAccessValidation:
     ) -> None:
         """Test returns None when file_validator.validate_script_file_access returns False."""
         await client.initialize()
-        with patch.object(client.file_validator, "validate_script_path", return_value=True):
-            with patch.object(client.file_validator, "validate_script_file_access", return_value=False):
-                result = await client.run_script("update_property.applescript")
-                assert result is None
+        with (
+            patch.object(client.file_validator, "validate_script_path", return_value=True),
+            patch.object(client.file_validator, "validate_script_file_access", return_value=False),
+        ):
+            result = await client.run_script("update_property.applescript")
+            assert result is None
 
 
 class TestFetchTracksByIds:
@@ -435,7 +442,11 @@ class TestFetchTracksByIds:
         # Create mock output that matches expected format
         field_sep = "\x1e"
         line_sep = "\x1d"
-        track_data = f"123{field_sep}Track Name{field_sep}Artist{field_sep}Album Artist{field_sep}Album{field_sep}Rock{field_sep}2023-01-01{field_sep}subscription{field_sep}2020{field_sep}2020{field_sep}{line_sep}"
+        track_data = (
+            f"123{field_sep}Track Name{field_sep}Artist{field_sep}Album Artist{field_sep}"
+            f"Album{field_sep}Rock{field_sep}2023-01-01{field_sep}subscription{field_sep}"
+            f"2020{field_sep}2020{field_sep}{line_sep}"
+        )
 
         with patch.object(client, "run_script", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = track_data
@@ -563,11 +574,11 @@ class TestFormatScriptPreview:
         self, client: AppleScriptClient
     ) -> None:
         """Test formats script with tell application pattern."""
-        script = '''
+        script = """
         tell application "Music"
             get name of first track
         end tell
-        '''
+        """
         result = client._format_script_preview(script)
         assert 'tell application "Music"' in result
         assert "..." in result
