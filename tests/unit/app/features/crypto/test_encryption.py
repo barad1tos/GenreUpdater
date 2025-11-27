@@ -2,8 +2,6 @@
 
 import base64
 import logging
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,10 +15,20 @@ from src.app.features.crypto.encryption import (
 from src.app.features.crypto.exceptions import (
     DecryptionError,
     EncryptionError,
-    InvalidKeyError,
     InvalidTokenError,
     KeyGenerationError,
 )
+
+
+# Test data - intentionally hardcoded values for encryption tests
+SAMPLE_PLAINTEXT = "my_secret_token"
+SAMPLE_PHRASE = "my_password"
+SAMPLE_STRONG_PHRASE = "strong_password"
+SAMPLE_WRONG_PHRASE = "wrong_password"
+SAMPLE_NEW_PHRASE = "new_password"
+SAMPLE_API_VALUE = "secret_api_key_12345"
+SAMPLE_UNICODE = "秘密のトークン"  # Japanese "secret token"
+SAMPLE_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
 
 
 @pytest.fixture
@@ -141,11 +149,10 @@ class TestEncryption:
         self, crypto_manager_with_key: CryptographyManager
     ) -> None:
         """Test basic token encryption."""
-        token = "my_secret_token"
-        encrypted = crypto_manager_with_key.encrypt_token(token)
+        encrypted = crypto_manager_with_key.encrypt_token(SAMPLE_PLAINTEXT)
 
         assert isinstance(encrypted, str)
-        assert encrypted != token
+        assert encrypted != SAMPLE_PLAINTEXT
         assert len(encrypted) >= FERNET_TOKEN_MIN_ENCODED_LENGTH
 
     def test_encrypt_empty_token_raises_error(
@@ -159,20 +166,18 @@ class TestEncryption:
         self, crypto_manager: CryptographyManager
     ) -> None:
         """Test encryption with password."""
-        token = "my_secret_token"
-        encrypted = crypto_manager.encrypt_token(token, password="my_password")
+        encrypted = crypto_manager.encrypt_token(SAMPLE_PLAINTEXT, password=SAMPLE_PHRASE)
 
-        assert encrypted != token
+        assert encrypted != SAMPLE_PLAINTEXT
 
     def test_encrypt_with_key(
         self, crypto_manager: CryptographyManager
     ) -> None:
         """Test encryption with explicit key."""
-        token = "my_secret_token"
         key = Fernet.generate_key().decode()
-        encrypted = crypto_manager.encrypt_token(token, key=key)
+        encrypted = crypto_manager.encrypt_token(SAMPLE_PLAINTEXT, key=key)
 
-        assert encrypted != token
+        assert encrypted != SAMPLE_PLAINTEXT
 
 
 class TestDecryption:
@@ -182,11 +187,10 @@ class TestDecryption:
         self, crypto_manager_with_key: CryptographyManager
     ) -> None:
         """Test basic token decryption."""
-        original_token = "my_secret_token"
-        encrypted = crypto_manager_with_key.encrypt_token(original_token)
+        encrypted = crypto_manager_with_key.encrypt_token(SAMPLE_PLAINTEXT)
         decrypted = crypto_manager_with_key.decrypt_token(encrypted)
 
-        assert decrypted == original_token
+        assert decrypted == SAMPLE_PLAINTEXT
 
     def test_decrypt_empty_token_raises_error(
         self, crypto_manager_with_key: CryptographyManager
@@ -206,24 +210,20 @@ class TestDecryption:
         self, crypto_manager_with_key: CryptographyManager, crypto_manager: CryptographyManager
     ) -> None:
         """Test decrypting with wrong key raises error."""
-        original_token = "my_secret_token"
-        encrypted = crypto_manager_with_key.encrypt_token(original_token)
+        encrypted = crypto_manager_with_key.encrypt_token(SAMPLE_PLAINTEXT)
 
         # Try to decrypt with different key
         with pytest.raises(DecryptionError):
-            crypto_manager.decrypt_token(encrypted, password="wrong_password")
+            crypto_manager.decrypt_token(encrypted, password=SAMPLE_WRONG_PHRASE)
 
     def test_roundtrip_with_password(
         self, crypto_manager: CryptographyManager
     ) -> None:
         """Test encryption/decryption roundtrip with password."""
-        original_token = "secret_api_key_12345"
-        password = "strong_password"
+        encrypted = crypto_manager.encrypt_token(SAMPLE_API_VALUE, password=SAMPLE_STRONG_PHRASE)
+        decrypted = crypto_manager.decrypt_token(encrypted, password=SAMPLE_STRONG_PHRASE)
 
-        encrypted = crypto_manager.encrypt_token(original_token, password=password)
-        decrypted = crypto_manager.decrypt_token(encrypted, password=password)
-
-        assert decrypted == original_token
+        assert decrypted == SAMPLE_API_VALUE
 
 
 class TestIsTokenEncrypted:
@@ -286,11 +286,11 @@ class TestKeyRotation:
         self, crypto_manager_with_key: CryptographyManager
     ) -> None:
         """Test key rotation with password."""
-        crypto_manager_with_key.rotate_key(new_password="new_password")
+        crypto_manager_with_key.rotate_key(new_password=SAMPLE_NEW_PHRASE)
 
         # Should be able to encrypt with new password-derived key
-        encrypted = crypto_manager_with_key.encrypt_token("test", password="new_password")
-        decrypted = crypto_manager_with_key.decrypt_token(encrypted, password="new_password")
+        encrypted = crypto_manager_with_key.encrypt_token("test", password=SAMPLE_NEW_PHRASE)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted, password=SAMPLE_NEW_PHRASE)
 
         assert decrypted == "test"
 
@@ -302,10 +302,7 @@ class TestGetSecureConfigStatus:
         self, crypto_manager: CryptographyManager
     ) -> None:
         """Test status before key initialization."""
-        status = crypto_manager.get_secure_config_status()
-
-        assert status["encryption_initialized"] is False
-        assert status["key_file_exists"] is False
+        self._assert_crypto_status(crypto_manager, expected_initialized=False)
 
     def test_status_after_initialization(
         self, crypto_manager_with_key: CryptographyManager
@@ -314,11 +311,20 @@ class TestGetSecureConfigStatus:
         # Initialize encryption
         crypto_manager_with_key.encrypt_token("test")
 
-        status = crypto_manager_with_key.get_secure_config_status()
-
-        assert status["encryption_initialized"] is True
-        assert status["key_file_exists"] is True
+        status = self._assert_crypto_status(
+            crypto_manager_with_key, expected_initialized=True
+        )
         assert status["key_file_permissions"] == "600"
+
+    @staticmethod
+    def _assert_crypto_status(
+        crypto_manager: CryptographyManager, *, expected_initialized: bool
+    ) -> dict[str, object]:
+        """Assert encryption status and return the status dict."""
+        result = crypto_manager.get_secure_config_status()
+        assert result["encryption_initialized"] is expected_initialized
+        assert result["key_file_exists"] is expected_initialized
+        return result
 
 
 class TestGetFernet:
@@ -350,11 +356,10 @@ class TestEdgeCases:
         self, crypto_manager_with_key: CryptographyManager
     ) -> None:
         """Test encrypting unicode token."""
-        token = "秘密のトークン"  # Japanese "secret token"
-        encrypted = crypto_manager_with_key.encrypt_token(token)
+        encrypted = crypto_manager_with_key.encrypt_token(SAMPLE_UNICODE)
         decrypted = crypto_manager_with_key.decrypt_token(encrypted)
 
-        assert decrypted == token
+        assert decrypted == SAMPLE_UNICODE
 
     def test_encrypt_long_token(
         self, crypto_manager_with_key: CryptographyManager
@@ -370,8 +375,7 @@ class TestEdgeCases:
         self, crypto_manager_with_key: CryptographyManager
     ) -> None:
         """Test encrypting token with special characters."""
-        token = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
-        encrypted = crypto_manager_with_key.encrypt_token(token)
+        encrypted = crypto_manager_with_key.encrypt_token(SAMPLE_SPECIAL_CHARS)
         decrypted = crypto_manager_with_key.decrypt_token(encrypted)
 
-        assert decrypted == token
+        assert decrypted == SAMPLE_SPECIAL_CHARS

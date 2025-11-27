@@ -108,7 +108,7 @@ class TestOrchestratorAllure:
             orchestrator = Orchestrator(deps)
 
         with allure.step(f"Check if '{command}' requires Music app"):
-            result = orchestrator._requires_music_app(command)  # noqa: SLF001
+            result = orchestrator._requires_music_app(command)
 
         with allure.step("Verify result"):
             assert result == requires_music
@@ -162,8 +162,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify dry-run context was set"):
-            set_context_mock = cast(Mock, orchestrator.music_updater.set_dry_run_context)
-            set_context_mock.assert_called_once()
+            orchestrator.music_updater.set_dry_run_context.assert_called_once()
+            set_context_mock = orchestrator.music_updater.set_dry_run_context
             mode_arg, artists_arg = set_context_mock.call_args.args
             assert mode_arg == expected_mode
             assert artists_arg == {"Test Artist 1", "Test Artist 2"}
@@ -189,8 +189,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify clean artist was called"):
-            run_clean_artist_mock = cast(AsyncMock, orchestrator.music_updater.run_clean_artist)
-            run_clean_artist_mock.assert_called_once()
+            orchestrator.music_updater.run_clean_artist.assert_called_once()
+            run_clean_artist_mock = orchestrator.music_updater.run_clean_artist
             clean_kwargs = run_clean_artist_mock.call_args.kwargs
             assert clean_kwargs["artist"] == "Test Artist"
             assert clean_kwargs["_force"] is True
@@ -215,9 +215,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify update years was called"):
-            run_update_years_mock = cast(AsyncMock, orchestrator.music_updater.run_update_years)
-            run_update_years_mock.assert_called_once()
-            update_kwargs = run_update_years_mock.call_args.kwargs
+            orchestrator.music_updater.run_update_years.assert_called_once()
+            update_kwargs = orchestrator.music_updater.run_update_years.call_args.kwargs
             assert update_kwargs["artist"] == "Test Artist"
             assert update_kwargs["force"] is True
             allure.attach("Update years executed", "Command Result", allure.attachment_type.TEXT)
@@ -241,9 +240,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify revert years was called"):
-            run_revert_years_mock = cast(AsyncMock, orchestrator.music_updater.run_revert_years)
-            run_revert_years_mock.assert_called_once()
-            revert_kwargs = run_revert_years_mock.call_args.kwargs
+            orchestrator.music_updater.run_revert_years.assert_called_once()
+            revert_kwargs = orchestrator.music_updater.run_revert_years.call_args.kwargs
             assert revert_kwargs["artist"] == "Test Artist"
             assert revert_kwargs["album"] == "Test Album"
             assert revert_kwargs["backup_csv"] == "backup.csv"
@@ -268,9 +266,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify database verification was called"):
-            run_verify_database_mock = cast(AsyncMock, orchestrator.music_updater.run_verify_database)
-            run_verify_database_mock.assert_called_once()
-            verify_kwargs = run_verify_database_mock.call_args.kwargs
+            orchestrator.music_updater.run_verify_database.assert_called_once()
+            verify_kwargs = orchestrator.music_updater.run_verify_database.call_args.kwargs
             assert verify_kwargs["force"] is True
             allure.attach("Database verification executed", "Command Result", allure.attachment_type.TEXT)
 
@@ -293,9 +290,8 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify main pipeline was called"):
-            run_main_pipeline_mock = cast(AsyncMock, orchestrator.music_updater.run_main_pipeline)
-            run_main_pipeline_mock.assert_called_once()
-            pipeline_kwargs = run_main_pipeline_mock.call_args.kwargs
+            orchestrator.music_updater.run_main_pipeline.assert_called_once()
+            pipeline_kwargs = orchestrator.music_updater.run_main_pipeline.call_args.kwargs
             assert pipeline_kwargs.get("force", False) is False
             allure.attach("Main pipeline executed", "Command Result", allure.attachment_type.TEXT)
 
@@ -329,15 +325,13 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify batch processor was called"):
-            batch_processor_class_mock = cast(Mock, mock_batch_processor_class)
-            batch_processor_class_mock.assert_called_once_with(
+            mock_batch_processor_class.assert_called_once_with(
                 orchestrator.music_updater,
                 orchestrator.console_logger,
                 orchestrator.error_logger,
             )
-            process_from_file_mock = cast(AsyncMock, mock_batch_processor.process_from_file)
-            process_from_file_mock.assert_called_once()
-            batch_call_kwargs = process_from_file_mock.call_args.kwargs
+            mock_batch_processor.process_from_file.assert_called_once()
+            batch_call_kwargs = mock_batch_processor.process_from_file.call_args.kwargs
             assert batch_call_kwargs["file_path"] == "batch.txt"
             assert batch_call_kwargs["operation"] == "full"
             assert batch_call_kwargs["force"] is True
@@ -387,7 +381,7 @@ class TestOrchestratorAllure:
                 "encryption_initialized": True,
                 "password_configured": True,
             }
-            orchestrator._run_rotate_encryption_keys(args)  # noqa: SLF001
+            orchestrator._run_rotate_encryption_keys(args)
 
         with allure.step("Verify key rotation steps executed"):
             mock_secure_config.rotate_key.assert_called_once_with(_TEST_PASSWORD)
@@ -417,7 +411,7 @@ class TestOrchestratorAllure:
             mock_secure_config = Mock()
             mock_secure_config_class.return_value = mock_secure_config
 
-            orchestrator._run_rotate_encryption_keys(args)  # noqa: SLF001
+            orchestrator._run_rotate_encryption_keys(args)
 
         with allure.step("Verify error was logged"):
             error_exception_mock = cast(Mock, orchestrator.error_logger.exception)
@@ -446,16 +440,13 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify test mode execution"):
-            set_context_mock = cast(Mock, orchestrator.music_updater.set_dry_run_context)
-            set_context_mock.assert_called_once_with(
+            orchestrator.music_updater.set_dry_run_context.assert_called_once_with(
                 "test",
                 {"Test Artist 1", "Test Artist 2"},
             )
-            console_info_mock = cast(Mock, orchestrator.console_logger.info)
-            console_info_mock.assert_any_call("--- Running in Test Mode ---")
-            run_main_pipeline_mock = cast(AsyncMock, orchestrator.music_updater.run_main_pipeline)
-            run_main_pipeline_mock.assert_called_once()
-            pipeline_kwargs = run_main_pipeline_mock.call_args.kwargs
+            orchestrator.console_logger.info.assert_any_call("--- Running in Test Mode ---")
+            orchestrator.music_updater.run_main_pipeline.assert_called_once()
+            pipeline_kwargs = orchestrator.music_updater.run_main_pipeline.call_args.kwargs
             assert pipeline_kwargs.get("force", False) is False
 
             allure.attach("Test mode executed with test artists", "Test Mode", allure.attachment_type.TEXT)
@@ -481,13 +472,11 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(args)
 
         with allure.step("Verify test artists were applied"):
-            set_context_mock = cast(Mock, orchestrator.music_updater.set_dry_run_context)
-            set_context_mock.assert_called_once_with(
+            orchestrator.music_updater.set_dry_run_context.assert_called_once_with(
                 "normal",
                 {"Test Artist 1", "Test Artist 2"},
             )
-            console_info_mock = cast(Mock, orchestrator.console_logger.info)
-            console_info_mock.assert_any_call(
+            orchestrator.console_logger.info.assert_any_call(
                 "Using test_artists from config in normal mode: %s",
                 ["Test Artist 1", "Test Artist 2"],
             )
