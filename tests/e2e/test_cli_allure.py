@@ -64,9 +64,6 @@ class TestCLIE2E:
         # FIX: Add config_path to prevent MagicMock from breaking file operations
         # This is critical - without it, MusicUpdater.__init__() hangs when trying to
         # resolve artist_renamer config path, because MagicMock.open() creates infinite recursion
-        import tempfile
-        from pathlib import Path
-
         temp_dir = Path(tempfile.mkdtemp())
         mock_config_file = temp_dir / "config.yaml"
         mock_deps.config_path = mock_config_file
