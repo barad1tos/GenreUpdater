@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from src.core.logger import get_full_log_path
 from src.core.models import repair as repair_utils
 from src.core.models.track import ChangeLogEntry
-from src.core.tracks.year import YearRetriever
+from src.core.tracks.year_retriever import YearRetriever
 from src.metrics.reports import save_changes_report
 
 if TYPE_CHECKING:

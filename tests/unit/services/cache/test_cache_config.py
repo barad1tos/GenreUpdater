@@ -1,7 +1,7 @@
 """Tests for Smart Cache Configuration."""
 
 import pytest
-from src.services.cache.config import (
+from src.services.cache.cache_config import (
     CacheContentType,
     CacheEvent,
     CacheEventType,

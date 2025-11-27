@@ -18,7 +18,7 @@ from typing import Any, TypeVar
 
 from src.services.cache.album_cache import AlbumCacheService
 from src.services.cache.api_cache import ApiCacheService
-from src.services.cache.config import CacheEvent, CacheEventType
+from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.generic_cache import GenericCacheService
 from src.services.cache.hash import UnifiedHashService
 from src.core.models.track import CachedApiResult, TrackDict

@@ -14,7 +14,7 @@ import allure
 import pytest
 
 from src.services.cache.api import ApiCacheService
-from src.services.cache.config import CacheEvent, CacheEventType
+from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.hash import UnifiedHashService
 from src.core.models.track import CachedApiResult
 

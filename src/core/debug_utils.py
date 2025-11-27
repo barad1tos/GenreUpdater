@@ -4,7 +4,7 @@ This module provides a single place to enable/disable debug logging
 for different components without removing debug statements from code.
 
 Usage:
-    from src.core.debug import debug
+    from src.core.debug_utils import debug
 
     if debug.year:
         logger.info("Year processing details: %s", data)
@@ -98,5 +98,5 @@ class DebugConfig:
 
 
 # Global debug configuration instance
-# Import this in other modules: from src.core.debug import debug
+# Import this in other modules: from src.core.debug_utils import debug
 debug = DebugConfig()

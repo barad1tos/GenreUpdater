@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.services.cache.config import CacheContentType, SmartCacheConfig
+from src.services.cache.cache_config import CacheContentType, SmartCacheConfig
 from src.services.cache.hash import UnifiedHashService
 from src.core.logger import ensure_directory, get_full_log_path
 

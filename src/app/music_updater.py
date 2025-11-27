@@ -11,11 +11,11 @@ from src.app.features.verify.database_verifier import DatabaseVerifier
 from src.app.pipeline_snapshot import PipelineSnapshotManager
 from src.app.track_cleaning import TrackCleaningService
 from src.app.year_update import YearUpdateService
-from src.core.tracks.artist import ArtistRenamer
+from src.core.tracks.artist_renamer import ArtistRenamer
 from src.core.tracks.genre_manager import GenreManager
 from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.tracks.processor import TrackProcessor
-from src.core.tracks.year import YearRetriever
+from src.core.tracks.year_retriever import YearRetriever
 from src.core.logger import get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.metadata import is_music_app_running
@@ -26,7 +26,7 @@ from src.metrics.reports import (
 )
 
 if TYPE_CHECKING:
-    from src.services.deps import DependencyContainer
+    from src.services.dependency_container import DependencyContainer
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker

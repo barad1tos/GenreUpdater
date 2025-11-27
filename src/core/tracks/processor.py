@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.core.tracks.artist import ArtistRenamer
+from src.core.tracks.artist_renamer import ArtistRenamer
 from src.core.tracks.batch_fetcher import BatchTrackFetcher
 from src.core.tracks.cache_manager import TrackCacheManager
 from src.core.tracks.update_executor import TrackUpdateExecutor

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from src.core.models.track import TrackDict
-    from src.core.tracks.delta import TrackDelta
+    from src.core.tracks.track_delta import TrackDelta
     from src.core.tracks.processor import TrackProcessor
 
 

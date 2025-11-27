@@ -13,7 +13,7 @@ import allure
 import pytest
 
 from src.services.cache.album import AlbumCacheEntry, AlbumCacheService
-from src.services.cache.config import CacheContentType
+from src.services.cache.cache_config import CacheContentType
 from src.services.cache.hash import UnifiedHashService
 
 

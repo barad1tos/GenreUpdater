@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.app.updater import MusicUpdater
+    from src.app.music_updater import MusicUpdater
 
 
 class BatchProcessor:
