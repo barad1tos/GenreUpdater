@@ -20,7 +20,7 @@ from typing import Any
 from src.services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from src.services.cache.hash_service import UnifiedHashService
 from src.core.logger import ensure_directory, get_full_log_path
-from src.core.models.track import CachedApiResult
+from src.core.models.track_models import CachedApiResult
 
 
 class ApiCacheService:

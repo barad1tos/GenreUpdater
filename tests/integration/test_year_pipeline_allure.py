@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 from src.core.tracks.year import YearRetriever
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 from src.metrics.analytics import Analytics
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger

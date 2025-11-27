@@ -19,7 +19,7 @@ from src.core.tracks.year_retriever import YearRetriever
 from src.core.logger import get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.metadata_utils import is_music_app_running
-from src.core.models.track import ChangeLogEntry, TrackDict
+from src.core.models.track_models import ChangeLogEntry, TrackDict
 from src.metrics.change_reports import (
     save_changes_report,
     sync_track_list_with_current,

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from src.services.cache.json_utils import dumps_json, loads_json
 from src.core.tracks.track_delta import TrackDelta, compute_track_delta
 from src.core.logger import ensure_directory
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 SNAPSHOT_VERSION = "1.0"
 DEFAULT_MAX_AGE_HOURS = 24

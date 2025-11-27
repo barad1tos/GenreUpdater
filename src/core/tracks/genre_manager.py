@@ -14,7 +14,7 @@ from src.core.models.metadata_utils import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
 )
-from src.core.models.track import ChangeLogEntry, TrackDict
+from src.core.models.track_models import ChangeLogEntry, TrackDict
 from src.core.models.track_status import can_edit_metadata, normalize_track_status
 
 from .track_base import BaseProcessor

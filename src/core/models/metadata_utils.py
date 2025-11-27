@@ -23,7 +23,7 @@ from enum import IntEnum, auto
 from pathlib import Path
 from typing import Any
 
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 
 class TrackField(IntEnum):

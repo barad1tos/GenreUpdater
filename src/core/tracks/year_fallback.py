@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     import logging
 
     from src.core.models.protocols import PendingVerificationServiceProtocol
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 
 class YearFallbackHandler:

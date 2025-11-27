@@ -16,7 +16,7 @@ import pytest
 from src.services.cache.api import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.models.track import CachedApiResult
+from src.core.models.track_models import CachedApiResult
 
 
 @allure.epic("Music Genre Updater")

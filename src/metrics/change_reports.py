@@ -33,7 +33,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.core.logger import ensure_directory
-from src.core.models.track import ChangeLogEntry
+from src.core.models.track_models import ChangeLogEntry
 from src.core.models.types import TrackDict
 from src.metrics.csv_utils import TRACK_FIELDNAMES
 from src.metrics.csv_utils import save_csv as _save_csv

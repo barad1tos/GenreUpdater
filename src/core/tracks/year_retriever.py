@@ -17,7 +17,7 @@ from src.core.models.protocols import (
     PendingVerificationServiceProtocol,
 )
 from src.core.models.track_status import can_edit_metadata, filter_available_tracks, is_prerelease_status, is_subscription_status
-from src.core.models.track import ChangeLogEntry, TrackDict
+from src.core.models.track_models import ChangeLogEntry, TrackDict
 from src.core.models.validators import is_empty_year, is_valid_year
 from src.metrics import Analytics
 

@@ -10,11 +10,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.models.metadata_utils import clean_names
-from src.core.models.track import ChangeLogEntry, TrackFieldValue
+from src.core.models.track_models import ChangeLogEntry, TrackFieldValue
 
 if TYPE_CHECKING:
     import logging
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
     from src.core.tracks.track_processor import TrackProcessor
 
 

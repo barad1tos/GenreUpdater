@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 
 # Maximum consecutive parse failures before aborting batch processing

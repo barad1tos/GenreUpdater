@@ -10,7 +10,7 @@ import contextlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from src.core.models.track import CachedApiResult, TrackDict
+from src.core.models.track_models import CachedApiResult, TrackDict
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

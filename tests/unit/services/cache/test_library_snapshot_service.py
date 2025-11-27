@@ -10,7 +10,7 @@ from src.services.cache.snapshot import (
     LibraryDeltaCache,
     LibrarySnapshotService,
 )
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 
 def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False) -> dict:

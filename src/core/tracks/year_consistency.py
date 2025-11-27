@@ -15,7 +15,7 @@ from src.core.models.validators import is_empty_year
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 
 # Constants for year consistency checking

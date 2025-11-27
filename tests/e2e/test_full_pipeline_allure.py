@@ -14,7 +14,7 @@ import pytest
 
 from src.app.music_updater import MusicUpdater
 from src.services.dependency_container import DependencyContainer
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 logger = logging.getLogger(__name__)
 
