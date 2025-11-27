@@ -1,3 +1,5 @@
+"""Tests for AppleScript client utility functions."""
+
 from __future__ import annotations
 
 from datetime import datetime, UTC
@@ -9,7 +11,7 @@ from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
 
 
 def test_datetime_to_applescript_timestamp_rounds_to_minute() -> None:
-    dt = datetime(2024, 5, 1, 10, 5, 59, 123456)
+    dt = datetime(2024, 5, 1, 10, 5, 59, 123456, tzinfo=UTC)
     expected = int(datetime(2024, 5, 1, 10, 5, tzinfo=UTC).timestamp())
     assert datetime_to_applescript_timestamp(dt) == expected
 
