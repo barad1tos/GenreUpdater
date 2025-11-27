@@ -94,7 +94,7 @@ class FakeTrackProcessor:
         self, batch_size: int = 1000, skip_snapshot_check: bool = False
     ) -> list[TrackDict]:
         """Mock fetch_tracks_in_batches method."""
-        del skip_snapshot_check  # Explicitly mark as unused
+        _ = skip_snapshot_check  # Unused in mock
         self.fetch_batches_calls += 1
         assert batch_size == 10
         return self.tracks

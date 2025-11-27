@@ -25,10 +25,11 @@ def is_music_app_running() -> bool:
     """Check if Music.app is running."""
     try:
         result = subprocess.run(
-            ["osascript", "-e", 'tell application "System Events" to (name of processes) contains "Music"'],
+            ["/usr/bin/osascript", "-e", 'tell application "System Events" to (name of processes) contains "Music"'],
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return result.stdout.strip() == "true"
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -130,6 +131,7 @@ class TestMusicAppConnection:
         applescript_client: AppleScriptClient,
     ) -> None:
         """Test required AppleScript files exist."""
+        assert applescript_client.apple_scripts_dir is not None
         scripts_dir = Path(applescript_client.apple_scripts_dir)
 
         required_scripts = [
@@ -170,7 +172,7 @@ class TestFetchTracks:
         """Test getting first track name from library."""
         await applescript_client.initialize()
 
-        script = '''
+        script = """
         tell application "Music"
             if (count of tracks of library playlist 1) > 0 then
                 return name of track 1 of library playlist 1
@@ -178,7 +180,7 @@ class TestFetchTracks:
                 return "NO_TRACKS"
             end if
         end tell
-        '''
+        """
         result = await applescript_client.run_script_code(script, timeout=30)
 
         assert result is not None
@@ -196,7 +198,7 @@ class TestFetchTracks:
         await applescript_client.initialize()
 
         # Simplified script without tab characters
-        script = '''
+        script = """
 tell application "Music"
     set trackCount to count of tracks of library playlist 1
     if trackCount > 0 then
@@ -206,7 +208,7 @@ tell application "Music"
         return "NO_TRACKS"
     end if
 end tell
-'''
+"""
         result = await applescript_client.run_script_code(script, timeout=60)
 
         assert result is not None
@@ -228,6 +230,7 @@ class TestRunScriptFile:
         """Test running the fetch_tracks.scpt file."""
         await applescript_client.initialize()
 
+        assert applescript_client.apple_scripts_dir is not None
         scripts_dir = Path(applescript_client.apple_scripts_dir)
         fetch_script = scripts_dir / "fetch_tracks.scpt"
 
@@ -276,7 +279,7 @@ class TestScriptExecution:
         await applescript_client.initialize()
 
         # Invalid AppleScript syntax
-        script = 'this is not valid applescript syntax at all'
+        script = "this is not valid applescript syntax at all"
 
         result = await applescript_client.run_script_code(script, timeout=10)
         # Client catches errors and returns None
@@ -294,10 +297,10 @@ class TestScriptExecution:
         await applescript_client.initialize()
 
         # Script that takes too long
-        script = '''
+        script = """
 delay 3
 return "done"
-'''
+"""
 
         result = await applescript_client.run_script_code(script, timeout=1)
         # Client catches timeout and returns None
@@ -315,13 +318,13 @@ class TestMusicAppQueries:
         """Test getting library statistics."""
         await applescript_client.initialize()
 
-        script = '''
+        script = """
         tell application "Music"
             set trackCount to count of tracks of library playlist 1
             set playlistCount to count of playlists
             return (trackCount as text) & "," & (playlistCount as text)
         end tell
-        '''
+        """
         result = await applescript_client.run_script_code(script, timeout=30)
 
         assert result is not None
@@ -344,7 +347,7 @@ class TestMusicAppQueries:
         await applescript_client.initialize()
 
         # Simpler script that gets genres from first 50 tracks
-        script = '''
+        script = """
 tell application "Music"
     set genreList to {}
     set trackCount to count of tracks of library playlist 1
@@ -359,7 +362,7 @@ tell application "Music"
     set AppleScript's text item delimiters to linefeed
     return genreList as text
 end tell
-'''
+"""
         result = await applescript_client.run_script_code(script, timeout=60)
 
         assert result is not None
@@ -380,6 +383,7 @@ class TestConcurrency:
         await applescript_client.initialize()
 
         async def get_count() -> int:
+            """Get track count from Music library."""
             script = 'tell application "Music" to count of tracks of library playlist 1'
             result = await applescript_client.run_script_code(script, timeout=30)
             return int(result.strip())

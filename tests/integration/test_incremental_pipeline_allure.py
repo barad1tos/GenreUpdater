@@ -269,7 +269,12 @@ class TestIncrementalPipelineIntegration:
             assert isinstance(filtered_tracks, list)
 
             # Identify tracks with status changes
-            status_changes = [track.id for track in tracks for summary in summaries if track.id == summary.id and track.track_status != summary.track_status]
+            status_changes = [
+                track.id
+                for track in tracks
+                for summary in summaries
+                if track.id == summary.id and track.track_status != summary.track_status
+            ]
 
             allure.attach(f"{len(status_changes)}", "Status Changes Detected", allure.attachment_type.TEXT)
             allure.attach(f"{len(filtered_tracks)}", "Tracks Filtered", allure.attachment_type.TEXT)
@@ -342,7 +347,7 @@ class TestIncrementalPipelineIntegration:
             ]
 
             tracks = TestIncrementalPipelineIntegration.create_test_tracks(tracks_data)
-            summaries = TestIncrementalPipelineIntegration.create_track_summaries(summaries_data)
+            _summaries = TestIncrementalPipelineIntegration.create_track_summaries(summaries_data)
             filter_service = self.create_incremental_filter()
 
             allure.attach(

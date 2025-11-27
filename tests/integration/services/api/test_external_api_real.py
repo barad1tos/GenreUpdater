@@ -10,7 +10,8 @@ Run with: pytest tests/integration/services/api/ -v --tb=short -m integration
 
 import asyncio
 import logging
-from pathlib import Path
+import socket
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
@@ -23,13 +24,11 @@ from src.services.pending_verification import PendingVerificationService
 
 
 def is_internet_available() -> bool:
-    """Check if internet is available via HTTP."""
-    import urllib.request
-
+    """Check if internet is available via socket connection."""
     try:
-        urllib.request.urlopen("https://musicbrainz.org", timeout=5)
+        socket.create_connection(("musicbrainz.org", 443), timeout=5).close()
         return True
-    except (urllib.error.URLError, TimeoutError):
+    except (OSError, TimeoutError):
         return False
 
 
@@ -115,7 +114,7 @@ async def api_orchestrator(
     error_logger: logging.Logger,
     cache_service: CacheOrchestrator,
     pending_verification_service: PendingVerificationService,
-) -> ExternalApiOrchestrator:
+) -> AsyncGenerator[ExternalApiOrchestrator]:
     """Create and initialize a real ExternalApiOrchestrator."""
     orchestrator = ExternalApiOrchestrator(
         config=app_config,
@@ -160,12 +159,12 @@ class TestApiOrchestratorInitialization:
     ) -> None:
         """Test API clients are initialized."""
         # At least one of these should be initialized (MusicBrainz doesn't need key)
-        has_client = (
-            api_orchestrator.musicbrainz_client is not None
-            or api_orchestrator.discogs_client is not None
-            or api_orchestrator.lastfm_client is not None
-        )
-        assert has_client, "At least one API client should be initialized"
+        clients = [
+            api_orchestrator.musicbrainz_client,
+            api_orchestrator.discogs_client,
+            api_orchestrator.lastfm_client,
+        ]
+        assert any(c is not None for c in clients), "At least one API client should be initialized"
 
 
 class TestMusicBrainzIntegration:
@@ -273,14 +272,14 @@ class TestArtistActivityPeriod:
         period = await api_orchestrator.get_artist_activity_period("Taylor Swift")
 
         if period is not None:
-            start_year, end_year = period
+            start_year, _end_year = period
 
             # APIs return various start years for Taylor Swift (1989 = birth year, or 2004-2006 = career start)
             # Just verify we got some reasonable values
             if start_year is not None:
                 assert 1985 <= start_year <= 2010  # Reasonable range
 
-            # Should either be None (still active) or recent year
+            # _end_year should either be None (still active) or recent year
             # APIs may report differently for active artists
 
     @pytest.mark.asyncio
@@ -361,7 +360,6 @@ class TestYearValidation:
             tracks=tracks,
             artist="Test Artist",
             album="Future Album",
-            current_library_year="",
         )
 
         assert isinstance(result, bool)
@@ -384,11 +382,12 @@ class TestConcurrentApiCalls:
         ]
 
         async def get_year(artist: str, album: str) -> tuple[str, str, str | None]:
+            """Fetch album year from API."""
             result = await api_orchestrator.get_album_year(artist=artist, album=album)
             if result is None:
                 return artist, album, None
-            year, _ = result
-            return artist, album, year
+            album_year, _ = result
+            return artist, album, album_year
 
         # Run lookups concurrently
         tasks = [get_year(artist, album) for artist, album in albums]
