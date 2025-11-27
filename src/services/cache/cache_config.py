@@ -269,7 +269,7 @@ class CacheEvent:
     event_type: CacheEventType
     track_id: str | None = None
     fingerprint: str | None = None
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Validate event data."""
@@ -294,7 +294,7 @@ class EventDrivenCacheManager:
         self.logger = logging.getLogger(__name__)
         self._event_handlers: dict[CacheEventType, list[Callable[[CacheEvent], None]]] = {}
 
-    def register_event_handler(self, event_type: CacheEventType, handler: Callable) -> None:
+    def register_event_handler(self, event_type: CacheEventType, handler: Callable[[CacheEvent], None]) -> None:
         """Register event handler for specific event type.
 
         Args:

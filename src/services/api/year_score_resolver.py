@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from src.core.tracks.year_retriever import is_valid_year
+from src.core.models.validators import is_valid_year
 
 if TYPE_CHECKING:
     import logging

@@ -14,7 +14,7 @@ import time
 from datetime import timedelta
 
 try:
-    import psutil  # type: ignore[import]
+    import psutil  # type: ignore[import-untyped]
 
     _psutil_module = psutil
     psutil_available = True

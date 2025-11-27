@@ -261,7 +261,7 @@ class YearSearchCoordinator:
         if api_name in {"musicbrainz", "discogs"}:
             result = await api_client.get_scored_releases(artist_norm, album_norm, artist_region)  # type: ignore[call-arg]
         else:
-            result = await api_client.get_scored_releases(artist_norm, album_norm)  # type: ignore[call-arg]
+            result = await api_client.get_scored_releases(artist_norm, album_norm)
         return result
 
     def _get_api_client(

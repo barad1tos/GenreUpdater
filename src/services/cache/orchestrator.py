@@ -366,7 +366,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached API result for an artist/album from a specific source."""
         return await self.api_service.get_cached_result(artist, album, source)
 
-    async def set_cached_api_result(  # type: ignore[override]
+    async def set_cached_api_result(
         self,
         artist: str,
         album: str,

@@ -161,7 +161,7 @@ class AlbumCacheService:
                 raise
 
         # Run in thread executor to avoid blocking
-        await asyncio.get_running_loop().run_in_executor(None, blocking_save)  # type: ignore[arg-type]
+        await asyncio.get_running_loop().run_in_executor(None, blocking_save)
 
     async def _load_album_years_cache(self) -> None:
         """Load album years cache from CSV file."""
@@ -174,7 +174,7 @@ class AlbumCacheService:
             return self._read_csv_file()
 
         # Run in thread executor to avoid blocking
-        loaded_cache = await asyncio.get_running_loop().run_in_executor(None, blocking_load)  # type: ignore[arg-type]
+        loaded_cache = await asyncio.get_running_loop().run_in_executor(None, blocking_load)
         self.album_years_cache.update(loaded_cache)
 
     def _read_csv_file(self) -> dict[str, AlbumCacheEntry]:
