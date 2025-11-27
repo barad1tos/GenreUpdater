@@ -1,6 +1,7 @@
 """Tests for Smart Cache Configuration."""
 
 import pytest
+
 from src.services.cache.cache_config import (
     CacheContentType,
     CacheEvent,
@@ -147,11 +148,11 @@ class TestSmartCacheConfig:
         # Note: _format_ttl is a private method, but we test it to ensure
         # the formatting logic works correctly for logging purposes
         # Testing private method is acceptable in unit tests
-        assert "∞" in self.config._format_ttl(self.config.INFINITE_TTL)  # noqa: SLF001
-        assert self.config._format_ttl(24 * 60 * 60) == "1d"  # noqa: SLF001
-        assert self.config._format_ttl(60 * 60) == "1h"  # noqa: SLF001
-        assert self.config._format_ttl(60) == "1m"  # noqa: SLF001
-        assert self.config._format_ttl(30) == "30s"  # noqa: SLF001
+        assert "∞" in self.config._format_ttl(self.config.INFINITE_TTL)
+        assert self.config._format_ttl(24 * 60 * 60) == "1d"
+        assert self.config._format_ttl(60 * 60) == "1h"
+        assert self.config._format_ttl(60) == "1m"
+        assert self.config._format_ttl(30) == "30s"
 
     def test_cleanup_threshold(self) -> None:
         """Test cleanup threshold getter."""

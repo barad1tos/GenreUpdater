@@ -2,14 +2,13 @@
 
 import logging
 from collections import defaultdict
+from typing import Any
 
 import pytest
 
 from src.services.api.api_base import ScoredRelease
 from src.services.api.year_score_resolver import (
     MAX_LOGGED_YEARS,
-    MAX_SUSPICIOUS_YEAR_DIFFERENCE,
-    MIN_CONFIDENT_SCORE_THRESHOLD,
     MIN_REISSUE_YEAR_DIFFERENCE,
     MIN_YEAR_GAP_FOR_REISSUE_DETECTION,
     VERY_HIGH_SCORE_THRESHOLD,
@@ -35,7 +34,7 @@ def resolver(logger: logging.Logger) -> YearScoreResolver:
     )
 
 
-def create_scored_release(year: str, score: int, **kwargs) -> ScoredRelease:
+def create_scored_release(year: str, score: int, **kwargs: Any) -> ScoredRelease:
     """Helper to create a ScoredRelease dict."""
     release: ScoredRelease = {
         "title": kwargs.get("title", "Test Album"),
@@ -46,9 +45,9 @@ def create_scored_release(year: str, score: int, **kwargs) -> ScoredRelease:
         "country": kwargs.get("country", "US"),
         "status": kwargs.get("status", "official"),
         "format": kwargs.get("format", "CD"),
-        "label": kwargs.get("label", None),
-        "catalog_number": kwargs.get("catalog_number", None),
-        "barcode": kwargs.get("barcode", None),
+        "label": kwargs.get("label"),
+        "catalog_number": kwargs.get("catalog_number"),
+        "barcode": kwargs.get("barcode"),
         "disambiguation": kwargs.get("disambiguation", ""),
         "source": kwargs.get("source", "musicbrainz"),
     }
@@ -110,10 +109,10 @@ class TestAggregateYearScores:
         """Test handles None year values."""
         releases = [
             create_scored_release("2020", 85),
-            {"year": None, "score": 90, "title": "Test", "artist": "Test"},  # type: ignore
+            {"year": None, "score": 90, "title": "Test", "artist": "Test"},  # type: ignore[typeddict-item]
         ]
 
-        result = resolver.aggregate_year_scores(releases)  # type: ignore
+        result = resolver.aggregate_year_scores(releases)  # type: ignore[arg-type]
 
         assert "2020" in result
         assert len(result) == 1
@@ -134,7 +133,7 @@ class TestSelectBestYear:
         year_scores["2020"] = [85, 90]
         year_scores["2021"] = [75, 80]
 
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
 
@@ -164,7 +163,7 @@ class TestSelectBestYear:
         year_scores["2025"] = [85]  # Future year
         year_scores["2023"] = [80]  # Past year
 
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive = resolver.select_best_year(year_scores)
 
         # Should prefer 2023 (non-future) over 2025 (future) when scores are close
         assert best_year == "2023"
@@ -177,7 +176,7 @@ class TestSelectBestYear:
         year_scores["2025"] = [95]  # Future year with much higher score
         year_scores["2023"] = [50]  # Past year
 
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive = resolver.select_best_year(year_scores)
 
         assert best_year == "2025"
 
@@ -255,7 +254,7 @@ class TestApplyFutureYearPreference:
         """Test prefers non-future year when scores are close."""
         sorted_years = [("2025", 85), ("2023", 80)]
 
-        year, score, is_future = resolver._apply_future_year_preference(
+        year, _score, is_future = resolver._apply_future_year_preference(
             sorted_years, "2025", 85, True
         )
 
@@ -268,7 +267,7 @@ class TestApplyFutureYearPreference:
         """Test keeps future year when score difference is large."""
         sorted_years = [("2025", 95), ("2023", 60)]
 
-        year, score, is_future = resolver._apply_future_year_preference(
+        year, _score, is_future = resolver._apply_future_year_preference(
             sorted_years, "2025", 95, True
         )
 
@@ -285,7 +284,7 @@ class TestApplyOriginalReleasePreference:
         """Test prefers earlier year when scores are similar (reissue detection)."""
         sorted_years = [("2020", 85), ("2010", 80)]
 
-        year, score = resolver._apply_original_release_preference(
+        year, _score = resolver._apply_original_release_preference(
             sorted_years, "2020", 85
         )
 
@@ -298,7 +297,7 @@ class TestApplyOriginalReleasePreference:
         """Test keeps later year when score difference is significant."""
         sorted_years = [("2020", 95), ("2010", 50)]
 
-        year, score = resolver._apply_original_release_preference(
+        year, _score = resolver._apply_original_release_preference(
             sorted_years, "2020", 95
         )
 
@@ -471,7 +470,7 @@ class TestIntegration:
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive = resolver.select_best_year(year_scores)
 
         # Should prefer 2005 (original) due to large year gap
         assert best_year == "2005"
@@ -485,6 +484,6 @@ class TestIntegration:
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
