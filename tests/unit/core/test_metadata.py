@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.core.models.metadata_utils import clean_names, determine_dominant_genre_for_artist
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 if TYPE_CHECKING:
     import pytest

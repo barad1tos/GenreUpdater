@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from src.app.music_updater import MusicUpdater
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 from src.metrics.analytics import Analytics, LoggerContainer
 
 

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from src.core.tracks.artist import ArtistRenamer
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 from tests.mocks.csv_mock import MockLogger
 from tests.mocks.track_data import DummyTrackData
 

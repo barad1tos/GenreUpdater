@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 from src.core.tracks.delta import TrackDelta, compute_track_delta
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 
 @pytest.fixture

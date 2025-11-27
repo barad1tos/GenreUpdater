@@ -23,14 +23,14 @@ from typing import (
     runtime_checkable,
 )
 
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 if TYPE_CHECKING:
     import asyncio
     from collections.abc import Callable
     from datetime import datetime
 
-    from src.core.models.track import CachedApiResult
+    from src.core.models.track_models import CachedApiResult
 
 # Type variable for generic cached values
 T = TypeVar("T")

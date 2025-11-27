@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import allure
 import pytest
 from src.core.tracks.genre import GenreManager
-from src.core.models.track import ChangeLogEntry
+from src.core.models.track_models import ChangeLogEntry
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.track_data import DummyTrackData

@@ -11,7 +11,7 @@ import allure
 import pytest
 from src.core.tracks.filter import IncrementalFilterService
 from src.core.tracks.delta import TrackDelta
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 
 from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger
 

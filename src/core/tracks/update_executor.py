@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from src.core.models.track_status import can_edit_metadata
-from src.core.models.track import TrackDict
+from src.core.models.track_models import TrackDict
 from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.metrics import Analytics
 

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.core.tracks.track_processor import TrackProcessor
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 
 def _load_mapping(path: Path, error_logger: logging.Logger) -> dict[str, str]:

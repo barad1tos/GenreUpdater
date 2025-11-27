@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from src.core.tracks.genre import GenreManager
-from src.core.models.track import ChangeLogEntry, TrackDict
+from src.core.models.track_models import ChangeLogEntry, TrackDict
 from src.metrics.analytics import Analytics
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger

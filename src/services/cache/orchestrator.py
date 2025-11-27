@@ -21,7 +21,7 @@ from src.services.cache.api_cache import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.generic_cache import GenericCacheService
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.models.track import CachedApiResult, TrackDict
+from src.core.models.track_models import CachedApiResult, TrackDict
 from src.core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
 
 T = TypeVar("T")

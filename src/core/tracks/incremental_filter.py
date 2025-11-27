@@ -18,7 +18,7 @@ from src.metrics.change_reports import load_track_list
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
     from src.metrics import Analytics
 
 

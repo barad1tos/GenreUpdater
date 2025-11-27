@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from src.core.models.protocols import CacheServiceProtocol
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
     from src.services.cache.snapshot import LibrarySnapshotService
 
 

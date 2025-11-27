@@ -9,7 +9,7 @@ from src.metrics import Analytics
 from src.metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
-    from src.core.models.track import TrackDict
+    from src.core.models.track_models import TrackDict
 
 
 class MockLoadTrackList:
