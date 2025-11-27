@@ -214,7 +214,14 @@ class LastFmClient(BaseApiClient):
         if tag_list := tags.get("tag", []):
             for tag in tag_list:
                 # Handle both dict (LastFmTag) and string cases from API
-                tag_name = tag if isinstance(tag, str) else tag.get("name", "")
+                if isinstance(tag, str):
+                    tag_name = tag
+                elif isinstance(tag, dict):
+                    tag_name = tag.get("name", "")
+                else:
+                    # Unexpected tag type - log and skip
+                    self.console_logger.debug("LastFM: Unexpected tag type %s, skipping", type(tag).__name__)
+                    continue
                 # Check if the tag is a year
                 if tag_name and self._is_valid_year(tag_name):
                     self.console_logger.debug("LastFM Year: %s from tags", tag_name)
