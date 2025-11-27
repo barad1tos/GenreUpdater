@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -388,7 +388,7 @@ class TestPrepareRequest:
         result = executor._prepare_request("musicbrainz", "url", None, None)
 
         assert result is not None
-        headers, limiter, timeout = result
+        headers, limiter, _timeout = result
         assert isinstance(headers, dict)
         assert limiter is not None
 
@@ -680,7 +680,6 @@ class TestExecuteWithRetry:
     ) -> None:
         """Test successful request on first attempt."""
         expected_result = {"data": "value"}
-        mock_response = self._create_mock_response(200, expected_result)
 
         with patch.object(
             configured_executor, "_attempt_request", new_callable=AsyncMock
@@ -827,7 +826,7 @@ class TestAttemptRequest:
         with patch.object(
             configured_executor, "_execute_single_request", new_callable=AsyncMock
         ) as mock_execute:
-            mock_execute.side_effect = asyncio.TimeoutError()
+            mock_execute.side_effect = TimeoutError()
 
             with patch.object(
                 configured_executor, "_handle_client_error", new_callable=AsyncMock
@@ -1419,7 +1418,7 @@ class TestHandleClientErrorIntegration:
         executor: ApiRequestExecutor,
     ) -> None:
         """Test TimeoutError triggers retry."""
-        error = asyncio.TimeoutError()
+        error = TimeoutError()
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             result = await executor._handle_client_error(
