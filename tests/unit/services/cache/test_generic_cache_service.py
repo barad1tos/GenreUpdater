@@ -13,7 +13,7 @@ import allure
 import pytest
 
 from src.services.cache.generic import GenericCacheService, is_generic_cache_entry
-from src.services.cache.hash import UnifiedHashService
+from src.services.cache.hash_service import UnifiedHashService
 
 
 @allure.epic("Music Genre Updater")

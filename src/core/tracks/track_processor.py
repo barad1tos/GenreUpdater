@@ -15,7 +15,7 @@ from src.core.tracks.cache_manager import TrackCacheManager
 from src.core.tracks.update_executor import TrackUpdateExecutor
 from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
 from src.services.cache.snapshot import LibrarySnapshotService
-from src.core.models.metadata import parse_tracks
+from src.core.models.metadata_utils import parse_tracks
 from src.core.models.track import TrackDict
 from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.metrics import Analytics

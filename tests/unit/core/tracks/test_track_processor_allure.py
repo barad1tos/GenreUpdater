@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import allure
 import pytest
-from src.core.tracks.processor import TrackProcessor
+from src.core.tracks.track_processor import TrackProcessor
 from src.core.models.validators import SecurityValidator
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger

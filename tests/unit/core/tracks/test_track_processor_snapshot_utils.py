@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.tracks.processor import TrackProcessor
+from src.core.tracks.track_processor import TrackProcessor
 from src.core.models.track import TrackDict
 
 

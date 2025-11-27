@@ -13,7 +13,7 @@ from typing import Any, TypedDict, cast
 from src.core.models.track import MBArtist
 from src.metrics import Analytics
 
-from .base import BaseApiClient, ScoredRelease
+from .api_base import BaseApiClient, ScoredRelease
 
 # Type alias for MusicBrainz API response data
 MBApiData = dict[str, Any]

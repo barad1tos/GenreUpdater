@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class MockLoadTrackList:
-    """Mock for src.metrics.reports.load_track_list function."""
+    """Mock for src.metrics.change_reports.load_track_list function."""
 
     def __init__(self, tracks_to_return: list[TrackDict] | None = None) -> None:
         """Initialize with tracks that should be 'loaded' from CSV."""

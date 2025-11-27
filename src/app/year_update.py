@@ -12,7 +12,7 @@ from src.core.logger import get_full_log_path
 from src.core.models import repair as repair_utils
 from src.core.models.track import ChangeLogEntry
 from src.core.tracks.year_retriever import YearRetriever
-from src.metrics.reports import save_changes_report
+from src.metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
     import logging
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from src.app.pipeline_snapshot import PipelineSnapshotManager
     from src.core.models.track import TrackDict
-    from src.core.tracks.processor import TrackProcessor
+    from src.core.tracks.track_processor import TrackProcessor
 
 
 class YearUpdateService:

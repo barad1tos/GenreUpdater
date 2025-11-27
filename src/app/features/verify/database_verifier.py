@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from src.core.logger import get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.types import TrackDict
-from src.metrics.reports import load_track_list, save_to_csv
+from src.metrics.change_reports import load_track_list, save_to_csv
 
 if TYPE_CHECKING:
     from src.core.models.protocols import AppleScriptClientProtocol

@@ -1,6 +1,6 @@
 """Tests for UnifiedHashService."""
 
-from src.services.cache.hash import UnifiedHashService
+from src.services.cache.hash_service import UnifiedHashService
 
 
 class TestUnifiedHashService:

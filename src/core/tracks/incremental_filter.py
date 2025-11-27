@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from src.core.tracks.track_base import BaseProcessor
 from src.core.tracks.track_delta import compute_track_delta
 from src.core.logger import get_full_log_path
-from src.metrics.reports import load_track_list
+from src.metrics.change_reports import load_track_list
 
 if TYPE_CHECKING:
     import logging

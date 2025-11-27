@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
 
 import yaml
 
-from src.core.config import load_config
+from src.core.core_config import load_config
 from src.core.dry_run import DryRunAppleScriptClient
 from src.core.models.album_type import configure_patterns as configure_album_patterns
 from src.metrics.analytics import Analytics, LoggerContainer

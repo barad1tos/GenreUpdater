@@ -396,7 +396,7 @@ class ConfigurationRetryHandler:
 
         """
         # Lazy import to avoid circular dependency
-        from src.core.config import load_config  # noqa: PLC0415
+        from src.core.core_config import load_config  # noqa: PLC0415
 
         # Try primary configuration
         try:

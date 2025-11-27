@@ -41,9 +41,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from src.services.cache.hash import UnifiedHashService
+from src.services.cache.hash_service import UnifiedHashService
 from src.core.logger import get_full_log_path
-from src.core.models.metadata import clean_names
+from src.core.models.metadata_utils import clean_names
 
 
 class Logger(Protocol):

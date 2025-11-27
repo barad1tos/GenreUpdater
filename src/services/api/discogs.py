@@ -12,7 +12,7 @@ from typing import Any, TypedDict, cast
 
 from src.metrics import Analytics
 
-from .base import BaseApiClient, ScoredRelease
+from .api_base import BaseApiClient, ScoredRelease
 
 
 # Discogs Type Definitions

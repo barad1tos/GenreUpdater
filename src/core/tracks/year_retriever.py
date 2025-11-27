@@ -21,7 +21,7 @@ from src.core.models.track import ChangeLogEntry, TrackDict
 from src.core.models.validators import is_empty_year, is_valid_year
 from src.metrics import Analytics
 
-from .processor import TrackProcessor
+from .track_processor import TrackProcessor
 from .year_consistency import YearConsistencyChecker
 from .year_fallback import YearFallbackHandler
 

@@ -32,7 +32,7 @@ from src.core.models.script_detection import ScriptType, detect_primary_script
 from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
 from src.services.api.applemusic import AppleMusicClient
-from src.services.api.base import EnhancedRateLimiter, ScoredRelease
+from src.services.api.api_base import EnhancedRateLimiter, ScoredRelease
 from src.services.api.discogs import DiscogsClient
 from src.services.api.lastfm import LastFmClient
 from src.services.api.musicbrainz import MusicBrainzClient

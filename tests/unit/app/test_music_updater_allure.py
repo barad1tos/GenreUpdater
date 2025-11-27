@@ -279,10 +279,10 @@ class TestMusicUpdaterAllure:
                 deps.external_api_service.get_album_year_response = ("2021", True)
 
         with allure.step("Execute year update operation"), patch(
-            "src.metrics.reports.sync_track_list_with_current",
+            "src.metrics.change_reports.sync_track_list_with_current",
             new_callable=AsyncMock,
         ) as _mock_sync, patch(
-            "src.metrics.reports.save_changes_report",
+            "src.metrics.change_reports.save_changes_report",
         ) as _mock_save:
             await updater.run_update_years("Test Artist", force=False)
 
@@ -342,7 +342,7 @@ class TestMusicUpdaterAllure:
         with allure.step("Execute main pipeline"), patch(
             "src.app.music_updater.IncrementalRunTracker"
         ) as mock_tracker, patch(
-            "src.metrics.reports.save_changes_report",
+            "src.metrics.change_reports.save_changes_report",
             new_callable=AsyncMock,
         ):
             mock_tracker.return_value.should_process.return_value = True

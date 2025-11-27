@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.core.models.metadata import (
+from src.core.models.metadata_utils import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
 )
@@ -22,7 +22,7 @@ from .track_base import BaseProcessor
 if TYPE_CHECKING:
     from src.metrics import Analytics
 
-    from .processor import TrackProcessor
+    from .track_processor import TrackProcessor
 
 
 class GenreManager(BaseProcessor):

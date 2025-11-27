@@ -19,7 +19,7 @@ import aiohttp
 
 if TYPE_CHECKING:
     from src.core.models.protocols import CacheServiceProtocol
-    from src.services.api.base import EnhancedRateLimiter
+    from src.services.api.api_base import EnhancedRateLimiter
 
 
 # Constants

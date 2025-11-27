@@ -16,7 +16,7 @@ from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.track_data import DummyTrackData
 
 if TYPE_CHECKING:
-    from src.core.tracks.processor import TrackProcessor
+    from src.core.tracks.track_processor import TrackProcessor
 
 
 class TestGenreManager:

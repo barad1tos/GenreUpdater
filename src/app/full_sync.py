@@ -18,7 +18,7 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from src.core.config import load_config
+from src.core.core_config import load_config
 from src.core.logger import get_loggers
 from src.core.models.protocols import CacheServiceProtocol
 
@@ -31,11 +31,11 @@ if str(project_root) not in sys.path:
 from src.app.music_updater import MusicUpdater  # noqa: E402
 from src.services.dependency_container import DependencyContainer  # noqa: E402
 from src.core.logger import get_full_log_path  # noqa: E402
-from src.core.models.metadata import is_music_app_running  # noqa: E402
-from src.metrics.reports import sync_track_list_with_current  # noqa: E402
+from src.core.models.metadata_utils import is_music_app_running  # noqa: E402
+from src.metrics.change_reports import sync_track_list_with_current  # noqa: E402
 
 if TYPE_CHECKING:
-    from src.core.tracks.processor import TrackProcessor
+    from src.core.tracks.track_processor import TrackProcessor
     from src.services.cache.orchestrator import CacheOrchestrator
 
 

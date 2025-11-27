@@ -14,7 +14,7 @@ from src.core.tracks.year_retriever import is_valid_year
 if TYPE_CHECKING:
     import logging
 
-    from src.services.api.base import ScoredRelease
+    from src.services.api.api_base import ScoredRelease
 
 
 # Constants for year scoring thresholds

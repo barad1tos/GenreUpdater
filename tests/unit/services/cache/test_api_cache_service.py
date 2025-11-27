@@ -15,7 +15,7 @@ import pytest
 
 from src.services.cache.api import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
-from src.services.cache.hash import UnifiedHashService
+from src.services.cache.hash_service import UnifiedHashService
 from src.core.models.track import CachedApiResult
 
 
