@@ -34,7 +34,8 @@ class TestGenericCacheService:
         test_config = default_config.copy()
         if config:
             if logging_cfg := config.get("logging"):
-                merged_logging = {**test_config.get("logging", {}), **logging_cfg}
+                existing_logging = cast(dict[str, Any], test_config.get("logging", {}))
+                merged_logging = {**existing_logging, **logging_cfg}
                 test_config["logging"] = merged_logging
             for key, value in config.items():
                 if key != "logging":
@@ -55,8 +56,8 @@ class TestGenericCacheService:
 
         with allure.step("Verify initialization"):
             assert service.cache == {}
-            assert service._cleanup_task is not None  # noqa: SLF001
-            assert not service._cleanup_task.done()  # noqa: SLF001
+            assert service._cleanup_task is not None
+            assert not service._cleanup_task.done()
 
         with allure.step("Stop cleanup task"):
             await service.stop_cleanup_task()
@@ -289,8 +290,8 @@ class TestGenericCacheService:
             await asyncio.sleep(0.2)
 
             # Task should still be running despite error
-            assert service._cleanup_task is not None  # noqa: SLF001
-            assert not service._cleanup_task.done()  # noqa: SLF001
+            assert service._cleanup_task is not None
+            assert not service._cleanup_task.done()
 
         with allure.step("Stop cleanup task"):
             await service.stop_cleanup_task()
