@@ -319,7 +319,7 @@ class TestExternalApiOrchestratorAllure:
                 "timestamp": "2024-01-01T00:00:00Z",
             }
 
-            orchestrator.analytics.track_event(test_event)
+            mock_analytics.track_event(test_event)
 
             # Verify event was tracked
             assert len(mock_analytics.events) == 1
