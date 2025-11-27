@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from src.core.logger import get_full_log_path
-from src.core.models import repair as repair_utils
+from src.core.models import year_repair as repair_utils
 from src.core.models.track_models import ChangeLogEntry
 from src.core.tracks.year_retriever import YearRetriever
 from src.metrics.change_reports import save_changes_report
