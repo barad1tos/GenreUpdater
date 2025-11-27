@@ -10,7 +10,7 @@ from unittest.mock import patch
 import allure
 import pytest
 
-from src.core.tracks.filter import IncrementalFilterService
+from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.models.track_models import TrackDict
 from src.metrics.analytics import Analytics
 from tests.mocks.csv_mock import MockAnalytics, MockLogger

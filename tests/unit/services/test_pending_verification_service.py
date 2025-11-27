@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.services.pending import PendingVerificationService
+from src.services.pending_verification import PendingVerificationService
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ async def test_initialize_creates_empty_pending_cache(service: PendingVerificati
 
 def test_generate_album_key_uses_hash_service(service: PendingVerificationService) -> None:
     with patch(
-        "src.services.pending.UnifiedHashService.hash_pending_key",
+        "src.services.pending_verification.UnifiedHashService.hash_pending_key",
         return_value="hashed-key",
     ) as hash_mock:
         key = service.generate_album_key("Artist", "Album")

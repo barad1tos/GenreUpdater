@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
-from src.services.cache.api import ApiCacheService
+from src.services.cache.api_cache import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.hash_service import UnifiedHashService
 from src.core.models.track_models import CachedApiResult

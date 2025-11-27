@@ -26,7 +26,7 @@ from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orche
 from .apple import AppleScriptClient
 from .cache.orchestrator import CacheOrchestrator
 from .cache.snapshot import LibrarySnapshotService
-from .pending import PendingVerificationService
+from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
     import logging

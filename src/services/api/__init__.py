@@ -15,7 +15,7 @@ from .discogs import DiscogsClient
 from .lastfm import LastFmClient
 from .musicbrainz import MusicBrainzClient
 from .orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
-from .scoring import ReleaseScorer, create_release_scorer
+from .year_scoring import ReleaseScorer, create_release_scorer
 
 __all__ = [
     "AppleMusicClient",

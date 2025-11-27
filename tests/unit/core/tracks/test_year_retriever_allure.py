@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.core.tracks import year as year_module
-from src.core.tracks.year import YearRetriever, is_empty_year
+from src.core.tracks import year_retriever as year_module
+from src.core.tracks.year_retriever import YearRetriever, is_empty_year
 from src.core.models.track_models import TrackDict
 from src.core.models.protocols import (
     CacheServiceProtocol,

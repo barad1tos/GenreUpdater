@@ -21,8 +21,8 @@ from unittest.mock import MagicMock
 import allure
 import pytest
 
-from src.core.tracks.year import YearRetriever
-from src.core.tracks.year import is_empty_year
+from src.core.tracks.year_retriever import YearRetriever
+from src.core.tracks.year_retriever import is_empty_year
 from src.core.models.track_models import TrackDict
 # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics
