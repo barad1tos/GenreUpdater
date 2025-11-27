@@ -1,9 +1,8 @@
 """Tests for ApiRequestExecutor - HTTP request execution with retry and caching."""
 
-import asyncio
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -16,6 +15,13 @@ from src.services.api.request_executor import (
     WAIT_TIME_LOG_THRESHOLD,
     ApiRequestExecutor,
 )
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import CacheServiceProtocol
+    from src.services.api.api_base import EnhancedRateLimiter
+
+# Test API token (not a real credential)
+TEST_API_TOKEN = "test_token"  # noqa: S105
 
 
 @pytest.fixture
@@ -50,31 +56,34 @@ def mock_rate_limiter() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, AsyncMock]:
+def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "EnhancedRateLimiter"]:
     """Create dict of mock rate limiters for all APIs."""
-    return {
-        "discogs": mock_rate_limiter,
-        "musicbrainz": mock_rate_limiter,
-        "lastfm": mock_rate_limiter,
-        "itunes": mock_rate_limiter,
-    }
+    return cast(
+        dict[str, "EnhancedRateLimiter"],
+        {
+            "discogs": mock_rate_limiter,
+            "musicbrainz": mock_rate_limiter,
+            "lastfm": mock_rate_limiter,
+            "itunes": mock_rate_limiter,
+        },
+    )
 
 
 @pytest.fixture
 def executor(
     mock_cache_service: AsyncMock,
-    mock_rate_limiters: dict[str, AsyncMock],
+    mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> ApiRequestExecutor:
     """Create an ApiRequestExecutor instance."""
     return ApiRequestExecutor(
-        cache_service=mock_cache_service,
+        cache_service=cast("CacheServiceProtocol", mock_cache_service),
         rate_limiters=mock_rate_limiters,
         console_logger=console_logger,
         error_logger=error_logger,
         user_agent="TestAgent/1.0",
-        discogs_token="test_token",
+        discogs_token=TEST_API_TOKEN,
         cache_ttl_days=1,
         default_max_retries=3,
         default_retry_delay=0.01,
@@ -97,25 +106,25 @@ class TestInitialization:
     def test_init_with_all_params(
         self,
         mock_cache_service: AsyncMock,
-        mock_rate_limiters: dict[str, AsyncMock],
+        mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
         """Test initialization with all parameters."""
         executor = ApiRequestExecutor(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             rate_limiters=mock_rate_limiters,
             console_logger=console_logger,
             error_logger=error_logger,
             user_agent="TestAgent/1.0",
-            discogs_token="test_token",
+            discogs_token=TEST_API_TOKEN,
             cache_ttl_days=7,
             default_max_retries=5,
             default_retry_delay=1.0,
         )
 
         assert executor.user_agent == "TestAgent/1.0"
-        assert executor.discogs_token == "test_token"
+        assert executor.discogs_token == TEST_API_TOKEN
         assert executor.cache_ttl_days == 7
         assert executor.default_max_retries == 5
         assert executor.default_retry_delay == 1.0
@@ -354,14 +363,14 @@ class TestPrepareRequest:
     def test_prepare_request_discogs_without_token(
         self,
         mock_cache_service: AsyncMock,
-        mock_rate_limiters: dict[str, AsyncMock],
+        mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         mock_session: MagicMock,
     ) -> None:
         """Test Discogs request fails without token."""
         executor = ApiRequestExecutor(
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", mock_cache_service),
             rate_limiters=mock_rate_limiters,
             console_logger=console_logger,
             error_logger=error_logger,
