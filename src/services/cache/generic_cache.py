@@ -392,11 +392,11 @@ class GenericCacheService:
         if hasattr(value, "model_dump"):
             return cast(CacheableValue, cast(Any, value).model_dump())
 
-        return cast(CacheableValue, value)
+        return value
 
     @staticmethod
     def _restore_value_from_disk(value: CacheableValue) -> CacheableValue:
         """Restore cache value from serialized representation."""
         # At this layer we keep values as plain data structures; higher layers
         # validate and rebuild domain objects as needed.
-        return cast(CacheableValue, value)
+        return value
