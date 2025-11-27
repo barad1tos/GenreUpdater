@@ -57,36 +57,36 @@ class TestFingerprintGeneration:
         self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
     ) -> None:
         """Test that different data produces different fingerprint."""
-        fp1 = generator.generate_track_fingerprint(valid_track_data)
-
-        modified_data = valid_track_data.copy()
-        modified_data["file_size"] = 9999999
-        fp2 = generator.generate_track_fingerprint(modified_data)
-
-        assert fp1 != fp2
+        self._assert_fingerprint_changes(generator, valid_track_data, "file_size", 9999999)
 
     def test_fingerprint_changes_with_location(
         self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
     ) -> None:
         """Test that changed location produces different fingerprint."""
-        fp1 = generator.generate_track_fingerprint(valid_track_data)
-
-        modified_data = valid_track_data.copy()
-        modified_data["location"] = "/different/path/song.mp3"
-        fp2 = generator.generate_track_fingerprint(modified_data)
-
-        assert fp1 != fp2
+        self._assert_fingerprint_changes(
+            generator, valid_track_data, "location", "/different/path/song.mp3"
+        )
 
     def test_fingerprint_changes_with_persistent_id(
         self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
     ) -> None:
         """Test that changed persistent_id produces different fingerprint."""
-        fp1 = generator.generate_track_fingerprint(valid_track_data)
+        self._assert_fingerprint_changes(
+            generator, valid_track_data, "persistent_id", "DIFFERENT_ID"
+        )
 
-        modified_data = valid_track_data.copy()
-        modified_data["persistent_id"] = "DIFFERENT_ID"
+    @staticmethod
+    def _assert_fingerprint_changes(
+        generator: FingerprintGenerator,
+        track_data: dict[str, Any],
+        field: str,
+        new_value: Any,
+    ) -> None:
+        """Assert that modifying a field changes the fingerprint."""
+        fp1 = generator.generate_track_fingerprint(track_data)
+        modified_data = track_data.copy()
+        modified_data[field] = new_value
         fp2 = generator.generate_track_fingerprint(modified_data)
-
         assert fp1 != fp2
 
     def test_fingerprint_with_minimal_data(self, generator: FingerprintGenerator) -> None:
@@ -395,12 +395,12 @@ class TestCanonicalRepresentation:
             "duration": 200,
         }
         # Same data, different insertion order
-        data2: dict[str, Any] = {}
-        data2["duration"] = 200
-        data2["file_size"] = 100
-        data2["location"] = "/path"
-        data2["persistent_id"] = "TEST"
-
+        data2: dict[str, Any] = {
+            "duration": 200,
+            "file_size": 100,
+            "location": "/path",
+            "persistent_id": "TEST",
+        }
         fp1 = generator.generate_track_fingerprint(data1)
         fp2 = generator.generate_track_fingerprint(data2)
 
