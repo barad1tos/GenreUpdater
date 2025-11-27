@@ -2,21 +2,50 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.tracks.artist_renamer import ArtistRenamer
 from src.core.models.track_models import TrackDict
-from tests.mocks.csv_mock import MockLogger
-from tests.mocks.track_data import DummyTrackData
+from src.core.tracks.artist_renamer import ArtistRenamer
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from src.core.tracks.track_processor import TrackProcessor
+
+
+def _create_track(
+    track_id: str = "12345",
+    name: str = "Test Track",
+    artist: str = "Test Artist",
+    album: str = "Test Album",
+    genre: str | None = "Rock",
+    date_added: str | None = "2024-01-01 12:00:00",
+    year: str | None = "2024",
+    last_modified: str | None = "2024-01-01 12:00:00",
+    track_status: str | None = "subscription",
+) -> TrackDict:
+    """Create a TrackDict for testing."""
+    return TrackDict(
+        id=track_id,
+        name=name,
+        artist=artist,
+        album=album,
+        genre=genre,
+        date_added=date_added,
+        year=year,
+        last_modified=last_modified,
+        track_status=track_status,
+    )
 
 
 class DummyTrackProcessor:
     """Minimal track processor stub for testing artist renames."""
 
     def __init__(self) -> None:
+        """Initialize calls tracker."""
         self.calls: list[dict[str, Any]] = []
 
     async def update_artist_async(
@@ -26,6 +55,7 @@ class DummyTrackProcessor:
         *,
         original_artist: str | None = None,
     ) -> bool:
+        """Record update call and return success."""
         self.calls.append(
             {
                 "track": track,
@@ -44,14 +74,14 @@ async def test_rename_tracks_updates_artist(tmp_path: Path) -> None:
     config_path.write_text('DK Energetyk: "ДК Енергетик"\n', encoding="utf-8")
 
     processor = DummyTrackProcessor()
-    console_logger = MockLogger()
-    error_logger = MockLogger()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
 
-    track = DummyTrackData.create(artist="DK Energetyk", track_status="subscription")
+    track = _create_track(artist="DK Energetyk")
     track.__dict__["album_artist"] = "DK Energetyk"
 
     renamer = ArtistRenamer(
-        processor,
+        cast("TrackProcessor", processor),
         console_logger,
         error_logger,
         config_path=config_path,
@@ -78,13 +108,13 @@ async def test_rename_tracks_skips_read_only(tmp_path: Path) -> None:
     config_path.write_text('DK Energetyk: "ДК Енергетик"\n', encoding="utf-8")
 
     processor = DummyTrackProcessor()
-    console_logger = MockLogger()
-    error_logger = MockLogger()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
 
-    track = DummyTrackData.create(artist="DK Energetyk", track_status="prerelease")
+    track = _create_track(artist="DK Energetyk", track_status="prerelease")
 
     renamer = ArtistRenamer(
-        processor,
+        cast("TrackProcessor", processor),
         console_logger,
         error_logger,
         config_path=config_path,
@@ -102,11 +132,11 @@ def test_missing_config_yields_no_mapping(tmp_path: Path) -> None:
 
     config_path = tmp_path / "missing.yaml"
     processor = DummyTrackProcessor()
-    console_logger = MockLogger()
-    error_logger = MockLogger()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
 
     renamer = ArtistRenamer(
-        processor,
+        cast("TrackProcessor", processor),
         console_logger,
         error_logger,
         config_path=config_path,

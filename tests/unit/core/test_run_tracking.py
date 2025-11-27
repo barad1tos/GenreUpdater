@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,7 +41,7 @@ class TestIncrementalRunTrackerInit:
 class TestGetLastRunFilePath:
     """Tests for get_last_run_file_path method."""
 
-    def test_returns_path_from_config(self, tracker: IncrementalRunTracker, tmp_path: Path) -> None:
+    def test_returns_path_from_config(self, tracker: IncrementalRunTracker) -> None:
         """Should return path based on config."""
         result = tracker.get_last_run_file_path()
         assert "last_run.log" in result or "last_incremental_run.log" in result
@@ -190,7 +191,6 @@ class TestRoundTrip:
         first_read = await tracker.get_last_run_timestamp()
 
         # Small delay to ensure different timestamp
-        import asyncio
         await asyncio.sleep(0.01)
 
         await tracker.update_last_run_timestamp()

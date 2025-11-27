@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +12,9 @@ import pytest
 from src.core.models.track_models import TrackDict
 from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.core.tracks.track_processor import TrackProcessor
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
 
 
 @pytest.fixture
@@ -83,13 +86,12 @@ def processor(
     security_validator = SecurityValidator(logger)
     analytics = MagicMock()
     return TrackProcessor(
-        ap_client=mock_ap_client,
-        cache_service=mock_cache_service,
+        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
+        cache_service=cast("CacheServiceProtocol", mock_cache_service),
         console_logger=logger,
         error_logger=error_logger,
         config=config,
         analytics=analytics,
-        dry_run=False,
         security_validator=security_validator,
     )
 
@@ -136,8 +138,7 @@ class TestProcessTestArtists:
     ) -> None:
         """Test uses dry run test artists when available."""
         processor.dry_run_mode = "test"
-        processor.dry_run_test_artists = ["Test Artist 1"]
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
+        processor.dry_run_test_artists = {"Test Artist 1"}
         mock_ap_client.run_script.return_value = "123\x1eTest Track\x1eTest Artist 1\x1eTest Artist 1\x1eAlbum\x1eRock\x1e2020-01-01\x1D"
 
         result = await processor._process_test_artists(False)
@@ -149,7 +150,6 @@ class TestProcessTestArtists:
     ) -> None:
         """Test uses config test artists when dry run not set."""
         processor.config["development"]["test_artists"] = ["Config Artist"]
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
         mock_ap_client.run_script.return_value = "456\x1eTrack\x1eConfig Artist\x1eConfig Artist\x1eAlbum\x1eRock\x1e2021-01-01\x1D"
 
         result = await processor._process_test_artists(False)
@@ -160,7 +160,7 @@ class TestProcessTestArtists:
         self, processor: TrackProcessor
     ) -> None:
         """Test returns empty list when no test artists configured."""
-        processor.dry_run_test_artists = None
+        processor.dry_run_test_artists = set()
         processor.config["development"]["test_artists"] = []
 
         result = await processor._process_test_artists(False)
@@ -366,7 +366,6 @@ class TestLoadTracksFromSnapshot:
         self,
         processor: TrackProcessor,
         mock_snapshot_service: AsyncMock,
-        mock_ap_client: AsyncMock,
         sample_track: TrackDict,
     ) -> None:
         """Test attempts delta refresh when delta is enabled."""
@@ -449,12 +448,12 @@ class TestRefreshSnapshotFromDelta:
         """Test uses max date when delta cache has last_run."""
         # Set up metadata with earlier date
         metadata = MagicMock()
-        metadata.last_full_scan = datetime(2021, 1, 1)
+        metadata.last_full_scan = datetime(2021, 1, 1, tzinfo=UTC)
         mock_snapshot_service.get_snapshot_metadata.return_value = metadata
 
         # Set up delta cache with more recent last_run
         delta_cache = MagicMock()
-        delta_cache.last_run = datetime(2021, 6, 1)  # More recent
+        delta_cache.last_run = datetime(2021, 6, 1, tzinfo=UTC)
         mock_snapshot_service.load_delta.return_value = delta_cache
 
         # Return a new track from the delta fetch
@@ -488,12 +487,13 @@ class TestValidateTracksSecurity:
         self, processor: TrackProcessor
     ) -> None:
         """Test filters out tracks that fail security validation."""
-        # Mock security validator to fail on specific track
         mock_validator = MagicMock()
+        error_message = "Invalid track"
 
         def validate_side_effect(track_dict: dict[str, Any]) -> dict[str, Any]:
+            """Validate track and raise error for bad tracks."""
             if track_dict.get("id") == "bad_track":
-                raise SecurityValidationError("Invalid track")
+                raise SecurityValidationError(error_message)
             return track_dict
 
         mock_validator.validate_track_data = MagicMock(side_effect=validate_side_effect)
@@ -559,7 +559,6 @@ class TestFetchTracksByIds:
         self, processor: TrackProcessor, mock_ap_client: AsyncMock
     ) -> None:
         """Test fetches tracks by IDs."""
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
         mock_ap_client.run_script.return_value = "123\x1eTrack\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2020-01-01\x1D"
 
         result = await processor.fetch_tracks_by_ids(["123"])
@@ -582,10 +581,9 @@ class TestFetchTracksByIds:
     ) -> None:
         """Test processes tracks in batches."""
         processor.config["batch_processing"] = {"ids_batch_size": 2}
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
         mock_ap_client.run_script.return_value = "1\x1eT\x1eA\x1eA\x1eAl\x1eR\x1e2020-01-01\x1D"
 
-        result = await processor.fetch_tracks_by_ids(["1", "2", "3", "4"])
+        await processor.fetch_tracks_by_ids(["1", "2", "3", "4"])
         # Should make 2 calls (batch size 2, 4 tracks)
         assert mock_ap_client.run_script.call_count == 2
 
@@ -611,18 +609,18 @@ class TestFetchTracksAsync:
     ) -> None:
         """Test updates snapshot when fetching tracks."""
         processor.config["library_snapshot"]["enabled"] = True
-        processor.snapshot_service = None  # Disable snapshot loading
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
+        processor.snapshot_service = None
         mock_ap_client.run_script.return_value = "123\x1eTrack\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2020-01-01\x1D"
 
-        # Make _can_use_snapshot return True
-        with patch.object(processor, "_can_use_snapshot", return_value=True):
-            with patch.object(processor, "_update_snapshot", new_callable=AsyncMock) as mock_update:
-                result = await processor.fetch_tracks_async()
+        with (
+            patch.object(processor, "_can_use_snapshot", return_value=True),
+            patch.object(processor, "_update_snapshot", new_callable=AsyncMock) as mock_update,
+        ):
+            result = await processor.fetch_tracks_async()
 
-                assert len(result) == 1
-                mock_update.assert_called_once()
-                mock_cache_service.set_async.assert_called_once()
+            assert len(result) == 1
+            mock_update.assert_called_once()
+            mock_cache_service.set_async.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_caches_fetched_tracks(
@@ -632,7 +630,6 @@ class TestFetchTracksAsync:
         mock_cache_service: AsyncMock,
     ) -> None:
         """Test caches tracks after fetching."""
-        # Format: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED
         mock_ap_client.run_script.return_value = "123\x1eTrack\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2020-01-01\x1D"
 
         result = await processor.fetch_tracks_async()
@@ -645,10 +642,8 @@ class TestFetchTracksAsync:
         self,
         processor: TrackProcessor,
         mock_ap_client: AsyncMock,
-        logger: logging.Logger,
     ) -> None:
         """Test logs warning when no tracks are fetched."""
-        # AppleScript returns empty
         mock_ap_client.run_script.return_value = ""
 
         with patch.object(processor.console_logger, "warning") as mock_warning:

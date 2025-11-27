@@ -3,17 +3,109 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import allure
 import pytest
+
+from src.core.models.track_models import TrackDict
 from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.tracks.track_delta import TrackDelta
-from src.core.models.track_models import TrackDict
+from src.metrics import Analytics
+from src.metrics.analytics import LoggerContainer
 
-from tests.mocks.csv_mock import MockAnalytics, MockGetFullLogPath, MockLoadTrackList, MockLogger
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+
+class _MockLogger(logging.Logger):
+    """Mock logger for testing with message tracking."""
+
+    def __init__(self, name: str = "mock") -> None:
+        """Initialize mock logger with message collections."""
+        super().__init__(name)
+        self.level = 0
+        self.handlers: list[Any] = []
+        self.parent = None
+        self.propagate = True
+        self.info_messages: list[str] = []
+        self.warning_messages: list[str] = []
+        self.error_messages: list[str] = []
+        self.debug_messages: list[str] = []
+
+    @staticmethod
+    def _format_message(message: str, *args: object) -> str:
+        """Format message with args for logging."""
+        if args:
+            try:
+                return message % args
+            except (TypeError, ValueError):
+                return f"{message} {args}"
+        return message
+
+    def info(self, msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track info-level log messages."""
+        self.info_messages.append(self._format_message(str(msg), *args))
+
+    def warning(self, msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track warning-level log messages."""
+        self.warning_messages.append(self._format_message(str(msg), *args))
+
+    def error(self, msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track error-level log messages."""
+        self.error_messages.append(self._format_message(str(msg), *args))
+
+    def debug(self, msg: object, *args: object, **_kwargs: Any) -> None:
+        """Track debug-level log messages."""
+        self.debug_messages.append(self._format_message(str(msg), *args))
+
+
+class _MockAnalytics(Analytics):
+    """Mock analytics for testing."""
+
+    def __init__(self) -> None:
+        """Initialize mock analytics with mock loggers."""
+        mock_console = _MockLogger("console")
+        mock_error = _MockLogger("error")
+        mock_analytics = _MockLogger("analytics")
+        loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
+        super().__init__(config={}, loggers=loggers, max_events=1000)
+        self.events: list[dict[str, Any]] = []
+
+    def track_event(self, event: dict[str, Any]) -> None:
+        """Track event for testing verification."""
+        self.events.append(event)
+
+
+class _MockLoadTrackList:
+    """Mock for load_track_list function."""
+
+    def __init__(self, tracks_to_return: Sequence[TrackDict] | None = None) -> None:
+        """Initialize with tracks to return."""
+        self.tracks_to_return = list(tracks_to_return) if tracks_to_return else []
+        self.load_called = False
+
+    def __call__(self, _csv_path: str) -> dict[str, TrackDict]:
+        """Return tracks as dict keyed by ID."""
+        self.load_called = True
+        return {str(t.id): t for t in self.tracks_to_return if t.id}
+
+
+class _MockGetFullLogPath:
+    """Mock for get_full_log_path function."""
+
+    def __init__(self, path: str = "/fake/path/track_list.csv") -> None:
+        """Initialize with path to return."""
+        self.path = path
+        self.get_called = False
+
+    def __call__(self, _config: dict[str, Any], _key: str, _default: str) -> str:
+        """Return the configured path."""
+        self.get_called = True
+        return self.path
 
 
 @allure.epic("Music Genre Updater")
@@ -30,9 +122,9 @@ class TestIncrementalFilterServiceAllure:
         test_config = config or {"csv_output_file": "csv/track_list.csv", "logs": {"directory": "/fake/logs"}}
 
         return IncrementalFilterService(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=_MockLogger(),  # type: ignore[arg-type]
+            error_logger=_MockLogger(),  # type: ignore[arg-type]
+            analytics=_MockAnalytics(),  # type: ignore[arg-type]
             config=test_config,
             dry_run=dry_run,
         )
@@ -144,8 +236,8 @@ class TestIncrementalFilterServiceAllure:
             service = self.create_service()
 
             # Mock empty CSV data so no status changes are detected
-            mock_load_track_list = MockLoadTrackList([])
-            mock_get_full_log_path = MockGetFullLogPath()
+            mock_load_track_list = _MockLoadTrackList([])
+            mock_get_full_log_path = _MockGetFullLogPath()
 
             with (
                 patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
@@ -352,7 +444,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach("3 tracks to check for status changes", "Input Tracks", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)
 
         with allure.step("Verify successful detection"):
             assert len(result) == 2
@@ -386,7 +478,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach("Empty CSV (file missing)", "Error Scenario", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)
 
         with allure.step("Verify graceful handling"):
             assert result == []
@@ -418,7 +510,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach("CSV loading exception", "Error Scenario", allure.attachment_type.TEXT)
 
         with allure.step("Execute status change detection"):
-            result = service._find_status_changed_tracks(tracks)  # noqa: SLF001
+            result = service._find_status_changed_tracks(tracks)
 
         with allure.step("Verify error handling"):
             assert result == []
@@ -452,7 +544,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach(date_string, "Input Date String", allure.attachment_type.TEXT)
 
         with allure.step("Parse date"):
-            result = IncrementalFilterService._parse_date_added(track)  # noqa: SLF001
+            result = IncrementalFilterService._parse_date_added(track)
 
         with allure.step("Verify parsed date"):
             assert result is not None
@@ -486,7 +578,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach(str(invalid_date), "Invalid Date Input", allure.attachment_type.TEXT)
 
         with allure.step("Attempt to parse invalid date"):
-            result = IncrementalFilterService._parse_date_added(track)  # noqa: SLF001
+            result = IncrementalFilterService._parse_date_added(track)
 
         with allure.step("Verify graceful handling"):
             assert result is None

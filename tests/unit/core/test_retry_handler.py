@@ -1,12 +1,12 @@
 """Tests for retry handler with exponential backoff."""
 
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from src.core.exceptions import ConfigurationError
 from src.core.retry_handler import (
     ConfigurationRetryHandler,
     DatabaseRetryHandler,
@@ -250,11 +250,17 @@ class TestAsyncRetryOperation:
         """Test non-transient error doesn't retry."""
         attempts = 0
         policy = RetryPolicy(max_retries=3, base_delay_seconds=0.01)
+        error_message = "Invalid value"
 
-        with pytest.raises(ValueError, match="Invalid value"):
+        async def operation_that_raises() -> None:
+            """Execute operation that raises non-transient error."""
+            nonlocal attempts
             async with retry_handler.async_retry_operation("test_op", policy) as _:
                 attempts += 1
-                raise ValueError("Invalid value")
+                raise ValueError(error_message)
+
+        with pytest.raises(ValueError, match=error_message):
+            await operation_that_raises()
 
         assert attempts == 1
 
@@ -267,7 +273,9 @@ class TestExecuteWithRetry:
         self, retry_handler: DatabaseRetryHandler
     ) -> None:
         """Test successful execution returns result."""
+
         async def operation() -> str:
+            """Test operation that returns success."""
             return "success"
 
         result = await retry_handler.execute_with_retry(operation, "test_op")
@@ -312,8 +320,6 @@ class TestConfigurationRetryHandler:
         self, config_retry_handler: ConfigurationRetryHandler
     ) -> None:
         """Test ConfigurationError when all configs fail."""
-        from src.core.exceptions import ConfigurationError
-
         with patch("src.core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
 
@@ -327,8 +333,6 @@ class TestConfigurationRetryHandler:
         self, config_retry_handler: ConfigurationRetryHandler
     ) -> None:
         """Test failure with no fallback paths."""
-        from src.core.exceptions import ConfigurationError
-
         with patch("src.core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
 
