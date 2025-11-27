@@ -86,37 +86,37 @@ class MockLogger(logging.Logger):
                 return f"{message} {args}"
         return message
 
-    def info(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def info(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock info logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
         self.info_messages.append(formatted)
 
-    def warning(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def warning(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock warning logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
         self.warning_messages.append(formatted)
 
-    def error(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def error(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock error logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
         self.error_messages.append(formatted)
 
-    def debug(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def debug(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock debug logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
         self.debug_messages.append(formatted)
 
-    def critical(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def critical(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock critical logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
         self.critical_messages.append(formatted)
 
-    def exception(self, msg: object, *args: object, **kwargs: Any) -> None:
+    def exception(self, msg: object, *args: object, **_kwargs: Any) -> None:
         """Mock exception logging."""
         message = str(msg)
         formatted = self._format_message(message, *args)
@@ -138,8 +138,8 @@ class MockLogger(logging.Logger):
         else:  # DEBUG or lower
             self.debug(message, *args, **kwargs)
 
-    def setLevel(self, level: int | str) -> None:
-        """Mock setLevel method."""
+    def set_level(self, level: int | str) -> None:
+        """Mock set_level method."""
         if isinstance(level, str):
             # Convert string levels to numeric
             level_map = {
@@ -152,6 +152,11 @@ class MockLogger(logging.Logger):
             self.level = level_map.get(level.upper(), 0)
         else:
             self.level = level
+
+    # Keep compatibility with logging.Logger API
+    def setLevel(self, level: int | str) -> None:  # noqa: N802
+        """Mock setLevel method for logging.Logger compatibility."""
+        self.set_level(level)
 
     def add_handler(self, handler: Any) -> None:
         """Mock add_handler method."""
