@@ -507,9 +507,7 @@ class TestParseTrackOutput:
             f"2020{field_sep}2020{field_sep}2021{line_sep}"
         )
 
-        result = AppleScriptClient._parse_track_output(raw_output)
-        assert len(result) == 1
-        assert result[0]["id"] == "123"
+        result = self._assert_parse_tracks(raw_output, expected_count=1, first_id="123")
         assert result[0]["name"] == "Track Name"
         assert result[0]["artist"] == "Artist"
         assert result[0]["album_artist"] == "Album Artist"
@@ -532,9 +530,7 @@ class TestParseTrackOutput:
             f"D2{field_sep}S2{field_sep}Y2{field_sep}RY2{field_sep}NY2{line_sep}"
         )
 
-        result = AppleScriptClient._parse_track_output(raw_output)
-        assert len(result) == 2
-        assert result[0]["id"] == "1"
+        result = self._assert_parse_tracks(raw_output, expected_count=2, first_id="1")
         assert result[1]["id"] == "2"
 
     def test_skips_empty_lines(self) -> None:
@@ -548,9 +544,7 @@ class TestParseTrackOutput:
             f"   {line_sep}"  # Whitespace only
         )
 
-        result = AppleScriptClient._parse_track_output(raw_output)
-        assert len(result) == 1
-        assert result[0]["id"] == "123"
+        self._assert_parse_tracks(raw_output, expected_count=1, first_id="123")
 
     def test_skips_lines_with_insufficient_fields(self) -> None:
         """Test skips lines with fewer than 11 fields."""
@@ -562,9 +556,19 @@ class TestParseTrackOutput:
             f"D{field_sep}S{field_sep}Y{field_sep}RY{field_sep}NY{line_sep}"
         )
 
+        self._assert_parse_tracks(raw_output, expected_count=1, first_id="456")
+
+    @staticmethod
+    def _assert_parse_tracks(
+        raw_output: str,
+        expected_count: int,
+        first_id: str,
+    ) -> list[dict[str, Any]]:
+        """Parse track output and assert expected count and first track ID."""
         result = AppleScriptClient._parse_track_output(raw_output)
-        assert len(result) == 1
-        assert result[0]["id"] == "456"
+        assert len(result) == expected_count
+        assert result[0]["id"] == first_id
+        return result
 
 
 class TestFormatScriptPreview:
