@@ -11,8 +11,9 @@ import allure
 import pytest
 
 from src.core.models.track_models import TrackDict
-from src.core.tracks import year_retriever as year_module
-from src.core.tracks.year_retriever import YearRetriever, is_empty_year
+from src.core.models.validators import is_empty_year
+from src.core.tracks import year_consistency as year_consistency_module
+from src.core.tracks.year_retriever import YearRetriever
 
 if TYPE_CHECKING:
     from src.core.models.protocols import (
@@ -222,7 +223,7 @@ class TestYearRetrieverAllure:
         """Test reasonable year validation with various inputs."""
         with allure.step(f"Testing reasonable year validation for: '{year}'"):
             # Access the private function through the imported module
-            result = year_module._is_reasonable_year(year)
+            result = year_consistency_module._is_reasonable_year(year)
 
             current_year = datetime.now(UTC).year
             min_year = YearRetriever.MIN_VALID_YEAR
@@ -405,7 +406,7 @@ class TestYearRetrieverAllure:
             ]
 
         with allure.step("Determine album year"):
-            determined_year = await retriever._determine_album_year("Test Artist", "Test Album", album_tracks)
+            determined_year = await retriever._year_determinator.determine_album_year("Test Artist", "Test Album", album_tracks)
 
         with allure.step("Verify year determination"):
             assert determined_year == expected_year
@@ -470,7 +471,7 @@ class TestYearRetrieverAllure:
             track_ids = [track_id for track_id, _ in tracks_data]
 
         with allure.step("Execute bulk update"):
-            success_count, failed_count = await retriever.update_album_tracks_bulk_async(
+            success_count, failed_count = await retriever._batch_processor.update_album_tracks_bulk_async(
                 track_ids=track_ids, year="1990"
             )
 
@@ -510,7 +511,7 @@ class TestYearRetrieverAllure:
             track_ids = [track_id for track_id, _ in tracks_data]
 
         with allure.step("Execute bulk update with expected failures"):
-            success_count, failed_count = await retriever.update_album_tracks_bulk_async(
+            success_count, failed_count = await retriever._batch_processor.update_album_tracks_bulk_async(
                 track_ids=track_ids, year="2000"
             )
 
