@@ -45,19 +45,21 @@ end run
 
 on serializeTrack(trackRef, fieldSeparator)
     try
-        set track_id to (id of trackRef) as text
-        if track_id is "" then return ""
+        tell application "Music"
+            set track_id to (id of trackRef) as text
+            if track_id is "" then return ""
 
-        set track_name to my safeText(name of trackRef)
-        set track_artist to my safeText(artist of trackRef)
-        set album_artist to my safeText(album artist of trackRef)
-        set track_album to my safeText(album of trackRef)
-        set track_genre to my safeText(genre of trackRef)
-        set date_added to my formatDate(date added of trackRef)
-        set track_status to my safeText(cloud status of trackRef)
-        set track_year to my normalizeYear(year of trackRef)
-        set release_year to my extractReleaseYear(trackRef)
-        set new_year to "" -- maintained for compatibility
+            set track_name to my safeText(name of trackRef)
+            set track_artist to my safeText(artist of trackRef)
+            set album_artist to my safeText(album artist of trackRef)
+            set track_album to my safeText(album of trackRef)
+            set track_genre to my safeText(genre of trackRef)
+            set date_added to my formatDate(date added of trackRef)
+            set track_status to my safeText(cloud status of trackRef)
+            set track_year to my normalizeYear(year of trackRef)
+            set release_year to my extractReleaseYear(trackRef)
+            set new_year to "" -- maintained for compatibility
+        end tell
 
         set fields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year}
         return my joinFields(fields, fieldSeparator)
@@ -68,7 +70,9 @@ end serializeTrack
 
 on extractReleaseYear(trackRef)
     try
-        set releaseDateValue to release date of trackRef
+        tell application "Music"
+            set releaseDateValue to release date of trackRef
+        end tell
         return my formatDate(releaseDateValue)
     on error
         return ""
