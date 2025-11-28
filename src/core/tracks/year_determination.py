@@ -17,16 +17,17 @@ from src.core.models.validators import is_empty_year, is_valid_year
 from .year_utils import resolve_non_negative_int, resolve_positive_int
 
 if TYPE_CHECKING:
-    from .year_fallback import YearFallbackHandler
-    from .year_consistency import YearConsistencyChecker
+    import logging
+
     from src.core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    import logging
-
     from src.core.models.track_models import TrackDict
+
+    from .year_consistency import YearConsistencyChecker
+    from .year_fallback import YearFallbackHandler
 
 
 # Constants
