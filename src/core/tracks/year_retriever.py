@@ -698,11 +698,11 @@ class YearRetriever:
                 total_albums,
             )
 
-    def _should_skip_album_due_to_existing_years(self, album_tracks: list[TrackDict], artist: str, album: str) -> bool:
+    async def _should_skip_album_due_to_existing_years(self, album_tracks: list[TrackDict], artist: str, album: str) -> bool:
         """Check if the album should be skipped due to existing years.
 
-        Skip only if ALL tracks have the SAME valid year.
-        Process if: empty years OR inconsistent years (for dominant year logic).
+        Now trusts cache (API data) over Music.app data.
+        If cache year differs from library year, we process the album to update from cache.
 
         Args:
             album_tracks: List of tracks in the album
@@ -713,70 +713,72 @@ class YearRetriever:
             True if the album should be skipped, False otherwise
 
         """
-        if tracks_with_empty_year := [track for track in album_tracks if is_empty_year(track.get("year"))]:
-            self.console_logger.info(
-                "Album '%s - %s' has %d tracks with empty/null year - will process",
-                artist,
-                album,
-                len(tracks_with_empty_year),
-            )
-            return False
+        # 1. Check cache first - API data is more reliable than Music.app
+        cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
 
-        # 2. Collect all non-empty years
+        # Collect non-empty years from library
         non_empty_years = [
             str(track.get("year"))
             for track in album_tracks
             if track.get("year") and str(track.get("year")).strip() and is_valid_year(track.get("year"))
         ]
 
+        if cached_year:
+            if non_empty_years:
+                # Get dominant library year
+                year_counts = Counter(non_empty_years)
+                library_year = year_counts.most_common(1)[0][0]
+
+                if cached_year != library_year:
+                    # Cache (API) differs from library - process to update from cache
+                    self.console_logger.info(
+                        "Year mismatch for '%s - %s': cache=%s, library=%s - will update from cache",
+                        artist,
+                        album,
+                        cached_year,
+                        library_year,
+                    )
+                    return False
+
+                # Cache matches library - can skip
+                self.console_logger.debug(
+                    "Skipping '%s - %s' (cache=%s matches library)",
+                    artist,
+                    album,
+                    cached_year,
+                )
+                return True
+
+            # No library years but have cache - process to apply cache
+            self.console_logger.info(
+                "Album '%s - %s' has no valid years but cache has %s - will apply from cache",
+                artist,
+                album,
+                cached_year,
+            )
+            return False
+
+        # No cache - need to query API to populate cache
+        # Check for empty years first
+        if tracks_with_empty_year := [track for track in album_tracks if is_empty_year(track.get("year"))]:
+            self.console_logger.info(
+                "Album '%s - %s' has %d tracks with empty year - will process",
+                artist,
+                album,
+                len(tracks_with_empty_year),
+            )
+            return False
+
         if not non_empty_years:
             self.console_logger.debug("Album '%s - %s' has no valid years - will process", artist, album)
             return False
 
-        # 3. Check for year consistency - ONLY skip if ALL tracks have SAME year AND SAME release_year
-        unique_years = set(non_empty_years)
-
-        # Also check release_year consistency
-        non_empty_release_years = [
-            str(track.get("release_year"))
-            for track in album_tracks
-            if track.get("release_year") and str(track.get("release_year")).strip() and is_valid_year(track.get("release_year"))
-        ]
-        unique_release_years = set(non_empty_release_years) if non_empty_release_years else set()
-
-        if len(unique_years) == 1 and len(unique_release_years) <= 1:
-            # All tracks have the same valid year AND consistent release_year - skip
-            year = next(iter(unique_years))
-            release_year = next(iter(unique_release_years)) if unique_release_years else "N/A"
-            self.console_logger.debug(
-                "Skipping '%s - %s' (all %d tracks have same year: %s, release_year: %s)",
-                artist,
-                album,
-                len(non_empty_years),
-                year,
-                release_year,
-            )
-            return True
-
-        # Check if we need to process due to release_year inconsistency
-        if len(unique_years) == 1:
-            self.console_logger.info(
-                "Album '%s - %s' has consistent year (%s) but inconsistent release_years: %s - will process",
-                artist,
-                album,
-                next(iter(unique_years)),
-                ", ".join(f"{ry}" for ry in unique_release_years),
-            )
-            return False
-
-        # Multiple different years - process for dominant year logic
-        year_counts = Counter(non_empty_years)
-        most_common = year_counts.most_common(2)
-        self.console_logger.info(
-            "Album '%s - %s' has inconsistent years: %s - will apply dominant year logic",
+        # All tracks have valid years but no cache - query API to verify and cache
+        # This is a one-time cost per album
+        self.console_logger.debug(
+            "Album '%s - %s' not in cache - will query API to verify year",
             artist,
             album,
-            ", ".join(f"{year}({count})" for year, count in most_common),
         )
         return False
 
@@ -1207,8 +1209,8 @@ class YearRetriever:
             return
 
         # Check if we should skip this album due to existing years
-        if self._should_skip_album_due_to_existing_years(album_tracks, artist, album):
-            self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks have same year", artist, album)
+        if await self._should_skip_album_due_to_existing_years(album_tracks, artist, album):
+            self.console_logger.debug("DEBUG: Skipping '%s - %s' - year matches cache", artist, album)
             return
 
         # Try dominant year processing first

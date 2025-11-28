@@ -150,12 +150,12 @@ fi
 log "Dependencies synced"
 
 # === Execute main script ===
-log "Starting update_years..."
+log "Starting main pipeline..."
 EXIT_CODE=0
 
-if timeout "$TIMEOUT_SECONDS" uv run python main.py update_years \
+if timeout "$TIMEOUT_SECONDS" uv run python main.py \
     >> "$LOGS_DIR/stdout.log" 2>> "$LOGS_DIR/stderr.log"; then
-    log "update_years completed successfully"
+    log "Main pipeline completed successfully"
 
     # Update timestamp
     date +%s > "$TIMESTAMP_FILE"

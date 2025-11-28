@@ -17,34 +17,34 @@ batch processing for large libraries, and comprehensive contextual logging for b
 ## Table of Contents
 
 - [Music Genre Updater](#music-genre-updater)
-  - [Table of Contents](#table-of-contents)
-  - [Description](#description)
-  - [Features](#features)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-    - [Clone the Repository](#clone-the-repository)
-    - [Set Up a Virtual Environment](#set-up-a-virtual-environment)
-  - [Install Dependencies](#install-dependencies)
-    - [Configuration](#configuration)
-    - [Setting Up the Launch Agent with launchctl](#setting-up-the-launch-agent-with-launchctl)
-  - [Usage](#usage)
-    - [Running the Script Manually](#running-the-script-manually)
-    - [Command-Line Arguments](#command-line-arguments)
-    - [Examples](#examples)
-    - [Revert and Repair](#revert-and-repair)
-  - [Configuration Details](#configuration-details)
-    - [config.yaml](#configyaml)
-  - [Logging](#logging)
-    - [Log Configuration](#log-configuration)
-    - [Log Files](#log-files)
-  - [Analytics Module](#analytics-module)
-  - [Auxiliary Scripts](#auxiliary-scripts)
-    - [AppleScript Scripts](#applescript-scripts)
-  - [Contributing](#contributing)
-  - [License](#license)
-  - [Contacts](#contacts)
-  - [Troubleshooting](#troubleshooting)
-  - [FAQ](#faq)
+    - [Table of Contents](#table-of-contents)
+    - [Description](#description)
+    - [Features](#features)
+    - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+        - [Clone the Repository](#clone-the-repository)
+        - [Set Up a Virtual Environment](#set-up-a-virtual-environment)
+    - [Install Dependencies](#install-dependencies)
+        - [Configuration](#configuration)
+        - [Setting Up the Launch Agent with launchctl](#setting-up-the-launch-agent-with-launchctl)
+    - [Usage](#usage)
+        - [Running the Script Manually](#running-the-script-manually)
+        - [Command-Line Arguments](#command-line-arguments)
+        - [Examples](#examples)
+        - [Revert and Repair](#revert-and-repair)
+    - [Configuration Details](#configuration-details)
+        - [config.yaml](#configyaml)
+    - [Logging](#logging)
+        - [Log Configuration](#log-configuration)
+        - [Log Files](#log-files)
+    - [Analytics Module](#analytics-module)
+    - [Auxiliary Scripts](#auxiliary-scripts)
+        - [AppleScript Scripts](#applescript-scripts)
+    - [Contributing](#contributing)
+    - [License](#license)
+    - [Contacts](#contacts)
+    - [Troubleshooting](#troubleshooting)
+    - [FAQ](#faq)
 
 ## Description
 
@@ -106,19 +106,17 @@ graph TD
     TrackProcessor --> AppleScript
     Orchestrator --> DI
     MusicUpdater --> DI
-    TrackProcessor -.uses.-> Core
-    TrackProcessor -.uses.-> Monitoring
-    TrackProcessor -.uses.-> Data
-
-    classDef appLayer fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
-    classDef domainLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    classDef infraLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef sharedLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-
-    class CLI,Orchestrator,Config,MusicUpdater,Features appLayer
-    class TrackProcessor,GenreManager,YearRetriever,ArtistRenamer,IncrementalFilter domainLayer
-    class AppleScript,APIs,Cache,DI infraLayer
-    class Core,Monitoring,Data sharedLayer
+    TrackProcessor -. uses .-> Core
+    TrackProcessor -. uses .-> Monitoring
+    TrackProcessor -. uses .-> Data
+    classDef appLayer fill: #e1f5ff, stroke: #0288d1, stroke-width: 2px
+    classDef domainLayer fill: #fff9c4, stroke: #f57f17, stroke-width: 2px
+    classDef infraLayer fill: #f3e5f5, stroke: #7b1fa2, stroke-width: 2px
+    classDef sharedLayer fill: #e8f5e9, stroke: #388e3c, stroke-width: 2px
+    class CLI, Orchestrator, Config, MusicUpdater, Features appLayer
+    class TrackProcessor, GenreManager, YearRetriever, ArtistRenamer, IncrementalFilter domainLayer
+    class AppleScript, APIs, Cache, DI infraLayer
+    class Core, Monitoring, Data sharedLayer
 ```
 
 ### Key Design Patterns
@@ -347,7 +345,7 @@ The application supports multiple commands and global flags:
 **Available Commands:**
 
 | Command           | Aliases  | Description                                        |
-| ----------------- | -------- | -------------------------------------------------- |
+|-------------------|----------|----------------------------------------------------|
 | _(default)_       | -        | Full library genre and year update                 |
 | `clean_artist`    | `clean`  | Clean metadata for specific artist                 |
 | `update_years`    | `years`  | Fetch release years from external APIs             |
@@ -498,7 +496,7 @@ max_retries: 2
 retry_delay_seconds: 1
 
 # === Test Artists (for --test-mode) ===
-test_artists: [] # Add artist names for testing
+test_artists: [ ] # Add artist names for testing
 
 # === Logging Configuration ===
 logging:
@@ -579,19 +577,19 @@ Parameter Descriptions:
 The application uses a **three-tier caching system** for optimal performance:
 
 1. **Memory Cache** (L1)
-   - In-memory dictionary for hot data
-   - Zero latency for repeated access
-   - Cleared on application restart
+    - In-memory dictionary for hot data
+    - Zero latency for repeated access
+    - Cleared on application restart
 
 2. **Disk Cache** (L2)
-   - JSON/pickle files for persistent storage
-   - 20-minute TTL for API responses
-   - Survives application restarts
+    - JSON/pickle files for persistent storage
+    - 20-minute TTL for API responses
+    - Survives application restarts
 
 3. **Library Snapshot** (L3)
-   - Full library state persisted to disk
-   - SHA-256 integrity verification
-   - Delta updates for incremental processing
+    - Full library state persisted to disk
+    - SHA-256 integrity verification
+    - Delta updates for incremental processing
 
 **Cache Hit Performance:**
 
@@ -659,16 +657,16 @@ open ~/path/to/logs/analytics/reports/analytics.html
 The project utilizes three specialized loggers for comprehensive logging:
 
 1. Console Logger (console_logger):
-   - Logs messages with a severity level of INFO and above to the console.
-   - Provides real-time feedback during script execution.
+    - Logs messages with a severity level of INFO and above to the console.
+    - Provides real-time feedback during script execution.
 2. Error Logger (error_logger):
-   - Logs messages with a severity level of ERROR to a specified log file.
-   - Helps in diagnosing issues by providing detailed error information.
+    - Logs messages with a severity level of ERROR to a specified log file.
+    - Helps in diagnosing issues by providing detailed error information.
 3. Analytics Logger (analytics_logger):
-   - Logs information related to function durations, overhead, and call counts.
-     - If analytics_log_file is configured in config.yaml, logs are written to that file using a rotating file
-       handler.
-     - Otherwise, analytics logs go to the console.
+    - Logs information related to function durations, overhead, and call counts.
+        - If analytics_log_file is configured in config.yaml, logs are written to that file using a rotating file
+          handler.
+        - Otherwise, analytics logs go to the console.
 
 ### Log Configuration
 
@@ -712,38 +710,38 @@ properties.
 The application uses 4 AppleScript files located in the `applescripts/` directory:
 
 1. **fetch_tracks.scpt**
-   - **Purpose**: Retrieve track metadata from Music.app library
-   - **Functionality**:
-     - Fetches 11 fields: ID, name, artist, album, genre, year, date_added, track_status, album_artist, etc.
-     - Supports artist filtering, batch processing (offset/limit), and date filtering
-     - Uses ASCII separators (field: \x1E, line: \x1D) for reliable parsing
-     - Filters out read-only tracks (prerelease, cloud status)
-   - **Timeout**: Configurable via `applescript_timeouts.full_library_fetch` (default: 3600s)
+    - **Purpose**: Retrieve track metadata from Music.app library
+    - **Functionality**:
+        - Fetches 11 fields: ID, name, artist, album, genre, year, date_added, track_status, album_artist, etc.
+        - Supports artist filtering, batch processing (offset/limit), and date filtering
+        - Uses ASCII separators (field: \x1E, line: \x1D) for reliable parsing
+        - Filters out read-only tracks (prerelease, cloud status)
+    - **Timeout**: Configurable via `applescript_timeouts.full_library_fetch` (default: 3600s)
 
 2. **fetch_tracks_by_ids.scpt**
-   - **Purpose**: Fetch specific tracks by ID list (targeted updates)
-   - **Functionality**:
-     - Input: Comma-separated track IDs (e.g., "123,456,789")
-     - Returns same 11-field format as `fetch_tracks.scpt`
-     - Processes up to 200 IDs per batch (configurable via `batch_processing.ids_batch_size`)
-   - **Use case**: Verification workflows, selective updates
+    - **Purpose**: Fetch specific tracks by ID list (targeted updates)
+    - **Functionality**:
+        - Input: Comma-separated track IDs (e.g., "123,456,789")
+        - Returns same 11-field format as `fetch_tracks.scpt`
+        - Processes up to 200 IDs per batch (configurable via `batch_processing.ids_batch_size`)
+    - **Use case**: Verification workflows, selective updates
 
 3. **update_property.applescript**
-   - **Purpose**: Update single track property atomically
-   - **Functionality**:
-     - Supported properties: `name`, `album`, `genre`, `year`, `artist`, `album_artist`
-     - Returns status: `"Success: <details>"` or `"No Change: already set"`
-     - Includes contextual logging support (artist/album/track context)
-   - **Timeout**: 30 seconds per update
+    - **Purpose**: Update single track property atomically
+    - **Functionality**:
+        - Supported properties: `name`, `album`, `genre`, `year`, `artist`, `album_artist`
+        - Returns status: `"Success: <details>"` or `"No Change: already set"`
+        - Includes contextual logging support (artist/album/track context)
+    - **Timeout**: 30 seconds per update
 
 4. **batch_update_tracks.applescript** (Experimental)
-   - **Purpose**: Update multiple properties in one AppleScript call (~10x faster)
-   - **Functionality**:
-     - Input format: `"trackID:property:value;trackID:property:value"`
-     - Example: `"123:genre:Rock;123:year:2020"`
-     - Processes multiple updates transactionally
-   - **Status**: Disabled by default (enable via `experimental.batch_updates_enabled: true`)
-   - **Timeout**: Configurable via `applescript_timeouts.batch_update` (default: 60s)
+    - **Purpose**: Update multiple properties in one AppleScript call (~10x faster)
+    - **Functionality**:
+        - Input format: `"trackID:property:value;trackID:property:value"`
+        - Example: `"123:genre:Rock;123:year:2020"`
+        - Processes multiple updates transactionally
+    - **Status**: Disabled by default (enable via `experimental.batch_updates_enabled: true`)
+    - **Timeout**: Configurable via `applescript_timeouts.batch_update` (default: 60s)
 
 **Location**: All scripts are in the `applescripts/` directory (set via `apple_scripts_dir` in config).
 
@@ -852,29 +850,29 @@ If you encounter issues while setting up or running the Music Genre Updater, con
 steps:
 
 1. Check Log Files:
-   - Review the log files specified in config.yaml and the plist file for error messages.
+    - Review the log files specified in config.yaml and the plist file for error messages.
 2. Verify Paths:
-   - Ensure all paths in config.yaml and the plist file are correct and accessible.
+    - Ensure all paths in config.yaml and the plist file are correct and accessible.
 3. Permissions:
-   - Confirm that the script has the necessary permissions to read and write to the specified directories and files.
+    - Confirm that the script has the necessary permissions to read and write to the specified directories and files.
 4. AppleScript Execution:
-   - Test the AppleScript scripts manually to ensure they function correctly.
-   - Open the Terminal and run:
+    - Test the AppleScript scripts manually to ensure they function correctly.
+    - Open the Terminal and run:
 
 ```bash
 osascript /path/to/fetch_tracks.scpt
 ```
 
 2. Python Dependencies:
-   - Ensure all Python dependencies are installed correctly within your virtual environment.
-   - Reinstall dependencies if necessary:
+    - Ensure all Python dependencies are installed correctly within your virtual environment.
+    - Reinstall dependencies if necessary:
 
 ```bash
 pip install --upgrade --force-reinstall -r requirements.txt
 ```
 
 6. Launch Agent Status:
-   - Verify that the launchctl agent is loaded and running:
+    - Verify that the launchctl agent is loaded and running:
 
 ```bash
 launchctl list | grep com.barad1tos.MusicGenreUpdater
@@ -888,7 +886,7 @@ launchctl load ~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist
 ```
 
 3. Python Version:
-   - Ensure you are using Python 3.8 or higher:
+    - Ensure you are using Python 3.8 or higher:
 
 ```bash
 python3 --version
