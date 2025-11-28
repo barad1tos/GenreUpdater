@@ -236,7 +236,8 @@ class TestYearRetrieverEdgeCases:
         "The 'Greatest Hits' detection is implemented in _apply_year_fallback() via detect_album_type(). "
         "See TestYearFallbackLogic for tests of the fix."
     )
-    def test_should_skip_album_with_inconsistent_years(self) -> None:
+    @pytest.mark.asyncio
+    async def test_should_skip_album_with_inconsistent_years(self) -> None:
         """Test behavior when album has tracks with various years (compilation pattern).
 
         NOTE: This tests the low-level _should_skip_album_due_to_existing_years() method.
@@ -259,20 +260,21 @@ class TestYearRetrieverEdgeCases:
             ]
 
         with allure.step("Check if album should be skipped by low-level method"):
-            should_skip = retriever._should_skip_album_due_to_existing_years(
+            should_skip = await retriever._should_skip_album_due_to_existing_years(
                 album_tracks,
                 "HIM",
                 "And Love Said No - Greatest Hits 1997 - 2004",
             )
 
-        with allure.step("Low-level method returns False (fix is in fallback layer)"):
-            # This is expected - the low-level method checks for consistent years
+        with allure.step("Low-level method returns False (no cache, queries API)"):
+            # Without cache, the method returns False to query API
             assert should_skip is False, (
-                "_should_skip_album_due_to_existing_years checks year consistency, not album type"
+                "_should_skip_album_due_to_existing_years returns False when no cache exists"
             )
 
             allure.attach(
-                "NOTE: _should_skip_album_due_to_existing_years() only checks year consistency.\n"
+                "NOTE: _should_skip_album_due_to_existing_years() now trusts cache (API data).\n"
+                "Without cache, it returns False to query API and populate cache.\n"
                 "Compilation detection is in _apply_year_fallback() via detect_album_type():\n"
                 "- Patterns: 'greatest hits', 'best of', 'compilation', 'anthology'\n"
                 "- Strategy: MARK_AND_SKIP (preserve existing years)\n"
