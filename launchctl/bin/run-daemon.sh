@@ -4,7 +4,7 @@
 #
 # Features:
 # - flock-based locking (prevents concurrent runs)
-# - 2-hour cooldown between runs
+# - 30-min cooldown between runs (prevents self-trigger loop)
 # - Auto git pull from origin/main
 # - macOS notifications on failure
 # - Comprehensive logging
@@ -25,7 +25,7 @@ TIMESTAMP_FILE="$STATE_DIR/last_run.timestamp"
 COOLDOWN_OVERRIDE="$STATE_DIR/cooldown_override"
 DAEMON_LOG="$LOGS_DIR/daemon.log"
 
-COOLDOWN_SECONDS=7200  # 2 hours
+COOLDOWN_SECONDS=1800  # 30 minutes
 TIMEOUT_SECONDS=14400  # 4 hours
 
 # === Logging ===
