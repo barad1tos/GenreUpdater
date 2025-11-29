@@ -295,7 +295,7 @@ class TestHandleWinnerRename:
         mock_logger.warning.assert_called_once()
 
     def test_dry_run_no_actual_rename(self, tmp_path: Path, mock_logger: MagicMock) -> None:
-        """Test dry run logs but doesn't rename."""
+        """Test dry run logs but doesn't rename, returns 1 to simulate success."""
         base = tmp_path / "test.json"
         winner = tmp_path / "test 2.json"
         winner.write_text("{}")
@@ -310,9 +310,9 @@ class TestHandleWinnerRename:
         )
 
         result = _handle_winner_rename(ctx, mock_logger)
-        assert result == 0
-        assert winner.exists()  # Still exists
-        assert not base.exists()  # Not created
+        assert result == 1  # Returns 1 to simulate successful rename
+        assert winner.exists()  # Still exists (no actual rename)
+        assert not base.exists()  # Not created (no actual rename)
 
     def test_actual_rename(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test actual rename when conditions are met."""

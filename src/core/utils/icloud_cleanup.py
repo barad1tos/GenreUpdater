@@ -106,16 +106,17 @@ def _handle_winner_rename(ctx: CleanupContext, logger: logging.Logger) -> int:
 
     if ctx.dry_run:
         logger.info("iCloud cleanup [DRY RUN]: Would rename '%s' → '%s'", ctx.winner_path.name, ctx.base_file.name)
+        return 1  # Simulate successful rename for accurate dry run reporting
+
+    # Rename winner to base file (atomic on same filesystem)
+    # If base file exists, rename() will replace it atomically
+    try:
+        ctx.winner_path.rename(ctx.base_file)
+        logger.info("iCloud cleanup: Renamed '%s' → '%s'", ctx.winner_path.name, ctx.base_file.name)
+        return 1
+    except OSError as e:
+        logger.error("iCloud cleanup: Failed to rename '%s' → '%s': %s", ctx.winner_path.name, ctx.base_file.name, e)
         return 0
-
-    # Remove old base file if it exists
-    if ctx.base_file.exists():
-        ctx.base_file.unlink()
-        logger.info("iCloud cleanup: Removed old base file '%s'", ctx.base_file.name)
-
-    ctx.winner_path.rename(ctx.base_file)
-    logger.info("iCloud cleanup: Renamed '%s' → '%s'", ctx.winner_path.name, ctx.base_file.name)
-    return 1
 
 
 def _should_skip_conflict(conflict: Path, ctx: CleanupContext) -> bool:
