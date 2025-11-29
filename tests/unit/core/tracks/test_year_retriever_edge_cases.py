@@ -926,7 +926,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -960,7 +959,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -992,7 +990,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -1026,7 +1023,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -1057,7 +1053,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -1128,7 +1123,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -1169,7 +1163,6 @@ class TestAbsurdYearDetection:
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
-            absurd_year_threshold=1970,
             pending_verification=mock_pending,
         )
 
@@ -1192,3 +1185,333 @@ class TestAbsurdYearDetection:
 
             assert result is None, f"Year {absurd_year} should be blocked"
             assert len(mock_pending.marked_albums) == 1
+
+
+@allure.epic("Music Genre Updater")
+@allure.feature("Year Consistency")
+@allure.story("Suspicious Old Year Detection")
+class TestSuspiciousOldYearDetection:
+    """Tests for _is_year_suspiciously_old method in YearConsistencyChecker.
+
+    This feature catches cases where all tracks have the same wrong year
+    (100% consensus on wrong data) by comparing album year to when tracks
+    were added to the library.
+
+    Real case: Equilibrium - Equinox
+    - All 13 tracks have year 2001
+    - But tracks were added in 2025
+    - Year gap = 24 years >> 10 year threshold
+    - Should trigger API verification instead of trusting local data
+    """
+
+    @staticmethod
+    def create_retriever() -> YearRetriever:
+        """Create YearRetriever with default suspicion threshold (10 years)."""
+        config = {
+            "year_retrieval": {
+                "api_timeout": 30,
+                "processing": {"batch_size": 50},
+            }
+        }
+        return TestYearRetrieverEdgeCases.create_year_retriever(config=config)
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Real case: Equilibrium-Equinox (2001 but added 2025)")
+    def test_equilibrium_equinox_case(self) -> None:
+        """Test real-world case: Equilibrium - Equinox.
+
+        All 13 tracks have year 2001, but were added to library in 2025.
+        The 24-year gap should trigger API verification.
+        """
+        retriever = self.create_retriever()
+
+        # Simulate Equilibrium - Equinox tracks
+        album_tracks = [
+            TrackDict(
+                id=str(i),
+                name=f"Track {i}",
+                artist="Equilibrium",
+                album="Equinox",
+                year="2001",  # All have 2001
+                date_added="2025-10-15 12:00:00",  # Added in 2025
+            )
+            for i in range(1, 14)  # 13 tracks
+        ]
+
+        # Check if year is suspicious
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2001", album_tracks
+        )
+
+        assert is_suspicious is True, (
+            "Year 2001 should be suspicious when tracks added in 2025 "
+            "(24 year gap > 10 year threshold)"
+        )
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Dominant year returns None when suspiciously old")
+    def test_dominant_year_returns_none_when_suspicious(self) -> None:
+        """Test that get_dominant_year returns None for suspicious years.
+
+        This triggers API verification instead of trusting wrong local data.
+        """
+        retriever = self.create_retriever()
+
+        # 100% consensus on wrong year, but recently added
+        album_tracks = [
+            TrackDict(
+                id=str(i),
+                name=f"Track {i}",
+                artist="Test Artist",
+                album="Test Album",
+                year="2001",
+                date_added="2025-01-15 10:00:00",
+            )
+            for i in range(1, 11)  # 10 tracks
+        ]
+
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
+
+        # Should return None to trigger API lookup
+        assert dominant is None, (
+            "Should return None for suspiciously old year to trigger API verification"
+        )
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Non-suspicious year passes through")
+    def test_non_suspicious_year_passes(self) -> None:
+        """Test that recently released albums aren't flagged as suspicious."""
+        retriever = self.create_retriever()
+
+        # Album released 2023, added to library 2024 (1 year gap)
+        album_tracks = [
+            TrackDict(
+                id=str(i),
+                name=f"Track {i}",
+                artist="Test Artist",
+                album="Test Album",
+                year="2023",
+                date_added="2024-03-15 10:00:00",
+            )
+            for i in range(1, 11)
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2023", album_tracks
+        )
+
+        assert is_suspicious is False, "1 year gap should not be suspicious"
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Missing date_added doesn't trigger suspicion")
+    def test_missing_date_added_not_suspicious(self) -> None:
+        """Test that tracks without date_added aren't flagged."""
+        retriever = self.create_retriever()
+
+        album_tracks = [
+            TrackDict(
+                id=str(i),
+                name=f"Track {i}",
+                artist="Test Artist",
+                album="Test Album",
+                year="2001",
+                # No date_added field
+            )
+            for i in range(1, 11)
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2001", album_tracks
+        )
+
+        assert is_suspicious is False, (
+            "Without date_added, can't determine suspicion"
+        )
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Boundary case: exactly at threshold (10 years)")
+    def test_boundary_exactly_at_threshold(self) -> None:
+        """Test boundary: exactly 10 years difference should NOT be suspicious."""
+        retriever = self.create_retriever()
+
+        # Album released 2014, added to library 2024 (exactly 10 years)
+        album_tracks = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Test Artist",
+                album="Test Album",
+                year="2014",
+                date_added="2024-01-01 10:00:00",
+            )
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2014", album_tracks
+        )
+
+        # threshold check is > not >=, so exactly 10 should NOT be suspicious
+        assert is_suspicious is False, (
+            "Exactly 10 year gap should not be suspicious (> not >=)"
+        )
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Boundary case: one year over threshold (11 years)")
+    def test_boundary_one_over_threshold(self) -> None:
+        """Test boundary: 11 years difference should be suspicious."""
+        retriever = self.create_retriever()
+
+        # Album released 2013, added to library 2024 (11 years)
+        album_tracks = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Test Artist",
+                album="Test Album",
+                year="2013",
+                date_added="2024-01-01 10:00:00",
+            )
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2013", album_tracks
+        )
+
+        assert is_suspicious is True, "11 year gap should be suspicious"
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Uses earliest track added date for comparison")
+    def test_uses_earliest_date_added(self) -> None:
+        """Test that the earliest date_added is used for comparison."""
+        retriever = self.create_retriever()
+
+        album_tracks = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Test Artist",
+                album="Test Album",
+                year="2015",
+                date_added="2024-06-01 10:00:00",  # Later
+            ),
+            TrackDict(
+                id="2",
+                name="Track 2",
+                artist="Test Artist",
+                album="Test Album",
+                year="2015",
+                date_added="2020-01-15 10:00:00",  # Earlier - 5 years gap
+            ),
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2015", album_tracks
+        )
+
+        # Earliest added: 2020, year: 2015 = 5 years gap (not suspicious)
+        assert is_suspicious is False, (
+            "Should use earliest date_added (2020). 5 year gap is not suspicious."
+        )
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Invalid year string doesn't crash")
+    def test_invalid_year_string(self) -> None:
+        """Test that invalid year strings are handled gracefully."""
+        retriever = self.create_retriever()
+
+        album_tracks = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Test Artist",
+                album="Test Album",
+                year="invalid",
+                date_added="2024-01-01 10:00:00",
+            )
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "invalid", album_tracks
+        )
+
+        assert is_suspicious is False, "Invalid year should not be suspicious"
+
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Invalid date_added format is skipped")
+    def test_invalid_date_added_format(self) -> None:
+        """Test that tracks with invalid date_added are skipped."""
+        retriever = self.create_retriever()
+
+        album_tracks = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Test Artist",
+                album="Test Album",
+                year="2001",
+                date_added="not-a-date",  # Invalid format
+            ),
+            TrackDict(
+                id="2",
+                name="Track 2",
+                artist="Test Artist",
+                album="Test Album",
+                year="2001",
+                date_added="2025-01-01 10:00:00",  # Valid
+            ),
+        ]
+
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
+            "2001", album_tracks
+        )
+
+        # Uses valid date from track 2: 2025 - 2001 = 24 years gap
+        assert is_suspicious is True, (
+            "Should use valid date_added and detect 24 year gap as suspicious"
+        )
+
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Collaboration album pattern still works")
+    def test_collaboration_album_with_suspicious_year(self) -> None:
+        """Test that collaboration album pattern also checks for suspicious years.
+
+        When some tracks have empty years but the rest are consistent,
+        we still check if the consistent year is suspiciously old.
+        """
+        retriever = self.create_retriever()
+
+        album_tracks = [
+            # 7 tracks with same year
+            *[
+                TrackDict(
+                    id=str(i),
+                    name=f"Track {i}",
+                    artist="Test Artist",
+                    album="Test Album",
+                    year="2001",
+                    date_added="2025-01-15 10:00:00",
+                )
+                for i in range(1, 8)
+            ],
+            # 3 tracks with empty year
+            *[
+                TrackDict(
+                    id=str(i),
+                    name=f"Track {i}",
+                    artist="Test Artist",
+                    album="Test Album",
+                    year="",
+                    date_added="2025-01-15 10:00:00",
+                )
+                for i in range(8, 11)
+            ],
+        ]
+
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
+
+        # 7/10 = 70% have 2001 (above 50% threshold)
+        # But 2001 is suspicious (24 year gap from 2025)
+        # Should NOT trust this year
+        assert dominant is None, (
+            "Collaboration pattern should still check for suspicious years"
+        )
