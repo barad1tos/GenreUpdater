@@ -1,11 +1,12 @@
 """Unit tests for iCloud conflict cleanup utilities."""
 
+
 from __future__ import annotations
 
 import logging
+import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,9 +26,6 @@ from src.core.utils.icloud_cleanup import (
     is_icloud_conflict,
 )
 
-if TYPE_CHECKING:
-    pass
-
 
 @pytest.fixture
 def temp_cache_dir(tmp_path: Path) -> Path:
@@ -40,8 +38,7 @@ def temp_cache_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_logger() -> MagicMock:
     """Create a mock logger."""
-    logger = MagicMock(spec=logging.Logger)
-    return logger
+    return MagicMock(spec=logging.Logger)
 
 
 class TestICloudConflictPattern:
@@ -412,7 +409,6 @@ class TestDeleteConflict:
         conflict.write_text("{}")
 
         # Set old mtime
-        import os
         old_time = time.time() - 120
         os.utime(conflict, (old_time, old_time))
 
@@ -435,7 +431,6 @@ class TestDeleteConflict:
         conflict.write_text("{}")
 
         # Set old mtime
-        import os
         old_time = time.time() - 120
         os.utime(conflict, (old_time, old_time))
 
@@ -467,7 +462,6 @@ class TestCleanupICloudConflicts:
 
     def test_base_is_winner_deletes_conflicts(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test deletes conflicts when base file is winner."""
-        import os
 
         base_file = temp_cache_dir / "cache.json"
         conflict2 = temp_cache_dir / "cache 2.json"
@@ -492,7 +486,6 @@ class TestCleanupICloudConflicts:
 
     def test_conflict_is_winner_renames_and_deletes(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test renames winner conflict and deletes others."""
-        import os
 
         base_file = temp_cache_dir / "cache.json"
         conflict2 = temp_cache_dir / "cache 2.json"
@@ -521,7 +514,6 @@ class TestCleanupICloudConflicts:
 
     def test_dry_run_no_changes(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test dry run makes no changes."""
-        import os
 
         base_file = temp_cache_dir / "cache.json"
         conflict2 = temp_cache_dir / "cache 2.json"
@@ -561,7 +553,6 @@ class TestCleanupCacheDirectory:
 
     def test_multiple_patterns_with_conflicts(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test handles multiple file patterns with conflicts."""
-        import os
 
         old_time = time.time() - 120
 
@@ -586,7 +577,6 @@ class TestCleanupCacheDirectory:
 
     def test_logs_summary(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test logs summary when files cleaned."""
-        import os
 
         old_time = time.time() - 120
         (temp_cache_dir / "cache.json").write_text("{}")
@@ -670,7 +660,6 @@ class TestCleanupConflictFilesWithDirectories:
 
     def test_deletes_conflict_directory(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test deletes conflict directories using shutil.rmtree."""
-        import os
 
         # Create conflict directory with content
         conflict_dir = tmp_path / "data 2"
@@ -686,12 +675,7 @@ class TestCleanupConflictFilesWithDirectories:
         conflict_info = is_icloud_conflict(conflict_dir)
         assert conflict_info is not None
 
-        deleted, skipped = cleanup_conflict_files(
-            [conflict_info],
-            mock_logger,
-            min_age_seconds=60,
-            dry_run=False,
-        )
+        deleted, skipped = cleanup_conflict_files([conflict_info], mock_logger)
 
         assert deleted == 1
         assert skipped == 0
@@ -699,7 +683,6 @@ class TestCleanupConflictFilesWithDirectories:
 
     def test_dry_run_preserves_directory(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test dry run doesn't delete directories but reports what would be deleted."""
-        import os
 
         conflict_dir = tmp_path / "monitoring 2"
         conflict_dir.mkdir()
@@ -711,10 +694,7 @@ class TestCleanupConflictFilesWithDirectories:
         assert conflict_info is not None
 
         deleted, skipped = cleanup_conflict_files(
-            [conflict_info],
-            mock_logger,
-            min_age_seconds=60,
-            dry_run=True,
+            [conflict_info], mock_logger, dry_run=True
         )
 
         assert deleted == 1  # Reports what WOULD be deleted
@@ -723,7 +703,6 @@ class TestCleanupConflictFilesWithDirectories:
 
     def test_mixed_files_and_directories(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test cleans up both files and directories."""
-        import os
 
         old_time = time.time() - 120
 
@@ -737,18 +716,13 @@ class TestCleanupConflictFilesWithDirectories:
         conflict_dir.mkdir()
         os.utime(conflict_dir, (old_time, old_time))
 
-        conflicts = [
+        conflict_infos = [
             is_icloud_conflict(conflict_file),
             is_icloud_conflict(conflict_dir),
         ]
-        conflicts = [c for c in conflicts if c is not None]
+        conflicts = [c for c in conflict_infos if c is not None]
 
-        deleted, skipped = cleanup_conflict_files(
-            conflicts,
-            mock_logger,
-            min_age_seconds=60,
-            dry_run=False,
-        )
+        deleted, _ = cleanup_conflict_files(conflicts, mock_logger)
 
         assert deleted == 2
         assert not conflict_file.exists()
@@ -779,7 +753,6 @@ class TestCleanupRepository:
 
     def test_finds_and_cleans_conflicts(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test finds and cleans conflict files."""
-        import os
 
         old_time = time.time() - 120
 
@@ -788,14 +761,13 @@ class TestCleanupRepository:
         conflict.write_text("conflict")
         os.utime(conflict, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger, dry_run=False)
+        result = cleanup_repository(tmp_path, mock_logger)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
         assert not conflict.exists()
 
     def test_finds_extensionless_conflicts(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test finds extensionless conflict files like .coverage 2."""
-        import os
 
         old_time = time.time() - 120
 
@@ -803,13 +775,12 @@ class TestCleanupRepository:
         conflict.write_text("coverage")
         os.utime(conflict, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger, dry_run=False)
+        result = cleanup_repository(tmp_path, mock_logger)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
 
     def test_finds_directory_conflicts(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test finds and cleans conflict directories."""
-        import os
 
         old_time = time.time() - 120
 
@@ -819,14 +790,13 @@ class TestCleanupRepository:
         (conflict_dir / "file.txt").write_text("content")
         os.utime(conflict_dir, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger, dry_run=False)
+        result = cleanup_repository(tmp_path, mock_logger)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
         assert not conflict_dir.exists()
 
     def test_dry_run_preserves_all(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test dry run reports what would be deleted but preserves files."""
-        import os
 
         old_time = time.time() - 120
 
@@ -846,8 +816,6 @@ class TestCleanupRepository:
 
     def test_excludes_git_directory(self, tmp_path: Path, mock_logger: MagicMock) -> None:
         """Test excludes .git directory from scanning."""
-        import os
-
         old_time = time.time() - 120
 
         # Create .git dir with conflict inside (should be ignored)
@@ -862,6 +830,6 @@ class TestCleanupRepository:
         conflict.write_text("found")
         os.utime(conflict, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger, dry_run=False)
+        result = cleanup_repository(tmp_path, mock_logger)
         assert result["conflicts_found"] == 1
         assert conflict_in_git.exists()  # Still exists - was excluded
