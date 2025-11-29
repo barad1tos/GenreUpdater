@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 TOP_YEARS_COUNT = 2
 PARITY_THRESHOLD = 1
 DOMINANCE_MIN_SHARE = 0.5
+DEFAULT_SUSPICION_THRESHOLD_YEARS = 10
 
 
 def _is_reasonable_year(year: str) -> bool:
@@ -59,6 +60,7 @@ class YearConsistencyChecker:
         top_years_count: int = TOP_YEARS_COUNT,
         parity_threshold: int = PARITY_THRESHOLD,
         dominance_min_share: float = DOMINANCE_MIN_SHARE,
+        suspicion_threshold_years: int = DEFAULT_SUSPICION_THRESHOLD_YEARS,
     ) -> None:
         """Initialize the year consistency checker.
 
@@ -67,12 +69,15 @@ class YearConsistencyChecker:
             top_years_count: Number of top years to consider for parity
             parity_threshold: Max difference for parity detection
             dominance_min_share: Min share of tracks for dominance (0.0-1.0)
+            suspicion_threshold_years: If dominant year is this many years older
+                than earliest track added date, trigger API verification
 
         """
         self.console_logger = console_logger
         self.top_years_count = top_years_count
         self.parity_threshold = parity_threshold
         self.dominance_min_share = dominance_min_share
+        self.suspicion_threshold_years = suspicion_threshold_years
 
     def get_dominant_year(self, tracks: list[TrackDict]) -> str | None:
         """Find dominant year among tracks using majority rule.
@@ -90,23 +95,13 @@ class YearConsistencyChecker:
             Dominant year string if found, None if no clear majority or parity
 
         """
-        # Collect all non-empty years (excluding "0" placeholder)
-        years: list[str] = []
-        for track in tracks:
-            year = track.get("year")
-            if year and str(year).strip() not in ["", "0"]:
-                years.append(str(year))
-
+        years = self._collect_valid_years(tracks)
         if not years:
             return None
 
-        # Count frequency
         year_counts: Counter[str] = Counter(years)
-        total_album_tracks = len(tracks)
+        total_tracks = len(tracks)
         most_common: tuple[str, int] = year_counts.most_common(1)[0]
-        tracks_with_empty_year = [
-            track for track in tracks if is_empty_year(track.get("year"))
-        ]
 
         # Check for release_year inconsistency case
         if result := self._check_release_year_inconsistency(
@@ -114,60 +109,107 @@ class YearConsistencyChecker:
         ):
             return result
 
-        # Check for clear majority by configured threshold of ALL album tracks
-        if most_common[1] >= total_album_tracks * self.dominance_min_share:
-            self.console_logger.info(
-                "Dominant year %s found (%d/%d tracks - %.1f%%)",
-                most_common[0],
-                most_common[1],
-                total_album_tracks,
-                (most_common[1] / total_album_tracks) * 100,
-            )
-            return most_common[0]
+        # Check for clear majority
+        if result := self._check_majority_dominance(most_common, total_tracks, tracks):
+            return result
 
-        # Handle collaboration albums: some empty years but otherwise consistent
-        # BUT require that at least 50% of TOTAL tracks have this year
-        # Otherwise, a few tracks with wrong metadata could pollute the whole album
-        result_year = None
-        if len(year_counts) == 1 and tracks_with_empty_year and years:
-            tracks_with_year_ratio = len(years) / total_album_tracks
-            if tracks_with_year_ratio >= self.dominance_min_share:
-                self.console_logger.info(
-                    "Using available year %s for %d tracks without years "
-                    "(collaboration album pattern, %.1f%% have year)",
-                    most_common[0],
-                    len(tracks_with_empty_year),
-                    tracks_with_year_ratio * 100,
-                )
-                result_year = most_common[0]
-            else:
-                self.console_logger.info(
-                    "Not trusting year %s - only %d/%d tracks (%.1f%%) have it, "
-                    "rest are empty. Need API verification.",
-                    most_common[0],
-                    len(years),
-                    total_album_tracks,
-                    tracks_with_year_ratio * 100,
-                )
-
-        if result_year:
-            return result_year
+        # Handle collaboration albums (some empty years but otherwise consistent)
+        if result := self._check_collaboration_pattern(
+            year_counts, years, most_common, total_tracks, tracks
+        ):
+            return result
 
         # Check for parity
         if self._check_year_parity(year_counts):
             return None
 
-        # Most frequent year but not a strong majority of album
+        # Most frequent year but not a strong majority
         self.console_logger.info(
             "No dominant year (below %.0f%%): %s has %d/%d album tracks (%.1f%%) "
             "- need API",
             self.dominance_min_share * 100,
             most_common[0],
             most_common[1],
-            total_album_tracks,
-            (most_common[1] / total_album_tracks) * 100,
+            total_tracks,
+            (most_common[1] / total_tracks) * 100,
         )
         return None
+
+    @staticmethod
+    def _collect_valid_years(tracks: list[TrackDict]) -> list[str]:
+        """Collect non-empty, non-placeholder years from tracks."""
+        years: list[str] = []
+        for track in tracks:
+            year = track.get("year")
+            if year and str(year).strip() not in ["", "0"]:
+                years.append(str(year))
+        return years
+
+    def _check_majority_dominance(
+        self, most_common: tuple[str, int], total_tracks: int, tracks: list[TrackDict]
+    ) -> str | None:
+        """Check if most common year has clear majority (>50% of all tracks)."""
+        if most_common[1] < total_tracks * self.dominance_min_share:
+            return None
+
+        # Before trusting, check if year is suspiciously old
+        if self._is_year_suspiciously_old(most_common[0], tracks):
+            return None  # Trigger API verification
+
+        self.console_logger.info(
+            "Dominant year %s found (%d/%d tracks - %.1f%%)",
+            most_common[0],
+            most_common[1],
+            total_tracks,
+            (most_common[1] / total_tracks) * 100,
+        )
+        return most_common[0]
+
+    def _check_collaboration_pattern(
+        self,
+        year_counts: Counter[str],
+        years: list[str],
+        most_common: tuple[str, int],
+        total_tracks: int,
+        tracks: list[TrackDict],
+    ) -> str | None:
+        """Handle collaboration albums: some empty years but otherwise consistent.
+
+        Requires at least 50% of TOTAL tracks have this year to avoid
+        wrong metadata pollution.
+        """
+        tracks_with_empty = [t for t in tracks if is_empty_year(t.get("year"))]
+        if not (len(year_counts) == 1 and tracks_with_empty and years):
+            return None
+
+        year_ratio = len(years) / total_tracks
+        if year_ratio < self.dominance_min_share:
+            self.console_logger.info(
+                "Not trusting year %s - only %d/%d tracks (%.1f%%) have it, "
+                "rest are empty. Need API verification.",
+                most_common[0],
+                len(years),
+                total_tracks,
+                year_ratio * 100,
+            )
+            return None
+
+        # Check for suspiciously old year before trusting
+        if self._is_year_suspiciously_old(most_common[0], tracks):
+            self.console_logger.info(
+                "Not trusting year %s - suspiciously old. Need API.",
+                most_common[0],
+            )
+            return None
+
+        self.console_logger.info(
+            "Using available year %s for %d tracks without years "
+            "(collaboration album pattern, %.1f%% have year)",
+            most_common[0],
+            len(tracks_with_empty),
+            year_ratio * 100,
+        )
+        return most_common[0]
 
     def _check_release_year_inconsistency(
         self, tracks: list[TrackDict], years: list[str], most_common_year: str
@@ -207,6 +249,58 @@ class YearConsistencyChecker:
                 top_two[1][1],
             )
             return True
+        return False
+
+    def _is_year_suspiciously_old(
+        self, dominant_year: str, tracks: list[TrackDict]
+    ) -> bool:
+        """Check if dominant year is suspiciously old compared to when tracks were added.
+
+        This catches cases where all tracks have an incorrect year (e.g., 2001)
+        but were added to the library recently (e.g., 2025).
+
+        Args:
+            dominant_year: The dominant year found in tracks
+            tracks: List of tracks to analyze
+
+        Returns:
+            True if year is suspiciously old (needs API verification)
+
+        """
+        try:
+            dominant_year_int = int(dominant_year)
+        except (ValueError, TypeError):
+            return False
+
+        # Find earliest track added date
+        earliest_added_year: int | None = None
+        for track in tracks:
+            date_added = track.get("date_added")
+            if not date_added:
+                continue
+            try:
+                # Parse date_added format: "2025-10-01 00:19:04"
+                added_year = int(str(date_added)[:4])
+                if earliest_added_year is None or added_year < earliest_added_year:
+                    earliest_added_year = added_year
+            except (ValueError, TypeError, IndexError):
+                continue
+
+        if earliest_added_year is None:
+            return False
+
+        # Check if dominant year is suspiciously old
+        year_gap = earliest_added_year - dominant_year_int
+        if year_gap > self.suspicion_threshold_years:
+            self.console_logger.warning(
+                "Suspicious year detected: dominant year %s is %d years older "
+                "than earliest track added (%d) - triggering API verification",
+                dominant_year,
+                year_gap,
+                earliest_added_year,
+            )
+            return True
+
         return False
 
     def get_consensus_release_year(self, tracks: list[TrackDict]) -> str | None:
