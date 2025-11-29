@@ -47,6 +47,7 @@ class TestMusicUpdaterAllure:
 
         # Configuration
         deps.config = {
+            "logs_base_dir": "/tmp/test_logs",
             "apple_script": {"timeout": 30},
             "development": {"test_artists": ["Test Artist"]},
             "year_retrieval": {
