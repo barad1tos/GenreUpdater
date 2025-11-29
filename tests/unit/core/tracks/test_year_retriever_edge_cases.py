@@ -20,8 +20,9 @@ from unittest.mock import MagicMock
 import allure
 import pytest
 
+from src.core.models.validators import is_empty_year
+from src.core.tracks.year_batch import YearBatchProcessor
 from src.core.tracks.year_retriever import YearRetriever
-from src.core.tracks.year_retriever import is_empty_year
 from src.core.models.track_models import TrackDict
 # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics
@@ -144,7 +145,7 @@ class TestYearRetrieverEdgeCases:
             ]
 
         with allure.step("Determine album year"):
-            determined_year = await retriever._determine_album_year(
+            determined_year = await retriever._year_determinator.determine_album_year(
                 "Blue Stahli",
                 "B-Sides and Other Things I Forgot",
                 album_tracks,
@@ -201,7 +202,7 @@ class TestYearRetrieverEdgeCases:
             api_year = "1998"
             year_difference = abs(int(current_year) - int(api_year))
 
-            needs_update = YearRetriever._track_needs_year_update(current_year, api_year)
+            needs_update = YearBatchProcessor._track_needs_year_update(current_year, api_year)
 
             allure.attach(
                 f"Current year: {current_year}\n"
@@ -260,7 +261,7 @@ class TestYearRetrieverEdgeCases:
             ]
 
         with allure.step("Check if album should be skipped by low-level method"):
-            should_skip = await retriever._should_skip_album_due_to_existing_years(
+            should_skip = await retriever._year_determinator.should_skip_album(
                 album_tracks,
                 "HIM",
                 "And Love Said No - Greatest Hits 1997 - 2004",
@@ -306,7 +307,7 @@ class TestYearRetrieverEdgeCases:
             release_year = "2021"   # When Demo Vault was released
 
             # The _track_needs_year_update sees they're different and says "update"
-            needs_update = YearRetriever._track_needs_year_update(original_year, release_year)
+            needs_update = YearBatchProcessor._track_needs_year_update(original_year, release_year)
 
         with allure.step("Low-level method returns True (fix is in fallback layer)"):
             # This is expected - the low-level method just checks if years differ
@@ -413,7 +414,7 @@ class TestTrackNeedsYearUpdate:
     def test_empty_year_needs_update(self, current_year: Any, expected: bool) -> None:
         """Test that empty years correctly trigger updates."""
         target_year = "2020"
-        result = YearRetriever._track_needs_year_update(current_year, target_year)
+        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
 
         # For "0", the behavior is: str("0") != "2020" → True
         # But we should verify empty year check
@@ -429,7 +430,7 @@ class TestTrackNeedsYearUpdate:
         current_year = "2020"
         target_year = "2020"
 
-        result = YearRetriever._track_needs_year_update(current_year, target_year)
+        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
 
         assert result is False
 
@@ -448,7 +449,7 @@ class TestTrackNeedsYearUpdate:
         self, current_year: str, target_year: str, year_diff: int
     ) -> None:
         """Test that different years trigger update regardless of difference magnitude."""
-        result = YearRetriever._track_needs_year_update(current_year, target_year)
+        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
 
         # Current behavior: ANY difference triggers update
         assert result is True
