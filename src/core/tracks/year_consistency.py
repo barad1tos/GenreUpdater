@@ -126,15 +126,29 @@ class YearConsistencyChecker:
             return most_common[0]
 
         # Handle collaboration albums: some empty years but otherwise consistent
+        # BUT require that at least 50% of TOTAL tracks have this year
+        # Otherwise, a few tracks with wrong metadata could pollute the whole album
         result_year = None
         if len(year_counts) == 1 and tracks_with_empty_year and years:
-            self.console_logger.info(
-                "Using available year %s for %d tracks without years "
-                "(collaboration album pattern)",
-                most_common[0],
-                len(tracks_with_empty_year),
-            )
-            result_year = most_common[0]
+            tracks_with_year_ratio = len(years) / total_album_tracks
+            if tracks_with_year_ratio >= self.dominance_min_share:
+                self.console_logger.info(
+                    "Using available year %s for %d tracks without years "
+                    "(collaboration album pattern, %.1f%% have year)",
+                    most_common[0],
+                    len(tracks_with_empty_year),
+                    tracks_with_year_ratio * 100,
+                )
+                result_year = most_common[0]
+            else:
+                self.console_logger.info(
+                    "Not trusting year %s - only %d/%d tracks (%.1f%%) have it, "
+                    "rest are empty. Need API verification.",
+                    most_common[0],
+                    len(years),
+                    total_album_tracks,
+                    tracks_with_year_ratio * 100,
+                )
 
         if result_year:
             return result_year
