@@ -103,6 +103,9 @@ class Analytics:
         Analytics._instances += 1
         self.instance_id = Analytics._instances
 
+        # Check if analytics is enabled (default: True)
+        self.enabled = config.get("analytics", {}).get("enabled", True)
+
         # Data stores
         self.events: list[dict[str, Any]] = []
         self.call_counts: dict[str, int] = {}
@@ -340,6 +343,10 @@ class Analytics:
         call_info: CallInfo,
         timing_info: TimingInfo,
     ) -> None:
+        # Skip recording if analytics is disabled
+        if not self.enabled:
+            return
+
         # Prune if exceeding cap (batch size: at least 5 or 10% for efficiency)
         if 0 < self.max_events <= len(self.events):
             prune = max(5, int(self.max_events * 0.1))
@@ -424,6 +431,8 @@ class Analytics:
 
     def log_summary(self) -> None:
         """Log a summary of analytics data."""
+        if not self.enabled:
+            return
         stats = self.get_stats()
         self.console_logger.info(
             f"📊 Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
@@ -518,6 +527,10 @@ class Analytics:
             via config (analytics.enable_gc_collect) and event count exceeds threshold.
 
         """
+        # Skip report generation if analytics is disabled
+        if not self.enabled:
+            return
+
         if not self.events and not self.call_counts:
             self.console_logger.warning("📊 No analytics data; skipping report")
             return
