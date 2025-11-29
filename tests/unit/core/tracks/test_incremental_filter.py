@@ -94,7 +94,7 @@ class TestIncrementalFilterService:
         console_logger = _create_mock_logger()
         error_logger = _create_mock_logger()
         analytics = MagicMock()
-        config: dict[str, Any] = {"csv_output_file": "csv/track_list.csv"}
+        config: dict[str, Any] = {"logs_base_dir": "/tmp/test_logs", "csv_output_file": "csv/track_list.csv"}
 
         return IncrementalFilterService(
             console_logger=console_logger,

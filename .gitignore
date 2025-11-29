@@ -71,4 +71,5 @@ dmypy.json
 
 # Project specific
 *.csv
+csv/
 /temp
