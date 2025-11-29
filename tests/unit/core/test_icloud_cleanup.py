@@ -23,7 +23,7 @@ from src.core.utils.icloud_cleanup import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 @pytest.fixture

@@ -116,7 +116,8 @@ class CacheOrchestrator(CacheServiceProtocol):
                 cache_dir=cache_dir,
                 file_patterns=cache_files,
                 logger=self.logger,
-                min_age_seconds=60,  # Don't delete files younger than 1 minute
+                # 60s minimum age prevents race conditions during active iCloud sync
+                min_age_seconds=60,
                 dry_run=False,
             )
         except OSError as e:

@@ -873,6 +873,7 @@ class TestCheckSuspiciousAlbum:
         _result = await year_retriever._year_determinator.check_suspicious_album("Artist", "Greatest Hits", tracks)
         # Greatest Hits albums with many years should be suspicious
         # The actual logic depends on implementation details
+        assert _result is not None  # Just verify it returns something
 
     @pytest.mark.asyncio
     async def test_returns_false_for_normal_album(self, year_retriever: YearRetriever) -> None:

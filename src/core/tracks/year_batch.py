@@ -557,7 +557,7 @@ class YearBatchProcessor:
 
     @staticmethod
     def _record_successful_updates(
-            tracks: list[TrackDict],
+        tracks: list[TrackDict],
         year: str,
         artist: str,
         album: str,
