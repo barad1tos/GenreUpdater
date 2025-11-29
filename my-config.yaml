@@ -101,14 +101,14 @@ reporting:
 # Caching configuration
 caching:
   default_ttl_seconds: 900 # Default TTL for cache entries (15 minutes)
-  negative_result_ttl: 2592000 # TTL for negative results (30 days)
   album_cache_sync_interval: 300 # Sync album cache to disk every 5 minutes
   cleanup_error_retry_delay: 60 # Wait time after cleanup error (1 minute)
   cleanup_interval_seconds: 300 # Background cleanup every 5 minutes
-  cache_size_limits:
-    generic_cache_max_entries: 10000
-    album_cache_max_entries: 50000
-    api_cache_max_entries: 25000
+
+  # Negative result caching - how long to remember "album not found" before retrying API
+  # Prevents repeated API calls for albums that don't exist in external databases
+  negative_result_ttl: 2592000 # 30 days (in seconds)
+
   library_snapshot:
     enabled: true
     delta_enabled: true
@@ -116,11 +116,6 @@ caching:
     max_age_hours: 24
     compress: true
     compress_level: 6
-    hash_fields:
-      - genre
-      - artist
-      - album
-      - year
 
 # API Cache file
 api_cache_file: cache/cache.json
@@ -203,6 +198,9 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     # Absurd year threshold: if proposed year < this AND no existing year, mark for verification
     # Catches cases like Gorillaz→1974 (band formed 1998) without artist period data
     absurd_year_threshold: 1970
+    # Suspicion threshold: if album year is this many years older than track added date, trigger API
+    # Catches cases like Equilibrium-Equinox: all tracks have 2001 but added in 2025 (24 year gap)
+    suspicion_threshold_years: 10
     definitive_score_threshold: 50 # Increased from 20 to avoid false positives
     definitive_score_diff: 15 # Reduced from 15 to handle close scores
     preferred_countries:
