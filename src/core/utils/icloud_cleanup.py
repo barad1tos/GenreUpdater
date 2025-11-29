@@ -21,8 +21,9 @@ if TYPE_CHECKING:
     import logging
 
 
-# Pattern to match iCloud conflict files: "filename N.ext" where N is a number
-ICLOUD_CONFLICT_PATTERN = re.compile(r"^(.+) (\d+)(\.[^.]+)$")
+# Pattern to match iCloud conflict files/folders: "name N" or "name N.ext"
+# Examples: ".coverage 2", "data 2", "file 3.txt", "script 2.sh"
+ICLOUD_CONFLICT_PATTERN = re.compile(r"^(.+) (\d+)(\.[^.]+)?$")
 
 # Minimum age in seconds before we consider a file safe to delete
 # Files younger than this might still be syncing
@@ -292,18 +293,19 @@ def cleanup_cache_directory(
 
 @dataclass
 class ConflictInfo:
-    """Information about a detected iCloud conflict file."""
+    """Information about a detected iCloud conflict file or folder."""
 
     conflict_path: Path
     base_name: str
     conflict_number: int
-    extension: str
+    extension: str  # Empty string if no extension
     mtime: float
     size: int
+    is_directory: bool = False
 
     @property
     def base_file_name(self) -> str:
-        """Return the expected base file name without conflict number."""
+        """Return the expected base file/folder name without conflict number."""
         return f"{self.base_name}{self.extension}"
 
 
@@ -335,32 +337,36 @@ class ScanResult:
         return groups
 
 
-def is_icloud_conflict(file_path: Path) -> ConflictInfo | None:
-    """Check if a file is an iCloud conflict and return info if so.
+def is_icloud_conflict(path: Path) -> ConflictInfo | None:
+    """Check if a path is an iCloud conflict and return info if so.
+
+    Handles both files and directories.
 
     Args:
-        file_path: Path to check
+        path: Path to check (file or directory)
 
     Returns:
-        ConflictInfo if the file is an iCloud conflict, None otherwise
+        ConflictInfo if the path is an iCloud conflict, None otherwise
 
     """
-    if not file_path.is_file():
+    if not path.exists():
         return None
 
-    match = ICLOUD_CONFLICT_PATTERN.match(file_path.name)
+    match = ICLOUD_CONFLICT_PATTERN.match(path.name)
     if not match:
         return None
 
     try:
-        stat = file_path.stat()
+        stat = path.stat()
+        is_dir = path.is_dir()
         return ConflictInfo(
-            conflict_path=file_path,
+            conflict_path=path,
             base_name=match.group(1),
             conflict_number=int(match.group(2)),
-            extension=match.group(3),
+            extension=match.group(3) or "",  # None → empty string
             mtime=stat.st_mtime,
-            size=stat.st_size,
+            size=0 if is_dir else stat.st_size,
+            is_directory=is_dir,
         )
     except OSError:
         return None
@@ -390,13 +396,12 @@ def _should_exclude_path(path: Path, exclude_patterns: list[str] | None) -> bool
     return any(path.match(pattern) for pattern in exclude_patterns)
 
 
-def _process_file(
+def _process_entry(
     entry: Path,
     result: ScanResult,
     exclude_patterns: list[str] | None,
 ) -> None:
-    """Process a single file entry during scanning."""
-    result.scanned_files += 1
+    """Process a single file or directory entry during scanning."""
     if _should_exclude_path(entry, exclude_patterns):
         return
     if conflict_info := is_icloud_conflict(entry):
@@ -418,10 +423,15 @@ def _scan_directory_recursive(
     result.scanned_dirs += 1
 
     for entry in entries:
-        if entry.is_dir() and entry.name not in exclude_dirs:
-            _scan_directory_recursive(entry, result, exclude_dirs, exclude_patterns)
-        elif entry.is_file():
-            _process_file(entry, result, exclude_patterns)
+        if entry.is_dir():
+            # Check if directory itself is a conflict (e.g., "data 2")
+            _process_entry(entry, result, exclude_patterns)
+            # Recurse into directory if not excluded
+            if entry.name not in exclude_dirs:
+                _scan_directory_recursive(entry, result, exclude_dirs, exclude_patterns)
+        else:
+            result.scanned_files += 1
+            _process_entry(entry, result, exclude_patterns)
 
 
 def scan_for_all_conflicts(
@@ -457,14 +467,14 @@ def cleanup_conflict_files(
     min_age_seconds: int = DEFAULT_MIN_AGE_SECONDS,
     dry_run: bool = False,
 ) -> tuple[int, int]:
-    """Delete iCloud conflict files (for repository cleanup).
+    """Delete iCloud conflict files and folders (for repository cleanup).
 
     Unlike cleanup_icloud_conflicts which picks a winner, this function
-    simply deletes all conflict files since the git-tracked version is
+    simply deletes all conflict files/folders since the git-tracked version is
     the authoritative source for repository files.
 
     Args:
-        conflicts: List of conflict files to delete
+        conflicts: List of conflict files/folders to delete
         logger: Logger for status messages
         min_age_seconds: Minimum file age before deletion
         dry_run: If True, only log what would be done
@@ -473,16 +483,20 @@ def cleanup_conflict_files(
         Tuple of (deleted_count, skipped_count)
 
     """
+    import shutil
+
     now = datetime.now(UTC).timestamp()
     deleted = 0
     skipped = 0
 
     for conflict in conflicts:
         age_seconds = now - conflict.mtime
+        item_type = "folder" if conflict.is_directory else "file"
 
         if age_seconds < min_age_seconds:
             logger.warning(
-                "iCloud cleanup: Skipping '%s' (%.1fs old, min age: %ds)",
+                "iCloud cleanup: Skipping %s '%s' (%.1fs old, min age: %ds)",
+                item_type,
                 conflict.conflict_path,
                 age_seconds,
                 min_age_seconds,
@@ -492,23 +506,29 @@ def cleanup_conflict_files(
 
         if dry_run:
             logger.info(
-                "iCloud cleanup [DRY RUN]: Would delete '%s' (conflict #%d for '%s')",
+                "iCloud cleanup [DRY RUN]: Would delete %s '%s' (conflict #%d for '%s')",
+                item_type,
                 conflict.conflict_path,
                 conflict.conflict_number,
                 conflict.base_file_name,
             )
+            deleted += 1  # Count as deleted for dry run reporting
         else:
             try:
-                conflict.conflict_path.unlink()
+                if conflict.is_directory:
+                    shutil.rmtree(conflict.conflict_path)
+                else:
+                    conflict.conflict_path.unlink()
                 logger.info(
-                    "iCloud cleanup: Deleted '%s' (conflict #%d for '%s')",
+                    "iCloud cleanup: Deleted %s '%s' (conflict #%d for '%s')",
+                    item_type,
                     conflict.conflict_path,
                     conflict.conflict_number,
                     conflict.base_file_name,
                 )
                 deleted += 1
             except OSError as e:
-                logger.exception("iCloud cleanup: Failed to delete '%s': %s", conflict.conflict_path, e)
+                logger.exception("iCloud cleanup: Failed to delete %s '%s': %s", item_type, conflict.conflict_path, e)
                 skipped += 1
 
     return deleted, skipped
@@ -588,3 +608,85 @@ def cleanup_repository(
         "deleted": deleted,
         "skipped": skipped,
     }
+
+
+# =============================================================================
+# CLI Entrypoint - Run as: uv run python -m src.core.utils.icloud_cleanup [path]
+# =============================================================================
+
+
+def main() -> None:
+    """CLI entrypoint for iCloud conflict cleanup."""
+    import argparse
+    import logging
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(
+        description="Scan and clean up iCloud conflict files and folders",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Dry run (preview what would be deleted)
+  uv run python -m src.core.utils.icloud_cleanup . --dry-run
+
+  # Actually delete conflicts
+  uv run python -m src.core.utils.icloud_cleanup .
+
+  # Scan specific directory
+  uv run python -m src.core.utils.icloud_cleanup /path/to/project --dry-run
+""",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="Directory to scan (default: current directory)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only show what would be deleted, don't actually delete",
+    )
+    parser.add_argument(
+        "--min-age",
+        type=int,
+        default=DEFAULT_MIN_AGE_SECONDS,
+        help=f"Minimum file age in seconds before deletion (default: {DEFAULT_MIN_AGE_SECONDS})",
+    )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Only show summary, not individual files",
+    )
+
+    args = parser.parse_args()
+
+    # Setup logging
+    log_level = logging.WARNING if args.quiet else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(message)s",
+    )
+    logger = logging.getLogger("icloud_cleanup")
+
+    root_path = Path(args.path).resolve()
+    if not root_path.exists():
+        logger.error("Path does not exist: %s", root_path)
+        raise SystemExit(1)
+
+    result = cleanup_repository(
+        root_path,
+        logger,
+        min_age_seconds=args.min_age,
+        dry_run=args.dry_run,
+    )
+
+    # Summary
+    if args.dry_run:
+        print(f"\n[DRY RUN] Would delete {result['deleted']} conflict(s)")
+    else:
+        print(f"\nDeleted {result['deleted']} conflict(s), skipped {result['skipped']}")
+
+
+if __name__ == "__main__":
+    main()
