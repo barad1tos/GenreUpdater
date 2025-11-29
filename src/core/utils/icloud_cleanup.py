@@ -5,18 +5,20 @@ When iCloud detects conflicting edits, it creates files like:
 - original.json → original 2.json, original 3.json, etc.
 
 These utilities safely clean up such conflicts by keeping the most recent version.
+
+For repository-wide cleanup, use `scan_for_all_conflicts` and `cleanup_conflict_files`.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import logging
     from pathlib import Path
+    import logging
 
 
 # Pattern to match iCloud conflict files: "filename N.ext" where N is a number
@@ -280,3 +282,293 @@ def cleanup_cache_directory(
         )
 
     return results
+
+
+# =============================================================================
+# Repository-wide conflict scanning and cleanup
+# =============================================================================
+
+
+@dataclass
+class ConflictInfo:
+    """Information about a detected iCloud conflict file."""
+
+    conflict_path: Path
+    base_name: str
+    conflict_number: int
+    extension: str
+    mtime: float
+    size: int
+
+    @property
+    def base_file_name(self) -> str:
+        """Return the expected base file name without conflict number."""
+        return f"{self.base_name}{self.extension}"
+
+
+@dataclass
+class ScanResult:
+    """Result of scanning a directory for iCloud conflicts."""
+
+    conflicts: list[ConflictInfo] = field(default_factory=list)
+    scanned_files: int = 0
+    scanned_dirs: int = 0
+
+    def add_conflict(self, conflict: ConflictInfo) -> None:
+        """Add a conflict to the results."""
+        self.conflicts.append(conflict)
+
+    @property
+    def total_conflicts(self) -> int:
+        """Return total number of conflicts found."""
+        return len(self.conflicts)
+
+    def group_by_base_name(self) -> dict[Path, list[ConflictInfo]]:
+        """Group conflicts by their base file path."""
+        groups: dict[Path, list[ConflictInfo]] = {}
+        for conflict in self.conflicts:
+            base_path = conflict.conflict_path.parent / conflict.base_file_name
+            if base_path not in groups:
+                groups[base_path] = []
+            groups[base_path].append(conflict)
+        return groups
+
+
+def is_icloud_conflict(file_path: Path) -> ConflictInfo | None:
+    """Check if a file is an iCloud conflict and return info if so.
+
+    Args:
+        file_path: Path to check
+
+    Returns:
+        ConflictInfo if the file is an iCloud conflict, None otherwise
+
+    """
+    if not file_path.is_file():
+        return None
+
+    match = ICLOUD_CONFLICT_PATTERN.match(file_path.name)
+    if not match:
+        return None
+
+    try:
+        stat = file_path.stat()
+        return ConflictInfo(
+            conflict_path=file_path,
+            base_name=match.group(1),
+            conflict_number=int(match.group(2)),
+            extension=match.group(3),
+            mtime=stat.st_mtime,
+            size=stat.st_size,
+        )
+    except OSError:
+        return None
+
+
+def scan_for_all_conflicts(
+    root_dir: Path,
+    *,
+    exclude_dirs: set[str] | None = None,
+    exclude_patterns: list[str] | None = None,
+) -> ScanResult:
+    """Scan a directory recursively for all iCloud conflict files.
+
+    Args:
+        root_dir: Root directory to scan
+        exclude_dirs: Directory names to skip (default: common non-source dirs)
+        exclude_patterns: Glob patterns to exclude from results
+
+    Returns:
+        ScanResult with all found conflicts
+
+    """
+    if exclude_dirs is None:
+        exclude_dirs = {
+            ".git",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            "node_modules",
+            ".tox",
+            "dist",
+            "build",
+            ".eggs",
+            "*.egg-info",
+        }
+
+    result = ScanResult()
+
+    if not root_dir.exists():
+        return result
+
+    def should_exclude_path(path: Path) -> bool:
+        """Check if path should be excluded based on patterns."""
+        if exclude_patterns:
+            for pattern in exclude_patterns:
+                if path.match(pattern):
+                    return True
+        return False
+
+    def scan_directory(directory: Path) -> None:
+        """Recursively scan a directory."""
+        try:
+            entries = list(directory.iterdir())
+        except PermissionError:
+            return
+
+        result.scanned_dirs += 1
+
+        for entry in entries:
+            if entry.is_dir():
+                if entry.name not in exclude_dirs:
+                    scan_directory(entry)
+            elif entry.is_file():
+                result.scanned_files += 1
+                if not should_exclude_path(entry) and (conflict_info := is_icloud_conflict(entry)):
+                    result.add_conflict(conflict_info)
+
+    scan_directory(root_dir)
+    return result
+
+
+def cleanup_conflict_files(
+    conflicts: list[ConflictInfo],
+    logger: logging.Logger,
+    *,
+    min_age_seconds: int = DEFAULT_MIN_AGE_SECONDS,
+    dry_run: bool = False,
+) -> tuple[int, int]:
+    """Delete iCloud conflict files (for repository cleanup).
+
+    Unlike cleanup_icloud_conflicts which picks a winner, this function
+    simply deletes all conflict files since the git-tracked version is
+    the authoritative source for repository files.
+
+    Args:
+        conflicts: List of conflict files to delete
+        logger: Logger for status messages
+        min_age_seconds: Minimum file age before deletion
+        dry_run: If True, only log what would be done
+
+    Returns:
+        Tuple of (deleted_count, skipped_count)
+
+    """
+    now = datetime.now(UTC).timestamp()
+    deleted = 0
+    skipped = 0
+
+    for conflict in conflicts:
+        age_seconds = now - conflict.mtime
+
+        if age_seconds < min_age_seconds:
+            logger.warning(
+                "iCloud cleanup: Skipping '%s' (%.1fs old, min age: %ds)",
+                conflict.conflict_path,
+                age_seconds,
+                min_age_seconds,
+            )
+            skipped += 1
+            continue
+
+        if dry_run:
+            logger.info(
+                "iCloud cleanup [DRY RUN]: Would delete '%s' (conflict #%d for '%s')",
+                conflict.conflict_path,
+                conflict.conflict_number,
+                conflict.base_file_name,
+            )
+        else:
+            try:
+                conflict.conflict_path.unlink()
+                logger.info(
+                    "iCloud cleanup: Deleted '%s' (conflict #%d for '%s')",
+                    conflict.conflict_path,
+                    conflict.conflict_number,
+                    conflict.base_file_name,
+                )
+                deleted += 1
+            except OSError as e:
+                logger.exception("iCloud cleanup: Failed to delete '%s': %s", conflict.conflict_path, e)
+                skipped += 1
+
+    return deleted, skipped
+
+
+def cleanup_repository(
+    root_dir: Path,
+    logger: logging.Logger,
+    *,
+    exclude_dirs: set[str] | None = None,
+    min_age_seconds: int = DEFAULT_MIN_AGE_SECONDS,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Scan and clean up all iCloud conflicts in a repository.
+
+    This is the main entry point for repository-wide cleanup.
+
+    Args:
+        root_dir: Root directory of the repository
+        logger: Logger for status messages
+        exclude_dirs: Directory names to skip
+        min_age_seconds: Minimum file age before deletion
+        dry_run: If True, only log what would be done
+
+    Returns:
+        Dict with statistics: scanned_files, scanned_dirs, conflicts_found, deleted, skipped
+
+    """
+    logger.info("iCloud cleanup: Scanning '%s' for conflict files...", root_dir)
+
+    scan_result = scan_for_all_conflicts(root_dir, exclude_dirs=exclude_dirs)
+
+    logger.info(
+        "iCloud cleanup: Scanned %d files in %d directories, found %d conflict(s)",
+        scan_result.scanned_files,
+        scan_result.scanned_dirs,
+        scan_result.total_conflicts,
+    )
+
+    if scan_result.total_conflicts == 0:
+        return {
+            "scanned_files": scan_result.scanned_files,
+            "scanned_dirs": scan_result.scanned_dirs,
+            "conflicts_found": 0,
+            "deleted": 0,
+            "skipped": 0,
+        }
+
+    # Log grouped conflicts
+    grouped = scan_result.group_by_base_name()
+    for base_path, file_conflicts in grouped.items():
+        logger.info(
+            "  %s: %d conflict(s) → %s",
+            base_path.parent.name,
+            len(file_conflicts),
+            ", ".join(c.conflict_path.name for c in file_conflicts),
+        )
+
+    deleted, skipped = cleanup_conflict_files(
+        scan_result.conflicts,
+        logger,
+        min_age_seconds=min_age_seconds,
+        dry_run=dry_run,
+    )
+
+    if not dry_run:
+        logger.info(
+            "iCloud cleanup complete: %d deleted, %d skipped",
+            deleted,
+            skipped,
+        )
+
+    return {
+        "scanned_files": scan_result.scanned_files,
+        "scanned_dirs": scan_result.scanned_dirs,
+        "conflicts_found": scan_result.total_conflicts,
+        "deleted": deleted,
+        "skipped": skipped,
+    }
