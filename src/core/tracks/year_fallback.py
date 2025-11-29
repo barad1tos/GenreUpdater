@@ -143,7 +143,7 @@ class YearFallbackHandler:
         artist: str,
         album: str,
     ) -> bool:
-        """Handle absurd year detection. Returns True if should skip."""
+        """Handle absurd year detection. Returns True if it should skip."""
         try:
             proposed_int = int(proposed_year)
             is_absurd = proposed_int < self.absurd_year_threshold
@@ -228,7 +228,7 @@ class YearFallbackHandler:
         artist: str,
         album: str,
     ) -> bool:
-        """Handle dramatic year changes. Returns True if should skip."""
+        """Handle dramatic year changes. Returns True if it should skip."""
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
 
@@ -256,7 +256,7 @@ class YearFallbackHandler:
 
     @staticmethod
     def get_existing_year_from_tracks(tracks: list[TrackDict]) -> str | None:
-        """Extract most common existing year from tracks.
+        """Extract the most common existing year from tracks.
 
         Uses Counter to find the most frequently occurring year among tracks.
 
@@ -279,7 +279,7 @@ class YearFallbackHandler:
         return most_common[0][0] if most_common else None
 
     def is_year_change_dramatic(self, existing: str, proposed: str) -> bool:
-        """Check if year change exceeds threshold.
+        """Check if year change exceeds the threshold.
 
         A dramatic change (e.g., 2018→1998) suggests the API returned
         a reissue/compilation year rather than the original.
