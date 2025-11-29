@@ -118,15 +118,15 @@ class YearDeterminator:
         if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
             return dominant_year
 
-        # 2. Check for consensus release_year
-        if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
-            await self.cache_service.store_album_year_in_cache(artist, album, consensus_year)
-            return consensus_year
-
-        # 3. Check cache (might have from previous API call)
+        # 2. Check cache (might have from previous API call)
         cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
         if cached_year:
             return cached_year
+
+        # 3. Check for consensus release_year
+        if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
+            await self.cache_service.store_album_year_in_cache(artist, album, consensus_year)
+            return consensus_year
 
         # 4. API as last resort
         try:

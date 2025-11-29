@@ -1583,6 +1583,8 @@ class TestDetermineAlbumYearBranches:
     ) -> None:
         """Test returns consensus release year and caches it."""
         tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
+        # Cache returns None so we proceed to consensus_release_year check
+        mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),

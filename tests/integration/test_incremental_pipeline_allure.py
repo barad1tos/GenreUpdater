@@ -28,7 +28,7 @@ class TestIncrementalPipelineIntegration:
         dry_run: bool = False,
     ) -> IncrementalFilterService:
         """Create an IncrementalFilterService instance for testing."""
-        test_config = config or {"force_update": False, "processing": {"batch_size": 100}, "paths": {"csv_output_file": "csv/track_list.csv"}}
+        test_config = config or {"logs_base_dir": "/tmp/test_logs", "force_update": False, "processing": {"batch_size": 100}, "paths": {"csv_output_file": "csv/track_list.csv"}}
 
         return IncrementalFilterService(
             console_logger=MockLogger(),  # type: ignore[arg-type]

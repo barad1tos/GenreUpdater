@@ -119,7 +119,7 @@ class TestIncrementalFilterServiceAllure:
         dry_run: bool = False,
     ) -> IncrementalFilterService:
         """Create an IncrementalFilterService instance for testing."""
-        test_config = config or {"csv_output_file": "csv/track_list.csv", "logs": {"directory": "/fake/logs"}}
+        test_config = config or {"logs_base_dir": "/tmp/test_logs", "csv_output_file": "csv/track_list.csv", "logs": {"directory": "/fake/logs"}}
 
         return IncrementalFilterService(
             console_logger=_MockLogger(),  # type: ignore[arg-type]
