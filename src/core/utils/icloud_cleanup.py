@@ -114,8 +114,8 @@ def _handle_winner_rename(ctx: CleanupContext, logger: logging.Logger) -> int:
         ctx.winner_path.rename(ctx.base_file)
         logger.info("iCloud cleanup: Renamed '%s' → '%s'", ctx.winner_path.name, ctx.base_file.name)
         return 1
-    except OSError as e:
-        logger.error("iCloud cleanup: Failed to rename '%s' → '%s': %s", ctx.winner_path.name, ctx.base_file.name, e)
+    except OSError:
+        logger.exception("iCloud cleanup: Failed to rename '%s' → '%s'", ctx.winner_path.name, ctx.base_file.name)
         return 0
 
 
@@ -366,6 +366,64 @@ def is_icloud_conflict(file_path: Path) -> ConflictInfo | None:
         return None
 
 
+DEFAULT_EXCLUDE_DIRS: set[str] = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "node_modules",
+    ".tox",
+    "dist",
+    "build",
+    ".eggs",
+    "*.egg-info",
+}
+
+
+def _should_exclude_path(path: Path, exclude_patterns: list[str] | None) -> bool:
+    """Check if path should be excluded based on patterns."""
+    if not exclude_patterns:
+        return False
+    return any(path.match(pattern) for pattern in exclude_patterns)
+
+
+def _process_file(
+    entry: Path,
+    result: ScanResult,
+    exclude_patterns: list[str] | None,
+) -> None:
+    """Process a single file entry during scanning."""
+    result.scanned_files += 1
+    if _should_exclude_path(entry, exclude_patterns):
+        return
+    if conflict_info := is_icloud_conflict(entry):
+        result.add_conflict(conflict_info)
+
+
+def _scan_directory_recursive(
+    directory: Path,
+    result: ScanResult,
+    exclude_dirs: set[str],
+    exclude_patterns: list[str] | None,
+) -> None:
+    """Recursively scan a directory for conflicts."""
+    try:
+        entries = list(directory.iterdir())
+    except PermissionError:
+        return
+
+    result.scanned_dirs += 1
+
+    for entry in entries:
+        if entry.is_dir() and entry.name not in exclude_dirs:
+            _scan_directory_recursive(entry, result, exclude_dirs, exclude_patterns)
+        elif entry.is_file():
+            _process_file(entry, result, exclude_patterns)
+
+
 def scan_for_all_conflicts(
     root_dir: Path,
     *,
@@ -383,55 +441,12 @@ def scan_for_all_conflicts(
         ScanResult with all found conflicts
 
     """
-    if exclude_dirs is None:
-        exclude_dirs = {
-            ".git",
-            ".venv",
-            "venv",
-            "__pycache__",
-            ".pytest_cache",
-            ".mypy_cache",
-            ".ruff_cache",
-            "node_modules",
-            ".tox",
-            "dist",
-            "build",
-            ".eggs",
-            "*.egg-info",
-        }
-
     result = ScanResult()
-
     if not root_dir.exists():
         return result
 
-    def should_exclude_path(path: Path) -> bool:
-        """Check if path should be excluded based on patterns."""
-        if exclude_patterns:
-            for pattern in exclude_patterns:
-                if path.match(pattern):
-                    return True
-        return False
-
-    def scan_directory(directory: Path) -> None:
-        """Recursively scan a directory."""
-        try:
-            entries = list(directory.iterdir())
-        except PermissionError:
-            return
-
-        result.scanned_dirs += 1
-
-        for entry in entries:
-            if entry.is_dir():
-                if entry.name not in exclude_dirs:
-                    scan_directory(entry)
-            elif entry.is_file():
-                result.scanned_files += 1
-                if not should_exclude_path(entry) and (conflict_info := is_icloud_conflict(entry)):
-                    result.add_conflict(conflict_info)
-
-    scan_directory(root_dir)
+    dirs_to_exclude = exclude_dirs if exclude_dirs is not None else DEFAULT_EXCLUDE_DIRS
+    _scan_directory_recursive(root_dir, result, dirs_to_exclude, exclude_patterns)
     return result
 
 
