@@ -82,7 +82,16 @@ class SmartCacheConfig:
             TTL in seconds for caching failed lookups
         """
         caching_config = self._config.get("caching", {})
-        return int(caching_config.get("negative_result_ttl", self.DEFAULT_NEGATIVE_RESULT_TTL))
+        value = caching_config.get("negative_result_ttl", self.DEFAULT_NEGATIVE_RESULT_TTL)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            self.logger.warning(
+                "Invalid negative_result_ttl %r, using default %d",
+                value,
+                self.DEFAULT_NEGATIVE_RESULT_TTL,
+            )
+            return self.DEFAULT_NEGATIVE_RESULT_TTL
 
     def _create_default_policies(self) -> dict[CacheContentType, CachePolicy]:
         """Create default cache policies for different content types."""

@@ -176,12 +176,15 @@ class DiscogsClient(BaseApiClient):
             Original release year or None if fetch fails
 
         """
-        # Check cache first
+        # Check cache first (including negative results)
         cache_key = f"discogs_master_{master_id}"
         cached_year = await self.cache_service.get_async(cache_key)
         if cached_year is not None:
+            if cached_year == "NO_YEAR":
+                self.console_logger.debug("[discogs] Master year cache hit (no year) for ID %s", master_id)
+                return None
             self.console_logger.debug("[discogs] Master year cache hit for ID %s: %s", master_id, cached_year)
-            return int(cached_year) if cached_year else None
+            return int(cached_year)
 
         try:
             master_url = f"https://api.discogs.com/masters/{master_id}"
@@ -200,7 +203,10 @@ class DiscogsClient(BaseApiClient):
                     self.console_logger.debug("[discogs] Master release %s year: %s", master_id, year)
                     return int(year)
 
-            self.console_logger.debug("[discogs] Master release %s has no year", master_id)
+            # Cache negative result to avoid repeated API calls
+            cache_ttl = self.cache_ttl_days * 86400
+            await self.cache_service.set_async(cache_key, "NO_YEAR", ttl=cache_ttl)
+            self.console_logger.debug("[discogs] Master release %s has no year (cached)", master_id)
             return None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
