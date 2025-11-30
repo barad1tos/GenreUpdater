@@ -219,7 +219,7 @@ class TestMusicUpdaterAllure:
         with allure.step("Execute clean artist operation"), patch(
             "src.app.music_updater.save_changes_report",
         ) as mock_save:
-            await updater.run_clean_artist("Test Artist", False)
+            await updater.run_clean_artist("Test Artist")
 
         with allure.step("Verify cleaning operations"):
             # Check that updates were attempted
@@ -247,7 +247,7 @@ class TestMusicUpdaterAllure:
             "src.app.music_updater.is_music_app_running",
             return_value=False,
         ):
-            await updater.run_clean_artist("Test Artist", False)
+            await updater.run_clean_artist("Test Artist")
 
         with allure.step("Verify error logged"):
             error_logs = deps.error_logger.error_messages
@@ -382,7 +382,7 @@ class TestMusicUpdaterAllure:
                 await deps.cache_service.set_async("tracks_NonExistentArtist", [])
 
         with allure.step("Execute clean artist with no tracks"):
-            await updater.run_clean_artist("NonExistentArtist", False)
+            await updater.run_clean_artist("NonExistentArtist")
 
         with allure.step("Verify warning logged"):
             warning_logs = deps.console_logger.warning_messages

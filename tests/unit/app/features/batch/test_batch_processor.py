@@ -176,14 +176,14 @@ class TestProcessArtists:
         assert "Artist 2" in result["successful"]
 
     @pytest.mark.asyncio
-    async def test_passes_force_flag(
+    async def test_passes_force_flag_to_years(
         self, processor: BatchProcessor, mock_music_updater: MagicMock
     ) -> None:
-        """Should pass force flag to updater methods."""
-        await processor.process_artists(["Test Artist"], operation="clean", force=True)
+        """Should pass force flag to run_update_years (run_clean_artist doesn't use force)."""
+        await processor.process_artists(["Test Artist"], operation="years", force=True)
 
-        mock_music_updater.run_clean_artist.assert_called_once_with(
-            "Test Artist", _force=True
+        mock_music_updater.run_update_years.assert_called_once_with(
+            "Test Artist", True
         )
 
     @pytest.mark.asyncio
