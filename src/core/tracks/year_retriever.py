@@ -339,3 +339,20 @@ class YearRetriever:
     def _extract_release_years(album_tracks: list[TrackDict]) -> list[str]:
         """Extract release years. Delegates to YearDeterminator."""
         return YearDeterminator.extract_release_years(album_tracks)
+
+    async def update_album_tracks_bulk_async(
+        self,
+        track_ids: list[str],
+        year: str,
+    ) -> tuple[int, int]:
+        """Update year for multiple tracks.
+        Delegates to YearBatchProcessor.
+
+        Args:
+            track_ids: List of track IDs to update.
+            year: Year value to set.
+
+        Returns:
+            Tuple of (successful_count, failed_count).
+        """
+        return await self._batch_processor.update_album_tracks_bulk_async(track_ids, year)
