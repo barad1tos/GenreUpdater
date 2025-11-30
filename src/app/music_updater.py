@@ -146,7 +146,6 @@ class MusicUpdater:
         # Also set context on track_processor
         self.track_processor.set_dry_run_context(mode, test_artists)
 
-
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
         """Resolve absolute path to artist rename configuration file."""
         config_entry = self.config.get("artist_renamer", {}).get("config_path", "artist-renames.yaml")
@@ -162,12 +161,11 @@ class MusicUpdater:
             config_root = Path.cwd()
         return config_root / candidate
 
-    async def run_clean_artist(self, artist: str, _force: bool) -> None:
+    async def run_clean_artist(self, artist: str) -> None:
         """Clean track names for a specific artist.
 
         Args:
             artist: Artist name to process
-            _force: Reserved for future use (API compatibility)
 
         """
         self.console_logger.info("Starting clean operation for artist: %s", artist)
@@ -491,7 +489,6 @@ class MusicUpdater:
 
         return result
 
-
     async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
 
@@ -578,17 +575,17 @@ class MusicUpdater:
         """
         await self.year_service.update_all_years(tracks, force)
 
-    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], _force: bool) -> list[ChangeLogEntry]:
-        """Update years for all tracks and return change logs (Step 3 of pipeline).
+    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool) -> list[ChangeLogEntry]:
+        """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process
-            _force: Force all operations (unused, kept for API compatibility)
+            force: Force update - bypass cache/skip checks and re-query API for all albums
 
         Returns:
             List of change log entries
         """
-        return await self.year_service.update_all_years_with_logs(tracks, _force)
+        return await self.year_service.update_all_years_with_logs(tracks, force)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.

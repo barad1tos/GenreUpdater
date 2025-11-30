@@ -88,7 +88,7 @@ class Orchestrator:
 
     async def _run_clean_artist(self, args: argparse.Namespace) -> None:
         """Run the clean artist command."""
-        await self.music_updater.run_clean_artist(artist=args.artist, _force=args.force)
+        await self.music_updater.run_clean_artist(artist=args.artist)
 
     async def _run_update_years(self, args: argparse.Namespace) -> None:
         """Run the update years command."""

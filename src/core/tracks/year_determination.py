@@ -158,6 +158,7 @@ class YearDeterminator:
         album_tracks: list[TrackDict],
         artist: str,
         album: str,
+        force: bool = False,
     ) -> bool:
         """Check if the album should be skipped due to existing years.
 
@@ -168,11 +169,21 @@ class YearDeterminator:
             album_tracks: List of tracks in the album
             artist: Artist name for logging
             album: Album name for logging
+            force: If True, never skip - always process the album
 
         Returns:
             True if the album should be skipped, False otherwise
 
         """
+        # Force mode bypasses all skip logic
+        if force:
+            self.console_logger.debug(
+                "Force mode: processing '%s - %s' regardless of cache state",
+                artist,
+                album,
+            )
+            return False
+
         # Check cache first - API data is more reliable than Music.app
         cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
 

@@ -107,6 +107,7 @@ class YearBatchProcessor:
         grouped_albums: dict[tuple[str, str], list[TrackDict]],
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        force: bool = False,
     ) -> None:
         """Process albums in batches with rate limiting.
 
@@ -114,6 +115,7 @@ class YearBatchProcessor:
             grouped_albums: Dictionary of albums grouped by (artist, album) key
             updated_tracks: List to append updated tracks to
             changes_log: List to append change entries to
+            force: If True, bypass skip checks and re-query API for all albums
 
         """
         year_config = self.config.get("year_retrieval", {})
@@ -138,6 +140,7 @@ class YearBatchProcessor:
                 total_albums,
                 updated_tracks,
                 changes_log,
+                force=force,
             )
             return
 
@@ -150,6 +153,7 @@ class YearBatchProcessor:
             updated_tracks,
             changes_log,
             adaptive_delay,
+            force=force,
         )
 
     def _warn_legacy_year_config(self, year_config: dict[str, Any]) -> None:
@@ -219,6 +223,7 @@ class YearBatchProcessor:
         total_albums: int,
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        force: bool = False,
     ) -> None:
         """Process albums strictly sequentially with explicit pauses."""
         for batch_start in range(0, total_albums, batch_size):
@@ -230,7 +235,7 @@ class YearBatchProcessor:
             for album_key, album_tracks in album_items[batch_start:batch_end]:
                 artist_name, album_name = album_key
                 self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist_name, album_name)
-                await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log)
+                await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
 
             if batch_end < total_albums and delay_between_batches > 0:
                 self.console_logger.info("Waiting %d seconds before next batch...", delay_between_batches)
@@ -246,6 +251,7 @@ class YearBatchProcessor:
         concurrency_limit: int,
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        force: bool = False,
     ) -> None:
         """Process a single album within concurrency limits and update progress."""
         album_key, album_tracks = album_entry
@@ -262,7 +268,7 @@ class YearBatchProcessor:
 
         async with semaphore:
             self.console_logger.debug("DEBUG: About to process album '%s - %s'", artist_name, album_name)
-            await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log)
+            await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
 
         await progress.record()
 
@@ -276,6 +282,7 @@ class YearBatchProcessor:
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
         adaptive_delay: bool,
+        force: bool = False,
     ) -> None:
         """Process albums concurrently using adaptive pacing and shared semaphore."""
         semaphore = asyncio.Semaphore(concurrency_limit)
@@ -308,6 +315,7 @@ class YearBatchProcessor:
                             concurrency_limit,
                             updated_tracks,
                             changes_log,
+                            force=force,
                         )
                     )
 
@@ -326,6 +334,7 @@ class YearBatchProcessor:
         album_tracks: list[TrackDict],
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        force: bool = False,
     ) -> None:
         """Process a single album for year updates.
 
@@ -335,6 +344,7 @@ class YearBatchProcessor:
             album_tracks: List of tracks in the album
             updated_tracks: List to append updated tracks to
             changes_log: List to append change entries to
+            force: If True, bypass skip checks and re-query API
 
         """
         # Filter to only subscription tracks
@@ -354,7 +364,7 @@ class YearBatchProcessor:
 
         self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
-        # Safety checks
+        # Safety checks (never bypassed by force - these are data integrity guards)
         if await self.year_determinator.check_suspicious_album(artist, album, album_tracks):
             return
 
@@ -367,8 +377,8 @@ class YearBatchProcessor:
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
 
-        # Check if we should skip this album
-        if await self.year_determinator.should_skip_album(album_tracks, artist, album):
+        # Check if we should skip this album (force=True bypasses this)
+        if await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force):
             self.console_logger.debug("DEBUG: Skipping '%s - %s' - year matches cache", artist, album)
             return
 
@@ -465,9 +475,7 @@ class YearBatchProcessor:
         successful, _ = await self.update_album_tracks_bulk_async(track_ids, year)
 
         if successful > 0:
-            self._record_successful_updates(
-                tracks_needing_update, year, artist, album, updated_tracks, changes_log
-            )
+            self._record_successful_updates(tracks_needing_update, year, artist, album, updated_tracks, changes_log)
 
     def _collect_tracks_for_update(
         self,

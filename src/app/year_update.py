@@ -156,12 +156,12 @@ class YearUpdateService:
             self._error_logger.exception("=== ERROR in Step 4 ===")
             raise
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], _force: bool) -> list[ChangeLogEntry]:
-        """Update years for all tracks and return change logs (Step 3 of pipeline).
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool) -> list[ChangeLogEntry]:
+        """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
-            _force: Force all operations (unused, kept for API compatibility).
+            force: Force update - bypass cache/skip checks and re-query API for all albums.
 
         Returns:
             List of change log entries.
@@ -175,11 +175,11 @@ class YearUpdateService:
             year_changes: list[ChangeLogEntry] = []
 
             if hasattr(self._year_retriever, "get_album_years_with_logs"):
-                updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks)
+                updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
                 if hasattr(self._year_retriever, "set_last_updated_tracks"):
                     self._year_retriever.set_last_updated_tracks(updated_tracks)
             else:
-                await self._year_retriever.process_album_years(tracks, force=_force)
+                await self._year_retriever.process_album_years(tracks, force=force)
                 if hasattr(self._year_retriever, "get_last_updated_tracks"):
                     updated_tracks = self._year_retriever.get_last_updated_tracks()
 

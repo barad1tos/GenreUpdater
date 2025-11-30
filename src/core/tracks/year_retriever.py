@@ -179,7 +179,7 @@ class YearRetriever:
 
         Args:
             tracks: Tracks to process
-            force: Force update even if year exists
+            force: Force update even if year exists (bypasses cache/skip checks)
 
         Returns:
             True if successful, False otherwise
@@ -197,8 +197,8 @@ class YearRetriever:
             if not hasattr(self.external_api, "_initialized"):
                 await self.external_api.initialize()
 
-            # Run the update logic
-            updated_tracks, _changes_log = await self._update_album_years_logic(tracks)
+            # Run the update logic with force flag
+            updated_tracks, _changes_log = await self._update_album_years_logic(tracks, force=force)
             self._last_updated_tracks = updated_tracks
 
             # Summary with detailed statistics
@@ -238,6 +238,7 @@ class YearRetriever:
     async def get_album_years_with_logs(
         self,
         tracks: list[TrackDict],
+        force: bool = False,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Get album year updates with change logs.
 
@@ -245,28 +246,31 @@ class YearRetriever:
 
         Args:
             tracks: Tracks to process
+            force: If True, bypass skip checks and re-query API for all albums
 
         Returns:
             Tuple of (updated_tracks, change_logs)
 
         """
-        return await self._update_album_years_logic(tracks)
+        return await self._update_album_years_logic(tracks, force=force)
 
     @Analytics.track_instance_method("year_discogs_update")
     async def update_years_from_discogs(
         self,
         tracks: list[TrackDict],
+        force: bool = False,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Update years specifically from Discogs API.
 
         Args:
             tracks: Tracks to process
+            force: If True, bypass skip checks and re-query API for all albums
 
         Returns:
             Tuple of (updated_tracks, change_logs)
 
         """
-        return await self._update_album_years_logic(tracks)
+        return await self._update_album_years_logic(tracks, force=force)
 
     # =========================================================================
     # State Accessors
@@ -296,11 +300,13 @@ class YearRetriever:
     async def _update_album_years_logic(
         self,
         tracks: list[TrackDict],
+        force: bool = False,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Core logic for updating album years.
 
         Args:
             tracks: Tracks to process
+            force: If True, bypass skip checks and re-query API for all albums
 
         Returns:
             Tuple of (updated_tracks, change_logs)
@@ -315,7 +321,7 @@ class YearRetriever:
         changes_log: list[ChangeLogEntry] = []
 
         # Process albums in batches
-        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log)
+        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log, force=force)
 
         return updated_tracks, changes_log
 
