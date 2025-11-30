@@ -380,8 +380,9 @@ class TestGenrePipelineIntegration:
 
             # Error logger should have recorded any errors
             error_logger = genre_manager.error_logger
-            if hasattr(error_logger, "error_messages"):
-                error_count = len(error_logger.error_messages)
+            error_messages = getattr(error_logger, "error_messages", [])
+            if error_messages:
+                error_count = len(error_messages)
                 allure.attach(f"{error_count}", "Errors Logged", allure.attachment_type.TEXT)
 
             allure.attach(f"{call_count}", "Update Attempts", allure.attachment_type.TEXT)

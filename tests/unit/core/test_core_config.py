@@ -3,6 +3,7 @@
 Note: This module tests internal config functions that are prefixed with underscore.
 Testing private functions is intentional to ensure correctness of internal logic.
 """
+# noinspection PyProtectedMember
 
 from __future__ import annotations
 

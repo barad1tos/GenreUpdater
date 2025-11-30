@@ -107,7 +107,7 @@ class TestMusicBrainzClientAllure:
     async def test_search_artist_not_found(self) -> None:
         """Test artist not found scenario."""
         with allure.step("Setup empty artist search response"):
-            mock_response = {"artists": []}  # Mock empty response
+            mock_response: dict[str, Any] = {"artists": []}  # Mock empty response
             mock_api_request = AsyncMock(return_value=mock_response)
             client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 

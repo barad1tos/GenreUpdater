@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,8 +12,6 @@ from src.core.tracks.artist_renamer import ArtistRenamer
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from src.core.tracks.track_processor import TrackProcessor
 
 
 def _create_track(
@@ -73,7 +71,7 @@ async def test_rename_tracks_updates_artist(tmp_path: Path) -> None:
     config_path = tmp_path / "artist-renames.yaml"
     config_path.write_text('DK Energetyk: "ДК Енергетик"\n', encoding="utf-8")
 
-    processor = DummyTrackProcessor()
+    processor: Any = DummyTrackProcessor()
     console_logger = MagicMock()
     error_logger = MagicMock()
 
@@ -81,7 +79,7 @@ async def test_rename_tracks_updates_artist(tmp_path: Path) -> None:
     track.__dict__["album_artist"] = "DK Energetyk"
 
     renamer = ArtistRenamer(
-        cast("TrackProcessor", processor),
+        processor,
         console_logger,
         error_logger,
         config_path=config_path,
@@ -107,14 +105,14 @@ async def test_rename_tracks_skips_read_only(tmp_path: Path) -> None:
     config_path = tmp_path / "artist-renames.yaml"
     config_path.write_text('DK Energetyk: "ДК Енергетик"\n', encoding="utf-8")
 
-    processor = DummyTrackProcessor()
+    processor: Any = DummyTrackProcessor()
     console_logger = MagicMock()
     error_logger = MagicMock()
 
     track = _create_track(artist="DK Energetyk", track_status="prerelease")
 
     renamer = ArtistRenamer(
-        cast("TrackProcessor", processor),
+        processor,
         console_logger,
         error_logger,
         config_path=config_path,
@@ -131,12 +129,12 @@ def test_missing_config_yields_no_mapping(tmp_path: Path) -> None:
     """Missing config file should result in empty mapping without errors."""
 
     config_path = tmp_path / "missing.yaml"
-    processor = DummyTrackProcessor()
+    processor: Any = DummyTrackProcessor()
     console_logger = MagicMock()
     error_logger = MagicMock()
 
     renamer = ArtistRenamer(
-        cast("TrackProcessor", processor),
+        processor,
         console_logger,
         error_logger,
         config_path=config_path,
