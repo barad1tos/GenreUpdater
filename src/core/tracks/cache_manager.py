@@ -80,11 +80,8 @@ class TrackCacheManager:
                     i,
                 )
                 return None
-            # Convert validated dict to TrackDict Pydantic model if needed
-            if isinstance(item, TrackDict):
-                validated_tracks.append(item)
-            else:
-                validated_tracks.append(TrackDict(**item))
+            # TypeGuard validates structure; model_validate handles both dict and TrackDict
+            validated_tracks.append(TrackDict.model_validate(item))
 
         return validated_tracks
 
