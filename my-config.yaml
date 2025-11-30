@@ -149,6 +149,7 @@ logging:
     # Example: debug_file: DEBUG # You could add a separate file for DEBUG logs if needed
 
 analytics:
+  enabled: false  # Disable analytics for manual runs (daemon keeps enabled: true)
   duration_thresholds:
     short_max: 5
     medium_max: 20
