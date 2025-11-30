@@ -11,6 +11,7 @@ For repository-wide cleanup, use `scan_for_all_conflicts` and `cleanup_conflict_
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -389,6 +390,11 @@ DEFAULT_EXCLUDE_DIRS: set[str] = {
 }
 
 
+def _should_exclude_dir(name: str, exclude_dirs: set[str]) -> bool:
+    """Check if directory name should be excluded (supports glob patterns)."""
+    return any(fnmatch.fnmatch(name, pattern) for pattern in exclude_dirs)
+
+
 def _should_exclude_path(path: Path, exclude_patterns: list[str] | None) -> bool:
     """Check if path should be excluded based on patterns."""
     if not exclude_patterns:
@@ -427,7 +433,7 @@ def _scan_directory_recursive(
             # Check if directory itself is a conflict (e.g., "data 2")
             _process_entry(entry, result, exclude_patterns)
             # Recurse into directory if not excluded
-            if entry.name not in exclude_dirs:
+            if not _should_exclude_dir(entry.name, exclude_dirs):
                 _scan_directory_recursive(entry, result, exclude_dirs, exclude_patterns)
         else:
             result.scanned_files += 1
