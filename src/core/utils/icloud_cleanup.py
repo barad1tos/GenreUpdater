@@ -11,15 +11,14 @@ For repository-wide cleanup, use `scan_for_all_conflicts` and `cleanup_conflict_
 
 from __future__ import annotations
 
+import argparse
 import fnmatch
 import logging
 import re
+import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 
 # Pattern to match iCloud conflict files/folders: "name N" or "name N.ext"
@@ -489,7 +488,6 @@ def cleanup_conflict_files(
         Tuple of (deleted_count, skipped_count)
 
     """
-    import shutil
 
     now = datetime.now(UTC).timestamp()
     deleted = 0
@@ -623,9 +621,6 @@ def cleanup_repository(
 
 def main() -> None:
     """CLI entrypoint for iCloud conflict cleanup."""
-    import argparse
-    from pathlib import Path
-
     parser = argparse.ArgumentParser(
         description="Scan and clean up iCloud conflict files and folders",
         formatter_class=argparse.RawDescriptionHelpFormatter,
