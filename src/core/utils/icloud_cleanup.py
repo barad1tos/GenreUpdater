@@ -20,14 +20,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 # Pattern to match iCloud conflict files/folders: "name N" or "name N.ext"
 # Examples: ".coverage 2", "data 2", "file 3.txt", "script 2.sh"
 ICLOUD_CONFLICT_PATTERN = re.compile(r"^(.+) (\d+)(\.[^.]+)?$")
 
 # Minimum age in seconds before we consider a file safe to delete
 # Files younger than this might still be syncing
-DEFAULT_MIN_AGE_SECONDS = 60
+DEFAULT_MIN_AGE_SECONDS = 600
 
 
 @dataclass
