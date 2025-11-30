@@ -163,9 +163,9 @@ class MockLogger(logging.Logger):
         self.handlers.append(handler)
 
     # Keep compatibility with logging.Logger API
-    def addHandler(self, handler: Any) -> None:  # noqa: N802
+    def addHandler(self, hdlr: Any) -> None:  # noqa: N802
         """Mock addHandler method for logging.Logger compatibility."""
-        self.add_handler(handler)
+        self.add_handler(hdlr)
 
     def remove_handler(self, handler: Any) -> None:
         """Mock remove_handler method."""
@@ -173,9 +173,9 @@ class MockLogger(logging.Logger):
             self.handlers.remove(handler)
 
     # Keep compatibility with logging.Logger API
-    def removeHandler(self, handler: Any) -> None:  # noqa: N802
+    def removeHandler(self, hdlr: Any) -> None:  # noqa: N802
         """Mock removeHandler method for logging.Logger compatibility."""
-        self.remove_handler(handler)
+        self.remove_handler(hdlr)
 
     def is_enabled_for(self, level: int) -> bool:
         """Mock is_enabled_for method."""
