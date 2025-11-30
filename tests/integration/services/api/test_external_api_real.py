@@ -383,10 +383,7 @@ class TestConcurrentApiCalls:
 
         async def get_year(artist: str, album: str) -> tuple[str, str, str | None]:
             """Fetch album year from API."""
-            result = await api_orchestrator.get_album_year(artist=artist, album=album)
-            if result is None:
-                return artist, album, None
-            album_year, _ = result
+            album_year, _ = await api_orchestrator.get_album_year(artist=artist, album=album)
             return artist, album, album_year
 
         # Run lookups concurrently

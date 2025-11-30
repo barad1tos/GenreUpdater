@@ -7,7 +7,7 @@ import json
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import allure
@@ -347,7 +347,9 @@ class TestApiCacheService:
             service.event_manager.emit_event(event)
 
         with allure.step("Verify logger was called"):
-            service.logger.debug.assert_called_once_with("Track modified: %s, API cache unaffected", "track456")
+            cast(MagicMock, service.logger.debug).assert_called_once_with(
+                "Track modified: %s, API cache unaffected", "track456"
+            )
 
     @allure.story("Statistics")
     @allure.title("Should provide cache statistics")
@@ -432,7 +434,7 @@ class TestApiCacheService:
 
         with allure.step("Mock event manager"):
             mock_emit = MagicMock()
-            service.event_manager.emit_event = mock_emit
+            object.__setattr__(service.event_manager, "emit_event", mock_emit)
 
         with allure.step("Emit event"):
             service.emit_track_removed("track789", "Pink Floyd", "The Wall")
@@ -466,7 +468,7 @@ class TestApiCacheService:
             await service.save_to_disk()
 
         with allure.step("Verify logger captured exception"):
-            service.logger.exception.assert_called()
+            cast(MagicMock, service.logger.exception).assert_called()
 
     @allure.story("Error Handling")
     @allure.title("Should handle load errors gracefully")
@@ -484,7 +486,7 @@ class TestApiCacheService:
 
         with allure.step("Verify service still initializes"):
             assert service.api_cache == {}
-            service.logger.exception.assert_called()
+            cast(MagicMock, service.logger.exception).assert_called()
 
     @allure.story("Persistence")
     @allure.title("Should skip save when cache is empty")
@@ -503,4 +505,6 @@ class TestApiCacheService:
 
         with allure.step("Verify save deletes empty cache file"):
             mock_open.assert_not_called()
-            service.logger.debug.assert_any_call("API cache is empty, deleting cache file if exists")
+            cast(MagicMock, service.logger.debug).assert_any_call(
+                "API cache is empty, deleting cache file if exists"
+            )

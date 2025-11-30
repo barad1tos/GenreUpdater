@@ -370,12 +370,16 @@ class ReleaseScorer:
         char_score = 0
         rg_first_year = None
 
-        # MusicBrainz Release Group First Date Match
+        # Release Group First Date Match (MusicBrainz or Discogs Master Release)
         rg_first_date_str = release.get("releasegroup_first_date")
-        if source == "musicbrainz" and rg_first_date_str and isinstance(rg_first_date_str, str):
-            rg_first_year = self._extract_rg_first_year(rg_first_date_str, year_str, score_components)
-            if rg_first_year is not None:
-                char_score += int(scoring_cfg.get("mb_release_group_match_bonus", 50))
+        if rg_first_date_str and isinstance(rg_first_date_str, str):
+            rg_first_year = self._extract_rg_first_year(rg_first_date_str)
+            # Only MusicBrainz gets the release group match bonus (RG is a MB concept)
+            # Year diff penalty applies to all sources with rg_first_year
+            if rg_first_year is not None and source == "musicbrainz" and year_str == str(rg_first_year):
+                rg_match_bonus: int = int(scoring_cfg.get("mb_release_group_match_bonus", 50))
+                char_score += rg_match_bonus
+                score_components.append(f"MB RG First Date Match: +{rg_match_bonus}")
 
         # Release Type scoring
         char_score += self._score_release_type(release, score_components)
@@ -391,14 +395,14 @@ class ReleaseScorer:
 
         return char_score, rg_first_year
 
-    def _extract_rg_first_year(self, rg_first_date_str: str, year_str: str, score_components: list[str]) -> int | None:
-        """Extract and validate RG first year, applying match bonus if applicable."""
+    def _extract_rg_first_year(self, rg_first_date_str: str) -> int | None:
+        """Extract RG first year from date string.
+
+        Note: Score component logging is handled by caller based on source.
+        """
         with contextlib.suppress(IndexError, ValueError, TypeError):
             rg_year_str = rg_first_date_str.split("-")[0]
             if len(rg_year_str) == self.YEAR_LENGTH and rg_year_str.isdigit():
-                if year_str and rg_year_str == year_str:
-                    rg_match_bonus = self.scoring_config.get("mb_release_group_match_bonus", 50)
-                    score_components.append(f"MB RG First Date Match: +{rg_match_bonus}")
                 return int(rg_year_str)
         return None
 

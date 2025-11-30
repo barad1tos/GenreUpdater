@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
@@ -411,7 +412,9 @@ class TestMusicUpdaterAllure:
             await updater.run_verify_database()
 
         with allure.step("Verify database verifier was called"):
-            updater.database_verifier.verify_and_clean_track_database.assert_called_once()
+            cast(
+                MagicMock, updater.database_verifier.verify_and_clean_track_database
+            ).assert_called_once()
 
             allure.attach("Database verification completed", "Verification Result", allure.attachment_type.TEXT)
 

@@ -81,6 +81,33 @@ class PipelineSnapshotManager:
         self._tracks_snapshot = None
         self._tracks_index = {}
 
+    async def persist_to_disk(self) -> bool:
+        """Persist the current in-memory snapshot to disk.
+
+        This should be called at the end of the pipeline to ensure
+        that genre/year changes are reflected in the disk snapshot.
+
+        Returns:
+            True if snapshot was persisted, False if no snapshot available.
+        """
+        if self._tracks_snapshot is None:
+            self._console_logger.debug("No snapshot to persist")
+            return False
+
+        try:
+            await self._track_processor.cache_manager.update_snapshot(
+                self._tracks_snapshot,
+                processed_track_ids=[str(t.id) for t in self._tracks_snapshot if t.id],
+            )
+            self._console_logger.info(
+                "✓ Persisted pipeline snapshot to disk (%d tracks)",
+                len(self._tracks_snapshot),
+            )
+            return True
+        except Exception as exc:
+            self._console_logger.warning("Failed to persist snapshot: %s", exc)
+            return False
+
     async def merge_smart_delta(
         self,
         snapshot_tracks: list[TrackDict],

@@ -58,6 +58,7 @@ class YearRetriever:
     DEFAULT_YEAR_DIFFERENCE_THRESHOLD = 5
     DEFAULT_FALLBACK_ENABLED = True
     DEFAULT_ABSURD_YEAR_THRESHOLD = 1970
+    DEFAULT_SUSPICION_THRESHOLD_YEARS = 10
 
     # Backward compatibility: expose utility methods as static methods
     _resolve_non_negative_int = staticmethod(resolve_non_negative_int)
@@ -119,6 +120,10 @@ class YearRetriever:
             logic_config.get("absurd_year_threshold"),
             default=self.DEFAULT_ABSURD_YEAR_THRESHOLD,
         )
+        self.suspicion_threshold_years = resolve_positive_int(
+            logic_config.get("suspicion_threshold_years"),
+            default=self.DEFAULT_SUSPICION_THRESHOLD_YEARS,
+        )
 
         # Initialize consistency checker
         self.year_consistency_checker = YearConsistencyChecker(
@@ -126,6 +131,7 @@ class YearRetriever:
             top_years_count=self.TOP_YEARS_COUNT,
             parity_threshold=self.PARITY_THRESHOLD,
             dominance_min_share=self.DOMINANCE_MIN_SHARE,
+            suspicion_threshold_years=self.suspicion_threshold_years,
         )
 
         # Initialize fallback handler
@@ -333,3 +339,20 @@ class YearRetriever:
     def _extract_release_years(album_tracks: list[TrackDict]) -> list[str]:
         """Extract release years. Delegates to YearDeterminator."""
         return YearDeterminator.extract_release_years(album_tracks)
+
+    async def update_album_tracks_bulk_async(
+        self,
+        track_ids: list[str],
+        year: str,
+    ) -> tuple[int, int]:
+        """Update year for multiple tracks.
+        Delegates to YearBatchProcessor.
+
+        Args:
+            track_ids: List of track IDs to update.
+            year: Year value to set.
+
+        Returns:
+            Tuple of (successful_count, failed_count).
+        """
+        return await self._batch_processor.update_album_tracks_bulk_async(track_ids, year)

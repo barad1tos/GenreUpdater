@@ -413,6 +413,10 @@ class MusicUpdater:
         if self._should_update_run_timestamp(force, incremental_tracks):
             await self.database_verifier.update_last_incremental_run()
 
+        # Persist updated snapshot to disk (prevents stale data on next run)
+        if not self.deps.dry_run:
+            await self.snapshot_manager.persist_to_disk()
+
         self.snapshot_manager.clear()
         self.console_logger.info("Main update pipeline completed successfully")
 

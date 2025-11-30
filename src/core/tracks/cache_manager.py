@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from src.core.models.track_models import TrackDict
 from src.core.models.validators import is_valid_track_item
 from src.services.cache.snapshot import LibraryCacheMetadata, LibraryDeltaCache
 
@@ -19,7 +20,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from src.core.models.protocols import CacheServiceProtocol
-    from src.core.models.track_models import TrackDict
     from src.services.cache.snapshot import LibrarySnapshotService
 
 
@@ -80,7 +80,8 @@ class TrackCacheManager:
                     i,
                 )
                 return None
-            validated_tracks.append(item)
+            # TypeGuard validates structure; model_validate handles both dict and TrackDict
+            validated_tracks.append(TrackDict.model_validate(item))
 
         return validated_tracks
 

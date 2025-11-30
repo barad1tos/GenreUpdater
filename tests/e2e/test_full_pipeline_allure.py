@@ -71,9 +71,6 @@ class TestFullApplicationPipelineE2E:
         # FIX: Add config_path to prevent MagicMock from breaking file operations
         # This is critical - without it, MusicUpdater.__init__() hangs when trying to
         # resolve artist_renamer config path, because MagicMock.open() creates infinite recursion
-        import tempfile
-        from pathlib import Path
-
         temp_dir = Path(tempfile.mkdtemp())
         mock_config_file = temp_dir / "config.yaml"
         mock_deps.config_path = mock_config_file
@@ -84,9 +81,13 @@ class TestFullApplicationPipelineE2E:
         mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         # Smart mock for run_script that returns different data based on script name
-        async def smart_run_script(script_name: str, args: list[str] | None = None, timeout: int = 30, **kwargs) -> str:
+        async def smart_run_script(
+            script_name: str,
+            _args: list[str] | None = None,
+            _timeout: int = 30,
+            **_kwargs: Any,
+        ) -> str:
             """Mock script runner that handles different script types."""
-            del args, timeout, kwargs  # Explicitly mark as unused
             if "fetch_tracks" in script_name:
                 # Return empty for batch processing end
                 return ""

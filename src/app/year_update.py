@@ -55,25 +55,6 @@ class YearUpdateService:
         self._console_logger = console_logger
         self._error_logger = error_logger
 
-    @staticmethod
-    def filter_tracks_for_artist(all_tracks: list[TrackDict], artist: str) -> list[TrackDict]:
-        """Filter tracks to include main artist and collaborations.
-
-        Args:
-            all_tracks: All tracks to filter.
-            artist: Artist name to filter by.
-
-        Returns:
-            List of tracks matching the artist.
-        """
-        filtered_tracks = []
-        for track in all_tracks:
-            track_artist = str(track.get("artist", ""))
-            normalized_artist = YearRetriever.normalize_collaboration_artist(track_artist)
-            if normalized_artist == artist:
-                filtered_tracks.append(track)
-        return filtered_tracks
-
     async def get_tracks_for_year_update(self, artist: str | None) -> list[TrackDict] | None:
         """Get tracks for year update based on artist filter.
 
@@ -83,27 +64,7 @@ class YearUpdateService:
         Returns:
             List of tracks or None if not found.
         """
-        if artist:
-            # Get all tracks (no AppleScript filter)
-            all_tracks = await self._track_processor.fetch_tracks_async()
-            if not all_tracks:
-                self._console_logger.warning("No tracks found")
-                return None
-
-            # Filter tracks to include main artist and collaborations
-            filtered_tracks = self.filter_tracks_for_artist(all_tracks, artist)
-            if not filtered_tracks:
-                self._console_logger.warning("No tracks found for artist: %s (including collaborations)", artist)
-                return None
-
-            self._console_logger.info(
-                "Found %d tracks for artist '%s' (including collaborations)",
-                len(filtered_tracks),
-                artist,
-            )
-            return filtered_tracks
-
-        # Fetch all tracks normally
+        # Fetch tracks - AppleScript handles artist filtering directly for performance
         fetched_tracks: list[TrackDict] = await self._track_processor.fetch_tracks_async(artist=artist)
         if not fetched_tracks:
             self._console_logger.warning("No tracks found")

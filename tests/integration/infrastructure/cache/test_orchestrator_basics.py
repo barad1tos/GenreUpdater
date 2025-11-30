@@ -65,7 +65,7 @@ async def test_generic_set_and_get(orchestrator: CacheOrchestrator) -> None:
 async def test_async_compute_on_miss(orchestrator: CacheOrchestrator) -> None:
     """When a key is missing, compute callback is evaluated and cached."""
 
-    def compute() -> asyncio.Future[str]:
+    def compute() -> asyncio.Future[Any]:
         """Compute function that returns a test value."""
 
         async def _compute() -> str:

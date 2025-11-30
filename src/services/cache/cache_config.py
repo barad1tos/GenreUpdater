@@ -62,10 +62,36 @@ class SmartCacheConfig:
     # Infinite TTL for persistent content (represented as very large number)
     INFINITE_TTL = 365 * DAY * 10  # 10 years - effectively infinite
 
-    def __init__(self) -> None:
-        """Initialize smart cache configuration."""
+    # Default TTL for negative results (failed lookups) - 30 days
+    DEFAULT_NEGATIVE_RESULT_TTL = MONTH
+
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        """Initialize smart cache configuration.
+
+        Args:
+            config: Optional application config dict to read cache settings from
+        """
         self.logger = logging.getLogger(__name__)
+        self._config = config or {}
         self._policies = self._create_default_policies()
+
+    def _get_negative_result_ttl(self) -> int:
+        """Get TTL for negative results from config or use default.
+
+        Returns:
+            TTL in seconds for caching failed lookups
+        """
+        caching_config = self._config.get("caching", {})
+        value = caching_config.get("negative_result_ttl", self.DEFAULT_NEGATIVE_RESULT_TTL)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            self.logger.warning(
+                "Invalid negative_result_ttl %r, using default %d",
+                value,
+                self.DEFAULT_NEGATIVE_RESULT_TTL,
+            )
+            return self.DEFAULT_NEGATIVE_RESULT_TTL
 
     def _create_default_policies(self) -> dict[CacheContentType, CachePolicy]:
         """Create default cache policies for different content types."""
@@ -100,7 +126,7 @@ class SmartCacheConfig:
             ),
             CacheContentType.NEGATIVE_RESULT: CachePolicy(
                 content_type=CacheContentType.NEGATIVE_RESULT,
-                ttl_seconds=self.MONTH,  # 2592000s - current default
+                ttl_seconds=self._get_negative_result_ttl(),
                 invalidation_strategy=InvalidationStrategy.TIME_BASED,
                 max_size_mb=10,
                 description="Failed lookups - long-term cache to avoid repeated failures",

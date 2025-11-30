@@ -54,7 +54,7 @@ class GenericCacheService:
         """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
-        self.cache_config = SmartCacheConfig()
+        self.cache_config = SmartCacheConfig(config)
 
         # Generic cache: {hash_key: (value, timestamp)}
         self.cache: dict[str, tuple[CacheableValue, float]] = {}

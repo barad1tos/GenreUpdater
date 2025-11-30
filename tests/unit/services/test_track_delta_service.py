@@ -6,6 +6,8 @@ that are used for incremental track synchronization.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from src.core.tracks.track_delta import TrackDelta, compute_track_delta
 from src.core.models.track_models import TrackDict
@@ -77,8 +79,8 @@ class TestComputeTrackDelta:
     @staticmethod
     def _assert_single_track_updated(
         create_track: type[TrackDict],
-        current_track_kwargs: dict,
-        existing_track_kwargs: dict,
+        current_track_kwargs: dict[str, Any],
+        existing_track_kwargs: dict[str, Any],
     ) -> None:
         """Helper method to test single track update scenarios.
 
@@ -88,7 +90,7 @@ class TestComputeTrackDelta:
             existing_track_kwargs: Keyword arguments for existing track
         """
         # Set common defaults if not provided
-        defaults = {
+        defaults: dict[str, Any] = {
             "id": "1",
             "name": "Track 1",
             "artist": "Artist A",

@@ -40,7 +40,7 @@ class AlbumCacheService:
         """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
-        self.cache_config = SmartCacheConfig()
+        self.cache_config = SmartCacheConfig(config)
         self.policy = self.cache_config.get_policy(CacheContentType.ALBUM_YEAR)
 
         # Album years cache: {hash_key: AlbumCacheEntry}

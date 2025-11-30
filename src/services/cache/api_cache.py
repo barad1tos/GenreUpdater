@@ -35,7 +35,7 @@ class ApiCacheService:
         """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
-        self.cache_config = SmartCacheConfig()
+        self.cache_config = SmartCacheConfig(config)
         self.event_manager = EventDrivenCacheManager(self.cache_config)
 
         # API cache: {hash_key: CachedApiResult}
