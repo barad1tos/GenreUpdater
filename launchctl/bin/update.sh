@@ -22,7 +22,7 @@ echo "Changes to pull:"
 git log HEAD..origin/main --oneline || echo "  (none)"
 
 echo ""
-read -p "Apply changes? [y/N] " confirm
+read -rp "Apply changes? [y/N] " confirm
 
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
     git reset --hard origin/main
