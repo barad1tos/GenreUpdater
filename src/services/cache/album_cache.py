@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import logging
+import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -262,17 +265,33 @@ class AlbumCacheService:
 
     @staticmethod
     def _write_csv_data(file_path: str, items: list[AlbumCacheEntry]) -> None:
-        """Write album data to CSV file.
+        """Write album data to CSV file atomically.
+
+        Uses a temporary file and atomic replace to prevent data loss
+        if the write operation fails mid-way.
 
         Args:
             file_path: Path to CSV file
-            items: List of (artist, album, year) tuples
+            items: List of AlbumCacheEntry objects
         """
-        with Path(file_path).open("w", encoding="utf-8", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(["artist", "album", "year", "timestamp"])
-            for item in items:
-                writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
+        file_path_obj = Path(file_path)
+        dir_name = file_path_obj.parent
+
+        # Write to temp file first, then atomically replace
+        fd, temp_path = tempfile.mkstemp(suffix=".csv", dir=dir_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(["artist", "album", "year", "timestamp"])
+                for item in items:
+                    writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
+            # Atomic replace - if this fails, original file is untouched
+            Path(temp_path).replace(file_path)
+        except BaseException:
+            # Clean up temp file on any error
+            with contextlib.suppress(OSError):
+                Path(temp_path).unlink()
+            raise
 
     def get_stats(self) -> dict[str, Any]:
         """Get album cache statistics.

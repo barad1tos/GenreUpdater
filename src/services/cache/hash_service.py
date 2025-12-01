@@ -66,9 +66,19 @@ class UnifiedHashService:
 
         Returns:
             SHA256 hash string
+
+        Note:
+            Non-JSON-serializable dict values are converted to their string representation.
         """
-        # Handle different data types consistently (including empty dicts)
-        key_string = str(sorted(data.items())) if isinstance(data, dict) else str(data)
+        # Handle different data types consistently (including nested dicts)
+        if isinstance(data, dict):
+            try:
+                key_string = json.dumps(data, sort_keys=True)
+            except TypeError:
+                # Fallback for non-serializable values (e.g., datetime, Path, custom objects)
+                key_string = str(sorted(data.items()))
+        else:
+            key_string = str(data)
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod
@@ -81,13 +91,24 @@ class UnifiedHashService:
 
         Returns:
             SHA256 hash string
+
+        Note:
+            Non-JSON-serializable arguments are converted to their string representation.
         """
-        # Use json.dumps for stable serialization of complex types
-        args_string = "|".join(json.dumps(arg, sort_keys=True) for arg in args)
+
+        def safe_serialize(obj: Any) -> str:
+            """Serialize object to JSON, falling back to str() if not serializable."""
+            try:
+                return json.dumps(obj, sort_keys=True)
+            except TypeError:
+                return str(obj)
+
+        # Use json.dumps for stable serialization, fallback to str() if not serializable
+        args_string = "|".join(safe_serialize(arg) for arg in args)
 
         # Build kwargs string from sorted key-value pairs
         kwargs_string = (
-            "|".join(f"{k}={json.dumps(v, sort_keys=True)}" for k, v in sorted(kwargs.items()))
+            "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs.items()))
             if kwargs
             else ""
         )

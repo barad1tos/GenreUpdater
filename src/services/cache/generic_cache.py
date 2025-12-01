@@ -337,8 +337,11 @@ class GenericCacheService:
                 temp_path = Path(tmp_file.name)
             temp_path.replace(self.cache_file)
 
-        await asyncio.to_thread(blocking_save)
-        self.logger.info("Generic cache saved to %s (%d entries)", self.cache_file, len(self.cache))
+        try:
+            await asyncio.to_thread(blocking_save)
+            self.logger.info("Generic cache saved to %s (%d entries)", self.cache_file, len(self.cache))
+        except OSError as e:
+            self.logger.exception("Failed to save generic cache to %s: %s", self.cache_file, e)
 
     async def _load_from_disk(self) -> None:
         """Load cache contents from disk if available."""

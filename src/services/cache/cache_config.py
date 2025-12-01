@@ -345,7 +345,8 @@ class EventDrivenCacheManager:
         for handler in handlers:
             try:
                 handler(event)
-            except (TypeError, ValueError, AttributeError) as e:
+            except Exception as e:
+                # Catch all exceptions to ensure remaining handlers still execute
                 self.logger.exception("Event handler failed: %s", e)
 
     def should_invalidate_for_event(self, content_type: CacheContentType, event: CacheEvent) -> bool:
