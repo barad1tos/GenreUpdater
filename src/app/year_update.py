@@ -171,17 +171,8 @@ class YearUpdateService:
         changes_log: list[ChangeLogEntry] = []
 
         try:
-            updated_tracks: list[TrackDict] = []
-            year_changes: list[ChangeLogEntry] = []
-
-            if hasattr(self._year_retriever, "get_album_years_with_logs"):
-                updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
-                if hasattr(self._year_retriever, "set_last_updated_tracks"):
-                    self._year_retriever.set_last_updated_tracks(updated_tracks)
-            else:
-                await self._year_retriever.process_album_years(tracks, force=force)
-                if hasattr(self._year_retriever, "get_last_updated_tracks"):
-                    updated_tracks = self._year_retriever.get_last_updated_tracks()
+            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
+            self._year_retriever.set_last_updated_tracks(updated_tracks)
 
             self._snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes
