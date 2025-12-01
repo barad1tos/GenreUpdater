@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from src.app.app_config import Config, DEFAULT_CONFIG_FILES
+from src.app.app_config import Config
 
 
 class TestConfigInit:
@@ -50,18 +49,15 @@ class TestConfigInit:
         config = Config()
         assert config.config_path == config_filename
 
-    def test_init_warns_when_no_config_found(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    def test_init_raises_when_no_config_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Config should warn when no config file exists."""
+        """Config should raise FileNotFoundError when no config file exists."""
         monkeypatch.delenv("CONFIG_PATH", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        with caplog.at_level(logging.WARNING):
-            config = Config()
-
-        assert config.config_path == DEFAULT_CONFIG_FILES[0]
-        assert "No configuration file found" in caplog.text
+        with pytest.raises(FileNotFoundError, match="No configuration file found"):
+            Config()
 
 
 class TestConfigLoad:
