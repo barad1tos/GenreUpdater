@@ -298,19 +298,19 @@ class TestAlbumCacheService:
 
         with allure.step("Test valid headers"):
             valid_headers = ["artist", "album", "year"]
-            assert service._validate_csv_headers(valid_headers) is True  # noqa: SLF001
+            assert service._validate_csv_headers(valid_headers) is True
 
         with allure.step("Test missing headers"):
             missing_headers = ["artist", "album"]  # Missing 'year'
             with pytest.raises(ValueError, match="missing required headers"):
-                service._validate_csv_headers(missing_headers)  # noqa: SLF001
+                service._validate_csv_headers(missing_headers)
 
         with allure.step("Test no headers"), pytest.raises(ValueError, match="has no headers"):
-            service._validate_csv_headers(None)  # noqa: SLF001
+            service._validate_csv_headers(None)
 
         with allure.step("Test extra headers (should still be valid)"):
             extra_headers = ["artist", "album", "year", "extra_field"]
-            assert service._validate_csv_headers(extra_headers) is True  # noqa: SLF001
+            assert service._validate_csv_headers(extra_headers) is True
 
     @allure.story("CSV Processing")
     @allure.title("Should process valid CSV rows")
@@ -322,7 +322,7 @@ class TestAlbumCacheService:
 
         with allure.step("Process valid row"):
             row = {"artist": "The Doors", "album": "L.A. Woman", "year": "1971"}
-            service._process_csv_row(row, album_data)  # noqa: SLF001
+            service._process_csv_row(row, album_data)
 
         with allure.step("Verify data was added"):
             assert len(album_data) == 1
@@ -342,12 +342,12 @@ class TestAlbumCacheService:
 
         with allure.step("Process row with empty fields"):
             row = {"artist": "", "album": "Album", "year": "1999"}
-            service._process_csv_row(row, album_data)  # noqa: SLF001
+            service._process_csv_row(row, album_data)
             assert not album_data
 
         with allure.step("Process row with missing field"):
             row = {"artist": "Artist", "album": "Album"}  # Missing 'year'
-            service._process_csv_row(row, album_data)  # noqa: SLF001
+            service._process_csv_row(row, album_data)
             assert not album_data
 
     @allure.story("CSV Processing")
@@ -366,7 +366,7 @@ class TestAlbumCacheService:
                 temp_path = tmp_file.name
 
             try:
-                AlbumCacheService._write_csv_data(temp_path, items)  # noqa: SLF001
+                AlbumCacheService._write_csv_data(temp_path, items)
 
                 with allure.step("Verify file contents"), Path(temp_path).open(encoding="utf-8") as f:
                     reader = csv.reader(f)
@@ -432,6 +432,42 @@ class TestAlbumCacheService:
         with allure.step("Verify logger captured exception"):
             logger_mock = cast(MagicMock, service.logger)
             logger_mock.exception.assert_called()
+
+    @allure.story("Error Handling")
+    @allure.title("Should clean up temp file when replace fails")
+    @allure.description("Test that temp file is deleted when atomic replace fails")
+    @pytest.mark.asyncio
+    async def test_temp_file_cleanup_on_replace_failure(self, tmp_path: Path) -> None:
+        """Test temp file is cleaned up when replace operation fails."""
+        cache_path = tmp_path / "album_years.csv"
+        service = TestAlbumCacheService.create_service({"album_years_cache_file": str(cache_path)})
+        await service.initialize()
+
+        with allure.step("Populate cache"):
+            await service.store_album_year("Artist", "Album", "2023")
+
+        with allure.step("Mock replace failure after successful temp file creation"):
+            # Track temp file path
+            created_temp_path: str | None = None
+            original_mkstemp = tempfile.mkstemp
+
+            def tracking_mkstemp(*args: Any, **kwargs: Any) -> tuple[int, str]:
+                nonlocal created_temp_path
+                fd, path = original_mkstemp(*args, **kwargs)
+                created_temp_path = path
+                return fd, path
+
+            with (
+                patch("tempfile.mkstemp", side_effect=tracking_mkstemp),
+                patch.object(Path, "replace", side_effect=OSError("Replace failed")),
+                patch("src.core.logger.ensure_directory"),
+                pytest.raises(OSError, match="Replace failed"),
+            ):
+                await service.save_to_disk()
+
+        with allure.step("Verify temp file was cleaned up"):
+            assert created_temp_path is not None
+            assert not Path(created_temp_path).exists()
 
     @allure.story("Error Handling")
     @allure.title("Should handle load errors gracefully")

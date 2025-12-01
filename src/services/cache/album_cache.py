@@ -278,15 +278,24 @@ class AlbumCacheService:
         dir_name = file_path_obj.parent
 
         # Write to temp file first, then atomically replace
-        fd, temp_path = tempfile.mkstemp(suffix=".csv", dir=dir_name)
+        fd, temp_path = tempfile.mkstemp(suffix=".csv", dir=str(dir_name))
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as file:
-                writer = csv.writer(file)
+            # Guard against fdopen failures so we don't leak the descriptor
+            try:
+                file_obj = os.fdopen(fd, "w", encoding="utf-8", newline="")
+            except BaseException:
+                # fdopen takes ownership only on success; close explicitly on failure
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+
+            with file_obj:
+                writer = csv.writer(file_obj)
                 writer.writerow(["artist", "album", "year", "timestamp"])
                 for item in items:
                     writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
             # Atomic replace - if this fails, original file is untouched
-            Path(temp_path).replace(file_path)
+            Path(temp_path).replace(file_path_obj)
         except BaseException:
             # Clean up temp file on any error
             with contextlib.suppress(OSError):
