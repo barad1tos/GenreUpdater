@@ -84,6 +84,9 @@ async def run_full_resync(
         # Perform full synchronization
         csv_path = get_full_log_path(config, "csv_output_file", "csv/track_list.csv")
 
+        # Ensure the directory for the CSV file exists
+        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+
         console_logger.info("💾 Synchronizing with database: %s", csv_path)
 
         await sync_track_list_with_current(
