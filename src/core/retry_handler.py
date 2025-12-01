@@ -61,7 +61,7 @@ class RetryPolicy:
     base_delay_seconds: float = 1.0
     max_delay_seconds: float = 60.0
     exponential_base: float = 2.0
-    jitter_range: float = 0.1  # �10% randomization
+    jitter_range: float = 0.1  # +/-10% randomization
     operation_timeout_seconds: float = 300.0  # 5 minutes total timeout
 
 

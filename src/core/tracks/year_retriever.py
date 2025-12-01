@@ -193,8 +193,9 @@ class YearRetriever:
             self.console_logger.info("Starting album year updates (force=%s)", force)
             self._last_updated_tracks = []
 
-            # Initialize external API service if needed
-            if not hasattr(self.external_api, "_initialized"):
+            # Initialize external API service if not already initialized
+            # Note: initialize() is idempotent - safe to call multiple times
+            if not getattr(self.external_api, "_initialized", False):
                 await self.external_api.initialize()
 
             # Run the update logic with force flag
