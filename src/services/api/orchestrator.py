@@ -1179,10 +1179,16 @@ class ExternalApiOrchestrator:
         str_result = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
 
         # Convert string years to integers to match protocol
-        start_year = int(str_result[0]) if str_result[0] else None
-        end_year = int(str_result[1]) if str_result[1] else None
+        def safe_int(val: str | None) -> int | None:
+            """Convert string to int, returning None for invalid or empty values."""
+            if not val:
+                return None
+            try:
+                return int(val)
+            except ValueError:
+                return None
 
-        return start_year, end_year
+        return safe_int(str_result[0]), safe_int(str_result[1])
 
     async def get_year_from_discogs(
         self,

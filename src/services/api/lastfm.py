@@ -298,7 +298,7 @@ class LastFmClient(BaseApiClient):
                 return None
 
             if "album" in data and isinstance(data["album"], dict):
-                return cast("LastFmAlbum", data["album"])
+                return cast(LastFmAlbum, data["album"])
 
         except (OSError, ValueError, KeyError, TypeError):
             self.error_logger.exception("Error fetching from Last.fm")
@@ -424,7 +424,7 @@ class LastFmClient(BaseApiClient):
                 return None
 
             if "artist" in data and isinstance(data["artist"], dict):
-                return cast("LastFmArtist", data["artist"])
+                return cast(LastFmArtist, data["artist"])
 
         except (OSError, ValueError, KeyError, TypeError):
             self.error_logger.exception("Error fetching artist from Last.fm")

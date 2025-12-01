@@ -283,7 +283,7 @@ class AppleMusicClient:
                 "label": result.get("copyright") or None,
                 "catalog_number": None,  # iTunes doesn't provide catalog numbers
                 "barcode": None,  # iTunes doesn't provide barcodes
-                "disambiguation": result.get("collectionCensoredName", ""),
+                "disambiguation": result.get("collectionCensoredName") or None,
                 "source": "itunes",
             }
 

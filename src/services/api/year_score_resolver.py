@@ -79,8 +79,17 @@ class YearScoreResolver:
         self, year_scores: defaultdict[str, list[int]]
     ) -> tuple[str, bool]:
         """Select the best year from aggregated scores and determine if definitive."""
+        if not year_scores:
+            self.console_logger.warning("No year scores to evaluate")
+            return "", False
+
         final_year_scores = self._compute_final_year_scores(year_scores)
         sorted_years = self._sort_years_by_score(final_year_scores)
+
+        if not sorted_years:
+            self.console_logger.warning("No valid years after score computation")
+            return "", False
+
         self._log_ranked_years(sorted_years)
 
         best_year, best_score, best_year_is_future = self._determine_best_year_candidate(

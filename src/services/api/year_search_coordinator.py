@@ -332,7 +332,7 @@ class YearSearchCoordinator:
         """Process results from concurrent API tasks."""
         all_releases: list[ScoredRelease] = []
 
-        for api_name, result in zip(api_order, results, strict=False):
+        for api_name, result in zip(api_order, results, strict=True):
             if isinstance(result, BaseException):
                 self._log_api_error(api_name, log_artist, log_album, result)
             elif result:

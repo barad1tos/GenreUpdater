@@ -658,7 +658,7 @@ class MusicBrainzClient(BaseApiClient):
         for info in label_info:
             label = info.get("label")
             if label and "name" in label and label["name"]:
-                return cast("str", label["name"])
+                return cast(str, label["name"])
 
         return None
 

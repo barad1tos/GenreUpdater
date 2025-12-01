@@ -478,6 +478,7 @@ class ReleaseScorer:
         end_year: int | None = self.artist_period_context.get("end_year")
 
         # Penalty if the year is before the artist's start (allow 1-year grace)
+        # Config values are expected to be negative (per schema Field(le=0))
         if start_year and year < start_year - 1:
             years_before = start_year - year
             penalty_val = min(50, 5 + (years_before - 1) * 5)
@@ -531,6 +532,11 @@ class ReleaseScorer:
         scoring_cfg = self.scoring_config
         release_country = (release.get("country") or "").lower()
         artist_region_normalized = (artist_region or "").lower()
+
+        # Normalize equivalent country codes (UK/GB are the same)
+        country_aliases = {"uk": "gb"}
+        release_country = country_aliases.get(release_country, release_country)
+        artist_region_normalized = country_aliases.get(artist_region_normalized, artist_region_normalized)
 
         if not artist_region_normalized or not release_country:
             return 0
