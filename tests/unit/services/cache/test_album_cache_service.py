@@ -423,7 +423,7 @@ class TestAlbumCacheService:
 
         with (
             allure.step("Mock save failure"),
-            patch("pathlib.Path.open", side_effect=OSError("Disk full")),
+            patch("tempfile.mkstemp", side_effect=OSError("Disk full")),
             patch("src.core.logger.ensure_directory"),
             pytest.raises(OSError, match="Disk full"),
         ):

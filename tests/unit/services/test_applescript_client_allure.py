@@ -466,7 +466,8 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         with allure.step("Test sanitization of special characters"):
             # Test escaping quotes
             assert sanitizer.sanitize_string('Test "quoted" string') == 'Test \\"quoted\\" string'
-            assert sanitizer.sanitize_string("Test 'single' quote") == "Test \\'single\\' quote"
+            # Single quotes don't need escaping in AppleScript double-quoted strings
+            assert sanitizer.sanitize_string("Test 'single' quote") == "Test 'single' quote"
 
             # Test escaping backslashes
             assert sanitizer.sanitize_string("Test\\backslash") == "Test\\\\backslash"
