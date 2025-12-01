@@ -520,10 +520,14 @@ class MusicUpdater:
             "Test mode: fetching tracks only for test artists: %s",
             list(self.dry_run_test_artists),
         )
-        collected_tracks: list[TrackDict] = []
+        # Use dict to deduplicate by track ID (handles collaborations appearing for multiple artists)
+        unique_tracks: dict[str, TrackDict] = {}
         for artist in self.dry_run_test_artists:
             artist_tracks = await self.track_processor.fetch_tracks_async(artist=artist)
-            collected_tracks.extend(artist_tracks)
+            for track in artist_tracks:
+                if track_id := track.get("id"):
+                    unique_tracks[str(track_id)] = track
+        collected_tracks = list(unique_tracks.values())
         self.snapshot_manager.set_snapshot(collected_tracks)
         return collected_tracks
 
