@@ -370,6 +370,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
         if not track_ids:
             return []
 
+        if batch_size <= 0:
+            self.error_logger.error("Invalid batch_size: %d, must be positive", batch_size)
+            return []
+
         if timeout is None:
             timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
 
@@ -448,6 +452,12 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     "new_year": fields[10],
                 }
                 tracks.append(track)
+            else:
+                logging.warning(
+                    "Skipping line with insufficient fields (%d < 11): %s",
+                    len(fields),
+                    line[:100] if len(line) > 100 else line,
+                )
 
         return tracks
 

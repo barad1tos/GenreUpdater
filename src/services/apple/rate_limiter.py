@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from typing import Any
 
 
@@ -35,7 +36,7 @@ class EnhancedRateLimiter:
 
         self.requests_per_window = requests_per_window
         self.window_size = window_size
-        self.request_timestamps: list[float] = []
+        self.request_timestamps: deque[float] = deque()
         self.semaphore: asyncio.Semaphore | None = None
         self.max_concurrent = max_concurrent
         self.logger = logger or logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class EnhancedRateLimiter:
     async def _wait_if_needed(self) -> float:
         now = time.monotonic()
         while self.request_timestamps and now - self.request_timestamps[0] > self.window_size:
-            self.request_timestamps.pop(0)
+            self.request_timestamps.popleft()
         if len(self.request_timestamps) >= self.requests_per_window:
             oldest_timestamp = self.request_timestamps[0]
             wait_duration = (oldest_timestamp + self.window_size) - now
@@ -88,7 +89,7 @@ class EnhancedRateLimiter:
     def get_stats(self) -> dict[str, Any]:
         """Get statistics about rate limiter usage."""
         now = time.monotonic()
-        self.request_timestamps = [ts for ts in self.request_timestamps if now - ts <= self.window_size]
+        self.request_timestamps = deque(ts for ts in self.request_timestamps if now - ts <= self.window_size)
         return {
             "total_requests": self.total_requests,
             "total_wait_time": self.total_wait_time,

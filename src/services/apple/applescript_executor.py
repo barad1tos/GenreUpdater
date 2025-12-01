@@ -248,8 +248,8 @@ class AppleScriptExecutor:
 
         # Check for complex patterns that might cause escaping issues
         complex_patterns = [
-            r"\"",  # Escaped quotes
-            r"\\",  # Escaped backslashes
+            r'\\"',  # Escaped quotes (literal \")
+            r"\\\\",  # Escaped backslashes (literal \\)
             r"\n",  # Newlines in strings
             r"\t",  # Tabs
             r"[^\x20-\x7E]",  # Non-ASCII characters
@@ -302,7 +302,7 @@ class AppleScriptExecutor:
             temp_filename = f"temp_script_{uuid.uuid4().hex}.applescript"
             temp_file_path = str(Path(self.apple_scripts_directory) / temp_filename)
             # Write the script content asynchronously using an executor
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
                 AppleScriptFileValidator.write_temp_file_sync,
