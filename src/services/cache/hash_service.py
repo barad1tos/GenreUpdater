@@ -71,14 +71,8 @@ class UnifiedHashService:
             Non-JSON-serializable dict values are converted to their string representation.
         """
         # Handle different data types consistently (including nested dicts)
-        if isinstance(data, dict):
-            try:
-                key_string = json.dumps(data, sort_keys=True)
-            except TypeError:
-                # Fallback for non-serializable values (e.g., datetime, Path, custom objects)
-                key_string = str(sorted(data.items()))
-        else:
-            key_string = str(data)
+        # Using default=str ensures non-serializable values (datetime, Path, etc.) are converted
+        key_string = json.dumps(data, sort_keys=True, default=str) if isinstance(data, dict) else str(data)
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod
@@ -97,11 +91,8 @@ class UnifiedHashService:
         """
 
         def safe_serialize(obj: Any) -> str:
-            """Serialize object to JSON, falling back to str() if not serializable."""
-            try:
-                return json.dumps(obj, sort_keys=True)
-            except TypeError:
-                return str(obj)
+            """Serialize object to JSON, with str() fallback for non-serializable types."""
+            return json.dumps(obj, sort_keys=True, default=str)
 
         # Use json.dumps for stable serialization, fallback to str() if not serializable
         args_string = "|".join(safe_serialize(arg) for arg in args)
