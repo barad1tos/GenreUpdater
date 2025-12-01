@@ -104,7 +104,7 @@ class TestInitializationErrors:
             console_logger=console_logger,
             error_logger=error_logger,
         )
-        with pytest.raises(FileNotFoundError, match="does not exist"):
+        with pytest.raises(FileNotFoundError, match="not accessible"):
             await client.initialize()
 
     @pytest.mark.asyncio

@@ -454,7 +454,7 @@ class MusicUpdater:
             self.console_logger.info("Snapshot invalid or expired, skipping Smart Delta")
             return None
 
-        self.console_logger.info("🔍 Attempting Smart Delta approach...")
+        self.console_logger.info("Attempting Smart Delta approach...")
 
         result: list[TrackDict] | None = None
         try:
@@ -469,12 +469,12 @@ class MusicUpdater:
                 return None
 
             if delta.is_empty():
-                self.console_logger.info("✓ Smart Delta: No changes detected, reusing snapshot")
-                self.console_logger.info("✓ Loaded %d tracks from snapshot", len(snapshot_tracks))
+                self.console_logger.info("Smart Delta: No changes detected, reusing snapshot")
+                self.console_logger.info("Loaded %d tracks from snapshot", len(snapshot_tracks))
                 result = snapshot_tracks
             else:
                 self.console_logger.info(
-                    "✓ Smart Delta detected changes: %d new, %d updated, %d removed",
+                    "Smart Delta detected: %d new, %d updated, %d removed",
                     len(delta.new_ids),
                     len(delta.updated_ids),
                     len(delta.removed_ids),
@@ -609,7 +609,7 @@ class MusicUpdater:
         )
 
         if changes:
-            self.console_logger.info("✅ Saved %d changes to changes report", len(changes))
+            self.console_logger.info("Saved %d changes to report", len(changes))
 
             # Validation: log change breakdown by type
             change_types: dict[str, int] = {}

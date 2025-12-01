@@ -93,7 +93,7 @@ class AppleScriptFileValidator:
 
         # Reject symlinks to prevent path traversal attacks
         if script_file.is_symlink():
-            self.error_logger.error("❌ Symlinks not allowed: %s", script_path)
+            self.error_logger.error("Symlinks not allowed: %s", script_path)
             return False
 
         # Resolve the path and check for symlinks in parent directories
@@ -106,26 +106,26 @@ class AppleScriptFileValidator:
                     resolved_path.relative_to(allowed_dir)
                 except ValueError:
                     self.error_logger.error(
-                        "❌ Resolved path escapes allowed directory: %s -> %s",
+                        "Resolved path escapes allowed directory: %s -> %s",
                         script_path,
                         resolved_path,
                     )
                     return False
         except (OSError, ValueError) as e:
-            self.error_logger.error("❌ Could not resolve script path %s: %s", script_path, e)
+            self.error_logger.error("Could not resolve script path %s: %s", script_path, e)
             return False
 
         # Check if file exists (without following symlinks)
         if not script_file.is_file():
-            self.error_logger.error("❌ AppleScript file does not exist: %s", script_path)
+            self.error_logger.error("AppleScript file does not exist: %s", script_path)
 
             # List directory contents for debugging
             try:
                 if self.apple_scripts_directory:
                     directory_contents = [f.name for f in Path(self.apple_scripts_directory).iterdir()]
-                    self.console_logger.debug("📂 Directory contents: %s", directory_contents)
+                    self.console_logger.debug("Directory contents: %s", directory_contents)
             except OSError as e:
-                self.console_logger.exception("⚠️ Could not list directory contents: %s", e)
+                self.console_logger.exception("Could not list directory contents: %s", e)
             return False
 
         # Check if the file is readable by actually trying to open it
@@ -135,7 +135,7 @@ class AppleScriptFileValidator:
             with script_file.open("rb") as f:
                 f.read(1)  # Read one byte to verify access
         except (OSError, PermissionError) as e:
-            self.error_logger.error("❌ AppleScript file is not readable: %s (%s)", script_path, e)
+            self.error_logger.error("AppleScript file is not readable: %s (%s)", script_path, e)
             return False
 
         return True

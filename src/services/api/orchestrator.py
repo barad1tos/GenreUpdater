@@ -295,7 +295,7 @@ class ExternalApiOrchestrator:
                 "MusicBrainz API requires valid contact information for compliance.",
             )
             self.console_logger.warning(
-                "⚠️  Missing contact email - using placeholder. MusicBrainz API requests may be rate-limited or rejected.",
+                "Missing contact email - using placeholder. MusicBrainz API may reject or rate-limit requests.",
             )
             self.contact_email = "no-email-provided@example.com"
 
@@ -385,11 +385,9 @@ class ExternalApiOrchestrator:
         assert self.secure_config is not None  # Caller ensures this
         try:
             encrypted_token = self.secure_config.encrypt_token(raw_token, key)
-            self.console_logger.info(
-                "Encrypted %s token for secure storage. Consider updating config to use encrypted value: %s",
-                key,
-                encrypted_token,
-            )
+            self.console_logger.info("Token '%s' encrypted. Update config.yaml with the encrypted value.", key)
+            # Store encrypted value for manual config update (visible only in debug logs)
+            self.console_logger.debug("Encrypted value for %s: %s", key, encrypted_token)
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to encrypt %s: %s", key, e)
 
@@ -920,23 +918,9 @@ class ExternalApiOrchestrator:
         if not debug.api:
             return
 
-        script_emoji_map = {
-            ScriptType.CYRILLIC: "🇺🇦",
-            ScriptType.CHINESE: "🇨🇳",
-            ScriptType.JAPANESE: "🇯🇵",
-            ScriptType.KOREAN: "🇰🇷",
-            ScriptType.ARABIC: "🇸🇦",
-            ScriptType.HEBREW: "🇮🇱",
-            ScriptType.GREEK: "🇬🇷",
-            ScriptType.THAI: "🇹🇭",
-            ScriptType.DEVANAGARI: "🇮🇳",
-            ScriptType.MIXED: "🌍",
-        }
-
-        emoji = script_emoji_map.get(script_type, "🌍")
-        self.console_logger.info(f"{emoji} Processing {script_type.value} artist")
+        self.console_logger.info("Processing %s artist", script_type.value)
         self.console_logger.info(
-            f"{emoji} Token status: Discogs=%s, LastFM=%s",
+            "Token status: Discogs=%s, LastFM=%s",
             "LOADED" if self.discogs_token else "MISSING",
             "LOADED" if self.lastfm_api_key else "MISSING",
         )
@@ -947,7 +931,7 @@ class ExternalApiOrchestrator:
         default_config = script_api_priorities.get("default", {})
         script_priorities = script_api_priorities.get(script_type.value, default_config)
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
-        self.console_logger.info(f"{emoji} Primary APIs for {script_type.value}: {primary_apis}")
+        self.console_logger.info("Primary APIs for %s: %s", script_type.value, primary_apis)
 
     def _log_search_initialization(
         self, log_artist: str, log_album: str, current_library_year: str | None, artist_norm: str, album_norm: str

@@ -209,7 +209,7 @@ class LibrarySnapshotService:
         library_unchanged = library_mtime <= metadata.library_mtime
         if library_unchanged:
             self.logger.info(
-                "✓ Library unchanged since snapshot creation; using cached snapshot (age: %s)",
+                "Library unchanged since snapshot; using cached snapshot (age: %s)",
                 _now() - metadata.last_full_scan,
             )
         else:
@@ -317,19 +317,19 @@ class LibrarySnapshotService:
             TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
 
         """
-        self.logger.info("🔍 Computing Smart Delta...")
+        self.logger.info("Computing Smart Delta...")
 
         # Load snapshot
         snapshot_tracks = await self.load_snapshot()
         if not snapshot_tracks:
-            self.logger.warning("⚠️  No snapshot available for Smart Delta")
+            self.logger.warning("No snapshot available for Smart Delta")
             return None
 
         snapshot_map = {str(track.id): track for track in snapshot_tracks}
         track_ids = list(snapshot_map.keys())
 
         self.logger.info(
-            "✓ Loaded snapshot with %d tracks, fetching current metadata...",
+            "Loaded snapshot with %d tracks, fetching current metadata...",
             len(track_ids),
         )
 
@@ -357,16 +357,16 @@ class LibrarySnapshotService:
                 )
                 current_tracks.append(track_dict)
             except (KeyError, ValueError) as exc:
-                self.logger.warning("⚠️  Failed to parse track %s: %s", raw_track.get("id"), exc)
+                self.logger.warning("Failed to parse track %s: %s", raw_track.get("id"), exc)
                 continue
 
-        self.logger.info("✓ Fetched %d tracks from Music.app", len(current_tracks))
+        self.logger.info("Fetched %d tracks from Music.app", len(current_tracks))
 
         # Compute delta
         delta = compute_track_delta(current_tracks, snapshot_map)
 
         self.logger.info(
-            "✓ Smart Delta computed: %d new, %d updated, %d removed",
+            "Smart Delta: %d new, %d updated, %d removed",
             len(delta.new_ids),
             len(delta.updated_ids),
             len(delta.removed_ids),

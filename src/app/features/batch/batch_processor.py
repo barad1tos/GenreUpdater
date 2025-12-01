@@ -138,14 +138,13 @@ class BatchProcessor:
         self.console_logger.info("✅ Successful: %d", successful)
 
         if failed:
-            self.console_logger.error("❌ Failed: %d", failed)
+            self.console_logger.error("Failed: %d", failed)
             for artist in results["failed"]:
                 self.console_logger.error("  - %s", artist)
         if skipped:
-            self.console_logger.warning("⏭️  Skipped: %d", skipped)
+            self.console_logger.warning("Skipped: %d", skipped)
             for artist in results["skipped"]:
                 self.console_logger.warning("  - %s", artist)
-            self.console_logger.warning("⏭️  Skipped: %d", skipped)
 
         # Success rate
         if total > 0:

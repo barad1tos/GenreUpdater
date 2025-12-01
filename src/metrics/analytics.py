@@ -132,7 +132,7 @@ class Analytics:
         # Performance options
         self.enable_gc_collect = config.get("analytics", {}).get("enable_gc_collect", True)
 
-        self.console_logger.debug(f"📊 Analytics #{self.instance_id} initialised")
+        self.console_logger.debug(f"Analytics #{self.instance_id} initialised")
 
     # --- Public decorator helpers ---
     def track(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -262,7 +262,7 @@ class Analytics:
         except RuntimeError as e:
             if "cannot be called from a running event loop" in str(e):
                 self.console_logger.warning(
-                    f"⚠️ Cannot track {func.__name__} with asyncio.run() from within event loop; "
+                    f"Cannot track {func.__name__} with asyncio.run() from within event loop; "
                     "executing without tracking"
                 )
                 # Execute function directly without tracking to avoid blocking
@@ -312,7 +312,7 @@ class Analytics:
             success = True
             return result
         except Exception as exc:
-            self.error_logger.exception(f"❌ {func_name}: {exc}")
+            self.error_logger.exception(f"{func_name}: {exc}")
             raise
         finally:
             func_end = time.time()
@@ -351,7 +351,7 @@ class Analytics:
         if 0 < self.max_events <= len(self.events):
             prune = max(5, int(self.max_events * 0.1))
             self.events = self.events[prune:]
-            self.console_logger.debug(f"📊 Pruned {prune} old events")
+            self.console_logger.debug(f"Pruned {prune} old events")
 
         # Timestamps
         if self.compact_time:
@@ -435,13 +435,13 @@ class Analytics:
             return
         stats = self.get_stats()
         self.console_logger.info(
-            f"📊 Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
+            f"Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
         )
 
         dc = stats["duration_counts"]
         total = sum(dc.values()) or 1
         self.console_logger.info(
-            f"📊 Performance: "
+            f"Performance: "
             f"{self._FAST} {dc['fast'] / total * 100:.0f}% | "
             f"{self._MEDIUM} {dc['medium'] / total * 100:.0f}% | "
             f"{self._SLOW} {dc['slow'] / total * 100:.0f}%",
@@ -467,7 +467,7 @@ class Analytics:
 
         if self.compact_time:
             self.console_logger.warning(
-                "⚠️ Age-based pruning not supported in compact_time mode; using count-based pruning"
+                "Age-based pruning not supported in compact_time mode; using count-based pruning"
             )
             prune = min(len(self.events) // 2, 1_000)
             self.events = self.events[prune:]
@@ -491,7 +491,7 @@ class Analytics:
             num_dropped = len(other.events) - num_to_add
             if num_dropped > 0:
                 self.console_logger.warning(
-                    f"📊 Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
+                    f"Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
                 )
         else:
             to_add = other.events
@@ -532,7 +532,7 @@ class Analytics:
             return
 
         if not self.events and not self.call_counts:
-            self.console_logger.warning("📊 No analytics data; skipping report")
+            self.console_logger.warning("No analytics data; skipping report")
             return
 
         self.log_summary()

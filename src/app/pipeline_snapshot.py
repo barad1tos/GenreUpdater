@@ -100,7 +100,7 @@ class PipelineSnapshotManager:
                 processed_track_ids=[str(t.id) for t in self._tracks_snapshot if t.id],
             )
             self._console_logger.info(
-                "✓ Persisted pipeline snapshot to disk (%d tracks)",
+                "Persisted pipeline snapshot to disk (%d tracks)",
                 len(self._tracks_snapshot),
             )
             return True
@@ -159,7 +159,7 @@ class PipelineSnapshotManager:
                 seen_ids.add(track_id)
 
         self._console_logger.info(
-            "✓ Smart Delta merged snapshot with %d updated, %d new, %d removed tracks",
+            "Smart Delta merged: %d updated, %d new, %d removed tracks",
             len(changed_ids),
             len(new_ids),
             len(removed_ids),

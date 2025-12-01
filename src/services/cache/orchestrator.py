@@ -261,7 +261,7 @@ class CacheOrchestrator(CacheServiceProtocol):
             await self.album_service.invalidate_album(artist, album)
             await self.api_service.invalidate_for_album(artist, album)
 
-            self.logger.info("Invalidated caches for track: %s - %s", artist, album)
+            self.logger.debug("Invalidated caches for track: %s - %s", artist, album)
 
             cache_event = CacheEvent(
                 event_type=CacheEventType.TRACK_MODIFIED,

@@ -19,6 +19,7 @@ import yaml
 
 from src.core.core_config import load_config
 from src.core.dry_run import DryRunAppleScriptClient
+from src.core.logger import shorten_path
 from src.core.models.album_type import configure_patterns as configure_album_patterns
 from src.metrics.analytics import Analytics, LoggerContainer
 
@@ -478,26 +479,22 @@ class DependencyContainer:
         try:
             scripts_path = Path(scripts_dir_str)
             if not scripts_path.is_dir():
-                self._console_logger.error(
-                    f"AppleScripts directory does not exist: {scripts_dir_str}",
-                )
+                short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+                self._console_logger.error("AppleScripts directory does not exist: %s", short_path)
                 return
         except PermissionError as exc:
-            self._console_logger.exception(
-                f"Permission denied when accessing AppleScripts directory: {scripts_dir_str}. Error: {exc}",
-            )
+            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            self._console_logger.exception("Permission denied for AppleScripts directory: %s. Error: %s", short_path, exc)
             return
         except Exception as exc:
-            self._console_logger.exception(
-                f"Unexpected error when checking AppleScripts directory: {scripts_dir_str}. Error: {exc}",
-            )
+            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            self._console_logger.exception("Error checking AppleScripts directory: %s. Error: %s", short_path, exc)
             return
 
-        # Log the directory being used
+        # Log the directory being used with shortened path
+        short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
         run_type = "DRY RUN - " if is_dry_run else ""
-        self._console_logger.info(
-            f"{run_type}Using AppleScripts directory: {scripts_dir_str}",
-        )
+        self._console_logger.info("%sAppleScripts: %s", run_type, short_path)
 
     def _load_config(self) -> dict[str, Any]:
         """Load and validate application configuration.
@@ -512,14 +509,16 @@ class DependencyContainer:
 
         """
         try:
-            self._console_logger.info(f"Loading configuration from {self._config_path}")
             config = load_config(self._config_path)
-            self._console_logger.info("Configuration loaded successfully")
+            short_path = shorten_path(self._config_path, config, self._error_logger)
+            self._console_logger.info("Configuration: %s", short_path)
             return config
         except FileNotFoundError as e:
-            self._error_logger.exception(f"Configuration file not found: {self._config_path}")
+            short_path = Path(self._config_path).name
+            self._error_logger.exception("Configuration file not found: %s", short_path)
             msg = f"Configuration file not found: {self._config_path}"
             raise FileNotFoundError(msg) from e
         except yaml.YAMLError as e:
-            self._error_logger.exception(f"Invalid YAML in config file {self._config_path}: {e}")
+            short_path = Path(self._config_path).name
+            self._error_logger.exception("Invalid YAML in config file %s: %s", short_path, e)
             raise

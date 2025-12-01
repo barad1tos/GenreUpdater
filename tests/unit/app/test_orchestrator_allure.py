@@ -386,7 +386,7 @@ class TestOrchestratorAllure:
         with allure.step("Verify key rotation steps executed"):
             mock_secure_config.rotate_key.assert_called_once_with(_TEST_PASSWORD)
             console_info_mock = cast(Mock, orchestrator.console_logger.info)
-            console_info_mock.assert_any_call("🎉 Encryption key rotation completed (placeholder mode)")
+            console_info_mock.assert_any_call("✅ Encryption key rotation completed (placeholder mode)")
             allure.attach("Key rotation executed successfully", "Result", allure.attachment_type.TEXT)
 
     @allure.story("Key Rotation")

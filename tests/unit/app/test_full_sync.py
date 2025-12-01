@@ -240,4 +240,4 @@ class TestRunFullResync:
             )
 
             assert "Found 2 tracks" in caplog.text
-            assert "synchronized: 2 tracks" in caplog.text
+            assert "Full resync completed: 2 tracks" in caplog.text
