@@ -909,3 +909,61 @@ Track 3|Artist 3|Album 3|2022|Pop"""
                 pytest.fail("Music.app operations should be allowed when allow_music_app=True")
 
         allure.attach("Reserved words validated", "Validation Result", allure.attachment_type.TEXT)
+
+    @allure.story("Security Validation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Should use word boundaries for reserved word matching")
+    @allure.description("Test that reserved words use regex word boundaries to prevent false positives")
+    def test_reserved_words_word_boundary_matching(self) -> None:
+        """Test that reserved words are matched with word boundaries."""
+        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
+
+        with allure.step("Test standalone 'delete' raises error"), pytest.raises(AppleScriptSanitizationError, match="delete"):
+            sanitizer.validate_script_code("delete track", allow_music_app=False)
+
+        with allure.step("Test 'undelete' does NOT raise (substring contains 'delete')"):
+            # Should NOT raise - "undelete" contains "delete" but is not a standalone word
+            try:
+                sanitizer.validate_script_code("undelete operation", allow_music_app=False)
+            except AppleScriptSanitizationError as e:
+                if "delete" in str(e).lower():
+                    pytest.fail("'undelete' should not trigger 'delete' reserved word check")
+
+        with allure.step("Test 'nodelete' does NOT raise"):
+            try:
+                sanitizer.validate_script_code("nodelete flag enabled", allow_music_app=False)
+            except AppleScriptSanitizationError as e:
+                if "delete" in str(e).lower():
+                    pytest.fail("'nodelete' should not trigger 'delete' reserved word check")
+
+        with allure.step("Test 'deleted' does NOT raise"):
+            try:
+                sanitizer.validate_script_code("file was deleted yesterday", allow_music_app=False)
+            except AppleScriptSanitizationError as e:
+                if "delete" in str(e).lower():
+                    pytest.fail("'deleted' should not trigger 'delete' reserved word check")
+
+        allure.attach("Word boundary matching verified", "Result", allure.attachment_type.TEXT)
+
+    @allure.story("Security Validation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Should respect allow_music_app parameter")
+    @allure.description("Test that allow_music_app correctly filters Music.app operations")
+    def test_allow_music_app_parameter(self) -> None:
+        """Test allow_music_app parameter behavior."""
+        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
+
+        with allure.step("Test 'delete' blocked when allow_music_app=False"), pytest.raises(AppleScriptSanitizationError, match="delete"):
+            sanitizer.validate_script_code("delete track from playlist", allow_music_app=False)
+
+        with (
+            allure.step("Test 'delete' blocked when allow_music_app=True (not Music-specific)"),
+            pytest.raises(AppleScriptSanitizationError, match="delete"),
+        ):
+            # 'delete' is in APPLESCRIPT_RESERVED_WORDS but doesn't contain 'music'
+            sanitizer.validate_script_code("delete track from playlist", allow_music_app=True)
+
+        with allure.step("Test 'move' blocked regardless of allow_music_app"), pytest.raises(AppleScriptSanitizationError, match="move"):
+            sanitizer.validate_script_code("move file to folder", allow_music_app=True)
+
+        allure.attach("allow_music_app parameter verified", "Result", allure.attachment_type.TEXT)

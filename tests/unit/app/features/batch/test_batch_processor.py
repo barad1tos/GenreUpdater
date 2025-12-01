@@ -187,6 +187,34 @@ class TestProcessArtists:
         )
 
     @pytest.mark.asyncio
+    async def test_clean_does_not_use_force(
+        self, processor: BatchProcessor, mock_music_updater: MagicMock
+    ) -> None:
+        """operation='clean' should ignore force and only call run_clean_artist."""
+        await processor.process_artists(
+            ["Test Artist"], operation="clean", force=True
+        )
+
+        mock_music_updater.run_clean_artist.assert_called_once_with("Test Artist")
+        mock_music_updater.run_update_years.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_full_uses_force_for_years_only(
+        self, processor: BatchProcessor, mock_music_updater: MagicMock
+    ) -> None:
+        """operation='full' with force=True should pass force only to run_update_years."""
+        await processor.process_artists(
+            ["Test Artist"], operation="full", force=True
+        )
+
+        # run_clean_artist called without force
+        mock_music_updater.run_clean_artist.assert_called_once_with("Test Artist")
+        # run_update_years called with force=True
+        mock_music_updater.run_update_years.assert_called_once_with(
+            "Test Artist", True
+        )
+
+    @pytest.mark.asyncio
     async def test_cancelled_error_adds_remaining_to_skipped(
         self, processor: BatchProcessor, mock_music_updater: MagicMock
     ) -> None:

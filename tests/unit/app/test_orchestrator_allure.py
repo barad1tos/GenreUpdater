@@ -188,13 +188,13 @@ class TestOrchestratorAllure:
         with allure.step("Execute clean artist command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
-        with allure.step("Verify clean artist was called"):
+        with allure.step("Verify clean artist was called with only artist kwarg"):
             orchestrator.music_updater.run_clean_artist.assert_called_once()
             run_clean_artist_mock = orchestrator.music_updater.run_clean_artist
             clean_kwargs = run_clean_artist_mock.call_args.kwargs
-            assert clean_kwargs["artist"] == "Test Artist"
-            # Note: run_clean_artist no longer accepts _force parameter
-            allure.attach("Clean artist executed", "Command Result", allure.attachment_type.TEXT)
+            # run_clean_artist should only receive the artist kwarg and no force flag
+            assert clean_kwargs == {"artist": "Test Artist"}
+            allure.attach("Clean artist executed (no force)", "Command Result", allure.attachment_type.TEXT)
 
     @allure.story("Command Execution")
     @allure.severity(allure.severity_level.CRITICAL)

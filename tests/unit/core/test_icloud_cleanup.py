@@ -529,6 +529,56 @@ class TestCleanupICloudConflicts:
         assert renamed == 0
         assert conflict2.exists()
 
+    def test_respects_min_age_preserves_new_conflict(
+        self, temp_cache_dir: Path, mock_logger: MagicMock
+    ) -> None:
+        """Test that conflicts newer than min_age_seconds are preserved."""
+        base_file = temp_cache_dir / "data.json"
+        base_file.write_text("{}")
+
+        # Create a conflict file that is newer than the threshold
+        conflict = temp_cache_dir / "data 2.json"
+        conflict.write_text('{"conflict": true}')
+
+        now = time.time()
+        os.utime(conflict, (now, now))
+
+        # New file (younger than min_age_seconds) should be skipped
+        deleted, renamed = cleanup_icloud_conflicts(
+            base_file,
+            mock_logger,
+            min_age_seconds=60,
+        )
+        assert deleted == 0
+        assert renamed == 0
+        assert conflict.exists()
+
+    def test_respects_min_age_deletes_old_conflict(
+        self, temp_cache_dir: Path, mock_logger: MagicMock
+    ) -> None:
+        """Test that conflicts older than min_age_seconds are deleted."""
+        base_file = temp_cache_dir / "data.json"
+        base_file.write_text("{}")
+
+        # Create a conflict file
+        conflict = temp_cache_dir / "data 2.json"
+        conflict.write_text('{"conflict": true}')
+
+        # Age the conflict file beyond the threshold
+        now = time.time()
+        old_time = now - 120  # 2 minutes ago
+        os.utime(conflict, (old_time, old_time))
+
+        # Old conflict should now be cleaned up
+        deleted, renamed = cleanup_icloud_conflicts(
+            base_file,
+            mock_logger,
+            min_age_seconds=60,
+        )
+        assert deleted == 1
+        assert renamed == 0
+        assert not conflict.exists()
+
 
 class TestCleanupCacheDirectory:
     """Tests for cleanup_cache_directory function."""
