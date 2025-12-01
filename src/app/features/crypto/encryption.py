@@ -5,6 +5,7 @@ import binascii
 import contextlib
 import hashlib
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -318,9 +319,10 @@ class CryptographyManager:
 
         """
         try:
-            # Backup old key if requested
+            # Backup old key if requested (with timestamp to preserve history)
             if backup_old_key and self.key_file_path.exists():
-                backup_path = self.key_file_path.with_suffix(".key.backup")
+                timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+                backup_path = self.key_file_path.with_suffix(f".key.backup.{timestamp}")
                 backup_path.write_bytes(self.key_file_path.read_bytes())
                 self.logger.info("Backed up old key to %s", backup_path)
 
