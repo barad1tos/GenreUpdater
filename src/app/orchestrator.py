@@ -200,12 +200,13 @@ class Orchestrator:
             preserve_existing: If True and backup exists, create timestamped backup instead of overwriting
 
         """
-        backup_path: Path = source_path.with_suffix(suffix)
+        # Append suffix to full filename (preserves multi-dot names like config.prod.yaml)
+        backup_path: Path = source_path.parent / f"{source_path.name}{suffix}"
 
         # If preserving existing backups and file exists, use timestamped name
         if preserve_existing and backup_path.exists():
             timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-            backup_path = source_path.parent / f"{source_path.stem}_{timestamp}{suffix}"
+            backup_path = source_path.parent / f"{source_path.name}_{timestamp}{suffix}"
             self.console_logger.warning("⚠️  Previous backup exists, creating timestamped backup: %s", backup_path)
 
         try:
@@ -270,7 +271,7 @@ class Orchestrator:
         else:
             self.console_logger.info("  New password: [AUTO-GENERATED]")
 
-        self.console_logger.info("⚠️ Note: Security features are in placeholder mode")
+        self.console_logger.warning("⚠️ Note: Security features are in placeholder mode")
 
     def _run_rotate_encryption_keys(self, args: argparse.Namespace) -> None:
         """Rotate encryption keys and re-encrypt all tokens.
