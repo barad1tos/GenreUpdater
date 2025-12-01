@@ -331,16 +331,19 @@ class DatabaseVerifier:
         for i in range(0, len(tracks_to_verify), batch_size):
             batch: list[TrackDict] = tracks_to_verify[i : i + batch_size]
 
-            # Create verification tasks
-            tasks: list[tuple[str, Any]] = []
+            # Create verification tasks with track IDs
+            track_ids: list[str] = []
+            tasks: list[Any] = []
             for track in batch:
                 if track_id := str(track.get("id", "")):
-                    task = self._verify_track_exists(track_id)
-                    tasks.append((track_id, task))
+                    track_ids.append(track_id)
+                    tasks.append(self._verify_track_exists(track_id))
 
-            # Execute batch
-            for track_id, task in tasks:
-                exists: bool = await task
+            # Execute batch concurrently (AppleScriptClient semaphore limits actual concurrency)
+            results: list[bool] = await asyncio.gather(*tasks)
+
+            # Process results
+            for track_id, exists in zip(track_ids, results, strict=True):
                 if not exists:
                     invalid_tracks.append(track_id)
                     self.console_logger.info(
