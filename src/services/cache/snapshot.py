@@ -304,7 +304,8 @@ class LibrarySnapshotService:
 
         return datetime.fromtimestamp(stat_result.st_mtime)
 
-    def _parse_raw_track(self, raw_track: dict[str, Any]) -> TrackDict:
+    @staticmethod
+    def _parse_raw_track(raw_track: dict[str, Any]) -> TrackDict:
         """Parse raw track dict to TrackDict."""
         year_value = raw_track.get("year")
         return TrackDict(
@@ -322,11 +323,58 @@ class LibrarySnapshotService:
             last_modified=None,
         )
 
+    def _parse_fetch_tracks_output(self, raw_output: str) -> list[dict[str, str]]:
+        """Parse AppleScript fetch_tracks.scpt output into track dictionaries.
+
+        Args:
+            raw_output: Raw AppleScript output with ASCII 30/29 separators
+
+        Returns:
+            List of track dictionaries
+
+        """
+        field_separator = "\x1e"  # ASCII 30
+        line_separator = "\x1d"  # ASCII 29
+
+        tracks: list[dict[str, str]] = []
+        lines = raw_output.split(line_separator)
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            fields = line.split(field_separator)
+
+            # Expected fields: id, name, artist, album_artist, album, genre, date_added,
+            # track_status, year, release_year, new_year
+            if len(fields) >= 11:
+                track = {
+                    "id": fields[0],
+                    "name": fields[1],
+                    "artist": fields[2],
+                    "album_artist": fields[3],
+                    "album": fields[4],
+                    "genre": fields[5],
+                    "date_added": fields[6],
+                    "track_status": fields[7],
+                    "year": fields[8],
+                    "release_year": fields[9],
+                    "new_year": fields[10],
+                }
+                tracks.append(track)
+            else:
+                self.logger.warning(
+                    "Skipping line with insufficient fields (%d < 11): %s",
+                    len(fields),
+                    line[:100] if len(line) > 100 else line,
+                )
+
+        return tracks
+
     async def compute_smart_delta(
         self,
         applescript_client: AppleScriptClientProtocol,
         force: bool = False,
-        batch_size: int = 1000,
     ) -> TrackDelta | None:
         """Compute track delta using Hybrid Smart Delta approach.
 
@@ -342,7 +390,6 @@ class LibrarySnapshotService:
         Args:
             applescript_client: AppleScriptClient instance for fetching tracks
             force: CLI --force flag
-            batch_size: Number of track IDs to fetch per batch (unused in new implementation)
 
         Returns:
             TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
@@ -386,36 +433,13 @@ class LibrarySnapshotService:
         )
 
         # Updated detection depends on mode
-        updated_ids: list[str] = []
-
         if is_force:
-            # FORCE MODE: Fetch full library and compare metadata
-            self.logger.info("Force mode: fetching full library metadata...")
-            raw_tracks = await applescript_client.fetch_tracks()
-
-            if raw_tracks:
-                # Build map of current tracks
-                current_map: dict[str, TrackDict] = {}
-                for raw_track in raw_tracks:
-                    try:
-                        track_dict = self._parse_raw_track(raw_track)
-                        current_map[str(track_dict.id)] = track_dict
-                    except (KeyError, ValueError) as exc:
-                        self.logger.warning("Failed to parse track: %s", exc)
-
-                # Find updated tracks (exist in both, metadata changed)
-                for track_id in current_ids & snapshot_ids:
-                    if track_id in current_map and track_id in snapshot_map:
-                        if has_track_changed(current_map[track_id], snapshot_map[track_id]):
-                            updated_ids.append(track_id)
-
-                self.logger.info("Force scan found %d updated tracks", len(updated_ids))
-
-            # Update force scan timestamp
-            await self._update_force_scan_time()
+            updated_ids = await self._detect_updated_tracks(
+                applescript_client, current_ids, snapshot_ids, snapshot_map
+            )
         else:
-            # FAST MODE: Trust snapshot for existing tracks
             self.logger.info("Fast mode: skipping updated detection (trusting snapshot)")
+            updated_ids = []
 
         self.logger.info(
             "Smart Delta (%s): %d new, %d updated, %d removed",
@@ -426,6 +450,48 @@ class LibrarySnapshotService:
         )
 
         return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
+
+    async def _detect_updated_tracks(
+        self,
+        applescript_client: AppleScriptClientProtocol,
+        current_ids: set[str],
+        snapshot_ids: set[str],
+        snapshot_map: dict[str, TrackDict],
+    ) -> list[str]:
+        """Detect tracks with changed metadata (force mode only).
+
+        Fetches full library metadata and compares with snapshot.
+        """
+        self.logger.info("Force mode: fetching full library metadata...")
+        result = await applescript_client.run_script("fetch_tracks.scpt", arguments=["", ""])
+        raw_tracks = self._parse_fetch_tracks_output(result) if result else []
+
+        if not raw_tracks:
+            await self._update_force_scan_time()
+            return []
+
+        # Build map of current tracks
+        current_map: dict[str, TrackDict] = {}
+        for raw_track in raw_tracks:
+            try:
+                track_dict = self._parse_raw_track(raw_track)
+                current_map[str(track_dict.id)] = track_dict
+            except (KeyError, ValueError) as exc:
+                self.logger.warning("Failed to parse track: %s", exc)
+
+        # Find updated tracks (exist in both, metadata changed)
+        common_ids = current_ids & snapshot_ids
+        updated_ids = [
+            track_id
+            for track_id in common_ids
+            if track_id in current_map
+            and track_id in snapshot_map
+            and has_track_changed(current_map[track_id], snapshot_map[track_id])
+        ]
+        self.logger.info("Force scan found %d updated tracks", len(updated_ids))
+
+        await self._update_force_scan_time()
+        return updated_ids
 
     def is_enabled(self) -> bool:
         """Check whether snapshot caching is enabled."""

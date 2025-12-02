@@ -357,7 +357,7 @@ class MusicUpdater:
         self.snapshot_manager.reset()
 
         # Fetch tracks based on mode (test or normal)
-        tracks = await self._fetch_tracks_for_pipeline_mode()
+        tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
         if not tracks:
             self.console_logger.warning("No tracks found in Music.app")
             return
@@ -438,7 +438,7 @@ class MusicUpdater:
         return bool(self.dry_run_test_artists) and self.deps.dry_run
 
     # noinspection PyUnusedLocal
-    async def _try_smart_delta_fetch(self) -> list["TrackDict"] | None:
+    async def _try_smart_delta_fetch(self, force: bool = False) -> list["TrackDict"] | None:
         """Attempt to use Smart Delta to fetch only changed tracks."""
         snapshot_service = self.deps.library_snapshot_service
         ap_client = self.deps.ap_client
@@ -457,8 +457,7 @@ class MusicUpdater:
         try:
             delta = await snapshot_service.compute_smart_delta(
                 ap_client,
-                force=getattr(self.args, "force", False),
-                batch_size=1000,
+                force=force,
             )
             if delta is None:
                 self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
@@ -490,8 +489,11 @@ class MusicUpdater:
 
         return result
 
-    async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
+    async def _fetch_tracks_for_pipeline_mode(self, force: bool = False) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
+
+        Args:
+            force: Force full metadata scan in Smart Delta
 
         Returns:
             List of tracks to process
@@ -500,7 +502,7 @@ class MusicUpdater:
         # Fetch all tracks if not in test mode
         if not self.dry_run_test_artists:
             # Try Smart Delta first
-            smart_delta_tracks = await self._try_smart_delta_fetch()
+            smart_delta_tracks = await self._try_smart_delta_fetch(force=force)
             if smart_delta_tracks is not None:
                 self.snapshot_manager.set_snapshot(smart_delta_tracks)
                 return smart_delta_tracks
