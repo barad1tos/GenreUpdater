@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from src.core.models.track_models import CachedApiResult, TrackDict
+from src.services.pending_verification import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -510,7 +511,7 @@ class MockPendingVerificationService:
 
     def __init__(self) -> None:
         """Initialize the mock pending verification service."""
-        self.pending_albums: list[tuple[datetime, str, str, str, str]] = []
+        self.pending_albums: list[PendingAlbumEntry] = []
         self.marked_albums: list[tuple[str, str, str, dict[str, Any] | None]] = []
         self.year_updates: list[tuple[str, str, str]] = []
         self.is_initialized = False
@@ -536,7 +537,15 @@ class MockPendingVerificationService:
             metadata: Additional metadata
         """
         self.marked_albums.append((artist, album, reason, metadata))
-        self.pending_albums.append((datetime.now(UTC), artist, album, reason, str(metadata) if metadata else ""))
+        self.pending_albums.append(
+            PendingAlbumEntry(
+                timestamp=datetime.now(UTC),
+                artist=artist,
+                album=album,
+                reason=VerificationReason.from_string(reason),
+                metadata=str(metadata) if metadata else "",
+            )
+        )
 
     async def remove_from_pending(
         self,
@@ -549,13 +558,13 @@ class MockPendingVerificationService:
             artist: Artist name
             album: Album name
         """
-        self.pending_albums = [item for item in self.pending_albums if item[1] != artist or item[2] != album]
+        self.pending_albums = [entry for entry in self.pending_albums if entry.artist != artist or entry.album != album]
 
-    async def get_all_pending_albums(self) -> list[tuple[datetime, str, str, str, str]]:
+    async def get_all_pending_albums(self) -> list[PendingAlbumEntry]:
         """Get all pending albums.
 
         Returns:
-            List of pending album tuples
+            List of PendingAlbumEntry objects
         """
         return self.pending_albums
 
@@ -573,7 +582,7 @@ class MockPendingVerificationService:
         """
         self.last_min_attempts = min_attempts
         # For testing, return a fixed number
-        return len([album for album in self.pending_albums if "problematic" in album[3]])
+        return len([entry for entry in self.pending_albums if "problematic" in entry.reason.value])
 
     async def add_year_update_async(
         self,

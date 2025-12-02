@@ -298,29 +298,26 @@ class MusicUpdater:
 
         # Process each pending album
         verified_count = 0
-        for pending_tuple in pending_albums:
-            # Unpack the tuple (timestamp, artist, album, reason, metadata)
-            _, artist_str, album_str, _, _ = pending_tuple
-
+        for entry in pending_albums:
             # Try to get year again
-            year = await self.deps.external_api_service.get_album_year(artist_str, album_str)
+            year = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
 
             if year:
                 # Year found! Update tracks
-                tracks = await self.track_processor.fetch_tracks_async(artist=artist_str)
-                if album_tracks := [t for t in tracks if t.get("album", "") == album_str]:
+                tracks = await self.track_processor.fetch_tracks_async(artist=entry.artist)
+                if album_tracks := [t for t in tracks if t.get("album", "") == entry.album]:
                     track_ids = [t.get("id", "") for t in album_tracks if t.get("id")]
                     successful, _ = await self.year_retriever.update_album_tracks_bulk_async(track_ids, str(year))
 
                     if successful > 0:
                         # Remove from pending
-                        await self.deps.pending_verification_service.remove_from_pending(artist_str, album_str)
+                        await self.deps.pending_verification_service.remove_from_pending(entry.artist, entry.album)
                         verified_count += 1
                         self.console_logger.info(
                             "Verified year %s for '%s - %s'",
                             year,
-                            artist_str,
-                            album_str,
+                            entry.artist,
+                            entry.album,
                         )
 
         self.console_logger.info(

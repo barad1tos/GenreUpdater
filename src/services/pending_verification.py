@@ -37,13 +37,70 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
-from src.services.cache.hash_service import UnifiedHashService
 from src.core.logger import get_full_log_path
 from src.core.models.metadata_utils import clean_names
+from src.services.cache.hash_service import UnifiedHashService
+
+
+class VerificationReason(str, Enum):
+    """Reasons why an album is pending verification.
+
+    Inherits from str to maintain backward compatibility with existing CSV files
+    and string-based comparisons.
+    """
+
+    NO_YEAR_FOUND = "no_year_found"
+    PRERELEASE = "prerelease"
+
+    @classmethod
+    def from_string(cls, value: str) -> "VerificationReason":
+        """Convert string to VerificationReason, defaulting to NO_YEAR_FOUND."""
+        try:
+            return cls(value.strip().lower())
+        except ValueError:
+            return cls.NO_YEAR_FOUND
+
+
+@dataclass(frozen=True, slots=True)
+class PendingAlbumEntry:
+    """Immutable entry representing a pending album verification.
+
+    Attributes:
+        timestamp: When the album was marked for verification
+        artist: Artist name
+        album: Album name
+        reason: Why the album needs verification
+        metadata: JSON-encoded metadata string
+    """
+
+    timestamp: datetime
+    artist: str
+    album: str
+    reason: VerificationReason
+    metadata: str = ""
+
+    def to_tuple(self) -> tuple[datetime, str, str, str, str]:
+        """Convert to legacy tuple format for backward compatibility."""
+        return self.timestamp, self.artist, self.album, self.reason.value, self.metadata
+
+    @classmethod
+    def from_tuple(cls, data: tuple[datetime, str, str, str, str]) -> "PendingAlbumEntry":
+        """Create from legacy tuple format."""
+        timestamp, artist, album, reason_str, metadata = data
+        return cls(
+            timestamp=timestamp,
+            artist=artist,
+            album=album,
+            reason=VerificationReason.from_string(reason_str),
+            metadata=metadata,
+        )
 
 
 class Logger(Protocol):
@@ -67,6 +124,10 @@ class Logger(Protocol):
         """Log a debug message."""
 
 
+# Type alias for error callback used in blocking I/O operations
+ErrorCallback = Callable[[str], None]
+
+
 # noinspection PyTypeChecker
 class PendingVerificationService:
     """Service to track albums needing future verification of their release year.
@@ -78,7 +139,7 @@ class PendingVerificationService:
         pending_file_path (str): Path to the CSV file storing pending verifications
         console_logger: Logger for console output
         verification_interval_days (int): Days to wait before re-checking an album
-        pending_albums: Cache of pending albums using hash keys.
+        pending_albums: Cache of pending albums using hash keys (PendingAlbumEntry).
         _lock: asyncio.Lock for synchronizing access to pending_albums cache
 
     """
@@ -104,19 +165,16 @@ class PendingVerificationService:
         self.error_logger = error_logger
 
         # Get verification interval from config or use default (30 days)
-        # Ensure the config path exists before accessing
         year_retrieval_config = config.get("year_retrieval", {})
-        processing_config = year_retrieval_config.get(
-            "processing",
-            {},
-        )  # Get processing subsection
+        processing_config = year_retrieval_config.get("processing", {})
         self.verification_interval_days = processing_config.get(
             "pending_verification_interval_days",
             30,
-        )  # Get from processing
-        self.prerelease_recheck_days = self._normalize_recheck_days(processing_config.get(
-            "prerelease_recheck_days")
-        ) or self.verification_interval_days
+        )
+        self.prerelease_recheck_days = (
+            self._normalize_recheck_days(processing_config.get("prerelease_recheck_days"))
+            or self.verification_interval_days
+        )
 
         # Set up the pending file path using the utility function
         self.pending_file_path = get_full_log_path(
@@ -124,12 +182,14 @@ class PendingVerificationService:
             "pending_verification_file",
             "csv/pending_year_verification.csv",
         )
-        # Initialize the in-memory cache of pending albums - it will be populated in async initialize
-        # key: hash of "artist|album", value: (timestamp, artist, album, reason, metadata)
-        self.pending_albums: dict[str, tuple[datetime, str, str, str, str]] = {}
+        # In-memory cache: key -> PendingAlbumEntry
+        self.pending_albums: dict[str, PendingAlbumEntry] = {}
 
-        # Initialize an asyncio Lock for thread-safe access to the in-memory cache
+        # asyncio.Lock for thread-safe access to pending_albums cache
         self._lock = asyncio.Lock()
+
+        # Error callback for blocking operations (used instead of print)
+        self._error_callback: ErrorCallback = lambda msg: print(msg, file=sys.stderr)
 
     @staticmethod
     def _normalize_recheck_days(value: Any) -> int | None:
@@ -227,34 +287,29 @@ class PendingVerificationService:
                 )
                 return timestamp
             except ValueError:
-                print(
-                    f"WARNING: Invalid timestamp format in pending file for '{artist} - {album}': {timestamp_str}",
-                    file=sys.stderr,
+                self._error_callback(
+                    f"WARNING: Invalid timestamp format in pending file for '{artist} - {album}': {timestamp_str}"
                 )
                 return None
 
-    def _process_csv_row(self, row: dict[str, str]) -> tuple[str, tuple[datetime, str, str, str, str]] | None:
+    def _process_csv_row(self, row: dict[str, str]) -> tuple[str, PendingAlbumEntry] | None:
         """Process a single CSV row into album data.
 
         Args:
             row: Dictionary representing a CSV row
 
         Returns:
-            tuple[str, tuple[datetime, str, str, str, str]] | None:
-            (key_hash, (timestamp, artist, album, reason, metadata)) or None if row invalid
+            Tuple of (key_hash, PendingAlbumEntry) or None if row invalid
 
         """
         artist = row.get("artist", "").strip()
         album = row.get("album", "").strip()
         timestamp_str = row.get("timestamp", "").strip()
-        reason = row.get("reason", "no_year_found").strip()
+        reason_str = row.get("reason", "").strip()
         metadata = row.get("metadata", "").strip()
 
         if not (artist and album and timestamp_str):
-            print(
-                f"WARNING: Skipping malformed row in pending file: {row}",
-                file=sys.stderr,
-            )
+            self._error_callback(f"WARNING: Skipping malformed row in pending file: {row}")
             return None
 
         timestamp = self._parse_timestamp(timestamp_str, artist, album)
@@ -263,22 +318,28 @@ class PendingVerificationService:
 
         try:
             key_hash = self.generate_album_key(artist, album)
-            return key_hash, (timestamp, artist, album, reason, metadata)
+            entry = PendingAlbumEntry(
+                timestamp=timestamp,
+                artist=artist,
+                album=album,
+                reason=VerificationReason.from_string(reason_str),
+                metadata=metadata,
+            )
+            return key_hash, entry
         except (ValueError, TypeError) as row_e:
-            print(
-                f"WARNING: Error processing row in pending file for '{artist} - {album}': {row_e}",
-                file=sys.stderr,
+            self._error_callback(
+                f"WARNING: Error processing row in pending file for '{artist} - {album}': {row_e}"
             )
             return None
 
-    def _read_csv_data(self) -> dict[str, tuple[datetime, str, str, str, str]]:
+    def _read_csv_data(self) -> dict[str, PendingAlbumEntry]:
         """Read and parse CSV data from the pending file.
 
         Returns:
-            dict[str, tuple[datetime, str, str, str, str]]: Dictionary of album data
+            Dictionary mapping hash keys to PendingAlbumEntry objects
 
         """
-        pending_data: dict[str, tuple[datetime, str, str, str, str]] = {}
+        pending_data: dict[str, PendingAlbumEntry] = {}
 
         try:
             with Path(self.pending_file_path).open(encoding="utf-8") as f:
@@ -286,10 +347,9 @@ class PendingVerificationService:
                 fieldnames = list(reader.fieldnames) if reader.fieldnames else None
 
                 if not self._validate_csv_headers(fieldnames):
-                    print(
+                    self._error_callback(
                         f"WARNING: Pending verification CSV header missing expected fields in "
-                        f"{self.pending_file_path}. Found: {fieldnames}. Skipping load.",
-                        file=sys.stderr,
+                        f"{self.pending_file_path}. Found: {fieldnames}. Skipping load."
                     )
                     return pending_data
 
@@ -299,141 +359,113 @@ class PendingVerificationService:
             for row in albums_data:
                 result = self._process_csv_row(row)
                 if result is not None:
-                    key_hash, album_data = result
-                    pending_data[key_hash] = album_data
+                    key_hash, entry = result
+                    pending_data[key_hash] = entry
 
             return pending_data
 
         except FileNotFoundError as csv_error:
-            print(
-                f"ERROR reading pending verification file {self.pending_file_path}: {csv_error}",
-                file=sys.stderr,
+            self._error_callback(
+                f"ERROR reading pending verification file {self.pending_file_path}: {csv_error}"
             )
             return {}
         except (OSError, csv.Error, UnicodeDecodeError) as csv_error:
-            print(
-                f"UNEXPECTED ERROR during CSV read from {self.pending_file_path}: {csv_error}",
-                file=sys.stderr,
+            self._error_callback(
+                f"UNEXPECTED ERROR during CSV read from {self.pending_file_path}: {csv_error}"
             )
             return {}
+
+    def _blocking_load(self) -> dict[str, PendingAlbumEntry]:
+        """Blocking file operation to load pending albums. Run in executor."""
+        self._ensure_pending_file_directory()
+
+        if not os.path.exists(self.pending_file_path):
+            self.console_logger.info(
+                f"Pending verification file not found, will create at: {self.pending_file_path}"
+            )
+            return {}
+
+        self.console_logger.debug(f"Reading pending verification file: {self.pending_file_path}")
+        return self._read_csv_data()
 
     async def _load_pending_albums(self) -> None:
         """Load the list of pending albums from the CSV file into memory asynchronously.
 
         Uses loop.run_in_executor for blocking file operations.
-        Read artist, album, and timestamp from CSV and stores using hash keys.
         """
         loop = asyncio.get_running_loop()
 
-        def blocking_load() -> dict[str, tuple[datetime, str, str, str, str]]:
-            """Blocking file operation to be run in executor."""
-            self._ensure_pending_file_directory()
-
-            if not os.path.exists(self.pending_file_path):
-                self.console_logger.info(f"Pending verification file not found, will create at: {self.pending_file_path}")
-                return {}
-
-            print(
-                f"DEBUG: Reading pending verification file: {self.pending_file_path}",
-                file=sys.stderr,
-            )
-            return self._read_csv_data()
-
-        # Run the blocking load operation in the default executor
         async with self._lock:
-            self.pending_albums = await loop.run_in_executor(None, blocking_load)
+            self.pending_albums = await loop.run_in_executor(None, self._blocking_load)
 
-        # Log success/failure after the executor task is complete
         if self.pending_albums:
-            self.console_logger.info(f"Loaded {len(self.pending_albums)} pending albums for verification from {self.pending_file_path}")
+            self.console_logger.info(
+                f"Loaded {len(self.pending_albums)} pending albums for verification"
+            )
         else:
-            self.console_logger.info(f"No pending albums loaded from {self.pending_file_path} (file not found or empty/corrupt).")
+            self.console_logger.info("No pending albums loaded (file not found or empty).")
+
+    def _blocking_save(self, entries: list[PendingAlbumEntry]) -> None:
+        """Blocking save operation to write pending albums to CSV.
+        Run in executor.
+
+        Args:
+            entries: List of PendingAlbumEntry objects to save
+        """
+        temp_file = f"{self.pending_file_path}.tmp"
+
+        try:
+            Path(self.pending_file_path).parent.mkdir(parents=True, exist_ok=True)
+
+            with Path(temp_file).open("w", newline="", encoding="utf-8") as f:
+                fieldnames = ["artist", "album", "timestamp", "reason", "metadata"]
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for entry in entries:
+                    writer.writerow({
+                        "artist": entry.artist,
+                        "album": entry.album,
+                        "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "reason": entry.reason.value,
+                        "metadata": entry.metadata,
+                    })
+
+            # Atomic rename
+            Path(temp_file).replace(self.pending_file_path)
+
+        except (OSError, csv.Error) as save_error:
+            self._error_callback(
+                f"ERROR during blocking save of pending verification file: {save_error}"
+            )
+            if Path(temp_file).exists():
+                try:
+                    Path(temp_file).unlink()
+                except OSError as cleanup_e:
+                    self._error_callback(
+                        f"WARNING: Could not remove temporary pending file {temp_file}: {cleanup_e}"
+                    )
+            raise
 
     async def _save_pending_albums(self) -> None:
-        """Save the current list of pending albums to the CSV file asynchronously.
+        """Save the current list of pending albums to the CSV file asynchronously."""
+        loop = asyncio.get_running_loop()
 
-        Uses loop.run_in_executor for blocking file operations.
-        Writes artist, album, and timestamp columns.
-        """
-        # Use the asyncio loop to run blocking file I/O in a thread pool
-        loop = asyncio.get_event_loop()
-
-        # Define the blocking file writing operation
-        def blocking_save() -> None:
-            """Blocking save operation to be run in executor."""
-            # First, write to a temporary file
-            temp_file = f"{self.pending_file_path}.tmp"
-
-            try:
-                # Create directories if they do not exist
-                Path(self.pending_file_path).parent.mkdir(parents=True, exist_ok=True)
-
-                with Path(temp_file).open("w", newline="", encoding="utf-8") as f:
-                    # Define fieldnames for the CSV file - now includes reason and metadata
-                    fieldnames = ["artist", "album", "timestamp", "reason", "metadata"]
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-
-                    # Acquire lock is done outside the blocking function now
-                    # Iterate through values in the in-memory cache
-                    # (which are (timestamp, artist, album, reason, metadata) tuples)
-                    # Create a list copy to iterate safely in a separate thread
-                    pending_items_to_save = list(self.pending_albums.values())
-
-                    for (
-                        timestamp,
-                        artist,
-                        album,
-                        reason,
-                        metadata,
-                    ) in pending_items_to_save:
-                        # Write artist, album, timestamp, reason, and metadata
-                        writer.writerow(
-                            {
-                                "artist": artist,
-                                "album": album,
-                                "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                                "reason": reason,
-                                "metadata": metadata,
-                            },
-                        )
-
-                # Rename the temporary file (atomic operation)
-                Path(temp_file).replace(self.pending_file_path)
-
-            except (OSError, csv.Error) as save_error:
-                # Log error and clean up the temp file
-                print(
-                    f"ERROR during blocking save of pending verification file to {self.pending_file_path}: {save_error}",
-                    file=sys.stderr,
-                )
-                if Path(temp_file).exists():
-                    try:
-                        Path(temp_file).unlink()
-                    except OSError as cleanup_e:
-                        print(
-                            f"WARNING: Could not remove temporary pending file {temp_file}: {cleanup_e}",
-                            file=sys.stderr,
-                        )
-                # Re-raise the exception so run_in_executor propagates it
-                raise
-
-        # Acquire lock before accessing the in-memory cache for saving
         async with self._lock:
-            # Run the blocking save operation in the default executor
-            try:
-                await loop.run_in_executor(None, blocking_save)
-                self.console_logger.info(
-                    f"Saved {len(self.pending_albums)} pending albums for verification to {self.pending_file_path}",
-                )  # Log after a successful save
-            except (OSError, csv.Error) as e:
-                # The exception from blocking_save is caught here
-                self.error_logger.exception(f"Error saving pending verification file: {e}")
+            entries = list(self.pending_albums.values())
+
+        try:
+            await loop.run_in_executor(None, self._blocking_save, entries)
+            self.console_logger.info(
+                f"Saved {len(entries)} pending albums for verification"
+            )
+        except (OSError, csv.Error) as e:
+            self.error_logger.exception(f"Error saving pending verification file: {e}")
     async def mark_for_verification(
         self,
         artist: str,
         album: str,
-        reason: str = "no_year_found",
+        reason: VerificationReason | str = VerificationReason.NO_YEAR_FOUND,
         metadata: dict[str, Any] | None = None,
         recheck_days: int | None = None,
     ) -> None:
@@ -444,13 +476,16 @@ class PendingVerificationService:
         Args:
             artist: Artist name
             album: Album name
-            reason: Reason for verification (default: "no_year_found", can be "prerelease", etc.)
+            reason: Reason for verification (default: NO_YEAR_FOUND, can be PRERELEASE, etc.)
             metadata: Optional metadata dictionary to store additional information
             recheck_days: Optional override for verification interval in days
 
         """
+        # Normalize reason to enum
+        reason_enum = VerificationReason.from_string(reason) if isinstance(reason, str) else reason
+
         interval_override = self._normalize_recheck_days(recheck_days)
-        if interval_override is None and reason == "prerelease":
+        if interval_override is None and reason_enum == VerificationReason.PRERELEASE:
             interval_override = self.prerelease_recheck_days
 
         # Acquire lock before modifying the in-memory cache
@@ -467,25 +502,26 @@ class PendingVerificationService:
                 metadata_payload["recheck_days"] = interval_override
 
             metadata_str = json.dumps(metadata_payload) if metadata_payload else ""
-            # Store the current timestamp, original artist, album, reason, and metadata in the value
-            self.pending_albums[key_hash] = (
-                datetime.now(UTC),
-                artist.strip(),
-                album.strip(),
-                reason,
-                metadata_str,
+
+            # Store the entry using PendingAlbumEntry
+            self.pending_albums[key_hash] = PendingAlbumEntry(
+                timestamp=datetime.now(UTC),
+                artist=artist.strip(),
+                album=album.strip(),
+                reason=reason_enum,
+                metadata=metadata_str,
             )
 
         # Log with the appropriate message based on reason
         effective_interval = interval_override if interval_override is not None else self.verification_interval_days
 
-        if reason == "prerelease":
+        if reason_enum == VerificationReason.PRERELEASE:
             self.console_logger.info(
                 f"Marked prerelease album '{artist} - {album}' for future verification in {effective_interval} days",
             )
         else:
             self.console_logger.info(
-                f"Marked '{artist} - {album}' for verification in {effective_interval} days (reason: {reason})",
+                f"Marked '{artist} - {album}' for verification in {effective_interval} days (reason: {reason_enum.value})",
             )
 
         # Save asynchronously after modifying the cache
@@ -514,26 +550,23 @@ class PendingVerificationService:
             if key_hash not in self.pending_albums:
                 return False
 
-            # The value is a tuple (timestamp, artist, album, reason, metadata)
-            timestamp, stored_artist, stored_album, stored_reason, raw_metadata = self.pending_albums[key_hash]
-            metadata = self._parse_metadata(raw_metadata)
+            # Get the entry
+            entry = self.pending_albums[key_hash]
+            metadata = self._parse_metadata(entry.metadata)
             interval_days = self.verification_interval_days
-            if stored_reason == "prerelease":
+
+            if entry.reason == VerificationReason.PRERELEASE:
                 override = self._normalize_recheck_days(metadata.get("recheck_days"))
                 interval_days = override if override is not None else self.prerelease_recheck_days
 
-            verification_time = timestamp + timedelta(days=interval_days)
+            verification_time = entry.timestamp + timedelta(days=interval_days)
 
             if datetime.now(UTC) >= verification_time:
                 # Verification period has elapsed
-                # Retrieve original artist/album from the stored tuple for logging
                 self.console_logger.info(
-                    f"Verification period elapsed for '{stored_artist} - {stored_album}'",
+                    f"Verification period elapsed for '{entry.artist} - {entry.album}'",
                 )
                 return True
-
-            # Log when verification is NOT needed, for debugging
-            # self.console_logger.debug(
 
             return False
 
@@ -555,11 +588,11 @@ class PendingVerificationService:
 
             # Remove from the in-memory cache if the hash key exists
             if key_hash in self.pending_albums:
-                # Retrieve the original artist / album from the stored tuple for logging
-                _, stored_artist, stored_album, _, _ = self.pending_albums[key_hash]
+                # Retrieve the original artist / album from the stored entry for logging
+                entry = self.pending_albums[key_hash]
                 del self.pending_albums[key_hash]
                 self.console_logger.info(
-                    f"Removed '{stored_artist} - {stored_album}' from pending verification",
+                    f"Removed '{entry.artist} - {entry.album}' from pending verification",
                 )
             # No need to save if the item wasn't found
             else:
@@ -573,16 +606,14 @@ class PendingVerificationService:
 
     # get_all_pending_albums is now an async method because it needs to acquire the lock
     # to safely access the in-memory cache.
-    async def get_all_pending_albums(
-        self,
-    ) -> list[tuple[datetime, str, str, str, str]]:  # Updated return type to include reason and metadata
-        """Get a list of all pending albums with their verification timestamps.
+    async def get_all_pending_albums(self) -> list[PendingAlbumEntry]:
+        """Get a list of all pending albums with their verification data.
 
-        Retrieves timestamp, artist, album, reason, and metadata from the stored tuples.
+        Retrieves all PendingAlbumEntry objects from the in-memory cache.
         Accesses the in-memory cache asynchronously with a lock.
 
         Returns:
-            List of tuples containing (timestamp, artist, album, reason, metadata)
+            List of PendingAlbumEntry objects
 
         """
         # Acquire lock before accessing the in-memory cache
@@ -592,25 +623,26 @@ class PendingVerificationService:
 
     async def get_pending_albums_by_reason(
         self,
-        reason: str,
-    ) -> list[tuple[str, str, datetime, str]]:
+        reason: VerificationReason | str,
+    ) -> list[PendingAlbumEntry]:
         """Get pending albums filtered by reason.
 
         Args:
-            reason: The reason to filter by (e.g., "prerelease", "no_year_found")
+            reason: The reason to filter by (e.g., PRERELEASE, NO_YEAR_FOUND)
 
         Returns:
-            List of tuples containing (artist, album, timestamp, metadata)
+            List of PendingAlbumEntry objects matching the reason
 
         """
+        # Normalize reason to enum
+        reason_enum = VerificationReason.from_string(reason) if isinstance(reason, str) else reason
+
         async with self._lock:
-            result: list[tuple[str, str, datetime, str]] = []
-            result.extend(
-                (artist, album, timestamp, metadata)
-                for timestamp, artist, album, stored_reason, metadata in self.pending_albums.values()
-                if stored_reason == reason
-            )
-        return result
+            return [
+                entry
+                for entry in self.pending_albums.values()
+                if entry.reason == reason_enum
+            ]
 
     # get_verified_album_keys is now an async method because it needs to acquire the lock
     # to safely access the in-memory cache.
@@ -630,17 +662,14 @@ class PendingVerificationService:
         # Acquire lock before accessing the in-memory cache
         async with self._lock:
             # Iterate through items (key_hash, value_tuple) in the in-memory cache
-            # Iterate over a list copy to allow potential future modifications during iteration if needed,
-            # though in this specific method it's just reading.
-            for key_hash, value_tuple in self.pending_albums.items():
-                # The value is a tuple (timestamp, artist, album, reason, metadata)
-                timestamp, stored_artist, stored_album, _reason, _metadata = value_tuple
-                verification_time = timestamp + timedelta(
+            # Iterate over entries
+            for key_hash, entry in self.pending_albums.items():
+                verification_time = entry.timestamp + timedelta(
                     days=self.verification_interval_days,
                 )
                 if now >= verification_time:
                     self.console_logger.info(
-                        f"Album '{stored_artist} - {stored_album}' needs verification",
+                        f"Album '{entry.artist} - {entry.album}' needs verification",
                     )
                     verified_keys.add(key_hash)
                 # self.console_logger.debug(
@@ -654,41 +683,44 @@ class PendingVerificationService:
         After migration, saves the updated pending list to disk.
         """
         async with self._lock:
-            updates: list[tuple[str, str]] = []  # (old_key, new_key)
-            for old_key, (
-                timestamp,
-                artist,
-                album,
-                reason,
-                metadata,
-            ) in self.pending_albums.items():
-                new_key = self._generate_album_key(artist, album)
+            # Collect updates first, then apply them to avoid modifying dict during iteration
+            pending_updates: dict[str, PendingAlbumEntry] = {}
+            keys_to_delete: list[str] = []
+
+            for old_key, entry in self.pending_albums.items():
+                new_key = self._generate_album_key(entry.artist, entry.album)
                 if new_key != old_key:
                     # Clean album name for storage as well
                     _, cleaned_album = clean_names(
-                        artist,
+                        entry.artist,
                         "",
-                        album,
+                        entry.album,
                         config=self.config,
                         console_logger=self.console_logger,
                         error_logger=self.error_logger,
                     )
-                    # Move to the new key, preserving reason and metadata
-                    self.pending_albums[new_key] = (
-                        timestamp,
-                        artist,
-                        cleaned_album,
-                        reason,
-                        metadata,
+                    # Stage the update
+                    pending_updates[new_key] = PendingAlbumEntry(
+                        timestamp=entry.timestamp,
+                        artist=entry.artist,
+                        album=cleaned_album,
+                        reason=entry.reason,
+                        metadata=entry.metadata,
                     )
-                    del self.pending_albums[old_key]
-                    updates.append((old_key, new_key))
-            if updates:
+                    keys_to_delete.append(old_key)
+
+            # Apply all updates
+            for new_key, new_entry in pending_updates.items():
+                self.pending_albums[new_key] = new_entry
+            for key_to_delete in keys_to_delete:
+                del self.pending_albums[key_to_delete]
+
+            if pending_updates:
                 self.console_logger.info(
                     "Normalized %d pending album keys by removing suffixes.",
-                    len(updates),
+                    len(pending_updates),
                 )
-        if updates:
+        if pending_updates:
             # Save outside the lock to avoid prolonged blocking
             await self._save_pending_albums()
 
@@ -723,15 +755,9 @@ class PendingVerificationService:
         async with self._lock:
             current_time = datetime.now(UTC)
 
-            for key, (
-                timestamp,
-                _artist,
-                _album,
-                _reason,
-                _metadata,
-            ) in self.pending_albums.items():
+            for key, entry in self.pending_albums.items():
                 # Calculate how many verification periods have passed
-                time_diff = current_time - timestamp
+                time_diff = current_time - entry.timestamp
                 periods_passed = int(time_diff.total_seconds() / (self.verification_interval_days * 86400))
 
                 if periods_passed >= min_attempts - 1:
@@ -740,7 +766,7 @@ class PendingVerificationService:
 
                     # Reconstruct verification dates
                     for i in range(periods_passed + 1):
-                        attempt_time = timestamp + timedelta(seconds=i * self.verification_interval_days * 86400)
+                        attempt_time = entry.timestamp + timedelta(seconds=i * self.verification_interval_days * 86400)
                         album_attempts[key].append(attempt_time)
 
         # Generate report
@@ -770,15 +796,15 @@ class PendingVerificationService:
                         key=lambda x: len(x[1]),
                         reverse=True,
                     ):
-                        _, artist, album, _, _ = self.pending_albums[album_key]
+                        album_entry = self.pending_albums[album_key]
                         first_attempt = min(attempts)
                         last_attempt = max(attempts)
                         days_since_first = (datetime.now(UTC) - first_attempt).days
 
                         writer.writerow(
                             [
-                                artist,
-                                album,
+                                album_entry.artist,
+                                album_entry.album,
                                 first_attempt.strftime("%Y-%m-%d"),
                                 last_attempt.strftime("%Y-%m-%d"),
                                 len(attempts),

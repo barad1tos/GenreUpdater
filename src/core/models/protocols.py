@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from src.core.models.track_models import CachedApiResult
+    from src.services.pending_verification import PendingAlbumEntry
 
 # Type variable for generic cached values
 T = TypeVar("T")
@@ -476,11 +477,11 @@ class PendingVerificationServiceProtocol(Protocol):
 
     async def get_all_pending_albums(
         self,
-    ) -> list[tuple[datetime, str, str, str, str]]:
+    ) -> list[PendingAlbumEntry]:
         """Get all pending albums.
 
         Returns:
-            List of tuples (timestamp, artist, album, reason, metadata)
+            List of PendingAlbumEntry objects
 
         """
         ...

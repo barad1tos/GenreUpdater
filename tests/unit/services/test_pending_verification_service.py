@@ -11,7 +11,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.services.pending_verification import PendingVerificationService
+from src.services.pending_verification import (
+    PendingAlbumEntry,
+    PendingVerificationService,
+    VerificationReason,
+)
 
 
 @pytest.fixture
@@ -87,11 +91,11 @@ async def test_mark_for_verification_persists_entry(service: PendingVerification
     pending = await service.get_all_pending_albums()
     assert len(pending) == 1
 
-    _timestamp, artist, album, reason, metadata_str = pending[0]
-    assert artist == "Radiohead"
-    assert album == "OK Computer"
-    assert reason == "prerelease"
-    metadata = json.loads(metadata_str)
+    entry = pending[0]
+    assert entry.artist == "Radiohead"
+    assert entry.album == "OK Computer"
+    assert entry.reason == VerificationReason.PRERELEASE
+    metadata = json.loads(entry.metadata)
     assert metadata["source"] == "discogs"
     assert metadata.get("recheck_days") == service.prerelease_recheck_days
 
@@ -104,13 +108,13 @@ async def test_is_verification_needed_returns_true_when_interval_elapsed(
     await service.mark_for_verification("Artist", "Album")
 
     key = service.generate_album_key("Artist", "Album")
-    timestamp, artist, album, reason, metadata_str = service.pending_albums[key]
-    service.pending_albums[key] = (
-        timestamp - timedelta(days=2),
-        artist,
-        album,
-        reason,
-        metadata_str,
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=2),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
     )
 
     assert await service.is_verification_needed("Artist", "Album") is True
@@ -146,7 +150,7 @@ async def test_get_pending_albums_by_reason_filters_results(
     await service.mark_for_verification("Artist Three", "Album Three")
 
     result = await service.get_pending_albums_by_reason("no_year_found")
-    artists = {artist for artist, _album, _timestamp, _metadata in result}
+    artists = {entry.artist for entry in result}
     assert artists == {"Artist One", "Artist Three"}
 
 
@@ -163,11 +167,11 @@ async def test_initialize_loads_existing_csv(service: PendingVerificationService
 
     pending = await service.get_all_pending_albums()
     assert len(pending) == 1
-    _timestamp, artist, album, reason, metadata_str = pending[0]
-    assert artist == "Artist1"
-    assert album == "Album1"
-    assert reason == "no_year_found"
-    assert metadata_str == ""
+    entry = pending[0]
+    assert entry.artist == "Artist1"
+    assert entry.album == "Album1"
+    assert entry.reason == VerificationReason.NO_YEAR_FOUND
+    assert entry.metadata == ""
 
 
 @pytest.mark.asyncio
@@ -178,13 +182,13 @@ async def test_generate_problematic_albums_report_writes_file(
     await service.mark_for_verification("Artist", "Album")
 
     key = service.generate_album_key("Artist", "Album")
-    timestamp, artist, album, reason, metadata_str = service.pending_albums[key]
-    service.pending_albums[key] = (
-        timestamp - timedelta(days=5),
-        artist,
-        album,
-        reason,
-        metadata_str,
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=5),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
     )
 
     report_path = Path(service.pending_file_path).parent / "problematic.csv"
