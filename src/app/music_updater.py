@@ -455,7 +455,11 @@ class MusicUpdater:
 
         result: list[TrackDict] | None = None
         try:
-            delta = await snapshot_service.compute_smart_delta(ap_client, batch_size=1000)
+            delta = await snapshot_service.compute_smart_delta(
+                ap_client,
+                force=getattr(self.args, "force", False),
+                batch_size=1000,
+            )
             if delta is None:
                 self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
                 return None
