@@ -76,16 +76,26 @@ class AppleScriptExecutor:
             script_result: Script output
             elapsed: Execution time in seconds
         """
-        if label == "fetch_tracks.scpt":
+        if label in ("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt"):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
-            size_bytes = len(script_result.encode())
-            size_kb = size_bytes / 1024
+            size_kb = len(script_result.encode()) / 1024
 
             self.console_logger.info(
                 "◁ %s: %d tracks (%.1fKB, %.1fs)",
                 label,
                 track_count,
+                size_kb,
+                elapsed,
+            )
+        elif "\x1d" in script_result or "\x1e" in script_result:
+            # Other scripts with field/record separators - show count only
+            record_count = script_result.count("\x1d") or script_result.count("\x1e")
+            size_kb = len(script_result.encode()) / 1024
+            self.console_logger.info(
+                "◁ %s: %d records (%.1fKB, %.1fs)",
+                label,
+                record_count,
                 size_kb,
                 elapsed,
             )
