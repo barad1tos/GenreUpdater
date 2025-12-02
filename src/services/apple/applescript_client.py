@@ -433,6 +433,11 @@ class AppleScriptClient(AppleScriptClientProtocol):
             self.console_logger.warning("No track IDs returned from Music.app")
             return []
 
+        # Check for error from AppleScript
+        if raw_output.startswith("ERROR:"):
+            self.error_logger.error("AppleScript error: %s", raw_output[6:])
+            return []
+
         # Parse comma-separated IDs
         track_ids = [id_str.strip() for id_str in raw_output.split(",") if id_str.strip()]
 
