@@ -414,6 +414,33 @@ class LibrarySnapshotService:
         """Return whether delta caching is enabled."""
         return self.enabled and self.delta_enabled
 
+    async def should_force_scan(self, force_flag: bool = False) -> bool:
+        """Determine if full metadata scan is needed.
+
+        Force scan triggers when:
+        - force_flag is True (CLI --force)
+        - No previous force scan recorded
+        - Last force scan was on a previous calendar day
+
+        Args:
+            force_flag: CLI --force flag value
+
+        Returns:
+            True if force scan should be performed
+
+        """
+        if force_flag:
+            return True
+
+        metadata = await self.get_snapshot_metadata()
+        if not metadata or not metadata.last_force_scan_time:
+            return True
+
+        last_scan = datetime.fromisoformat(metadata.last_force_scan_time)
+        now = _now()
+
+        return now.date() > last_scan.date()
+
     @staticmethod
     def compute_snapshot_hash(payload: Sequence[dict[str, Any]]) -> str:
         """Compute deterministic hash for snapshot payload."""
