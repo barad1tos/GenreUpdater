@@ -508,3 +508,90 @@ class TestApiCacheService:
             cast(MagicMock, service.logger.debug).assert_any_call(
                 "API cache is empty, deleting cache file if exists"
             )
+
+    @allure.story("Initialization")
+    @allure.title("Should cleanup expired entries on init")
+    @allure.description("Test that expired entries are cleaned up during initialization")
+    @pytest.mark.asyncio
+    async def test_cleanup_on_init(self) -> None:
+        """Test that cleanup_expired is called during initialization."""
+        # Create cache data with expired entries
+        cache_data = {
+            "valid_key": {
+                "artist": "Artist1",
+                "album": "Album1",
+                "year": "2023",
+                "source": "spotify",
+                "timestamp": datetime.now(UTC).timestamp(),
+                "metadata": {},
+                "api_response": {"year": "2023"},
+            },
+            "expired_key": {
+                "artist": "Artist2",
+                "album": "Album2",
+                "year": None,
+                "source": "lastfm",
+                "timestamp": 0.0,  # Expired timestamp
+                "metadata": {},
+                "api_response": None,
+            },
+        }
+
+        with allure.step("Create service with expired cache data"):
+            with (
+                patch.object(Path, "exists", return_value=True),
+                patch.object(Path, "open", MagicMock()),
+                patch("json.load", return_value=cache_data),
+            ):
+                service = TestApiCacheService.create_service()
+                await service.initialize()
+
+        with allure.step("Verify expired entry was cleaned up"):
+            # Only non-expired entries should remain
+            assert len(service.api_cache) == 1
+            cast(MagicMock, service.logger.info).assert_any_call(
+                "ApiCacheService initialized with %d entries (after cleanup)",
+                1,
+            )
+
+    @allure.story("Resource Limits")
+    @allure.title("Should limit background tasks")
+    @allure.description("Test that background tasks are limited to prevent unbounded growth")
+    @pytest.mark.asyncio
+    async def test_background_task_limit(self) -> None:
+        """Test that background tasks are limited to max count."""
+        service = TestApiCacheService.create_service()
+        await service.initialize()
+
+        with allure.step("Fill background tasks to limit"):
+            # Create fake tasks to fill the limit
+            for i in range(service._max_background_tasks):
+                fake_task = asyncio.create_task(asyncio.sleep(10))
+                service._background_tasks.add(fake_task)
+
+            assert len(service._background_tasks) == 100
+
+        with allure.step("Attempt to add another task via event"):
+            event = CacheEvent(
+                event_type=CacheEventType.TRACK_REMOVED,
+                track_id="test_track",
+                metadata={"artist": "Test Artist", "album": "Test Album"},
+            )
+            initial_count = len(service._background_tasks)
+            service._handle_track_removed(event)
+
+        with allure.step("Verify task was skipped"):
+            # Count should remain the same - new task was skipped
+            assert len(service._background_tasks) == initial_count
+            cast(MagicMock, service.logger.debug).assert_any_call(
+                "Background task limit reached (%d), skipping invalidation for %s - %s",
+                100,
+                "Test Artist",
+                "Test Album",
+            )
+
+        with allure.step("Cleanup tasks"):
+            for task in list(service._background_tasks):
+                task.cancel()
+            await asyncio.gather(*service._background_tasks, return_exceptions=True)
+            service._background_tasks.clear()
