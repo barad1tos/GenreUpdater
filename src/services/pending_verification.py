@@ -77,7 +77,6 @@ class PendingVerificationService:
     Attributes:
         pending_file_path (str): Path to the CSV file storing pending verifications
         console_logger: Logger for console output
-    def __init__(self, config: dict[str, Any], console_logger: Logger, error_logger: Logger):
         verification_interval_days (int): Days to wait before re-checking an album
         pending_albums: Cache of pending albums using hash keys.
         _lock: asyncio.Lock for synchronizing access to pending_albums cache
@@ -92,7 +91,6 @@ class PendingVerificationService:
     ) -> None:
         """Initialize the PendingVerificationService.
 
-        Does NOT perform file loading here. Use the async initialize method.
         Does NOT perform file loading here. Use the async initialize method.
 
         Args:
@@ -490,8 +488,6 @@ class PendingVerificationService:
                 f"Marked '{artist} - {album}' for verification in {effective_interval} days (reason: {reason})",
             )
 
-        # Save asynchronously after modifying the cache
-        await self._save_pending_albums()
         # Save asynchronously after modifying the cache
         await self._save_pending_albums()
 

@@ -99,7 +99,7 @@ async def test_mark_for_verification(service: PendingVerificationService) -> Non
     metadata = json.loads(metadata_raw)
     assert metadata["year"] == 2024
     assert metadata["recheck_days"] == 7
-    assert save_mock.await_count == 2
+    assert save_mock.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -151,7 +151,7 @@ async def test_remove_from_pending(service: PendingVerificationService) -> None:
 
     key = service.generate_album_key("Test Artist", "Test Album")
     assert key not in service.pending_albums
-    assert save_mock.await_count >= 3
+    assert save_mock.await_count == 2  # mark + remove
 
 
 @pytest.mark.asyncio
