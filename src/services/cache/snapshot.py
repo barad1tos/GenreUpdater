@@ -47,6 +47,7 @@ class LibraryCacheMetadata:
     track_count: int
     snapshot_hash: str
     version: str = SNAPSHOT_VERSION
+    last_force_scan_time: str | None = None  # ISO format datetime
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize metadata to a JSON-friendly dict."""
@@ -56,6 +57,7 @@ class LibraryCacheMetadata:
             "library_mtime": self.library_mtime.isoformat(),
             "track_count": self.track_count,
             "snapshot_hash": self.snapshot_hash,
+            "last_force_scan_time": self.last_force_scan_time,
         }
 
     @classmethod
@@ -67,6 +69,7 @@ class LibraryCacheMetadata:
             library_mtime=datetime.fromisoformat(data["library_mtime"]),
             track_count=int(data["track_count"]),
             snapshot_hash=str(data["snapshot_hash"]),
+            last_force_scan_time=data.get("last_force_scan_time"),
         )
 
 
