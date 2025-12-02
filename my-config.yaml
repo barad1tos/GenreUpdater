@@ -89,7 +89,7 @@ database_verification:
 
 # Development and testing settings
 development:
-  test_artists: [ ] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  test_artists: [ ] # List of artists to test with
 
 # Reporting configuration
 reporting:
