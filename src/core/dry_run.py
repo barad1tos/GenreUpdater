@@ -58,6 +58,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Run an AppleScript by name in dry run mode.
 
@@ -71,6 +72,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
             context_artist: Artist name for contextual logging (optional).
             context_album: Album name for contextual logging (optional).
             context_track: Track name for contextual logging (optional).
+            label: Custom label for logging (defaults to script_name).
 
         Returns:
             str | None: The script output if this is a fetch operation, DRY_RUN_SUCCESS_MESSAGE otherwise.
@@ -99,6 +101,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
                 context_artist=context_artist,
                 context_album=context_album,
                 context_track=context_track,
+                label=label,
             )
             return str(result) if result is not None else None
 

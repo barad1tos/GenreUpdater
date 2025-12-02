@@ -76,7 +76,7 @@ class AppleScriptExecutor:
             script_result: Script output
             elapsed: Execution time in seconds
         """
-        if label in ("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt"):
+        if label.startswith(("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
             size_kb = len(script_result.encode()) / 1024

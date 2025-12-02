@@ -373,6 +373,7 @@ class AppleScriptClientProtocol(Protocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Run an AppleScript file by name.
 
@@ -383,6 +384,7 @@ class AppleScriptClientProtocol(Protocol):
             context_artist: Artist name for contextual logging (optional)
             context_album: Album name for contextual logging (optional)
             context_track: Track name for contextual logging (optional)
+            label: Custom label for logging (defaults to script_name)
 
         Returns:
             Script output or None if no output

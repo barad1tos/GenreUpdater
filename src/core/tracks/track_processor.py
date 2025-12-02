@@ -422,14 +422,18 @@ class TrackProcessor:
         batch_size = min(batch_size, 1000)  # Enforce upper limit to prevent excessive memory/performance issues
 
         collected: list[TrackDict] = []
+        total_batches = (len(track_ids) + batch_size - 1) // batch_size
+
         for i in range(0, len(track_ids), batch_size):
             batch = track_ids[i : i + batch_size]
+            batch_num = i // batch_size + 1
             ids_param = ",".join(batch)
 
             raw_output = await self.ap_client.run_script(
                 "fetch_tracks_by_ids.scpt",
                 [ids_param],
                 timeout=self._get_applescript_timeout(False),
+                label=f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]",
             )
 
             if not raw_output:

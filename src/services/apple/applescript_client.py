@@ -186,6 +186,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Execute an AppleScript asynchronously and return its output.
 
@@ -197,6 +198,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         :param context_artist: Artist name for contextual logging (optional)
         :param context_album: Album name for contextual logging (optional)
         :param context_track: Track name for contextual logging (optional)
+        :param label: Custom label for logging (defaults to script_name)
         :return: The output of the script, or None if an error occurred
         """
         self.console_logger.debug("run_script called: script='%s'", script_name)
@@ -253,7 +255,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             )
 
         try:
-            result = await self.executor.run_osascript(cmd, script_name, timeout_float)
+            result = await self.executor.run_osascript(cmd, label or script_name, timeout_float)
             self._log_script_result(result)
             return result
         except TimeoutError:
@@ -378,17 +380,13 @@ class AppleScriptClient(AppleScriptClientProtocol):
             ids_csv = ",".join(batch)
             batch_num = i // batch_size + 1
 
-            self.console_logger.debug(
-                "Fetching batch %d/%d (%d tracks)",
-                batch_num,
-                total_batches,
-                len(batch),
-            )
+            batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
 
             raw_output = await self.run_script(
                 "fetch_tracks_by_ids.scpt",
                 [ids_csv],
                 timeout=timeout_float,
+                label=batch_label,
             )
 
             if not raw_output or raw_output == "NO_TRACKS_FOUND":
