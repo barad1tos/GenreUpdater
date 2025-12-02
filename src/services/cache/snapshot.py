@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from src.core.models.protocols import AppleScriptClientProtocol
 
 from src.services.cache.json_utils import dumps_json, loads_json
-from src.core.tracks.track_delta import TrackDelta, compute_track_delta
+from src.core.tracks.track_delta import TrackDelta, has_track_changed
 from src.core.logger import ensure_directory
 from src.core.models.track_models import TrackDict
 
@@ -306,12 +306,13 @@ class LibrarySnapshotService:
         applescript_client: AppleScriptClientProtocol,
         batch_size: int = 1000,
     ) -> TrackDelta | None:
-        """Compute track delta using Smart Delta approach (fetch by IDs).
+        """Compute track delta using Smart Delta approach.
 
         This method:
         1. Loads the snapshot from disk
-        2. Fetches current metadata for all track IDs from Music.app
-        3. Computes delta between current and snapshot
+        2. Fetches ALL current track IDs from Music.app (lightweight)
+        3. Computes new/removed by comparing ID sets
+        4. Fetches metadata only for existing IDs to detect updates
 
         Args:
             applescript_client: AppleScriptClient instance for fetching tracks
@@ -321,7 +322,7 @@ class LibrarySnapshotService:
             TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
 
         """
-        self.logger.info("Computing Smart Delta...")
+        self.logger.info("🔍 Computing Smart Delta...")
 
         # Load snapshot
         snapshot_tracks = await self.load_snapshot()
@@ -330,15 +331,35 @@ class LibrarySnapshotService:
             return None
 
         snapshot_map = {str(track.id): track for track in snapshot_tracks}
-        track_ids = list(snapshot_map.keys())
+        snapshot_ids = set(snapshot_map.keys())
 
         self.logger.info(
-            "Loaded snapshot with %d tracks, fetching current metadata...",
-            len(track_ids),
+            "✓ Loaded snapshot with %d tracks, fetching current IDs...",
+            len(snapshot_ids),
         )
 
-        # Fetch current tracks by ID
-        raw_tracks = await applescript_client.fetch_tracks_by_ids(track_ids, batch_size=batch_size)
+        # NEW: Fetch ALL current track IDs from Music.app (lightweight operation)
+        current_ids_list = await applescript_client.fetch_all_track_ids()
+        if not current_ids_list:
+            self.logger.warning("Failed to fetch track IDs from Music.app")
+            return None
+
+        current_ids = set(current_ids_list)
+
+        # Compute ID differences
+        new_ids = sorted(current_ids - snapshot_ids)
+        removed_ids = sorted(snapshot_ids - current_ids)
+        existing_ids = list(current_ids & snapshot_ids)
+
+        self.logger.info(
+            "ID comparison: %d new, %d removed, %d existing",
+            len(new_ids),
+            len(removed_ids),
+            len(existing_ids),
+        )
+
+        # Fetch metadata for existing IDs (to detect updates)
+        raw_tracks = await applescript_client.fetch_tracks_by_ids(existing_ids, batch_size=batch_size)
 
         # Convert dict to TrackDict
         current_tracks: list[TrackDict] = []
@@ -364,19 +385,23 @@ class LibrarySnapshotService:
                 self.logger.warning("Failed to parse track %s: %s", raw_track.get("id"), exc)
                 continue
 
-        self.logger.info("Fetched %d tracks from Music.app", len(current_tracks))
+        self.logger.info("Fetched metadata for %d existing tracks", len(current_tracks))
 
-        # Compute delta
-        delta = compute_track_delta(current_tracks, snapshot_map)
+        # Compute updated IDs by comparing with snapshot
+        updated_ids: list[str] = []
+        for track in current_tracks:
+            track_id = str(track.id)
+            if track_id in snapshot_map and has_track_changed(track, snapshot_map[track_id]):
+                updated_ids.append(track_id)
 
         self.logger.info(
             "Smart Delta: %d new, %d updated, %d removed",
-            len(delta.new_ids),
-            len(delta.updated_ids),
-            len(delta.removed_ids),
+            len(new_ids),
+            len(updated_ids),
+            len(removed_ids),
         )
 
-        return delta
+        return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
 
     def is_enabled(self) -> bool:
         """Check whether snapshot caching is enabled."""

@@ -428,6 +428,21 @@ class AppleScriptClientProtocol(Protocol):
         """
         ...
 
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Fetch just track IDs from Music.app (lightweight operation).
+
+        This is used by Smart Delta to detect new/removed tracks without
+        fetching full metadata.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track ID strings
+
+        """
+        ...
+
 
 @runtime_checkable
 class PendingVerificationServiceProtocol(Protocol):

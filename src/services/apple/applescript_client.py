@@ -228,9 +228,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
             timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
         timeout_float = float(timeout) if timeout is not None else 3600.0
 
-        # Log the command with contextual information when available
-        args_str = " ".join([script_name] + (arguments or []))
-
         # Build contextual information
         context_parts: list[str] = []
         if context_artist:
@@ -403,6 +400,44 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         self.console_logger.info("Fetched %d tracks (requested: %d)", len(all_tracks), len(track_ids))
         return all_tracks
+
+    @Analytics.track_instance_method("applescript_fetch_all_ids")
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Fetch just track IDs from Music.app (lightweight operation).
+
+        This is used by Smart Delta to detect new/removed tracks without
+        fetching full metadata. Much faster than fetching all track data.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track ID strings
+
+        """
+        if timeout is None:
+            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get(
+                "applescript_timeout_seconds", 600
+            )
+
+        timeout_float = float(timeout) if timeout is not None else 600.0
+
+        self.console_logger.info("Fetching all track IDs from Music.app...")
+
+        raw_output = await self.run_script(
+            "fetch_track_ids.applescript",
+            timeout=timeout_float,
+        )
+
+        if not raw_output:
+            self.console_logger.warning("No track IDs returned from Music.app")
+            return []
+
+        # Parse comma-separated IDs
+        track_ids = [id_str.strip() for id_str in raw_output.split(",") if id_str.strip()]
+
+        self.console_logger.info("Fetched %d track IDs", len(track_ids))
+        return track_ids
 
     @staticmethod
     def _parse_track_output(raw_output: str) -> list[dict[str, str]]:
