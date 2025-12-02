@@ -441,6 +441,13 @@ class LibrarySnapshotService:
 
         return now.date() > last_scan.date()
 
+    async def _update_force_scan_time(self) -> None:
+        """Update metadata with current force scan timestamp."""
+        metadata = await self.get_snapshot_metadata()
+        if metadata:
+            metadata.last_force_scan_time = _now().isoformat()
+            await self.update_snapshot_metadata(metadata)
+
     @staticmethod
     def compute_snapshot_hash(payload: Sequence[dict[str, Any]]) -> str:
         """Compute deterministic hash for snapshot payload."""

@@ -87,3 +87,31 @@ class TestShouldForceScan:
         with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
             result = await snapshot_service.should_force_scan(force_flag=False)
             assert result is True
+
+
+class TestUpdateForceScanTime:
+    """Tests for _update_force_scan_time method."""
+
+    @pytest.mark.asyncio
+    async def test_updates_metadata_with_current_time(self, snapshot_service: LibrarySnapshotService) -> None:
+        """Should update metadata with current timestamp."""
+        existing_metadata = LibraryCacheMetadata(
+            version="1.0",
+            last_full_scan=datetime.now(UTC),
+            library_mtime=datetime.now(UTC),
+            track_count=100,
+            snapshot_hash="abc",
+            last_force_scan_time=None,
+        )
+        with (
+            patch.object(snapshot_service, "get_snapshot_metadata", return_value=existing_metadata),
+            patch.object(snapshot_service, "update_snapshot_metadata") as mock_update,
+        ):
+            await snapshot_service._update_force_scan_time()
+
+            mock_update.assert_called_once()
+            updated_metadata = mock_update.call_args[0][0]
+            assert updated_metadata.last_force_scan_time is not None
+            # Verify it's a valid ISO timestamp
+            parsed = datetime.fromisoformat(updated_metadata.last_force_scan_time)
+            assert parsed.date() == datetime.now(UTC).date()
