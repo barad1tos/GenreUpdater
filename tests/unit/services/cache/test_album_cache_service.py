@@ -164,9 +164,13 @@ class TestAlbumCacheService:
             result = await service.get_album_year("Queen", "A Night at the Opera")
             assert result is None
 
-        with allure.step("Verify invalid entry was removed"):
+        with allure.step("Verify original entry preserved (no deletion on collision)"):
             key = UnifiedHashService.hash_album_key("Queen", "A Night at the Opera")
-            assert key not in service.album_years_cache
+            # Entry should remain - we keep the original owner's data
+            assert key in service.album_years_cache
+            # But lookup for mismatched request should still return None
+            result = await service.get_album_year("Queen", "A Night at the Opera")
+            assert result is None
 
     @allure.story("Invalidation")
     @allure.title("Should invalidate specific album")

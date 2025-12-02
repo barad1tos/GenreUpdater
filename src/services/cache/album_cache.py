@@ -75,10 +75,16 @@ class AlbumCacheService:
         if key in self.album_years_cache:
             entry = self.album_years_cache[key]
 
-            # Validate cache entry consistency
+            # Validate cache entry consistency (detect true hash collision)
             if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
-                self.logger.warning("Hash collision detected for %s - %s, removing invalid entry", artist, album)
-                del self.album_years_cache[key]
+                self.logger.warning(
+                    "Hash collision detected: requested '%s - %s', found '%s - %s'",
+                    artist,
+                    album,
+                    entry.artist,
+                    entry.album,
+                )
+                # Don't delete - keep the original entry, just miss for this request
                 return None
 
             if self._is_entry_expired(entry):

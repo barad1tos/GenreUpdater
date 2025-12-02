@@ -43,6 +43,7 @@ class ApiCacheService:
 
         # Background tasks to prevent garbage collection
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._max_background_tasks = 100
 
         # Cache file path
         self.api_cache_file = Path(get_full_log_path(config, "api_cache_file", "cache/cache.json"))
@@ -66,6 +67,16 @@ class ApiCacheService:
             album = event.metadata.get("album")
 
             if artist and album:
+                # Limit background tasks to prevent unbounded memory growth
+                if len(self._background_tasks) >= self._max_background_tasks:
+                    self.logger.debug(
+                        "Background task limit reached (%d), skipping invalidation for %s - %s",
+                        self._max_background_tasks,
+                        artist,
+                        album,
+                    )
+                    return
+
                 task = asyncio.create_task(self.invalidate_for_album(artist, album))
                 # Store reference to prevent garbage collection
                 self._background_tasks.add(task)
@@ -85,7 +96,8 @@ class ApiCacheService:
         """Initialize API cache by loading data from disk."""
         self.logger.info("Initializing ApiCacheService...")
         await self._load_api_cache()
-        self.logger.info("ApiCacheService initialized with %d entries", len(self.api_cache))
+        await self.cleanup_expired()
+        self.logger.info("ApiCacheService initialized with %d entries (after cleanup)", len(self.api_cache))
 
     async def get_cached_result(self, artist: str, album: str, source: str) -> CachedApiResult | None:
         """Get cached API result.

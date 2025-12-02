@@ -140,6 +140,9 @@ class LibrarySnapshotService:
         self._delta_path = self._base_cache_path.parent / "library_delta.json"
         self._music_library_path = self._resolve_music_library_path(config, options)
 
+        # Lock to prevent concurrent snapshot writes
+        self._write_lock = asyncio.Lock()
+
     async def initialize(self) -> None:
         """Ensure directories exist and clean up stale formats."""
         ensure_directory(str(self._base_cache_path.parent), self.logger)
@@ -168,18 +171,19 @@ class LibrarySnapshotService:
 
     async def save_snapshot(self, tracks: Sequence[TrackDict]) -> str:
         """Persist snapshot and return its hash."""
-        payload = self._prepare_snapshot_payload(tracks)
-        serialized = dumps_json(payload)
-        if self.compress:
-            serialized = await asyncio.to_thread(gzip.compress, serialized, self.compress_level)
+        async with self._write_lock:
+            payload = self._prepare_snapshot_payload(tracks)
+            serialized = dumps_json(payload)
+            if self.compress:
+                serialized = await asyncio.to_thread(gzip.compress, serialized, self.compress_level)
 
-        snapshot_hash = self.compute_snapshot_hash(payload)
-        snapshot_path = self._snapshot_path
+            snapshot_hash = self.compute_snapshot_hash(payload)
+            snapshot_path = self._snapshot_path
 
-        await asyncio.to_thread(self._write_bytes_atomic, snapshot_path, serialized)
-        await asyncio.to_thread(self._ensure_single_cache_format)
-        self.logger.info("Saved library snapshot (%d tracks)", len(payload))
-        return snapshot_hash
+            await asyncio.to_thread(self._write_bytes_atomic, snapshot_path, serialized)
+            await asyncio.to_thread(self._ensure_single_cache_format)
+            self.logger.info("Saved library snapshot (%d tracks)", len(payload))
+            return snapshot_hash
 
     async def is_snapshot_valid(self) -> bool:
         """Check whether snapshot meets freshness and integrity requirements.
