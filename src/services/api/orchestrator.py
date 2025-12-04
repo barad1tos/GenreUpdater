@@ -28,6 +28,7 @@ import aiohttp
 import certifi
 
 from src.core.debug_utils import debug
+from src.core.logger import LogFormat
 from src.core.models.script_detection import ScriptType, detect_primary_script
 from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
@@ -198,7 +199,7 @@ class ExternalApiOrchestrator:
         self.secure_config: SecureConfig | None = None
         try:
             self.secure_config = SecureConfig(logger=self.error_logger)
-            self.console_logger.debug("SecureConfig initialized for encrypted token storage")
+            self.console_logger.debug("%s initialized for encrypted token storage", LogFormat.entity("SecureConfig"))
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to initialize SecureConfig: %s", e)
             self.secure_config = None
@@ -641,7 +642,7 @@ class ExternalApiOrchestrator:
         self.console_logger.info("---------------------------")
 
         await self.session.close()
-        self.console_logger.info("External API session closed")
+        self.console_logger.info("%s session closed", LogFormat.entity("ExternalApiOrchestrator"))
 
     async def _make_api_request(
         self,
@@ -1096,9 +1097,10 @@ class ExternalApiOrchestrator:
 
         if not year_scores:
             self.console_logger.warning(
-                "No valid years found after processing API results for '%s - %s'",
+                "No valid years found for '%s - %s' (%d releases processed)",
                 log_artist,
                 log_album,
+                len(all_releases) if all_releases else 0,
             )
             await self._safe_mark_for_verification(artist, album)
             fallback_year = self._get_fallback_year_when_no_api_results(

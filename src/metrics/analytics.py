@@ -87,9 +87,9 @@ class Analytics:
     GC_COLLECTION_THRESHOLD = 5_000
 
     # Symbols for duration buckets
-    _FAST = "⚡"
-    _MEDIUM = "⏱️"
-    _SLOW = "🐢"
+    _FAST = ">>>"
+    _MEDIUM = ">>"
+    _SLOW = ">"
     _DURATION_FIELD = "Duration (s)"  # Field name for duration in analytics events
 
     # --- Init ---
@@ -487,7 +487,7 @@ class Analytics:
         if self.max_events > 0:
             cap = max(0, self.max_events - len(self.events))
             num_to_add = min(cap, len(other.events))
-            to_add = other.events[:num_to_add]
+            to_add = other.events[-num_to_add:] if num_to_add > 0 else []
             num_dropped = len(other.events) - num_to_add
             if num_dropped > 0:
                 self.console_logger.warning(
