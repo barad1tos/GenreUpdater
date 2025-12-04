@@ -16,6 +16,17 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+
+from src.core.logger import LogFormat, spinner
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
 from src.services.apple.applescript_executor import AppleScriptExecutor
@@ -29,6 +40,9 @@ from src.services.apple.sanitizer import (
 # Logging constants
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
+
+# AppleScript output markers
+NO_TRACKS_FOUND = "NO_TRACKS_FOUND"
 
 
 # noinspection PyUnboundLocalVariable
@@ -131,7 +145,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 self.console_logger.debug("Creating semaphore with concurrency limit: %d", concurrent_limit)
                 self.semaphore = asyncio.Semaphore(concurrent_limit)
                 self.executor.update_semaphore(self.semaphore)
-                self.console_logger.info("AppleScriptClient initialized (%d scripts, concurrency: %d)", len(scripts), concurrent_limit)
+                self.console_logger.info(
+                    "%s initialized (%d scripts, concurrency: %d)",
+                    LogFormat.entity("AppleScriptClient"), len(scripts), concurrent_limit,
+                )
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
                 self.error_logger.exception("Error initializing AppleScriptClient: %s", e)
                 raise
@@ -362,8 +379,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
             return []
 
         if batch_size <= 0:
-            self.error_logger.error("Invalid batch_size: %d, must be positive", batch_size)
-            return []
+            msg = f"Invalid batch_size: {batch_size}, must be positive"
+            raise ValueError(msg)
 
         if timeout is None:
             timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
@@ -372,29 +389,42 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         all_tracks: list[dict[str, str]] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size
-        self.console_logger.info("Fetching %d tracks in %d batches...", len(track_ids), total_batches)
+
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[cyan]{task.description}[/cyan]"),
+            BarColumn(bar_width=30),
+            TaskProgressColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+        )
 
         # Process in batches to avoid command-line length limits
-        for i in range(0, len(track_ids), batch_size):
-            batch = track_ids[i : i + batch_size]
-            ids_csv = ",".join(batch)
-            batch_num = i // batch_size + 1
+        with progress:
+            task_id = progress.add_task("Fetching tracks by ID", total=total_batches)
 
-            batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
+            for i in range(0, len(track_ids), batch_size):
+                batch = track_ids[i : i + batch_size]
+                ids_csv = ",".join(batch)
+                batch_num = i // batch_size + 1
 
-            raw_output = await self.run_script(
-                "fetch_tracks_by_ids.scpt",
-                [ids_csv],
-                timeout=timeout_float,
-                label=batch_label,
-            )
+                batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
 
-            if not raw_output or raw_output == "NO_TRACKS_FOUND":
-                continue
+                raw_output = await self.run_script(
+                    "fetch_tracks_by_ids.scpt",
+                    [ids_csv],
+                    timeout=timeout_float,
+                    label=batch_label,
+                )
 
-            # Parse output using same format as fetch_tracks.scpt
-            batch_tracks = self._parse_track_output(raw_output)
-            all_tracks.extend(batch_tracks)
+                progress.update(task_id, advance=1)
+
+                if not raw_output or raw_output == NO_TRACKS_FOUND:
+                    continue
+
+                # Parse output using same format as fetch_tracks.scpt
+                batch_tracks = self._parse_track_output(raw_output)
+                all_tracks.extend(batch_tracks)
 
         self.console_logger.info("Fetched %d tracks (requested: %d)", len(all_tracks), len(track_ids))
         return all_tracks
@@ -420,12 +450,11 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         timeout_float = float(timeout) if timeout is not None else 600.0
 
-        self.console_logger.info("Fetching all track IDs from Music.app...")
-
-        raw_output = await self.run_script(
-            "fetch_track_ids.applescript",
-            timeout=timeout_float,
-        )
+        async with spinner("Fetching all track IDs from Music.app..."):
+            raw_output = await self.run_script(
+                "fetch_track_ids.applescript",
+                timeout=timeout_float,
+            )
 
         if not raw_output:
             self.console_logger.warning("No track IDs returned from Music.app")

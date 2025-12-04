@@ -76,6 +76,11 @@ class AppleScriptExecutor:
             script_result: Script output
             elapsed: Execution time in seconds
         """
+        # Skip verbose logging for update_property - higher-level logs are more informative
+        if label.startswith("update_property"):
+            self.console_logger.debug("◁ %s completed in %.1fs", label, elapsed)
+            return
+
         if label.startswith(("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
@@ -85,6 +90,17 @@ class AppleScriptExecutor:
                 "◁ %s: %d tracks (%.1fKB, %.1fs)",
                 label,
                 track_count,
+                size_kb,
+                elapsed,
+            )
+        elif label.startswith("fetch_track_ids.applescript"):
+            # Just show count of IDs fetched - no preview needed
+            id_count = script_result.count(",") + 1 if script_result.strip() else 0
+            size_kb = len(script_result.encode()) / 1024
+            self.console_logger.info(
+                "◁ %s: %d IDs (%.1fKB, %.1fs)",
+                label,
+                id_count,
                 size_kb,
                 elapsed,
             )
