@@ -477,7 +477,7 @@ class TestCleanupICloudConflicts:
         # Create newer base file
         base_file.write_text("{}")
 
-        deleted, renamed = cleanup_icloud_conflicts(base_file, mock_logger)
+        deleted, renamed = cleanup_icloud_conflicts(base_file, mock_logger, min_age_seconds=60)
         assert deleted == 2
         assert renamed == 0
         assert base_file.exists()
@@ -504,7 +504,7 @@ class TestCleanupICloudConflicts:
         conflict2.write_text('{"winner": true}')
         os.utime(conflict2, (winner_time, winner_time))
 
-        deleted, renamed = cleanup_icloud_conflicts(base_file, mock_logger)
+        deleted, renamed = cleanup_icloud_conflicts(base_file, mock_logger, min_age_seconds=60)
         assert renamed == 1
         assert deleted == 1  # conflict3 deleted
         assert base_file.exists()
@@ -528,6 +528,56 @@ class TestCleanupICloudConflicts:
         assert deleted == 0
         assert renamed == 0
         assert conflict2.exists()
+
+    def test_respects_min_age_preserves_new_conflict(
+        self, temp_cache_dir: Path, mock_logger: MagicMock
+    ) -> None:
+        """Test that conflicts newer than min_age_seconds are preserved."""
+        base_file = temp_cache_dir / "data.json"
+        base_file.write_text("{}")
+
+        # Create a conflict file that is newer than the threshold
+        conflict = temp_cache_dir / "data 2.json"
+        conflict.write_text('{"conflict": true}')
+
+        now = time.time()
+        os.utime(conflict, (now, now))
+
+        # New file (younger than min_age_seconds) should be skipped
+        deleted, renamed = cleanup_icloud_conflicts(
+            base_file,
+            mock_logger,
+            min_age_seconds=60,
+        )
+        assert deleted == 0
+        assert renamed == 0
+        assert conflict.exists()
+
+    def test_respects_min_age_deletes_old_conflict(
+        self, temp_cache_dir: Path, mock_logger: MagicMock
+    ) -> None:
+        """Test that conflicts older than min_age_seconds are deleted."""
+        base_file = temp_cache_dir / "data.json"
+        base_file.write_text("{}")
+
+        # Create a conflict file
+        conflict = temp_cache_dir / "data 2.json"
+        conflict.write_text('{"conflict": true}')
+
+        # Age the conflict file beyond the threshold
+        now = time.time()
+        old_time = now - 120  # 2 minutes ago
+        os.utime(conflict, (old_time, old_time))
+
+        # Old conflict should now be cleaned up
+        deleted, renamed = cleanup_icloud_conflicts(
+            base_file,
+            mock_logger,
+            min_age_seconds=60,
+        )
+        assert deleted == 1
+        assert renamed == 0
+        assert not conflict.exists()
 
 
 class TestCleanupCacheDirectory:
@@ -569,6 +619,7 @@ class TestCleanupCacheDirectory:
             temp_cache_dir,
             ["cache.json", "other.json"],
             mock_logger,
+            min_age_seconds=60,
         )
 
         assert "cache.json" in results
@@ -584,7 +635,7 @@ class TestCleanupCacheDirectory:
         conflict.write_text("{}")
         os.utime(conflict, (old_time, old_time))
 
-        cleanup_cache_directory(temp_cache_dir, ["cache.json"], mock_logger)
+        cleanup_cache_directory(temp_cache_dir, ["cache.json"], mock_logger, min_age_seconds=60)
 
         # Check summary was logged
         mock_logger.info.assert_called()
@@ -675,7 +726,7 @@ class TestCleanupConflictFilesWithDirectories:
         conflict_info = is_icloud_conflict(conflict_dir)
         assert conflict_info is not None
 
-        deleted, skipped = cleanup_conflict_files([conflict_info], mock_logger)
+        deleted, skipped = cleanup_conflict_files([conflict_info], mock_logger, min_age_seconds=60)
 
         assert deleted == 1
         assert skipped == 0
@@ -694,7 +745,7 @@ class TestCleanupConflictFilesWithDirectories:
         assert conflict_info is not None
 
         deleted, skipped = cleanup_conflict_files(
-            [conflict_info], mock_logger, dry_run=True
+            [conflict_info], mock_logger, min_age_seconds=60, dry_run=True
         )
 
         assert deleted == 1  # Reports what WOULD be deleted
@@ -722,7 +773,7 @@ class TestCleanupConflictFilesWithDirectories:
         ]
         conflicts = [c for c in conflict_infos if c is not None]
 
-        deleted, _ = cleanup_conflict_files(conflicts, mock_logger)
+        deleted, _ = cleanup_conflict_files(conflicts, mock_logger, min_age_seconds=60)
 
         assert deleted == 2
         assert not conflict_file.exists()
@@ -761,7 +812,7 @@ class TestCleanupRepository:
         conflict.write_text("conflict")
         os.utime(conflict, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger)
+        result = cleanup_repository(tmp_path, mock_logger, min_age_seconds=60)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
         assert not conflict.exists()
@@ -775,7 +826,7 @@ class TestCleanupRepository:
         conflict.write_text("coverage")
         os.utime(conflict, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger)
+        result = cleanup_repository(tmp_path, mock_logger, min_age_seconds=60)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
 
@@ -790,7 +841,7 @@ class TestCleanupRepository:
         (conflict_dir / "file.txt").write_text("content")
         os.utime(conflict_dir, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger)
+        result = cleanup_repository(tmp_path, mock_logger, min_age_seconds=60)
         assert result["conflicts_found"] == 1
         assert result["deleted"] == 1
         assert not conflict_dir.exists()
@@ -808,7 +859,7 @@ class TestCleanupRepository:
         conflict_dir.mkdir()
         os.utime(conflict_dir, (old_time, old_time))
 
-        result = cleanup_repository(tmp_path, mock_logger, dry_run=True)
+        result = cleanup_repository(tmp_path, mock_logger, min_age_seconds=60, dry_run=True)
         assert result["conflicts_found"] == 2
         assert result["deleted"] == 2  # Reports what WOULD be deleted
         assert conflict_file.exists()  # But not actually deleted

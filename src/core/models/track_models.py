@@ -116,7 +116,6 @@ class LogLevelsConfig(BaseModel):
     console: LogLevel
     main_file: LogLevel
     analytics_file: LogLevel
-    year_updates_file: LogLevel
 
 
 class LoggingConfig(BaseModel):
@@ -126,13 +125,11 @@ class LoggingConfig(BaseModel):
     main_log_file: str
     analytics_log_file: str
     csv_output_file: str
-    album_cache_csv: str
     changes_report_file: str
     dry_run_report_file: str
     last_incremental_run_file: str
     pending_verification_file: str
     last_db_verify_log: str
-    year_changes_log_file: str
     levels: LogLevelsConfig
 
 
@@ -167,14 +164,6 @@ class ApiAuthConfig(BaseModel):
     contact_email: str
     use_lastfm: bool
     lastfm_api_key: str
-
-    @staticmethod
-    def validate_email(v: str) -> str:
-        """Validate email format."""
-        if "@" not in v:
-            msg = "Invalid email address"
-            raise ValueError(msg)
-        return v
 
 
 class RateLimitsConfig(BaseModel):
@@ -371,17 +360,9 @@ class TrackDict(BaseModel):
             A new TrackDict instance with updated fields
 
         """
-        # Get current data as dict (including extra fields from Config.extra="allow")
-        # Use Pydantic v2 model_dump
+        # Pydantic v2 model_dump() includes extra fields automatically
         data = self.model_dump()
-
-        # Include any extra fields that might be stored directly in __dict__
-        for key, value in self.__dict__.items():
-            if not key.startswith("_") and key not in data:
-                data[key] = value
-        # Update with provided kwargs
         data.update(kwargs)
-        # Create new instance
         return TrackDict(**data)
 
 
@@ -575,5 +556,9 @@ class LastFmSearchResult(BaseModel):
     def albums(self) -> list[LastFmAlbum]:
         """Get albums from search results."""
         album_data = self.albummatches.get("album", [])
-        albums: list[dict[str, Any]] = album_data
-        return [LastFmAlbum(**album) for album in albums]
+        # Last.fm returns dict for single result, list for multiple
+        if isinstance(album_data, dict):
+            album_data = [album_data]
+        elif not isinstance(album_data, list):
+            return []
+        return [LastFmAlbum(**album) for album in album_data]

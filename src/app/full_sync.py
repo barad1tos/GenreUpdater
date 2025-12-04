@@ -61,30 +61,33 @@ async def run_full_resync(
         track_processor: Track processor instance
 
     """
-    console_logger.info("🔄 Starting full media library resync...")
+    console_logger.info("Starting full media library resync...")
 
     try:
         # Check if Music.app is running
         if not is_music_app_running(error_logger):
-            error_logger.error("❌ Music.app is not running! Please start Music.app before running this script.")
+            error_logger.error("Music.app is not running! Please start Music.app before running this script.")
             return
 
-        console_logger.info("✅ Music.app is running")
+        console_logger.info("Music.app is running")
 
         # Fetch ALL current tracks from Music.app
-        console_logger.info("📚 Fetching all tracks from Music.app...")
+        console_logger.info("Fetching all tracks from Music.app...")
         all_tracks = await track_processor.fetch_tracks_async()
 
         if not all_tracks:
-            console_logger.warning("⚠️ No tracks found in Music.app")
+            console_logger.warning("No tracks found in Music.app")
             return
 
-        console_logger.info("📊 Found %d tracks in Music.app", len(all_tracks))
+        console_logger.info("Found %d tracks in Music.app", len(all_tracks))
 
         # Perform full synchronization
         csv_path = get_full_log_path(config, "csv_output_file", "csv/track_list.csv")
 
-        console_logger.info("💾 Synchronizing with database: %s", csv_path)
+        # Ensure the directory for the CSV file exists
+        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+
+        console_logger.info("Synchronizing with database: %s", csv_path)
 
         await sync_track_list_with_current(
             all_tracks,
@@ -96,8 +99,7 @@ async def run_full_resync(
             applescript_client=track_processor.ap_client,
         )
 
-        console_logger.info("✨ Full resync completed successfully!")
-        console_logger.info("🎯 Database synchronized: %d tracks", len(all_tracks))
+        console_logger.info("✅ Full resync completed: %d tracks", len(all_tracks))
 
     except (OSError, RuntimeError, ValueError) as e:
         error_logger.exception("❌ Full resync failed: %s", e)
@@ -106,7 +108,7 @@ async def run_full_resync(
 
 async def main() -> None:
     """Perform full media library resynchronization."""
-    print("🚀 Music Genre Updater - Full Media Library Resync")
+    print("Music Genre Updater - Full Media Library Resync")
     print("=" * 55)
 
     # Determine config path - look for it in the current project directory
@@ -120,56 +122,55 @@ async def main() -> None:
         config_path = found_configs[0]
         if len(found_configs) > 1:
             print(
-                f"⚠️  Both '{config_files[0]}' and '{config_files[1]}' found in the project directory.\n"
-                f"    Using '{config_path.name}' as configuration file (higher precedence).\n"
-                "    Please remove the unused config file to avoid ambiguity."
+                f"Both '{config_files[0]}' and '{config_files[1]}' found.\n"
+                f"    Using '{config_path.name}' (higher precedence).\n"
+                "    Remove the unused config file to avoid ambiguity."
             )
 
     else:
         # If neither exists, use default naming
         config_path = project_root / "config.yaml"
     if not config_path.exists():
-        print(f"❌ Configuration file not found: {config_path}")
+        print(f"Configuration file not found: {config_path}")
         print("Please make sure you're running this script from the correct directory.")
         sys.exit(1)
 
-    print(f"📁 Using config: {config_path}")
+    print(f"Using config: {config_path.name}")
 
     # Load configuration to setup proper loggers
     config = load_config(str(config_path))
 
     # Setup loggers using centralized system
-    console_logger, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener = get_loggers(config)
+    console_logger, error_logger, analytics_logger, db_verify_logger, listener = get_loggers(config)
 
     # Initialize variables for cleanup
     deps = None
     try:
         # Initialize dependency container with proper config path and loggers
-        print("⚙️ Initializing services...")
+        print("Initializing services...")
         deps = DependencyContainer(
             config_path=str(config_path),
             console_logger=console_logger,
             error_logger=error_logger,
             analytics_logger=analytics_logger,
-            year_updates_logger=year_updates_logger,
             db_verify_logger=db_verify_logger,
         )
         await deps.initialize()
 
-        print("✅ Services initialized successfully")
+        print("Services initialized")
 
         # Create MusicUpdater instance to get track processor
         music_updater = MusicUpdater(deps)
 
         # Run the full resync
-        print("🔄 Starting full media library resync...")
+        print("Starting full media library resync...")
         await run_full_resync(console_logger, error_logger, deps.config, deps.cache_service, music_updater.track_processor)
 
-        print("✅ Full resync completed successfully!")
-        print("🎯 Your track_list.csv is now fully synchronized with Music.app")
+        print("✅ Full resync completed!")
+        print("track_list.csv is now synchronized with Music.app")
 
     except KeyboardInterrupt:
-        print("\n⏹️ Resync cancelled by user")
+        print("\nResync cancelled by user")
         sys.exit(1)
     except (OSError, ValueError, RuntimeError) as e:
         print(f"❌ Resync failed: {e}")
@@ -185,7 +186,7 @@ async def main() -> None:
             try:
                 listener.stop()
             except Exception as e:
-                print(f"❌ Exception during listener.stop(): {e}")
+                print(f"Exception during listener.stop(): {e}")
                 traceback.print_exc()
 
 

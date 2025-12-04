@@ -35,6 +35,12 @@ def error_logger() -> logging.Logger:
 
 
 @pytest.fixture
+def db_verify_logger() -> logging.Logger:
+    """Create test db_verify logger."""
+    return logging.getLogger("test.db_verify")
+
+
+@pytest.fixture
 def mock_ap_client() -> Any:
     """Create mock AppleScript client."""
     client = create_autospec(AppleScriptClientProtocol, instance=True)
@@ -71,6 +77,7 @@ def verifier(
     mock_ap_client: Any,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
+    db_verify_logger: logging.Logger,
     mock_analytics: Any,
     config: dict[str, Any],
 ) -> DatabaseVerifier:
@@ -79,6 +86,7 @@ def verifier(
         ap_client=mock_ap_client,
         console_logger=console_logger,
         error_logger=error_logger,
+        db_verify_logger=db_verify_logger,
         analytics=mock_analytics,
         config=config,
     )
@@ -92,6 +100,7 @@ class TestDatabaseVerifierInit:
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
         mock_analytics: MagicMock,
         config: dict[str, Any],
     ) -> None:
@@ -100,6 +109,7 @@ class TestDatabaseVerifierInit:
             ap_client=mock_ap_client,
             console_logger=console_logger,
             error_logger=error_logger,
+            db_verify_logger=db_verify_logger,
             analytics=mock_analytics,
             config=config,
         )
@@ -116,6 +126,7 @@ class TestDatabaseVerifierInit:
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
         mock_analytics: MagicMock,
         config: dict[str, Any],
     ) -> None:
@@ -124,6 +135,7 @@ class TestDatabaseVerifierInit:
             ap_client=mock_ap_client,
             console_logger=console_logger,
             error_logger=error_logger,
+            db_verify_logger=db_verify_logger,
             analytics=mock_analytics,
             config=config,
             dry_run=True,
@@ -239,11 +251,11 @@ class TestHandleInvalidTracks:
     def test_logs_when_no_invalid_tracks(
         self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Should log success when no invalid tracks."""
+        """Should log when no invalid tracks found."""
         with caplog.at_level(logging.INFO):
             verifier._handle_invalid_tracks([], [], "/path/tracks.csv")
 
-        assert "All tracks in database are valid" in caplog.text
+        assert "INVALID_TRACKS | count=0" in caplog.text
 
     def test_removes_invalid_tracks_in_normal_mode(
         self, verifier: DatabaseVerifier
@@ -272,6 +284,7 @@ class TestHandleInvalidTracks:
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
         mock_analytics: Any,
         config: dict[str, Any],
     ) -> None:
@@ -280,6 +293,7 @@ class TestHandleInvalidTracks:
             ap_client=mock_ap_client,
             console_logger=console_logger,
             error_logger=error_logger,
+            db_verify_logger=db_verify_logger,
             analytics=mock_analytics,
             config=config,
             dry_run=True,

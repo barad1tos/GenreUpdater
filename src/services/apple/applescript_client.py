@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from src.core.logger import LogFormat, spinner
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
 from src.services.apple.applescript_executor import AppleScriptExecutor
@@ -29,6 +30,9 @@ from src.services.apple.sanitizer import (
 # Logging constants
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
+
+# AppleScript output markers
+NO_TRACKS_FOUND = "NO_TRACKS_FOUND"
 
 
 # noinspection PyUnboundLocalVariable
@@ -90,28 +94,23 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         Must be called within an active event loop.
         """
-        self.console_logger.info("🔧 Starting AppleScriptClient initialization...")
-
         if self.apple_scripts_dir is None:
-            error_msg = "❌ AppleScript directory is not set. Cannot initialize client."
+            error_msg = "AppleScript directory is not set"
             self.error_logger.critical(error_msg)
             raise ValueError(error_msg)
 
-        self.console_logger.debug("📁 AppleScript directory: %s", self.apple_scripts_dir)
+        self.console_logger.debug("AppleScript directory: %s", self.apple_scripts_dir)
 
         # Check if the directory exists and is accessible
         if not Path(self.apple_scripts_dir).is_dir():
-            error_msg = f"❌ AppleScript directory does not exist or is not accessible: {self.apple_scripts_dir}"
+            error_msg = f"AppleScript directory not accessible: {self.apple_scripts_dir}"
             self.error_logger.critical(error_msg)
             raise FileNotFoundError(error_msg)
 
-        # List scripts in the directory for debugging
+        # Count and validate scripts
         try:
-            # Use pathlib.Path.iterdir() for better path handling
             scripts_path = Path(self.apple_scripts_dir)
             scripts: list[str] = [f.name for f in scripts_path.iterdir() if f.name.endswith((".applescript", ".scpt"))]
-            msg = f"📜 Found {len(scripts)} AppleScript files: {', '.join(scripts) if scripts else 'None'}"
-            self.console_logger.info(msg)
 
             # Check for required scripts
             required_scripts: list[str] = [
@@ -119,30 +118,32 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 "fetch_tracks.scpt",
             ]
             if missing_scripts := [script for script in required_scripts if not (Path(self.apple_scripts_dir) / script).exists()]:
-                self.error_logger.warning("⚠️ Missing required AppleScripts: %s", "', '".join(missing_scripts))
+                self.error_logger.warning("Missing required AppleScripts: %s", "', '".join(missing_scripts))
 
         except OSError as e:
-            self.console_logger.warning("⚠️ Could not list AppleScript directory: %s", e)
+            self.console_logger.warning("Could not list AppleScript directory: %s", e)
+            scripts = []
 
         if self.semaphore is None:
             try:
                 concurrent_limit = self.config.get("apple_script_concurrency", 5)
                 if concurrent_limit <= 0:
-                    error_msg = f"❌ Invalid concurrency limit: {concurrent_limit}. Must be a positive integer."
+                    error_msg = f"Invalid concurrency limit: {concurrent_limit}. Must be positive."
                     self.error_logger.critical(error_msg)
                     raise ValueError(error_msg)
 
-                self.console_logger.debug("🔒 Creating semaphore with concurrency limit: %d", concurrent_limit)
+                self.console_logger.debug("Creating semaphore with concurrency limit: %d", concurrent_limit)
                 self.semaphore = asyncio.Semaphore(concurrent_limit)
                 self.executor.update_semaphore(self.semaphore)
-                self.console_logger.info("✅ AppleScriptClient semaphore initialized with concurrency: %d", concurrent_limit)
+                self.console_logger.info(
+                    "%s initialized (%d scripts, concurrency: %d)",
+                    LogFormat.entity("AppleScriptClient"), len(scripts), concurrent_limit,
+                )
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
-                self.error_logger.exception("❌ Error initializing AppleScriptClient semaphore: %s", e)
+                self.error_logger.exception("Error initializing AppleScriptClient: %s", e)
                 raise
         else:
-            self.console_logger.debug("INFO: Semaphore already initialized")
-
-        self.console_logger.info("✨ AppleScriptClient initialization complete")
+            self.console_logger.debug("Semaphore already initialized")
 
     def _build_command_with_args(self, script_path: str, arguments: list[str] | None) -> list[str] | None:
         """Build osascript command with validated arguments.
@@ -162,7 +163,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             for arg in arguments:
                 # Basic safety check for potentially dangerous characters
                 if any(c in arg for c in DANGEROUS_ARGUMENT_CHARACTERS):
-                    self.error_logger.error("❌ Potentially dangerous characters in argument: %s", arg)
+                    self.error_logger.error("Potentially dangerous characters in argument: %s", arg)
                     return None
                 safe_args.append(arg)
             cmd.extend(safe_args)
@@ -177,11 +178,11 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         """
         if result is not None:
-            self.console_logger.debug("✅ AppleScript execution completed successfully. Result length: %d characters", len(result))
+            self.console_logger.debug("AppleScript execution completed. Result length: %d characters", len(result))
             if result.strip():
-                self.console_logger.debug("📝 Script output: %s%s", result[:LOG_PREVIEW_LENGTH], "..." if len(result) > LOG_PREVIEW_LENGTH else "")
+                self.console_logger.debug("Script output: %s%s", result[:LOG_PREVIEW_LENGTH], "..." if len(result) > LOG_PREVIEW_LENGTH else "")
         else:
-            self.console_logger.warning("⚠️ AppleScript execution returned None")
+            self.console_logger.warning("AppleScript execution returned None")
 
     @Analytics.track_instance_method("applescript_run_script")
     async def run_script(
@@ -192,6 +193,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Execute an AppleScript asynchronously and return its output.
 
@@ -203,21 +205,22 @@ class AppleScriptClient(AppleScriptClientProtocol):
         :param context_artist: Artist name for contextual logging (optional)
         :param context_album: Album name for contextual logging (optional)
         :param context_track: Track name for contextual logging (optional)
+        :param label: Custom label for logging (defaults to script_name)
         :return: The output of the script, or None if an error occurred
         """
-        self.console_logger.debug("🔧 run_script called with script_name='%s', arguments=%s", script_name, arguments)
+        self.console_logger.debug("run_script called: script='%s'", script_name)
 
         if self.apple_scripts_dir is None:
-            error_msg = "❌ AppleScript directory is not set. Cannot run script."
+            error_msg = "AppleScript directory is not set. Cannot run script."
             self.error_logger.error(error_msg)
             return None
 
         script_path = str(Path(self.apple_scripts_dir) / script_name)
-        self.console_logger.debug("📜 Resolved script path: %s", script_path)
+        self.console_logger.debug("Script path: %s", script_path)
 
         # Validate the script path is within the allowed directory
         if not self.file_validator.validate_script_path(script_path):
-            self.error_logger.error("❌ Invalid script path (security check failed): %s", script_path)
+            self.error_logger.error("Invalid script path (security check failed): %s", script_path)
             return None
 
         # Validate file access
@@ -234,9 +237,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
             timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
         timeout_float = float(timeout) if timeout is not None else 3600.0
 
-        # Log the command with contextual information when available
-        args_str = " ".join([script_name] + (arguments or []))
-
         # Build contextual information
         context_parts: list[str] = []
         if context_artist:
@@ -248,31 +248,29 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         if context_parts:
             context_str = f" ({' | '.join(context_parts)})"
-            self.console_logger.info(
-                "🚀 Executing AppleScript: %s (%s)%s [timeout: %ss]",
+            self.console_logger.debug(
+                "Executing AppleScript: %s%s [timeout: %ss]",
                 script_name,
-                args_str,
                 context_str,
                 timeout_float,
             )
         else:
-            self.console_logger.info(
-                "🚀 Executing AppleScript: %s (%s) [timeout: %ss]",
+            self.console_logger.debug(
+                "Executing AppleScript: %s [timeout: %ss]",
                 script_name,
-                args_str,
                 timeout_float,
             )
 
         try:
-            result = await self.executor.run_osascript(cmd, script_name, timeout_float)
+            result = await self.executor.run_osascript(cmd, label or script_name, timeout_float)
             self._log_script_result(result)
             return result
         except TimeoutError:
-            error_msg = f"⌛ AppleScript execution timed out after {timeout_float} seconds"
+            error_msg = f"AppleScript execution timed out after {timeout_float} seconds"
             self.error_logger.exception(error_msg)
             raise
         except (OSError, subprocess.SubprocessError, asyncio.CancelledError) as e:
-            error_msg = f"❌ Error in AppleScript execution: {e}"
+            error_msg = f"Error in AppleScript execution: {e}"
             self.error_logger.exception(error_msg)
             raise
 
@@ -312,15 +310,15 @@ class AppleScriptClient(AppleScriptClientProtocol):
             # Validate the script before writing to the temp file
             try:
                 self.sanitizer.validate_script_code(script_code)
-                self.console_logger.debug("✅ AppleScript code passed security validation (temp file mode)")
+                self.console_logger.debug("AppleScript code passed security validation (temp file mode)")
             except AppleScriptSanitizationError as e:
-                self.error_logger.exception("🔒 Security violation in AppleScript code: %s", e)
-                self.error_logger.exception("🚫 Blocked potentially dangerous script: %s", script_code[:200])
+                self.error_logger.exception("Security violation in AppleScript code: %s", e)
+                self.error_logger.exception("Blocked potentially dangerous script: %s", script_code[:200])
                 return None
 
             code_preview = self._format_script_preview(script_code)
             self.console_logger.info(
-                "▷ tempfile-script (%dB) [t:%ss] %s",
+                "tempfile-script (%dB) [timeout: %ss] %s",
                 len(script_code.encode()),
                 timeout_float,
                 code_preview,
@@ -330,18 +328,18 @@ class AppleScriptClient(AppleScriptClientProtocol):
         # Use traditional -e flag execution for simple scripts
         try:
             cmd = self.sanitizer.create_safe_command(script_code, arguments)
-            self.console_logger.debug("✅ AppleScript code passed security validation (inline mode)")
+            self.console_logger.debug("AppleScript code passed security validation (inline mode)")
         except AppleScriptSanitizationError as e:
-            self.error_logger.exception("🔒 Security violation in AppleScript code: %s", e)
-            self.error_logger.exception("🚫 Blocked potentially dangerous script: %s", script_code[:200])
+            self.error_logger.exception("Security violation in AppleScript code: %s", e)
+            self.error_logger.exception("Blocked potentially dangerous script: %s", script_code[:200])
             return None
         except (ValueError, TypeError, AttributeError) as e:
-            self.error_logger.exception("❌ Error during script sanitization: %s", e)
+            self.error_logger.exception("Error during script sanitization: %s", e)
             return None
 
         code_preview = self._format_script_preview(script_code)
         self.console_logger.info(
-            "▷ inline-script (%dB) [t:%ss] %s",
+            "inline-script (%dB) [timeout: %ss] %s",
             len(script_code.encode()),
             timeout_float,
             code_preview,
@@ -370,41 +368,87 @@ class AppleScriptClient(AppleScriptClientProtocol):
         if not track_ids:
             return []
 
+        if batch_size <= 0:
+            msg = f"Invalid batch_size: {batch_size}, must be positive"
+            raise ValueError(msg)
+
         if timeout is None:
             timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
 
         timeout_float = float(timeout) if timeout is not None else 3600.0
 
         all_tracks: list[dict[str, str]] = []
+        total_batches = (len(track_ids) + batch_size - 1) // batch_size
 
-        # Process in batches to avoid command-line length limits
-        for i in range(0, len(track_ids), batch_size):
-            batch = track_ids[i : i + batch_size]
-            ids_csv = ",".join(batch)
+        # Use analytics batch_mode to suppress per-call console logging
+        async with self.analytics.batch_mode("Fetching tracks by ID...") as status:
+            for i in range(0, len(track_ids), batch_size):
+                batch = track_ids[i : i + batch_size]
+                ids_csv = ",".join(batch)
+                batch_num = i // batch_size + 1
 
-            self.console_logger.info(
-                "🔍 Fetching %d tracks by ID (batch %d-%d of %d)",
-                len(batch),
-                i + 1,
-                min(i + batch_size, len(track_ids)),
-                len(track_ids),
+                status.update(f"[cyan]Fetching tracks by ID... ({batch_num}/{total_batches})[/cyan]")
+
+                batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
+
+                raw_output = await self.run_script(
+                    "fetch_tracks_by_ids.scpt",
+                    [ids_csv],
+                    timeout=timeout_float,
+                    label=batch_label,
+                )
+
+                if not raw_output or raw_output == NO_TRACKS_FOUND:
+                    continue
+
+                # Parse output using same format as fetch_tracks.scpt
+                batch_tracks = self._parse_track_output(raw_output)
+                all_tracks.extend(batch_tracks)
+
+        self.console_logger.info("Fetched %d tracks (requested: %d)", len(all_tracks), len(track_ids))
+        return all_tracks
+
+    @Analytics.track_instance_method("applescript_fetch_all_ids")
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Fetch just track IDs from Music.app (lightweight operation).
+
+        This is used by Smart Delta to detect new/removed tracks without
+        fetching full metadata. Much faster than fetching all track data.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track ID strings
+
+        """
+        if timeout is None:
+            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get(
+                "applescript_timeout_seconds", 600
             )
 
+        timeout_float = float(timeout) if timeout is not None else 600.0
+
+        async with spinner("Fetching all track IDs from Music.app..."):
             raw_output = await self.run_script(
-                "fetch_tracks_by_ids.scpt",
-                [ids_csv],
+                "fetch_track_ids.applescript",
                 timeout=timeout_float,
             )
 
-            if not raw_output or raw_output == "NO_TRACKS_FOUND":
-                continue
+        if not raw_output:
+            self.console_logger.warning("No track IDs returned from Music.app")
+            return []
 
-            # Parse output using same format as fetch_tracks.scpt
-            batch_tracks = self._parse_track_output(raw_output)
-            all_tracks.extend(batch_tracks)
+        # Check for error from AppleScript
+        if raw_output.startswith("ERROR:"):
+            self.error_logger.error("AppleScript error: %s", raw_output[6:])
+            return []
 
-        self.console_logger.info("✓ Fetched %d tracks by ID (requested: %d)", len(all_tracks), len(track_ids))
-        return all_tracks
+        # Parse comma-separated IDs
+        track_ids = [id_str.strip() for id_str in raw_output.split(",") if id_str.strip()]
+
+        self.console_logger.info("Fetched %d track IDs", len(track_ids))
+        return track_ids
 
     @staticmethod
     def _parse_track_output(raw_output: str) -> list[dict[str, str]]:
@@ -448,6 +492,12 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     "new_year": fields[10],
                 }
                 tracks.append(track)
+            else:
+                logging.warning(
+                    "Skipping line with insufficient fields (%d < 11): %s",
+                    len(fields),
+                    line[:100] if len(line) > 100 else line,
+                )
 
         return tracks
 

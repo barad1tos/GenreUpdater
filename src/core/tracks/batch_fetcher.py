@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from rich.console import Console
+
 from src.core.models.metadata_utils import parse_tracks
+from src.services.apple.applescript_client import NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
     import logging
@@ -16,6 +19,7 @@ if TYPE_CHECKING:
 
     from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
     from src.core.models.track_models import TrackDict
+    from src.metrics import Analytics
 
 
 # Maximum consecutive parse failures before aborting batch processing
@@ -45,6 +49,7 @@ class BatchTrackFetcher:
         snapshot_persister: Callable[[list[TrackDict], list[str] | None], Awaitable[None]],
         can_use_snapshot: Callable[[str | None], bool],
         dry_run: bool = False,
+        analytics: Analytics | None = None,
     ) -> None:
         """Initialize the batch track fetcher.
 
@@ -60,6 +65,7 @@ class BatchTrackFetcher:
             snapshot_persister: Async callback to persist tracks to snapshot
             can_use_snapshot: Callback to check if snapshot can be used
             dry_run: Whether running in dry-run mode
+            analytics: Optional analytics instance for batch mode logging
         """
         self.ap_client = ap_client
         self.cache_service = cache_service
@@ -72,6 +78,7 @@ class BatchTrackFetcher:
         self._snapshot_persister = snapshot_persister
         self._can_use_snapshot = can_use_snapshot
         self.dry_run = dry_run
+        self.analytics = analytics
 
     async def fetch_all_tracks(
         self,
@@ -115,60 +122,120 @@ class BatchTrackFetcher:
         Returns:
             List of all fetched and validated tracks
         """
+        # Use analytics batch_mode if available (suppresses per-call logging)
+        if self.analytics is not None:
+            return await self._fetch_tracks_in_batches_with_analytics(batch_size)
+        return await self._fetch_tracks_in_batches_raw(batch_size)
+
+    async def _fetch_tracks_in_batches_with_analytics(self, batch_size: int) -> list[TrackDict]:
+        """Batch fetch with analytics batch_mode (suppresses per-call console logs)."""
         all_tracks: list[TrackDict] = []
-        offset = 1  # AppleScript indices start from 1
+        offset = 1
         batch_number = 0
         consecutive_failures = 0
 
-        self.console_logger.info("Starting batch processing with batch_size=%d", batch_size)
+        async with self.analytics.batch_mode("Fetching library...") as status:  # type: ignore[union-attr]
+            while True:
+                batch_number += 1
+                status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
 
-        while True:
-            batch_number += 1
-            self.console_logger.info(
-                "Fetching batch %d (offset=%d, limit=%d)...",
-                batch_number,
-                offset,
-                batch_size,
-            )
-
-            try:
-                batch_result = await self._fetch_and_validate_batch(batch_number, offset, batch_size)
-                if batch_result is None:
-                    break
-
-                validated_tracks, should_continue, parse_failed = batch_result
-
-                consecutive_failures, should_continue_loop = self._update_failure_counter(
-                    consecutive_failures,
-                    parse_failed,
-                    batch_number,
+                result = await self._process_single_batch(
+                    batch_number, offset, batch_size, consecutive_failures
                 )
-                if not should_continue_loop:
+                if result is None:
                     break
 
-                all_tracks.extend(validated_tracks)
+                tracks, new_offset, new_failures, should_continue = result
+                all_tracks.extend(tracks)
+                offset = new_offset
+                consecutive_failures = new_failures
+
+                status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
 
                 if not should_continue:
                     break
-
-                offset += batch_size
-
-            except (OSError, ValueError, RuntimeError) as error:
-                self.error_logger.exception(
-                    "Error in batch %d (offset=%d): %s",
-                    batch_number,
-                    offset,
-                    error,
-                )
-                break
 
         self.console_logger.info(
             "Batch processing completed: %d batches processed, %d total tracks fetched",
             batch_number,
             len(all_tracks),
         )
-
         return all_tracks
+
+    async def _fetch_tracks_in_batches_raw(self, batch_size: int) -> list[TrackDict]:
+        """Batch fetch with raw Rich status (fallback when analytics unavailable)."""
+        all_tracks: list[TrackDict] = []
+        offset = 1
+        batch_number = 0
+        consecutive_failures = 0
+
+        console = Console()
+        with console.status("[cyan]Fetching library...[/cyan]") as status:
+            while True:
+                batch_number += 1
+                status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
+
+                result = await self._process_single_batch(
+                    batch_number, offset, batch_size, consecutive_failures
+                )
+                if result is None:
+                    break
+
+                tracks, new_offset, new_failures, should_continue = result
+                all_tracks.extend(tracks)
+                offset = new_offset
+                consecutive_failures = new_failures
+
+                status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
+
+                if not should_continue:
+                    break
+
+        self.console_logger.info(
+            "Batch processing completed: %d batches processed, %d total tracks fetched",
+            batch_number,
+            len(all_tracks),
+        )
+        return all_tracks
+
+    async def _process_single_batch(
+        self,
+        batch_number: int,
+        offset: int,
+        batch_size: int,
+        consecutive_failures: int,
+    ) -> tuple[list[TrackDict], int, int, bool] | None:
+        """Process a single batch and return results.
+
+        Returns:
+            Tuple of (tracks, new_offset, new_failures, should_continue) or None to stop
+        """
+        try:
+            batch_result = await self._fetch_and_validate_batch(batch_number, offset, batch_size)
+            if batch_result is None:
+                return None
+
+            validated_tracks, should_continue, parse_failed = batch_result
+
+            new_failures, should_continue_loop = self._update_failure_counter(
+                consecutive_failures,
+                parse_failed,
+                batch_number,
+            )
+            if not should_continue_loop:
+                return None
+
+            new_offset = offset + batch_size
+            return validated_tracks, new_offset, new_failures, should_continue
+
+        except (OSError, ValueError, RuntimeError) as error:
+            self.error_logger.exception(
+                "Error in batch %d (offset=%d): %s",
+                batch_number,
+                offset,
+                error,
+            )
+            return None
 
     async def _fetch_and_validate_batch(
         self,
@@ -202,7 +269,7 @@ class BatchTrackFetcher:
         if raw_output.startswith("ERROR:"):
             self.error_logger.error("Batch %d AppleScript error: %s", batch_number, raw_output)
             return None
-        if raw_output == "NO_TRACKS_FOUND":
+        if raw_output == NO_TRACKS_FOUND:
             self.console_logger.info("Batch %d: no tracks found", batch_number)
             return None
 

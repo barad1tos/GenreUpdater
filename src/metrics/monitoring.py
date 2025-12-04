@@ -168,6 +168,8 @@ class ThresholdRule(AlertRule):
             should_alert = value < self.threshold
         elif self.operator == "equal":
             should_alert = abs(value - self.threshold) < FLOAT_COMPARISON_TOLERANCE
+        else:
+            raise ValueError(f"Unrecognized operator '{self.operator}' in ThresholdRule")
 
         if should_alert:
             return Alert(
@@ -627,7 +629,7 @@ class MetricsCollector:
     def get_summary(self) -> dict[str, Any]:
         """Get comprehensive monitoring summary."""
         now = datetime.now(UTC)
-        hour_ago = now.replace(minute=0, second=0, microsecond=0)
+        hour_ago = now - timedelta(hours=1)
 
         recent_alerts = self.alert_manager.get_alerts(since=hour_ago)
         recent_performance = self.performance_tracker.get_metrics(since=hour_ago)

@@ -127,3 +127,58 @@ def test_metadata_serialization_roundtrip() -> None:
         snapshot_hash="deadbeef",
     )
     assert LibraryCacheMetadata.from_dict(metadata.to_dict()) == metadata
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writes_are_serialized(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Test that concurrent snapshot writes are serialized via lock."""
+    import asyncio
+
+    config = _make_config(tmp_path_factory)
+    service = LibrarySnapshotService(config, logging.getLogger("test.snapshot"))
+    await service.initialize()
+
+    # Track execution order
+    execution_order: list[str] = []
+
+    original_write = service._write_bytes_atomic
+
+    def tracking_write(path, data):
+        execution_order.append(f"start_{len(data)}")
+        original_write(path, data)
+        execution_order.append(f"end_{len(data)}")
+
+    service._write_bytes_atomic = tracking_write  # type: ignore[method-assign]
+
+    tracks1 = [TrackDict(id="1", name="Track1", artist="Artist1", album="Album1")]
+    tracks2 = [
+        TrackDict(id="2", name="Track2", artist="Artist2", album="Album2"),
+        TrackDict(id="3", name="Track3", artist="Artist3", album="Album3"),
+    ]
+
+    # Launch concurrent writes
+    await asyncio.gather(
+        service.save_snapshot(tracks1),
+        service.save_snapshot(tracks2),
+    )
+
+    # Verify writes completed (each write has start/end pair)
+    assert len(execution_order) == 4
+    # Verify writes were serialized: one must complete before other starts
+    # Pattern should be: start_X, end_X, start_Y, end_Y (serialized)
+    # NOT: start_X, start_Y, end_X, end_Y (interleaved)
+    assert execution_order[0].startswith("start_")
+    assert execution_order[1].startswith("end_")
+    assert execution_order[2].startswith("start_")
+    assert execution_order[3].startswith("end_")
+
+
+def test_service_has_write_lock(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Test that LibrarySnapshotService has _write_lock attribute."""
+    import asyncio
+
+    config = _make_config(tmp_path_factory)
+    service = LibrarySnapshotService(config, logging.getLogger("test.snapshot"))
+
+    assert hasattr(service, "_write_lock")
+    assert isinstance(service._write_lock, asyncio.Lock)

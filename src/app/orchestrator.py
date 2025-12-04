@@ -13,8 +13,8 @@ import yaml
 
 from src.app.features.batch.batch_processor import BatchProcessor
 from src.app.music_updater import MusicUpdater
+from src.core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
-from src.core.models.metadata_utils import is_music_app_running
 
 if TYPE_CHECKING:
     from src.services.dependency_container import DependencyContainer
@@ -45,6 +45,9 @@ class Orchestrator:
             args: Parsed command-line arguments
 
         """
+        # Reset per-run state
+        reset_cleaning_exceptions_log()
+
         command = getattr(args, "command", None)
 
         # Check if Music app is running for commands that depend on it
@@ -88,7 +91,7 @@ class Orchestrator:
 
     async def _run_clean_artist(self, args: argparse.Namespace) -> None:
         """Run the clean artist command."""
-        await self.music_updater.run_clean_artist(artist=args.artist, _force=args.force)
+        await self.music_updater.run_clean_artist(artist=args.artist)
 
     async def _run_update_years(self, args: argparse.Namespace) -> None:
         """Run the update years command."""
@@ -112,12 +115,20 @@ class Orchestrator:
 
     async def _run_main_workflow(self, args: argparse.Namespace) -> None:
         """Run the main update workflow when no specific command is given."""
+        # Auto-verify database if threshold days passed (before main workflow)
+        await self._maybe_auto_verify()
+
         # Check if in test mode
         if getattr(args, "test_mode", False):
             await self._run_test_mode(args)
         else:
             # Run the main pipeline
             await self.music_updater.run_main_pipeline(force=args.force)
+
+    async def _maybe_auto_verify(self) -> None:
+        """Run automatic database verification if threshold days have passed."""
+        if await self.music_updater.database_verifier.should_auto_verify():
+            await self.music_updater.run_verify_database()
 
     async def _run_test_mode(self, args: argparse.Namespace) -> None:
         """Run in test mode with a limited artist set."""
@@ -160,7 +171,7 @@ class Orchestrator:
             if token_value and secure_config.is_token_encrypted(token_value):
                 try:
                     current_tokens[key] = secure_config.decrypt_token(token_value, key)
-                    self.console_logger.debug("✅ Decrypted current %s", key)
+                    self.console_logger.debug("Decrypted current %s", key)
                 except SecurityConfigError as e:
                     self.error_logger.warning("Could not decrypt %s: %s", key, str(e))
                     current_tokens[key] = token_value
@@ -185,11 +196,10 @@ class Orchestrator:
                 self._create_backup_file(
                     key_file_path,
                     ".key.backup",
-                    "📦 Created backup of old key: %s",
+                    "Created backup of old key: %s",
                     preserve_existing=True,  # Critical: preserve previous key backups
                 )
-        self._create_backup_file(config_path, ".yaml.backup", "📦 Created backup of config: %s")
-
+        self._create_backup_file(config_path, ".yaml.backup", "Created backup of config: %s")
     def _create_backup_file(self, source_path: Path, suffix: str, success_message: str, preserve_existing: bool = False) -> None:
         """Create a backup of a file with the specified suffix.
 
@@ -200,19 +210,20 @@ class Orchestrator:
             preserve_existing: If True and backup exists, create timestamped backup instead of overwriting
 
         """
-        backup_path: Path = source_path.with_suffix(suffix)
+        # Append suffix to full filename (preserves multi-dot names like config.prod.yaml)
+        backup_path: Path = source_path.parent / f"{source_path.name}{suffix}"
 
         # If preserving existing backups and file exists, use timestamped name
         if preserve_existing and backup_path.exists():
             timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-            backup_path = source_path.parent / f"{source_path.stem}_{timestamp}{suffix}"
-            self.console_logger.warning("⚠️  Previous backup exists, creating timestamped backup: %s", backup_path)
+            backup_path = source_path.parent / f"{source_path.name}_{timestamp}{suffix}"
+            self.console_logger.warning("Previous backup exists, creating timestamped backup: %s", backup_path)
 
         try:
             shutil.copy2(source_path, backup_path)
             self.console_logger.info(success_message, backup_path)
         except OSError as exc:
-            self.console_logger.exception("❌ Failed to backup %s to %s: %s", source_path, backup_path, exc)
+            self.console_logger.exception("Failed to backup %s to %s: %s", source_path, backup_path, exc)
             raise
 
     def _re_encrypt_tokens(self, secure_config: "SecureConfig", current_tokens: dict[str, str]) -> dict[str, str]:
@@ -226,7 +237,7 @@ class Orchestrator:
             Dictionary of newly encrypted tokens
 
         """
-        self.console_logger.info("🔄 Re-encrypting %d tokens with new key...", len(current_tokens))
+        self.console_logger.info("Re-encrypting %d tokens with new key...", len(current_tokens))
 
         re_encrypted_tokens: dict[str, str] = {}
         for key, token_value in current_tokens.items():
@@ -234,7 +245,7 @@ class Orchestrator:
                 # Try to encrypt with the new key
                 encrypted_token = secure_config.encrypt_token(token_value, key)
                 re_encrypted_tokens[key] = encrypted_token
-                self.console_logger.debug("✅ Re-encrypted %s", key)
+                self.console_logger.debug("Re-encrypted %s", key)
             except SecurityConfigError as e:
                 self.error_logger.warning("Could not re-encrypt %s: %s", key, str(e))
                 # Keep the original token if encryption fails
@@ -250,7 +261,7 @@ class Orchestrator:
             new_password: New password used (None if auto-generated)
 
         """
-        self.console_logger.info("📊 Key rotation status:")
+        self.console_logger.info("Key rotation status:")
 
         # Get status from secure config
         status = secure_config.get_secure_config_status()
@@ -258,11 +269,11 @@ class Orchestrator:
         self.console_logger.info("  Key file path: %s", status.get("key_file_path", "Unknown"))
         self.console_logger.info(
             "  Encryption initialized: %s",
-            "✅" if status.get("encryption_initialized", False) else "❌",
+            "yes" if status.get("encryption_initialized", False) else "no",
         )
         self.console_logger.info(
             "  Password configured: %s",
-            "✅" if status.get("password_configured", False) else "❌",
+            "yes" if status.get("password_configured", False) else "no",
         )
 
         if new_password:
@@ -270,7 +281,7 @@ class Orchestrator:
         else:
             self.console_logger.info("  New password: [AUTO-GENERATED]")
 
-        self.console_logger.info("⚠️ Note: Security features are in placeholder mode")
+        self.console_logger.warning("Note: Security features are in placeholder mode")
 
     def _run_rotate_encryption_keys(self, args: argparse.Namespace) -> None:
         """Rotate encryption keys and re-encrypt all tokens.
@@ -281,7 +292,7 @@ class Orchestrator:
                 - no_backup: Whether to skip creating backup
 
         """
-        self.console_logger.info("🔐 Starting encryption key rotation...")
+        self.console_logger.info("Starting encryption key rotation...")
 
         try:
             # Initialize secure config with logger
@@ -320,24 +331,24 @@ class Orchestrator:
             new_password = getattr(args, "new_password", None)
             try:
                 secure_config.rotate_key(new_password)
-                self.console_logger.info("✅ New encryption key generated")
+                self.console_logger.info("New encryption key generated")
             except SecurityConfigError as e:
                 self.error_logger.warning("Key rotation failed: %s", str(e))
-                self.console_logger.info("⚠️ Continuing with placeholder implementation...")
+                self.console_logger.info("Continuing with placeholder implementation...")
 
             # Step 4: Re-encrypt tokens
             self.console_logger.info("Step 4: Re-encrypting tokens...")
             if new_encrypted_tokens := self._re_encrypt_tokens(secure_config, current_tokens):
                 self.console_logger.info("Step 5: Updating configuration...")
                 self.console_logger.info(
-                    "⚠️ Would update %d tokens in configuration",
+                    "Would update %d tokens in configuration",
                     len(new_encrypted_tokens),
                 )
             # Step 6: Display status
             self.console_logger.info("Step 6: Displaying rotation status...")
             self._display_rotation_status(secure_config, new_password)
 
-            self.console_logger.info("🎉 Encryption key rotation completed (placeholder mode)")
+            self.console_logger.info("✅ Encryption key rotation completed (placeholder mode)")
 
         except (OSError, SecurityConfigError, yaml.YAMLError) as e:
             self.error_logger.exception("Error during key rotation: %s", e)

@@ -8,6 +8,67 @@
 -- Note: This script is designed to be run from the command line with arguments.
 -- The script will return success or error messages based on the operation's outcome.
 
+-- Native AppleScript text trimming (replaces shell script + python3 calls)
+on trimText(theText)
+	if theText is "" or theText is missing value then return ""
+	set trimmed to theText as text
+	-- Trim leading whitespace
+	repeat while trimmed starts with " " or trimmed starts with tab or trimmed starts with return or trimmed starts with linefeed
+		if length of trimmed ≤ 1 then return ""
+		set trimmed to text 2 thru -1 of trimmed
+	end repeat
+	-- Trim trailing whitespace
+	repeat while trimmed ends with " " or trimmed ends with tab or trimmed ends with return or trimmed ends with linefeed
+		if length of trimmed ≤ 1 then return ""
+		set trimmed to text 1 thru -2 of trimmed
+	end repeat
+	return trimmed
+end trimText
+
+-- Native AppleScript property name normalization (replaces shell script + python3 calls)
+-- Converts to lowercase and replaces spaces/hyphens with underscores
+on normalizePropertyName(propName)
+	if propName is "" or propName is missing value then return ""
+	-- First trim
+	set trimmed to my trimText(propName)
+	if trimmed is "" then return ""
+
+	-- Convert to lowercase using ASCII codes and replace spaces/hyphens with underscores
+	set lowered to ""
+	repeat with c in characters of trimmed
+		set charCode to id of c
+		-- A-Z (65-90) -> a-z (97-122)
+		if charCode ≥ 65 and charCode ≤ 90 then
+			set lowered to lowered & (character id (charCode + 32))
+		else if charCode is 32 or charCode is 45 or charCode is 9 then
+			-- 32=space, 45=hyphen, 9=tab -> underscore
+			set lowered to lowered & "_"
+		else
+			set lowered to lowered & c
+		end if
+	end repeat
+
+	-- Collapse multiple underscores to single (handles "album  artist" -> "album_artist")
+	repeat while lowered contains "__"
+		set AppleScript's text item delimiters to "__"
+		set parts to text items of lowered
+		set AppleScript's text item delimiters to "_"
+		set lowered to parts as text
+		set AppleScript's text item delimiters to ""
+	end repeat
+
+	-- Trim leading/trailing underscores
+	repeat while lowered starts with "_"
+		if length of lowered ≤ 1 then return ""
+		set lowered to text 2 thru -1 of lowered
+	end repeat
+	repeat while lowered ends with "_"
+		if length of lowered ≤ 1 then return ""
+		set lowered to text 1 thru -2 of lowered
+	end repeat
+
+	return lowered
+end normalizePropertyName
 
 on run argv
     try
@@ -31,11 +92,11 @@ on run argv
         end if
 
         set rawPropName to item 2 of argv
-        set propDisplayName to do shell script "/usr/bin/python3 -c 'import sys;print(sys.argv[1].strip())' " & quoted form of rawPropName
+        set propDisplayName to my trimText(rawPropName)
         if propDisplayName is "" then
             return "Error: Missing property name"
         end if
-        set normalizedPropName to do shell script "/usr/bin/python3 -c 'import sys;name = sys.argv[1];name = name.strip().lower();name = \"_\".join(name.replace(\"-\", \" \").split());print(name)' " & quoted form of propDisplayName
+        set normalizedPropName to my normalizePropertyName(propDisplayName)
         set supportedProps to {"name", "album", "artist", "album_artist", "genre", "year"}
         -- Verify it's one of the supported properties
         if normalizedPropName is not in supportedProps then
@@ -45,7 +106,7 @@ on run argv
         set propIdentifier to normalizedPropName
 
         set rawPropValue to item 3 of argv
-        set propValue to do shell script "/usr/bin/python3 -c 'import sys;print(sys.argv[1].strip())' " & quoted form of rawPropValue
+        set propValue to my trimText(rawPropValue)
         if propValue is "" then
             return "Error: Empty property value"
         end if

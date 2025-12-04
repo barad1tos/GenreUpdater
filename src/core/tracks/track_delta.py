@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 __all__ = [
     "TrackDelta",
     "compute_track_delta",
+    "has_track_changed",
 ]
 
 FIELD_SEPARATOR = "\x1e"  # ASCII 30
@@ -58,7 +59,7 @@ def _field_changed(current: str, stored: str) -> bool:
     return bool(current and current != stored)
 
 
-def _has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
+def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
     """Check if track metadata has changed between current and stored versions.
 
     Args:
@@ -115,7 +116,7 @@ def compute_track_delta(
         current = current_map[track_id]
         stored = existing_map[track_id]
 
-        if _has_track_changed(current, stored):
+        if has_track_changed(current, stored):
             updated_ids.append(track_id)
 
     return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)

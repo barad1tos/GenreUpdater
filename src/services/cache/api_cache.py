@@ -19,7 +19,7 @@ from typing import Any
 
 from src.services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.logger import ensure_directory, get_full_log_path
+from src.core.logger import LogFormat, ensure_directory, get_full_log_path
 from src.core.models.track_models import CachedApiResult
 
 
@@ -43,6 +43,7 @@ class ApiCacheService:
 
         # Background tasks to prevent garbage collection
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._max_background_tasks = 100
 
         # Cache file path
         self.api_cache_file = Path(get_full_log_path(config, "api_cache_file", "cache/cache.json"))
@@ -66,6 +67,16 @@ class ApiCacheService:
             album = event.metadata.get("album")
 
             if artist and album:
+                # Limit background tasks to prevent unbounded memory growth
+                if len(self._background_tasks) >= self._max_background_tasks:
+                    self.logger.debug(
+                        "Background task limit reached (%d), skipping invalidation for %s - %s",
+                        self._max_background_tasks,
+                        artist,
+                        album,
+                    )
+                    return
+
                 task = asyncio.create_task(self.invalidate_for_album(artist, album))
                 # Store reference to prevent garbage collection
                 self._background_tasks.add(task)
@@ -83,9 +94,10 @@ class ApiCacheService:
 
     async def initialize(self) -> None:
         """Initialize API cache by loading data from disk."""
-        self.logger.info("Initializing ApiCacheService...")
+        self.logger.info("Initializing %s...", LogFormat.entity("ApiCacheService"))
         await self._load_api_cache()
-        self.logger.info("ApiCacheService initialized with %d entries", len(self.api_cache))
+        await self.cleanup_expired()
+        self.logger.info("%s initialized with %d entries (after cleanup)", LogFormat.entity("ApiCacheService"), len(self.api_cache))
 
     async def get_cached_result(self, artist: str, album: str, source: str) -> CachedApiResult | None:
         """Get cached API result.

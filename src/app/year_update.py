@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 from src.core.logger import get_full_log_path
 from src.core.models import year_repair as repair_utils
 from src.core.models.track_models import ChangeLogEntry
-from src.core.tracks.year_retriever import YearRetriever
 from src.metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
@@ -21,6 +20,7 @@ if TYPE_CHECKING:
     from src.app.pipeline_snapshot import PipelineSnapshotManager
     from src.core.models.track_models import TrackDict
     from src.core.tracks.track_processor import TrackProcessor
+    from src.core.tracks.year_retriever import YearRetriever
 
 
 class YearUpdateService:
@@ -156,12 +156,12 @@ class YearUpdateService:
             self._error_logger.exception("=== ERROR in Step 4 ===")
             raise
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], _force: bool) -> list[ChangeLogEntry]:
-        """Update years for all tracks and return change logs (Step 3 of pipeline).
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool) -> list[ChangeLogEntry]:
+        """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
-            _force: Force all operations (unused, kept for API compatibility).
+            force: Force update - bypass cache/skip checks and re-query API for all albums.
 
         Returns:
             List of change log entries.
@@ -171,17 +171,8 @@ class YearUpdateService:
         changes_log: list[ChangeLogEntry] = []
 
         try:
-            updated_tracks: list[TrackDict] = []
-            year_changes: list[ChangeLogEntry] = []
-
-            if hasattr(self._year_retriever, "get_album_years_with_logs"):
-                updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks)
-                if hasattr(self._year_retriever, "set_last_updated_tracks"):
-                    self._year_retriever.set_last_updated_tracks(updated_tracks)
-            else:
-                await self._year_retriever.process_album_years(tracks, force=_force)
-                if hasattr(self._year_retriever, "get_last_updated_tracks"):
-                    updated_tracks = self._year_retriever.get_last_updated_tracks()
+            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
+            self._year_retriever.set_last_updated_tracks(updated_tracks)
 
             self._snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes

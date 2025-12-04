@@ -462,17 +462,15 @@ class TestYearRetrieverAllure:
             retriever = self.create_year_retriever(track_processor=mock_track_processor)
 
         with allure.step("Create album tracks needing year updates"):
-            tracks_data = [
-                ("track_001", _DummyTrackData.create(track_id="track_001", name="Song 1", artist="Artist", album="Album", year="")),
-                ("track_002", _DummyTrackData.create(track_id="track_002", name="Song 2", artist="Artist", album="Album", year="")),
-                ("track_003", _DummyTrackData.create(track_id="track_003", name="Song 3", artist="Artist", album="Album", year="")),
+            tracks = [
+                _DummyTrackData.create(track_id="track_001", name="Song 1", artist="Artist", album="Album", year=""),
+                _DummyTrackData.create(track_id="track_002", name="Song 2", artist="Artist", album="Album", year=""),
+                _DummyTrackData.create(track_id="track_003", name="Song 3", artist="Artist", album="Album", year=""),
             ]
-
-            track_ids = [track_id for track_id, _ in tracks_data]
 
         with allure.step("Execute bulk update"):
             success_count, failed_count = await retriever._batch_processor.update_album_tracks_bulk_async(
-                track_ids=track_ids, year="1990"
+                tracks=tracks, year="1990", artist="Artist", album="Album"
             )
 
         with allure.step("Verify bulk update results"):
@@ -502,17 +500,15 @@ class TestYearRetrieverAllure:
             retriever = self.create_year_retriever(track_processor=mock_track_processor)
 
         with allure.step("Create tracks for testing failure handling"):
-            tracks_data = [
-                ("success_001", _DummyTrackData.create(track_id="success_001", name="Success 1")),
-                ("failure_001", _DummyTrackData.create(track_id="failure_001", name="Failure 1")),
-                ("success_002", _DummyTrackData.create(track_id="success_002", name="Success 2")),
+            tracks = [
+                _DummyTrackData.create(track_id="success_001", name="Success 1"),
+                _DummyTrackData.create(track_id="failure_001", name="Failure 1"),
+                _DummyTrackData.create(track_id="success_002", name="Success 2"),
             ]
-
-            track_ids = [track_id for track_id, _ in tracks_data]
 
         with allure.step("Execute bulk update with expected failures"):
             success_count, failed_count = await retriever._batch_processor.update_album_tracks_bulk_async(
-                track_ids=track_ids, year="2000"
+                tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
             )
 
         with allure.step("Verify failure handling"):

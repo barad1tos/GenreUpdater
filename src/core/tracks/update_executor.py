@@ -315,11 +315,17 @@ class TrackUpdateExecutor:
         )
         if success:
             if changed:
-                # Only log when actual change was made
+                # Only log when actual change was made - prefer artist/track names over ID
+                if original_artist:
+                    entity_label = f"'{original_artist}'"
+                    if original_track:
+                        entity_label += f" - '{original_track}'"
+                else:
+                    entity_label = sanitized_track_id
                 self.console_logger.info(
                     "\u2705 Updated %s for %s to %s",
                     property_name,
-                    sanitized_track_id,
+                    entity_label,
                     property_value,
                 )
             else:
@@ -330,8 +336,15 @@ class TrackUpdateExecutor:
                     sanitized_track_id,
                     property_value,
                 )
+        elif original_artist and original_track:
+            self.console_logger.warning(
+                "❌ Failed to update %s for '%s' - '%s'",
+                property_name,
+                original_artist,
+                original_track,
+            )
         else:
-            self.console_logger.warning("\u274c Failed to update %s for %s", property_name, sanitized_track_id)
+            self.console_logger.warning("❌ Failed to update %s for %s", property_name, sanitized_track_id)
         return success
 
     async def _perform_property_updates(
@@ -637,7 +650,7 @@ class TrackUpdateExecutor:
             self.error_logger.warning("Cannot update artist for track without ID: %s", track)
             return None
 
-        current_artist = track.artist or ""
+        current_artist = (track.artist or "").strip()
         target_artist = (new_artist_name or "").strip()
 
         if not target_artist:

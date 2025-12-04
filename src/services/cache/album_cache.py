@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import logging
+import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.services.cache.cache_config import CacheContentType, SmartCacheConfig
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.logger import ensure_directory, get_full_log_path
+from src.core.logger import LogFormat, ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -51,9 +54,9 @@ class AlbumCacheService:
 
     async def initialize(self) -> None:
         """Initialize album cache by loading data from disk."""
-        self.logger.info("Initializing AlbumCacheService...")
+        self.logger.info("Initializing %s...", LogFormat.entity("AlbumCacheService"))
         await self._load_album_years_cache()
-        self.logger.info("AlbumCacheService initialized with %d albums", len(self.album_years_cache))
+        self.logger.info("%s initialized with %d albums", LogFormat.entity("AlbumCacheService"), len(self.album_years_cache))
 
     async def get_album_year(self, artist: str, album: str) -> str | None:
         """Get album release year from cache.
@@ -72,10 +75,16 @@ class AlbumCacheService:
         if key in self.album_years_cache:
             entry = self.album_years_cache[key]
 
-            # Validate cache entry consistency
+            # Validate cache entry consistency (detect true hash collision)
             if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
-                self.logger.warning("Hash collision detected for %s - %s, removing invalid entry", artist, album)
-                del self.album_years_cache[key]
+                self.logger.warning(
+                    "Hash collision detected: requested '%s - %s', found '%s - %s'",
+                    artist,
+                    album,
+                    entry.artist,
+                    entry.album,
+                )
+                # Don't delete - keep the original entry, just miss for this request
                 return None
 
             if self._is_entry_expired(entry):
@@ -154,7 +163,7 @@ class AlbumCacheService:
 
                 # Write CSV file
                 self._write_csv_data(str(self.album_years_cache_file), items)
-                self.logger.info("Album cache saved to %s (%d entries)", self.album_years_cache_file, len(items))
+                self.logger.info("Album cache saved to [cyan]%s[/cyan] (%d entries)", self.album_years_cache_file.name, len(items))
 
             except (OSError, UnicodeError) as e:
                 self.logger.exception("Failed to save album cache: %s", e)
@@ -196,7 +205,7 @@ class AlbumCacheService:
                 for row in reader:
                     self._process_csv_row(row, album_data)
 
-            self.logger.info("Loaded %d album entries from %s", len(album_data), self.album_years_cache_file)
+            self.logger.info("Loaded %d album entries from [cyan]%s[/cyan]", len(album_data), self.album_years_cache_file.name)
 
         except (OSError, UnicodeDecodeError, csv.Error) as e:
             self.logger.exception("Error reading album cache file %s: %s", self.album_years_cache_file, e)
@@ -262,17 +271,42 @@ class AlbumCacheService:
 
     @staticmethod
     def _write_csv_data(file_path: str, items: list[AlbumCacheEntry]) -> None:
-        """Write album data to CSV file.
+        """Write album data to CSV file atomically.
+
+        Uses a temporary file and atomic replace to prevent data loss
+        if the write operation fails mid-way.
 
         Args:
             file_path: Path to CSV file
-            items: List of (artist, album, year) tuples
+            items: List of AlbumCacheEntry objects
         """
-        with Path(file_path).open("w", encoding="utf-8", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(["artist", "album", "year", "timestamp"])
-            for item in items:
-                writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
+        file_path_obj = Path(file_path)
+        dir_name = file_path_obj.parent
+
+        # Write to temp file first, then atomically replace
+        fd, temp_path = tempfile.mkstemp(suffix=".csv", dir=str(dir_name))
+        try:
+            # Guard against fdopen failures so we don't leak the descriptor
+            try:
+                file_obj = os.fdopen(fd, "w", encoding="utf-8", newline="")
+            except BaseException:
+                # fdopen takes ownership only on success; close explicitly on failure
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+
+            with file_obj:
+                writer = csv.writer(file_obj)
+                writer.writerow(["artist", "album", "year", "timestamp"])
+                for item in items:
+                    writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
+            # Atomic replace - if this fails, original file is untouched
+            Path(temp_path).replace(file_path_obj)
+        except BaseException:
+            # Clean up temp file on any error
+            with contextlib.suppress(OSError):
+                Path(temp_path).unlink()
+            raise
 
     def get_stats(self) -> dict[str, Any]:
         """Get album cache statistics.

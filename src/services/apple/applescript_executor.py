@@ -76,16 +76,42 @@ class AppleScriptExecutor:
             script_result: Script output
             elapsed: Execution time in seconds
         """
-        if label == "fetch_tracks.scpt":
+        # Skip verbose logging for update_property - higher-level logs are more informative
+        if label.startswith("update_property"):
+            self.console_logger.debug("◁ %s completed in %.1fs", label, elapsed)
+            return
+
+        if label.startswith(("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
-            size_bytes = len(script_result.encode())
-            size_kb = size_bytes / 1024
+            size_kb = len(script_result.encode()) / 1024
 
             self.console_logger.info(
                 "◁ %s: %d tracks (%.1fKB, %.1fs)",
                 label,
                 track_count,
+                size_kb,
+                elapsed,
+            )
+        elif label.startswith("fetch_track_ids.applescript"):
+            # Just show count of IDs fetched - no preview needed
+            id_count = script_result.count(",") + 1 if script_result.strip() else 0
+            size_kb = len(script_result.encode()) / 1024
+            self.console_logger.info(
+                "◁ %s: %d IDs (%.1fKB, %.1fs)",
+                label,
+                id_count,
+                size_kb,
+                elapsed,
+            )
+        elif "\x1d" in script_result or "\x1e" in script_result:
+            # Other scripts with field/record separators - show count only
+            record_count = script_result.count("\x1d") or script_result.count("\x1e")
+            size_kb = len(script_result.encode()) / 1024
+            self.console_logger.info(
+                "◁ %s: %d records (%.1fKB, %.1fs)",
+                label,
+                record_count,
                 size_kb,
                 elapsed,
             )
@@ -248,8 +274,8 @@ class AppleScriptExecutor:
 
         # Check for complex patterns that might cause escaping issues
         complex_patterns = [
-            r"\"",  # Escaped quotes
-            r"\\",  # Escaped backslashes
+            r'\\"',  # Escaped quotes (literal \")
+            r"\\\\",  # Escaped backslashes (literal \\)
             r"\n",  # Newlines in strings
             r"\t",  # Tabs
             r"[^\x20-\x7E]",  # Non-ASCII characters
@@ -302,7 +328,7 @@ class AppleScriptExecutor:
             temp_filename = f"temp_script_{uuid.uuid4().hex}.applescript"
             temp_file_path = str(Path(self.apple_scripts_directory) / temp_filename)
             # Write the script content asynchronously using an executor
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
                 AppleScriptFileValidator.write_temp_file_sync,

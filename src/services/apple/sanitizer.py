@@ -113,9 +113,6 @@ class AppleScriptSanitizer:
         # Escape double quotes for AppleScript string literals
         sanitized = sanitized.replace('"', '\\"')
 
-        # Escape single quotes
-        sanitized = sanitized.replace("'", "\\'")
-
         # Log any escaping changes for audit purposes
         if value != sanitized:
             self.logger.debug(
@@ -180,9 +177,11 @@ class AppleScriptSanitizer:
                 self.logger.error("Security violation: %s in code: %s", error_msg, script_code[:100])
                 raise AppleScriptSanitizationError(error_msg, dangerous_text)
 
-        # Check for reserved words that could be dangerous
+        # Check for reserved words that could be dangerous (exact word match)
         for reserved_word in APPLESCRIPT_RESERVED_WORDS:
-            if reserved_word.lower() in normalized_code:
+            # Use word boundaries to prevent false positives (e.g., "delete" in "undelete")
+            pattern = re.compile(rf"\b{re.escape(reserved_word.lower())}\b")
+            if pattern.search(normalized_code):
                 # Allow Music.app specific operations if permitted
                 if allow_music_app and "music" in reserved_word.lower():
                     continue

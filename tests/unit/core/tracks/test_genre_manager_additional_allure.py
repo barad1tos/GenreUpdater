@@ -299,10 +299,11 @@ class TestGenreManagerCoreFunctionality:
             allure.attach(json.dumps(artist_genres, indent=2), "Artist Genres", allure.attachment_type.JSON)
 
         with allure.step("Verify correct genres for each artist"):
+            # Keys are lowercase due to case-insensitive grouping
             expected_genres = {
-                "Artist 1": "Rock",
-                "Artist 2": "Pop",
-                "Artist 3": "Jazz",
+                "artist 1": "Rock",
+                "artist 2": "Pop",
+                "artist 3": "Jazz",
             }
 
             for artist, expected_genre in expected_genres.items():

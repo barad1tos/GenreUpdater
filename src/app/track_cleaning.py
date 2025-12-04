@@ -130,15 +130,20 @@ class TrackCleaningService:
         if not track_id:
             return None, None
 
-        # Check if update needed
-        if cleaned_track_name == track_name and cleaned_album_name == album_name:
+        # Normalize originals for comparison (strip whitespace to match cleaned values)
+        track_name_normalized = str(track_name).strip() if track_name else ""
+        album_name_normalized = str(album_name).strip() if album_name else ""
+
+        # Check if update needed (compare against normalized values)
+        if cleaned_track_name == track_name_normalized and cleaned_album_name == album_name_normalized:
             return None, None
 
         # Update track
         success = await self._track_processor.update_track_async(
             track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
+            new_track_name=(cleaned_track_name if cleaned_track_name != track_name_normalized else None),
+            new_album_name=(cleaned_album_name if cleaned_album_name != album_name_normalized else None),
+            track_status=track.track_status,
             original_artist=artist_name,
             original_album=str(album_name) if album_name is not None else None,
             original_track=str(track_name) if track_name is not None else None,
@@ -195,6 +200,7 @@ class TrackCleaningService:
             track_id=str(track_id),
             new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
             new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
+            track_status=track.track_status,
             original_artist=str(track.get("artist", "")),
             original_album=str(album_name) if album_name is not None else None,
             original_track=str(track_name) if track_name is not None else None,

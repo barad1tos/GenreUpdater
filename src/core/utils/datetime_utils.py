@@ -15,6 +15,7 @@ def datetime_to_applescript_timestamp(dt: datetime) -> int:
         Unix timestamp as integer, floored to the minute
 
     """
+    # Naive datetimes are assumed to be UTC (all internal datetimes use UTC)
     aware_dt = dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
     utc_dt = aware_dt.astimezone(UTC)
     floored = utc_dt.replace(second=0, microsecond=0)

@@ -155,6 +155,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args(dry_run=dry_run, test_mode=test_mode)
 
@@ -188,13 +190,13 @@ class TestOrchestratorAllure:
         with allure.step("Execute clean artist command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
-        with allure.step("Verify clean artist was called"):
+        with allure.step("Verify clean artist was called with only artist kwarg"):
             orchestrator.music_updater.run_clean_artist.assert_called_once()
             run_clean_artist_mock = orchestrator.music_updater.run_clean_artist
             clean_kwargs = run_clean_artist_mock.call_args.kwargs
-            assert clean_kwargs["artist"] == "Test Artist"
-            assert clean_kwargs["_force"] is True
-            allure.attach("Clean artist executed", "Command Result", allure.attachment_type.TEXT)
+            # run_clean_artist should only receive the artist kwarg and no force flag
+            assert clean_kwargs == {"artist": "Test Artist"}
+            allure.attach("Clean artist executed (no force)", "Command Result", allure.attachment_type.TEXT)
 
     @allure.story("Command Execution")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -283,6 +285,9 @@ class TestOrchestratorAllure:
             orchestrator = Orchestrator(deps)
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
+            orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args()
 
@@ -386,7 +391,7 @@ class TestOrchestratorAllure:
         with allure.step("Verify key rotation steps executed"):
             mock_secure_config.rotate_key.assert_called_once_with(_TEST_PASSWORD)
             console_info_mock = cast(Mock, orchestrator.console_logger.info)
-            console_info_mock.assert_any_call("🎉 Encryption key rotation completed (placeholder mode)")
+            console_info_mock.assert_any_call("✅ Encryption key rotation completed (placeholder mode)")
             allure.attach("Key rotation executed successfully", "Result", allure.attachment_type.TEXT)
 
     @allure.story("Key Rotation")
@@ -433,6 +438,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args(test_mode=True)
 
@@ -466,6 +473,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             # Normal mode but with test_artists in config
             args = self.create_mock_args()

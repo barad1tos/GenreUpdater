@@ -20,14 +20,19 @@ import asyncio
 import gc
 import logging
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
+from rich.console import Console
+
 from src.metrics.change_reports import save_html_report
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncGenerator, Callable
+
+    from rich.status import Status
 
 
 class TimingInfo:
@@ -87,9 +92,9 @@ class Analytics:
     GC_COLLECTION_THRESHOLD = 5_000
 
     # Symbols for duration buckets
-    _FAST = "⚡"
-    _MEDIUM = "⏱️"
-    _SLOW = "🐢"
+    _FAST = ">>>"
+    _MEDIUM = ">>"
+    _SLOW = ">"
     _DURATION_FIELD = "Duration (s)"  # Field name for duration in analytics events
 
     # --- Init ---
@@ -132,7 +137,12 @@ class Analytics:
         # Performance options
         self.enable_gc_collect = config.get("analytics", {}).get("enable_gc_collect", True)
 
-        self.console_logger.debug(f"📊 Analytics #{self.instance_id} initialised")
+        # Batch mode state (suppresses console logging, shows spinner instead)
+        self._suppress_console_logging = False
+        self._batch_call_count = 0
+        self._batch_total_duration = 0.0
+
+        self.console_logger.debug(f"Analytics #{self.instance_id} initialised")
 
     # --- Public decorator helpers ---
     def track(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -262,7 +272,7 @@ class Analytics:
         except RuntimeError as e:
             if "cannot be called from a running event loop" in str(e):
                 self.console_logger.warning(
-                    f"⚠️ Cannot track {func.__name__} with asyncio.run() from within event loop; "
+                    f"Cannot track {func.__name__} with asyncio.run() from within event loop; "
                     "executing without tracking"
                 )
                 # Execute function directly without tracking to avoid blocking
@@ -312,7 +322,7 @@ class Analytics:
             success = True
             return result
         except Exception as exc:
-            self.error_logger.exception(f"❌ {func_name}: {exc}")
+            self.error_logger.exception(f"{func_name}: {exc}")
             raise
         finally:
             func_end = time.time()
@@ -351,7 +361,7 @@ class Analytics:
         if 0 < self.max_events <= len(self.events):
             prune = max(5, int(self.max_events * 0.1))
             self.events = self.events[prune:]
-            self.console_logger.debug(f"📊 Pruned {prune} old events")
+            self.console_logger.debug(f"Pruned {prune} old events")
 
         # Timestamps
         if self.compact_time:
@@ -380,16 +390,80 @@ class Analytics:
             self.success_counts[call_info.func_name] = self.success_counts.get(call_info.func_name, 0) + 1
         self.decorator_overhead[call_info.func_name] = self.decorator_overhead.get(call_info.func_name, 0.0) + timing_info.overhead
 
+        # Track batch mode stats
+        if self._suppress_console_logging:
+            self._batch_call_count += 1
+            self._batch_total_duration += timing_info.duration
+
         # Logging
         symbol = self._get_duration_symbol(timing_info.duration)
         status = "✅" if call_info.success else "❌"
         msg = f"{status} {symbol} {call_info.func_name}({call_info.event_type}) took {timing_info.duration:.3f}s"
         level = "info" if call_info.success and timing_info.duration > self.long_max else "debug"
+
+        # Always log to analytics file
         getattr(self.analytics_logger, level)(msg)
+
+        # Skip console logging in batch mode (spinner shows progress instead)
+        if self._suppress_console_logging:
+            return
+
         if call_info.success:
             getattr(self.console_logger, level)(msg)
         else:
             self.console_logger.warning(msg)
+
+    # --- Batch mode context manager ---
+    @asynccontextmanager
+    async def batch_mode(
+        self,
+        message: str = "Processing...",
+        console: Console | None = None,
+    ) -> AsyncGenerator[Status]:
+        """Context manager that suppresses console logging and shows a spinner instead.
+
+        Use this when executing many tracked operations in a loop to avoid
+        flooding the console with individual timing logs.
+
+        Args:
+            message: Message to display next to the spinner
+            console: Optional Rich Console instance
+
+        Yields:
+            Rich Status object that can be updated with progress info
+
+        Example:
+            async with analytics.batch_mode("Fetching tracks...") as status:
+                for i, batch in enumerate(batches):
+                    status.update(f"[cyan]Fetching batch {i+1}/{len(batches)}...[/cyan]")
+                    await fetch_batch(batch)
+        """
+        _console = console or Console()
+        self._suppress_console_logging = True
+        self._batch_call_count = 0
+        self._batch_total_duration = 0.0
+        start_time = time.time()
+
+        try:
+            with _console.status(f"[cyan]{message}[/cyan]") as status:
+                yield status
+        finally:
+            self._suppress_console_logging = False
+            elapsed = time.time() - start_time
+
+            # Log summary after batch completes
+            if self._batch_call_count > 0:
+                avg_duration = self._batch_total_duration / self._batch_call_count
+                self.console_logger.info(
+                    "✅ Batch completed: %d calls in %.1fs (avg %.1fs/call)",
+                    self._batch_call_count,
+                    elapsed,
+                    avg_duration,
+                )
+
+            # Reset batch stats
+            self._batch_call_count = 0
+            self._batch_total_duration = 0.0
 
     # --- Stats & summaries ---
     def get_stats(self, function_filter: str | list[str] | None = None) -> dict[str, Any]:
@@ -435,13 +509,13 @@ class Analytics:
             return
         stats = self.get_stats()
         self.console_logger.info(
-            f"📊 Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
+            f"Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
         )
 
         dc = stats["duration_counts"]
         total = sum(dc.values()) or 1
         self.console_logger.info(
-            f"📊 Performance: "
+            f"Performance: "
             f"{self._FAST} {dc['fast'] / total * 100:.0f}% | "
             f"{self._MEDIUM} {dc['medium'] / total * 100:.0f}% | "
             f"{self._SLOW} {dc['slow'] / total * 100:.0f}%",
@@ -467,7 +541,7 @@ class Analytics:
 
         if self.compact_time:
             self.console_logger.warning(
-                "⚠️ Age-based pruning not supported in compact_time mode; using count-based pruning"
+                "Age-based pruning not supported in compact_time mode; using count-based pruning"
             )
             prune = min(len(self.events) // 2, 1_000)
             self.events = self.events[prune:]
@@ -487,11 +561,11 @@ class Analytics:
         if self.max_events > 0:
             cap = max(0, self.max_events - len(self.events))
             num_to_add = min(cap, len(other.events))
-            to_add = other.events[:num_to_add]
+            to_add = other.events[-num_to_add:] if num_to_add > 0 else []
             num_dropped = len(other.events) - num_to_add
             if num_dropped > 0:
                 self.console_logger.warning(
-                    f"📊 Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
+                    f"Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
                 )
         else:
             to_add = other.events
@@ -532,7 +606,7 @@ class Analytics:
             return
 
         if not self.events and not self.call_counts:
-            self.console_logger.warning("📊 No analytics data; skipping report")
+            self.console_logger.warning("No analytics data; skipping report")
             return
 
         self.log_summary()

@@ -399,10 +399,12 @@ class ApiRequestExecutor:
             raises exception if failed
         """
         start_time = time.monotonic()
+        acquired = False
 
         try:
             self._ensure_session()
             wait_time = await limiter.acquire()
+            acquired = True
             if wait_time > WAIT_TIME_LOG_THRESHOLD:
                 self.console_logger.debug(
                     "[%s] Waited %.3fs for rate limiting",
@@ -428,7 +430,8 @@ class ApiRequestExecutor:
                 )
 
         finally:
-            limiter.release()
+            if acquired:
+                limiter.release()
 
     def _ensure_session(self) -> None:
         """Ensure session is available, raise if not."""
@@ -622,7 +625,18 @@ class ApiRequestExecutor:
             self._log_final_failure(api_name, url, exception)
             return None
 
-        delay = base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4)
+        max_delay = 120.0  # Cap to prevent excessively long waits (2 minutes)
+        delay = min(base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4), max_delay)
+
+        if delay > 15.0:
+            self.console_logger.info(
+                "[%s] Long retry delay: waiting %.1fs before attempt %d/%d",
+                api_name,
+                delay,
+                attempt + 2,
+                max_retries + 1,
+            )
+
         self.console_logger.warning(
             "[%s] %s, retrying %d/%d in %.2fs",
             api_name,

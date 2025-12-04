@@ -13,7 +13,7 @@ import pytest
 
 from src.core import debug_utils
 from src.core.models.track_models import ChangeLogEntry, TrackDict
-from src.core.tracks.year_batch import AlbumProcessingProgress, YearBatchProcessor
+from src.core.tracks.year_batch import YearBatchProcessor
 from src.core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,
 )
@@ -333,8 +333,15 @@ class TestUpdateAlbumTracksBulkAsync:
     @pytest.mark.asyncio
     async def test_returns_early_on_no_valid_ids(self, year_retriever: YearRetriever) -> None:
         """Test returns (0, count) when no valid track IDs."""
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(["", "", None], "2020")  # type: ignore[list-item]
-        assert result == (0, 3)
+        # Create tracks with empty/invalid IDs
+        tracks = [
+            TrackDict(id="", name="T1", artist="A", album="Al", genre="R", year=""),
+            TrackDict(id="", name="T2", artist="A", album="Al", genre="R", year=""),
+        ]
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
+            tracks=tracks, year="2020", artist="A", album="Al"
+        )
+        assert result == (0, 2)
 
     @pytest.mark.asyncio
     async def test_handles_exception_in_batch(
@@ -348,7 +355,13 @@ class TestUpdateAlbumTracksBulkAsync:
             RuntimeError("Test error"),
             True,
         ]
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(["123", "456"], "2020")
+        tracks = [
+            TrackDict(id="123", name="T1", artist="A", album="Al", genre="R", year=""),
+            TrackDict(id="456", name="T2", artist="A", album="Al", genre="R", year=""),
+        ]
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
+            tracks=tracks, year="2020", artist="A", album="Al"
+        )
         # One success (from else branch returning False after exception), one failure
         # Actually the retry logic handles exceptions
         assert result[1] >= 0  # At least 0 failures tracked
@@ -737,19 +750,6 @@ class TestShouldSkipAlbumDueToExistingYears:
         assert result is False
 
 
-class TestAlbumProcessingProgress:
-    """Tests for AlbumProcessingProgress class (now in year_batch module)."""
-
-    @pytest.mark.asyncio
-    async def test_progress_tracking(self, logger: logging.Logger) -> None:
-        """Test progress tracking records correctly."""
-        # Use the class directly from year_batch module
-        progress = AlbumProcessingProgress(10, logger)
-        assert progress.processed == 0
-        await progress.record()
-        assert progress.processed == 1
-
-
 class TestProcessBatchesSequentially:
     """Tests for _process_batches_sequentially method."""
 
@@ -770,7 +770,6 @@ class TestProcessBatchesSequentially:
             album_items=album_items,
             batch_size=10,
             delay_between_batches=0,  # No delay for test
-            total_batches=1,
             total_albums=1,
             updated_tracks=updated_tracks,
             changes_log=changes_log,
@@ -1037,12 +1036,10 @@ class TestProcessBatchesConcurrently:
             await year_retriever._batch_processor._process_batches_concurrently(
                 album_items=album_items,
                 batch_size=10,
-                total_batches=1,
                 total_albums=1,
                 concurrency_limit=2,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
-                adaptive_delay=False,
             )
             # Should complete without error
 
@@ -1054,7 +1051,6 @@ class TestProcessAlbumEntry:
     async def test_processes_single_album_entry(
         self,
         year_retriever: YearRetriever,
-        logger: logging.Logger,
         mock_cache_service: AsyncMock,
     ) -> None:
         """Test processes a single album entry with semaphore."""
@@ -1063,7 +1059,9 @@ class TestProcessAlbumEntry:
         ]
         album_entry = (("A1", "Al1"), tracks)
         semaphore = asyncio.Semaphore(2)
-        progress = AlbumProcessingProgress(1, logger)
+        # Mock the Rich Progress
+        mock_progress = MagicMock()
+        mock_task_id = "test_task"
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
@@ -1075,17 +1073,15 @@ class TestProcessAlbumEntry:
             unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False)),
         ):
             await year_retriever._batch_processor._process_album_entry(
-                album_index=0,
-                total_albums=1,
                 album_entry=album_entry,
                 semaphore=semaphore,
-                progress=progress,
-                concurrency_limit=2,
+                progress=mock_progress,
+                task_id=mock_task_id,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
             )
-            # Progress should be updated
-            assert progress.processed == 1
+            # Progress update should be called
+            mock_progress.update.assert_called_once_with(mock_task_id, advance=1)
 
 
 class TestUpdateTracksForAlbum:
@@ -1758,7 +1754,10 @@ class TestUpdateAlbumTracksBulkAsyncBranches:
         """Test counts falsy (not True) results as failures."""
         # Return None (falsy but not error string)
         mock_track_processor.update_track_async.return_value = None
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(["123"], "2020")
+        tracks = [TrackDict(id="123", name="T1", artist="A", album="Al", genre="R", year="")]
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
+            tracks=tracks, year="2020", artist="A", album="Al"
+        )
         # Should count as failure
         assert result[1] >= 1  # At least 1 failure
 
@@ -1794,7 +1793,6 @@ class TestProcessBatchesSequentiallyWithDelay:
                 album_items=album_items,
                 batch_size=1,  # 1 album per batch = 2 batches
                 delay_between_batches=5,  # 5 second delay
-                total_batches=2,
                 total_albums=2,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,

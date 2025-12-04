@@ -89,7 +89,7 @@ database_verification:
 
 # Development and testing settings
 development:
-  test_artists: [ ] # List of artists to test with (e.g., ["Artist1", "Artist2"]) - Empty for full library
+  test_artists: [ ] # List of artists to test with
 
 # Reporting configuration
 reporting:
@@ -131,22 +131,17 @@ logging:
   main_log_file: main/main.log
   analytics_log_file: analytics/analytics.log
   csv_output_file: csv/track_list.csv
-  album_cache_csv: csv/cache_albums.csv
   changes_report_file: csv/changes_report.csv
   dry_run_report_file: reports/dry_run_report.html
   last_incremental_run_file: last_incremental_run.log
   pending_verification_file: csv/pending_year_verification.csv
   last_db_verify_log: main/last_db_verify.log
-  year_changes_log_file: main/year_changes.log
 
-  # New: Log levels configuration
-  # Defines logging levels for different loggers/handlers
+  # Log levels configuration
   levels:
     console: DEBUG # Level for console output (RichHandler)
     main_file: DEBUG # Level for the main log file (main/main.log)
     analytics_file: INFO # Level for the analytics log file (analytics/analytics.log)
-    year_updates_file: INFO # Level for the year updates log file (main/year_changes.log)
-    # Example: debug_file: DEBUG # You could add a separate file for DEBUG logs if needed
 
 analytics:
   enabled: false  # Disable analytics for manual runs (daemon keeps enabled: true)

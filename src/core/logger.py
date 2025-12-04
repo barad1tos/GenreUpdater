@@ -33,6 +33,8 @@ import sys
 import syslog
 import time
 import traceback
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
@@ -40,6 +42,7 @@ from typing import Any, Literal, cast
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.status import Status
 
 
 class SafeQueueListener(QueueListener):
@@ -78,6 +81,151 @@ LEVEL_ABBREV = {
 }
 
 
+class LogFormat:
+    """Rich markup helpers for consistent log formatting.
+
+    Provides IDE-like syntax highlighting for log messages using Rich markup.
+    Use these methods to wrap values that should be highlighted in console output.
+
+    Example:
+        from src.core.logger import LogFormat as LF
+        logger.info("Initializing %s...", LF.entity("CacheService"))
+        logger.info("Loaded %s entries from %s", LF.number(100), LF.file("cache.json"))
+    """
+
+    @staticmethod
+    def entity(name: str) -> str:
+        """Format entity/class name with IDE-like highlighting (yellow).
+
+        Args:
+            name: Class, service, or component name
+
+        Returns:
+            Rich-formatted string with yellow highlighting
+        """
+        return f"[yellow]{name}[/yellow]"
+
+    @staticmethod
+    def file(name: str) -> str:
+        """Format filename with cyan highlighting.
+
+        Args:
+            name: Filename or path
+
+        Returns:
+            Rich-formatted string with cyan highlighting
+        """
+        return f"[cyan]{name}[/cyan]"
+
+    @staticmethod
+    def number(value: float) -> str:
+        """Format numbers with bright white highlighting.
+
+        Args:
+            value: Numeric value to format (int or float, since int is a subtype)
+
+        Returns:
+            Rich-formatted string with bright white highlighting
+        """
+        return f"[bright_white]{value}[/bright_white]"
+
+    @staticmethod
+    def success(text: str) -> str:
+        """Format success status with green highlighting.
+
+        Args:
+            text: Success message or status
+
+        Returns:
+            Rich-formatted string with green highlighting
+        """
+        return f"[green]{text}[/green]"
+
+    @staticmethod
+    def error(text: str) -> str:
+        """Format error status with red highlighting.
+
+        Args:
+            text: Error message or status
+
+        Returns:
+            Rich-formatted string with red highlighting
+        """
+        return f"[red]{text}[/red]"
+
+    @staticmethod
+    def warning(text: str) -> str:
+        """Format warning status with yellow highlighting.
+
+        Args:
+            text: Warning message or status
+
+        Returns:
+            Rich-formatted string with yellow highlighting
+        """
+        return f"[yellow]{text}[/yellow]"
+
+    @staticmethod
+    def duration(seconds: float) -> str:
+        """Format duration with dim styling.
+
+        Args:
+            seconds: Duration in seconds
+
+        Returns:
+            Rich-formatted string with duration
+        """
+        return f"[dim]{seconds:.1f}s[/dim]"
+
+    @staticmethod
+    def label(text: str) -> str:
+        """Format label/key with bold styling.
+
+        Args:
+            text: Label text
+
+        Returns:
+            Rich-formatted string with bold styling
+        """
+        return f"[bold]{text}[/bold]"
+
+    @staticmethod
+    def dim(text: str) -> str:
+        """Format text with dim styling for secondary info.
+
+        Args:
+            text: Secondary text
+
+        Returns:
+            Rich-formatted string with dim styling
+        """
+        return f"[dim]{text}[/dim]"
+
+
+@asynccontextmanager
+async def spinner(message: str, console: Console | None = None) -> AsyncGenerator[Status]:
+    """Async context manager for indeterminate spinner during long operations.
+
+    Use this for operations where progress cannot be tracked (e.g., AppleScript
+    calls that return all data at once). The spinner provides visual feedback
+    that the application is working.
+
+    Args:
+        message: Message to display next to the spinner
+        console: Optional Rich Console instance (creates new one if not provided)
+
+    Yields:
+        Rich Status object that can be used to update the message
+
+    Example:
+        async with spinner("Fetching all track IDs from Music.app..."):
+            result = await run_applescript(...)
+    """
+    _console = console or Console()
+    with _console.status(f"[cyan]{message}[/cyan]") as status:
+        yield status
+
+
 class LoggerFilter:
     """Filter that only allows records from specific logger names."""
 
@@ -87,10 +235,7 @@ class LoggerFilter:
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Filter records based on logger name or child loggers."""
-        return any(
-            record.name == logger or record.name.startswith(f"{logger}.")
-            for logger in self.allowed_loggers
-        )
+        return any(record.name == logger or record.name.startswith(f"{logger}.") for logger in self.allowed_loggers)
 
 
 class RunHandler:
@@ -587,7 +732,6 @@ def _get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
         "console": get_level_from_config(levels_config.get("console", "INFO")),
         "main_file": get_level_from_config(levels_config.get("main_file", "INFO")),
         "analytics_file": get_level_from_config(levels_config.get("analytics_file", "INFO")),
-        "year_updates_file": get_level_from_config(levels_config.get("year_updates_file", "INFO")),
     }
 
 
@@ -596,7 +740,6 @@ def _get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
     return {
         "main": get_full_log_path(config, "main_log_file", "main/main.log"),
         "analytics": get_full_log_path(config, "analytics_log_file", "analytics/analytics.log"),
-        "year_changes": get_full_log_path(config, "year_changes_log_file", "main/year_changes.log"),
         "db_verify": get_full_log_path(config, "last_db_verify_log", "main/last_db_verify.log"),
     }
 
@@ -611,6 +754,7 @@ def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
             show_path=False,
             enable_link_path=False,
             log_time_format="%H:%M:%S",
+            markup=True,
         )
         ch.setLevel(levels["console"])
         console_logger.addHandler(ch)
@@ -621,7 +765,7 @@ def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
 
 def _setup_queue_logging(
     config: dict[str, Any], levels: dict[str, int], log_files: dict[str, str]
-) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener]:
+) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener]:
     """Set up queue-based file logging with all handlers."""
     logging_config = config.get("logging", {})
     max_runs = logging_config.get("max_runs", 3)
@@ -646,17 +790,12 @@ def _setup_queue_logging(
     analytics_handler.setLevel(levels["analytics_file"])
     analytics_handler.addFilter(LoggerFilter(["analytics_logger"]))
 
-    year_changes_handler = RunTrackingHandler(log_files["year_changes"], run_handler=run_handler)
-    year_changes_handler.setFormatter(file_formatter)
-    year_changes_handler.setLevel(levels["year_updates_file"])
-    year_changes_handler.addFilter(LoggerFilter(["year_updates"]))
-
     db_verify_handler = RunTrackingHandler(log_files["db_verify"], run_handler=run_handler)
     db_verify_handler.setFormatter(file_formatter)
-    db_verify_handler.setLevel(levels["year_updates_file"])
+    db_verify_handler.setLevel(levels["main_file"])
     db_verify_handler.addFilter(LoggerFilter(["db_verify"]))
 
-    file_handlers: list[logging.Handler] = [main_handler, analytics_handler, year_changes_handler, db_verify_handler]
+    file_handlers: list[logging.Handler] = [main_handler, analytics_handler, db_verify_handler]
 
     listener = SafeQueueListener(log_queue, *file_handlers, respect_handler_level=True)
     listener.start()
@@ -676,21 +815,20 @@ def _setup_queue_logging(
     main_logger = setup_logger("main_logger", levels["main_file"])
     error_logger = setup_logger("error_logger", levels["main_file"])
     analytics_logger = setup_logger("analytics_logger", levels["analytics_file"])
-    year_updates_logger = setup_logger("year_updates", levels["year_updates_file"])
-    db_verify_logger = setup_logger("db_verify", levels["year_updates_file"])
+    db_verify_logger = setup_logger("db_verify", levels["main_file"])
     setup_logger("config", levels["main_file"])
 
-    return main_logger, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener
+    return main_logger, error_logger, analytics_logger, db_verify_logger, listener
 
 
 # Added loggers as return values and ensure_directory calls
 def get_loggers(
     config: dict[str, Any],
-) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener | None]:
+) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener | None]:
     """Create and returns loggers using QueueHandler for non-blocking file logging, and RichHandler for console output.
 
     Returns:
-        tuple: (console_logger, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener)
+        tuple: (console_logger, error_logger, analytics_logger, db_verify_logger, listener)
 
     Ensures log directories exist and sets levels based on config.
 
@@ -700,18 +838,18 @@ def get_loggers(
         log_files = _get_log_file_paths(config)
         console_logger = _create_console_logger(levels)
 
-        _, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener = _setup_queue_logging(config, levels, log_files)
+        _, error_logger, analytics_logger, db_verify_logger, listener = _setup_queue_logging(config, levels, log_files)
 
     except (ImportError, OSError, ValueError, AttributeError, TypeError) as e:
         return _create_fallback_loggers(e)
 
     console_logger.debug("Logging setup with QueueListener and RichHandler complete.")
-    return console_logger, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener
+    return console_logger, error_logger, analytics_logger, db_verify_logger, listener
 
 
 def _create_fallback_loggers(
     e: Exception,
-) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, logging.Logger, None]:
+) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, None]:
     """Create fallback loggers when main logger setup fails."""
     print(
         f"FATAL ERROR: Failed to configure custom logging with QueueListener and RichHandler: {e}",
@@ -730,7 +868,6 @@ def _create_fallback_loggers(
     console_fallback = logging.getLogger("console_fallback")
     error_fallback = logging.getLogger("error_fallback")
     analytics_fallback = logging.getLogger("analytics_fallback")
-    year_updates_fallback = logging.getLogger("year_updates_fallback")
     db_verify_fallback = logging.getLogger("db_verify_fallback")
     # Ensure fallback loggers have at least one handler to output messages
     if not console_fallback.handlers:
@@ -739,12 +876,10 @@ def _create_fallback_loggers(
         error_fallback.addHandler(logging.StreamHandler(sys.stderr))
     if not analytics_fallback.handlers:
         analytics_fallback.addHandler(logging.StreamHandler(sys.stdout))
-    if not year_updates_fallback.handlers:
-        year_updates_fallback.addHandler(logging.StreamHandler(sys.stdout))
     if not db_verify_fallback.handlers:
         db_verify_fallback.addHandler(logging.StreamHandler(sys.stdout))
 
-    return console_fallback, error_fallback, analytics_fallback, year_updates_fallback, db_verify_fallback, None
+    return console_fallback, error_fallback, analytics_fallback, db_verify_fallback, None
 
 
 def get_html_report_path(config: dict[str, Any] | None, force_mode: bool = False) -> str:

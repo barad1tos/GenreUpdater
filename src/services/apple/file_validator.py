@@ -6,7 +6,6 @@ and ensures secure file access.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,7 +81,7 @@ class AppleScriptFileValidator:
         """Validate script file exists and is accessible.
 
         Checks that the file exists, is not a symlink (to prevent
-        path traversal attacks), and is readable.
+        path traversal attacks), resolves to allowed directory, and is readable.
 
         Args:
             script_path: Path to the script file
@@ -94,25 +93,49 @@ class AppleScriptFileValidator:
 
         # Reject symlinks to prevent path traversal attacks
         if script_file.is_symlink():
-            self.error_logger.error("❌ Symlinks not allowed: %s", script_path)
+            self.error_logger.error("Symlinks not allowed: %s", script_path)
+            return False
+
+        # Resolve the path and check for symlinks in parent directories
+        try:
+            resolved_path = script_file.resolve(strict=True)
+            # Verify resolved path is within allowed directory (use relative_to for accurate check)
+            if self.apple_scripts_directory:
+                allowed_dir = Path(self.apple_scripts_directory).resolve()
+                try:
+                    resolved_path.relative_to(allowed_dir)
+                except ValueError:
+                    self.error_logger.exception(
+                        "Resolved path escapes allowed directory: %s -> %s",
+                        script_path,
+                        resolved_path,
+                    )
+                    return False
+        except (OSError, ValueError) as e:
+            self.error_logger.exception("Could not resolve script path %s: %s", script_path, e)
             return False
 
         # Check if file exists (without following symlinks)
         if not script_file.is_file():
-            self.error_logger.error("❌ AppleScript file does not exist: %s", script_path)
+            self.error_logger.error("AppleScript file does not exist: %s", script_path)
 
             # List directory contents for debugging
             try:
                 if self.apple_scripts_directory:
                     directory_contents = [f.name for f in Path(self.apple_scripts_directory).iterdir()]
-                    self.console_logger.debug("📂 Directory contents: %s", directory_contents)
+                    self.console_logger.debug("Directory contents: %s", directory_contents)
             except OSError as e:
-                self.console_logger.exception("⚠️ Could not list directory contents: %s", e)
+                self.console_logger.exception("Could not list directory contents: %s", e)
             return False
 
-        # Check if the file is readable
-        if not os.access(script_path, os.R_OK):
-            self.error_logger.error("❌ AppleScript file is not readable: %s", script_path)
+        # Check if the file is readable by actually trying to open it
+        # (more reliable than os.access which may not reflect ACLs correctly)
+        # Note: .scpt files are compiled binary AppleScript, so open in binary mode
+        try:
+            with script_file.open("rb") as f:
+                f.read(1)  # Read one byte to verify access
+        except OSError as e:
+            self.error_logger.exception("AppleScript file is not readable: %s (%s)", script_path, e)
             return False
 
         return True

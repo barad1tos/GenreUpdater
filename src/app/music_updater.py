@@ -3,6 +3,7 @@
 This is a streamlined version that uses the new modular components.
 """
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,7 +17,7 @@ from src.core.tracks.genre_manager import GenreManager
 from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.tracks.track_processor import TrackProcessor
 from src.core.tracks.year_retriever import YearRetriever
-from src.core.logger import get_full_log_path
+from src.core.logger import LogFormat, get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.metadata_utils import is_music_app_running
 from src.core.models.track_models import ChangeLogEntry, TrackDict
@@ -92,6 +93,7 @@ class MusicUpdater:
             ap_client=deps.ap_client,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
+            db_verify_logger=deps.db_verify_logger,
             analytics=deps.analytics,
             config=deps.config,
             dry_run=deps.dry_run,
@@ -146,7 +148,6 @@ class MusicUpdater:
         # Also set context on track_processor
         self.track_processor.set_dry_run_context(mode, test_artists)
 
-
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
         """Resolve absolute path to artist rename configuration file."""
         config_entry = self.config.get("artist_renamer", {}).get("config_path", "artist-renames.yaml")
@@ -162,12 +163,11 @@ class MusicUpdater:
             config_root = Path.cwd()
         return config_root / candidate
 
-    async def run_clean_artist(self, artist: str, _force: bool) -> None:
+    async def run_clean_artist(self, artist: str) -> None:
         """Clean track names for a specific artist.
 
         Args:
             artist: Artist name to process
-            _force: Reserved for future use (API compatibility)
 
         """
         self.console_logger.info("Starting clean operation for artist: %s", artist)
@@ -280,6 +280,41 @@ class MusicUpdater:
         """
         await self.year_service.run_update_years(artist, force)
 
+    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
+        """Verify and update a single pending album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+            year: Year string found from API
+
+        Returns:
+            True if verification succeeded, False otherwise
+
+        """
+        tracks = await self.track_processor.fetch_tracks_async(artist=artist)
+        album_tracks = [t for t in tracks if t.get("album", "") == album]
+        if not album_tracks:
+            return False
+
+        successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
+            tracks=album_tracks,
+            year=year,
+            artist=artist,
+            album=album,
+        )
+        if successful <= 0:
+            return False
+
+        await self.deps.pending_verification_service.remove_from_pending(artist, album)
+        self.console_logger.debug(
+            "  %s %s - %s",
+            LogFormat.success(year),
+            artist,
+            album,
+        )
+        return True
+
     async def run_verify_pending(self, _force: bool = False) -> None:
         """Re-verify albums that are pending year verification.
 
@@ -287,49 +322,54 @@ class MusicUpdater:
             _force: Force verification even if recently done (currently unused)
 
         """
-        self.console_logger.info("Starting pending year verification")
-
-        # Get pending albums
+        start_time = time.time()
         pending_albums = await self.deps.pending_verification_service.get_all_pending_albums()
 
         if not pending_albums:
-            self.console_logger.info("No albums pending verification")
+            self.console_logger.info(
+                "%s %s | no albums pending",
+                LogFormat.label("PENDING"),
+                LogFormat.dim("SKIP"),
+            )
             return
 
-        self.console_logger.info("Found %d albums pending year verification", len(pending_albums))
-
-        # Process each pending album
-        verified_count = 0
-        for pending_tuple in pending_albums:
-            # Unpack the tuple (timestamp, artist, album, reason, metadata)
-            _, artist_str, album_str, _, _ = pending_tuple
-
-            # Try to get year again
-            year = await self.deps.external_api_service.get_album_year(artist_str, album_str)
-
-            if year:
-                # Year found! Update tracks
-                tracks = await self.track_processor.fetch_tracks_async(artist=artist_str)
-                if album_tracks := [t for t in tracks if t.get("album", "") == album_str]:
-                    track_ids = [t.get("id", "") for t in album_tracks if t.get("id")]
-                    successful, _ = await self.year_retriever.update_album_tracks_bulk_async(track_ids, str(year))
-
-                    if successful > 0:
-                        # Remove from pending
-                        await self.deps.pending_verification_service.remove_from_pending(artist_str, album_str)
-                        verified_count += 1
-                        self.console_logger.info(
-                            "Verified year %s for '%s - %s'",
-                            year,
-                            artist_str,
-                            album_str,
-                        )
-
         self.console_logger.info(
-            "Pending verification complete. Verified %d/%d albums",
-            verified_count,
-            len(pending_albums),
+            "%s %s | albums: %s",
+            LogFormat.label("PENDING"),
+            LogFormat.success("START"),
+            LogFormat.number(len(pending_albums)),
         )
+
+        verified_count = 0
+        failed_count = 0
+        for entry in pending_albums:
+            year_str, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            if not year_str:
+                failed_count += 1
+                continue
+
+            if await self._verify_single_pending_album(entry.artist, entry.album, year_str):
+                verified_count += 1
+            else:
+                failed_count += 1
+
+        duration = time.time() - start_time
+        if verified_count > 0:
+            self.console_logger.info(
+                "%s %s | verified: %s failed: %s %s",
+                LogFormat.label("PENDING"),
+                LogFormat.success("DONE"),
+                LogFormat.success(str(verified_count)),
+                LogFormat.dim(str(failed_count)),
+                LogFormat.duration(duration),
+            )
+        else:
+            self.console_logger.info(
+                "%s %s | no years found %s",
+                LogFormat.label("PENDING"),
+                LogFormat.warning("DONE"),
+                LogFormat.duration(duration),
+            )
 
     async def run_verify_database(self, force: bool = False) -> None:
         """Verify track database against Music.app.
@@ -362,7 +402,7 @@ class MusicUpdater:
         self.snapshot_manager.reset()
 
         # Fetch tracks based on mode (test or normal)
-        tracks = await self._fetch_tracks_for_pipeline_mode()
+        tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
         if not tracks:
             self.console_logger.warning("No tracks found in Music.app")
             return
@@ -443,7 +483,7 @@ class MusicUpdater:
         return bool(self.dry_run_test_artists) and self.deps.dry_run
 
     # noinspection PyUnusedLocal
-    async def _try_smart_delta_fetch(self) -> list["TrackDict"] | None:
+    async def _try_smart_delta_fetch(self, force: bool = False) -> list["TrackDict"] | None:
         """Attempt to use Smart Delta to fetch only changed tracks."""
         snapshot_service = self.deps.library_snapshot_service
         ap_client = self.deps.ap_client
@@ -456,11 +496,14 @@ class MusicUpdater:
             self.console_logger.info("Snapshot invalid or expired, skipping Smart Delta")
             return None
 
-        self.console_logger.info("🔍 Attempting Smart Delta approach...")
+        self.console_logger.info("Attempting Smart Delta approach...")
 
         result: list[TrackDict] | None = None
         try:
-            delta = await snapshot_service.compute_smart_delta(ap_client, batch_size=1000)
+            delta = await snapshot_service.compute_smart_delta(
+                ap_client,
+                force=force,
+            )
             if delta is None:
                 self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
                 return None
@@ -471,12 +514,12 @@ class MusicUpdater:
                 return None
 
             if delta.is_empty():
-                self.console_logger.info("✓ Smart Delta: No changes detected, reusing snapshot")
-                self.console_logger.info("✓ Loaded %d tracks from snapshot", len(snapshot_tracks))
+                self.console_logger.info("Smart Delta: No changes detected, reusing snapshot")
+                self.console_logger.info("Loaded %d tracks from snapshot", len(snapshot_tracks))
                 result = snapshot_tracks
             else:
                 self.console_logger.info(
-                    "✓ Smart Delta detected changes: %d new, %d updated, %d removed",
+                    "Smart Delta detected: %d new, %d updated, %d removed",
                     len(delta.new_ids),
                     len(delta.updated_ids),
                     len(delta.removed_ids),
@@ -491,9 +534,11 @@ class MusicUpdater:
 
         return result
 
-
-    async def _fetch_tracks_for_pipeline_mode(self) -> list["TrackDict"]:
+    async def _fetch_tracks_for_pipeline_mode(self, force: bool = False) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
+
+        Args:
+            force: Force full metadata scan in Smart Delta
 
         Returns:
             List of tracks to process
@@ -502,7 +547,7 @@ class MusicUpdater:
         # Fetch all tracks if not in test mode
         if not self.dry_run_test_artists:
             # Try Smart Delta first
-            smart_delta_tracks = await self._try_smart_delta_fetch()
+            smart_delta_tracks = await self._try_smart_delta_fetch(force=force)
             if smart_delta_tracks is not None:
                 self.snapshot_manager.set_snapshot(smart_delta_tracks)
                 return smart_delta_tracks
@@ -523,10 +568,14 @@ class MusicUpdater:
             "Test mode: fetching tracks only for test artists: %s",
             list(self.dry_run_test_artists),
         )
-        collected_tracks: list[TrackDict] = []
+        # Use dict to deduplicate by track ID (handles collaborations appearing for multiple artists)
+        unique_tracks: dict[str, TrackDict] = {}
         for artist in self.dry_run_test_artists:
             artist_tracks = await self.track_processor.fetch_tracks_async(artist=artist)
-            collected_tracks.extend(artist_tracks)
+            for track in artist_tracks:
+                if track_id := track.get("id"):
+                    unique_tracks[str(track_id)] = track
+        collected_tracks = list(unique_tracks.values())
         self.snapshot_manager.set_snapshot(collected_tracks)
         return collected_tracks
 
@@ -578,17 +627,17 @@ class MusicUpdater:
         """
         await self.year_service.update_all_years(tracks, force)
 
-    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], _force: bool) -> list[ChangeLogEntry]:
-        """Update years for all tracks and return change logs (Step 3 of pipeline).
+    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool) -> list[ChangeLogEntry]:
+        """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process
-            _force: Force all operations (unused, kept for API compatibility)
+            force: Force update - bypass cache/skip checks and re-query API for all albums
 
         Returns:
             List of change log entries
         """
-        return await self.year_service.update_all_years_with_logs(tracks, _force)
+        return await self.year_service.update_all_years_with_logs(tracks, force)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.
@@ -608,7 +657,7 @@ class MusicUpdater:
         )
 
         if changes:
-            self.console_logger.info("✅ Saved %d changes to changes report", len(changes))
+            self.console_logger.info("Saved %d changes to report", len(changes))
 
             # Validation: log change breakdown by type
             change_types: dict[str, int] = {}

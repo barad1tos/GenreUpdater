@@ -50,7 +50,7 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
         os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
 
     # Initialize logging
-    logger_console, logger_error, analytics_logger, year_updates_logger, db_verify_logger, listener = get_loggers(config)
+    logger_console, logger_error, analytics_logger, db_verify_logger, listener = get_loggers(config)
 
     # Create dependency container
     deps = DependencyContainer(
@@ -58,7 +58,6 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
         console_logger=logger_console,
         error_logger=logger_error,
         analytics_logger=analytics_logger,
-        year_updates_logger=year_updates_logger,
         db_verify_logger=db_verify_logger,
         logging_listener=listener,
         dry_run=args.dry_run,

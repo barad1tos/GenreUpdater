@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from src.core.models.track_models import CachedApiResult
+    from src.services.pending_verification import PendingAlbumEntry
 
 # Type variable for generic cached values
 T = TypeVar("T")
@@ -372,6 +373,7 @@ class AppleScriptClientProtocol(Protocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Run an AppleScript file by name.
 
@@ -382,6 +384,7 @@ class AppleScriptClientProtocol(Protocol):
             context_artist: Artist name for contextual logging (optional)
             context_album: Album name for contextual logging (optional)
             context_track: Track name for contextual logging (optional)
+            label: Custom label for logging (defaults to script_name)
 
         Returns:
             Script output or None if no output
@@ -423,6 +426,21 @@ class AppleScriptClientProtocol(Protocol):
 
         Returns:
             List of track dictionaries with metadata
+
+        """
+        ...
+
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Fetch just track IDs from Music.app (lightweight operation).
+
+        This is used by Smart Delta to detect new/removed tracks without
+        fetching full metadata.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track ID strings
 
         """
         ...
@@ -476,11 +494,11 @@ class PendingVerificationServiceProtocol(Protocol):
 
     async def get_all_pending_albums(
         self,
-    ) -> list[tuple[datetime, str, str, str, str]]:
+    ) -> list[PendingAlbumEntry]:
         """Get all pending albums.
 
         Returns:
-            List of tuples (timestamp, artist, album, reason, metadata)
+            List of PendingAlbumEntry objects
 
         """
         ...

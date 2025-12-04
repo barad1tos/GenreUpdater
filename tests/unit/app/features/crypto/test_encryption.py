@@ -267,8 +267,9 @@ class TestKeyRotation:
 
         crypto_manager_with_key.rotate_key()
 
-        backup_path = temp_key_file.with_suffix(".key.backup")
-        assert backup_path.exists()
+        # Backup has timestamp: .key.backup.YYYYMMDD_HHMMSS
+        backup_files = list(temp_key_file.parent.glob("*.key.backup.*"))
+        assert len(backup_files) == 1
 
     def test_rotate_key_without_backup(
         self, crypto_manager_with_key: CryptographyManager, temp_key_file: Path

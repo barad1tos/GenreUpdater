@@ -28,6 +28,9 @@ ICLOUD_CONFLICT_PATTERN = re.compile(r"^(.+) (\d+)(\.[^.]+)?$")
 # Files younger than this might still be syncing
 DEFAULT_MIN_AGE_SECONDS = 600
 
+# Module-level logger for internal functions
+_logger = logging.getLogger(__name__)
+
 
 @dataclass
 class CleanupContext:
@@ -422,6 +425,7 @@ def _scan_directory_recursive(
     try:
         entries = list(directory.iterdir())
     except PermissionError:
+        _logger.warning("Permission denied when scanning directory: %s", directory)
         return
 
     result.scanned_dirs += 1

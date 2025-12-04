@@ -19,6 +19,7 @@ import yaml
 
 from src.core.core_config import load_config
 from src.core.dry_run import DryRunAppleScriptClient
+from src.core.logger import LogFormat, shorten_path
 from src.core.models.album_type import configure_patterns as configure_album_patterns
 from src.metrics.analytics import Analytics, LoggerContainer
 
@@ -68,7 +69,6 @@ class DependencyContainer:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics_logger: logging.Logger,
-        year_updates_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         *,
         logging_listener: SafeQueueListener | None = None,
@@ -81,7 +81,6 @@ class DependencyContainer:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics_logger: Logger for analytics events
-            year_updates_logger: Logger for year update operations
             db_verify_logger: Logger for database verification operations
             logging_listener: Optional queue listener for logging
             dry_run: Whether to run in dry-run mode (no changes made)
@@ -92,7 +91,6 @@ class DependencyContainer:
         self._console_logger = console_logger
         self._error_logger = error_logger
         self._analytics_logger = analytics_logger
-        self._year_updates_logger = year_updates_logger
         self._db_verify_logger = db_verify_logger
         self._listener = logging_listener
 
@@ -185,6 +183,11 @@ class DependencyContainer:
         """Get the analytics logger."""
         return self._analytics_logger
 
+    @property
+    def db_verify_logger(self) -> logging.Logger:
+        """Get the database verification logger."""
+        return self._db_verify_logger
+
     async def _initialize_service(
         self,
         service: InitializableService | None,
@@ -212,11 +215,11 @@ class DependencyContainer:
         initialize_method = getattr(service, "initialize", None)
         if not callable(initialize_method):
             self._error_logger.warning(
-                f" {service_name} instance has no initialize method",
+                " %s instance has no initialize method", LogFormat.entity(service_name),
             )
             return
 
-        self._console_logger.debug(f" Initializing {service_name}...")
+        self._console_logger.debug(" Initializing %s...", LogFormat.entity(service_name))
         start = time.monotonic()
 
         try:
@@ -233,12 +236,12 @@ class DependencyContainer:
                 await result
 
             elapsed = time.monotonic() - start
-            self._console_logger.debug(f" {service_name} initialized in {elapsed:.2f}s")
+            self._console_logger.debug(" %s initialized in %.2fs", LogFormat.entity(service_name), elapsed)
 
         except Exception as e:
             elapsed = time.monotonic() - start
             self._error_logger.exception(
-                f" Failed to initialize {service_name} after {elapsed:.2f}s: {e}"
+                " Failed to initialize %s after %.2fs: %s", LogFormat.entity(service_name), elapsed, e
             )
             raise
 
@@ -265,7 +268,7 @@ class DependencyContainer:
                 self._console_logger,
                 self._error_logger,
             )
-            self._console_logger.info("Dry run enabled - using DryRunAppleScriptClient")
+            self._console_logger.info("Dry run enabled - using %s", LogFormat.entity("DryRunAppleScriptClient"))
         else:
             self._ap_client = AppleScriptClient(
                 self._config,
@@ -359,7 +362,7 @@ class DependencyContainer:
 
     async def close(self) -> None:
         """Async cleanup of resources and services."""
-        self._console_logger.debug("Closing DependencyContainer...")
+        self._console_logger.debug("Closing %s...", LogFormat.entity("DependencyContainer"))
 
         # Save cache before closing
         if self._cache_service is not None:
@@ -384,21 +387,21 @@ class DependencyContainer:
             else:
                 try:
                     await self._api_orchestrator.close()
-                    self._console_logger.debug("API Orchestrator closed successfully")
+                    self._console_logger.debug("%s closed successfully", LogFormat.entity("ExternalApiOrchestrator"))
                 except (OSError, RuntimeError, asyncio.CancelledError) as e:
                     self._console_logger.warning(f"Failed to close API Orchestrator: {e}")
 
-        self._console_logger.debug("DependencyContainer closed.")
+        self._console_logger.debug("%s closed.", LogFormat.entity("DependencyContainer"))
 
     def shutdown(self) -> None:
         """Clean up non-async resources and stop services."""
-        self._console_logger.debug("Shutting down DependencyContainer...")
+        self._console_logger.debug("Shutting down %s...", LogFormat.entity("DependencyContainer"))
 
         if self._listener is not None:
             self._console_logger.debug("Stopping logging listener...")
             self._listener.stop()
             self._listener = None
-        self._console_logger.debug("DependencyContainer shutdown complete.")
+        self._console_logger.debug("%s shutdown complete.", LogFormat.entity("DependencyContainer"))
 
     async def _async_run(self, coro: Awaitable[T]) -> T:
         """Run a coroutine in the current event loop.
@@ -441,7 +444,11 @@ class DependencyContainer:
         """
         elapsed = time.monotonic() - start_time
         self._error_logger.error(
-            f" {error_type} initializing {service_name} after {elapsed:.2f}s: {error}",
+            " %s initializing %s after %.2fs: %s",
+            error_type,
+            LogFormat.entity(service_name),
+            elapsed,
+            error,
             exc_info=not isinstance(error, KeyboardInterrupt | SystemExit),
         )
 
@@ -478,26 +485,22 @@ class DependencyContainer:
         try:
             scripts_path = Path(scripts_dir_str)
             if not scripts_path.is_dir():
-                self._console_logger.error(
-                    f"AppleScripts directory does not exist: {scripts_dir_str}",
-                )
+                short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+                self._console_logger.error("AppleScripts directory does not exist: %s", short_path)
                 return
         except PermissionError as exc:
-            self._console_logger.exception(
-                f"Permission denied when accessing AppleScripts directory: {scripts_dir_str}. Error: {exc}",
-            )
+            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            self._console_logger.exception("Permission denied for AppleScripts directory: %s. Error: %s", short_path, exc)
             return
         except Exception as exc:
-            self._console_logger.exception(
-                f"Unexpected error when checking AppleScripts directory: {scripts_dir_str}. Error: {exc}",
-            )
+            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            self._console_logger.exception("Error checking AppleScripts directory: %s. Error: %s", short_path, exc)
             return
 
-        # Log the directory being used
+        # Log the directory being used with shortened path
+        short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
         run_type = "DRY RUN - " if is_dry_run else ""
-        self._console_logger.info(
-            f"{run_type}Using AppleScripts directory: {scripts_dir_str}",
-        )
+        self._console_logger.info("%sAppleScripts: %s", run_type, short_path)
 
     def _load_config(self) -> dict[str, Any]:
         """Load and validate application configuration.
@@ -512,14 +515,15 @@ class DependencyContainer:
 
         """
         try:
-            self._console_logger.info(f"Loading configuration from {self._config_path}")
             config = load_config(self._config_path)
-            self._console_logger.info("Configuration loaded successfully")
+            self._console_logger.info("Configuration: [cyan]%s[/cyan]", Path(self._config_path).name)
             return config
         except FileNotFoundError as e:
-            self._error_logger.exception(f"Configuration file not found: {self._config_path}")
+            short_path = Path(self._config_path).name
+            self._error_logger.exception("Configuration file not found: %s", short_path)
             msg = f"Configuration file not found: {self._config_path}"
             raise FileNotFoundError(msg) from e
         except yaml.YAMLError as e:
-            self._error_logger.exception(f"Invalid YAML in config file {self._config_path}: {e}")
+            short_path = Path(self._config_path).name
+            self._error_logger.exception("Invalid YAML in config file %s: %s", short_path, e)
             raise

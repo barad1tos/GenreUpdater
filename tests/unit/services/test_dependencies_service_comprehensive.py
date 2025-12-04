@@ -23,7 +23,6 @@ class TestDependencyContainer:
             "console": Mock(spec=logging.Logger),
             "error": Mock(spec=logging.Logger),
             "analytics": Mock(spec=logging.Logger),
-            "year_updates": Mock(spec=logging.Logger),
             "db_verify": Mock(spec=logging.Logger),
         }
 
@@ -59,7 +58,6 @@ class TestDependencyContainer:
             console_logger=mock_loggers["console"],
             error_logger=mock_loggers["error"],
             analytics_logger=mock_loggers["analytics"],
-            year_updates_logger=mock_loggers["year_updates"],
             db_verify_logger=mock_loggers["db_verify"],
         )
 
@@ -78,7 +76,6 @@ class TestDependencyContainer:
             console_logger=mock_loggers["console"],
             error_logger=mock_loggers["error"],
             analytics_logger=mock_loggers["analytics"],
-            year_updates_logger=mock_loggers["year_updates"],
             db_verify_logger=mock_loggers["db_verify"],
             dry_run=True,
         )
@@ -530,7 +527,6 @@ class TestDependencyContainer:
             console_logger=mock_loggers["console"],
             error_logger=mock_loggers["error"],
             analytics_logger=mock_loggers["analytics"],
-            year_updates_logger=mock_loggers["year_updates"],
             db_verify_logger=mock_loggers["db_verify"],
             logging_listener=mock_listener,
         )

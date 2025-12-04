@@ -10,22 +10,28 @@ Key Features:
 - Centralized configuration management and metrics
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from src.core.logger import get_full_log_path
+from src.core.logger import LogFormat, get_full_log_path
+from src.core.run_tracking import IncrementalRunTracker
+from src.core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
 from src.core.utils.icloud_cleanup import cleanup_cache_directory
 from src.services.cache.album_cache import AlbumCacheService
 from src.services.cache.api_cache import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.generic_cache import GenericCacheService
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.models.track_models import CachedApiResult, TrackDict
-from src.core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from src.core.models.track_models import CachedApiResult, TrackDict
 
 T = TypeVar("T")
 
@@ -59,7 +65,7 @@ class CacheOrchestrator(CacheServiceProtocol):
 
     async def initialize(self) -> None:
         """Initialize all cache services."""
-        self.logger.info("Initializing CacheOrchestrator...")
+        self.logger.info("Initializing %s...", LogFormat.entity("CacheOrchestrator"))
 
         # Clean up iCloud conflict files before loading caches
         self._cleanup_icloud_conflicts()
@@ -75,7 +81,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         failed_services: list[str] = []
         for (service_name, _), result in zip(service_tasks, results, strict=False):
             if isinstance(result, Exception):
-                self.logger.error("Failed to initialize %s: %s", service_name, result, exc_info=result)
+                self.logger.error("Failed to initialize %s: %s", LogFormat.entity(service_name), result, exc_info=result)
                 failed_services.append(service_name)
 
         if failed_services:
@@ -83,7 +89,7 @@ class CacheOrchestrator(CacheServiceProtocol):
             msg = f"Cache service initialization failed for: {failed_list}"
             raise RuntimeError(msg)
 
-        self.logger.info("CacheOrchestrator initialized successfully")
+        self.logger.info("%s initialized successfully", LogFormat.entity("CacheOrchestrator"))
 
     def _cleanup_icloud_conflicts(self) -> None:
         """Clean up iCloud sync conflict files in the cache directory.
@@ -118,7 +124,6 @@ class CacheOrchestrator(CacheServiceProtocol):
                 logger=self.logger,
                 # 60s minimum age prevents race conditions during active iCloud sync
                 min_age_seconds=60,
-                dry_run=False,
             )
         except OSError as e:
             self.logger.warning("Failed to cleanup iCloud conflicts: %s", e)
@@ -261,7 +266,7 @@ class CacheOrchestrator(CacheServiceProtocol):
             await self.album_service.invalidate_album(artist, album)
             await self.api_service.invalidate_for_album(artist, album)
 
-            self.logger.info("Invalidated caches for track: %s - %s", artist, album)
+            self.logger.debug("Invalidated caches for track: %s - %s", artist, album)
 
             cache_event = CacheEvent(
                 event_type=CacheEventType.TRACK_MODIFIED,
@@ -285,7 +290,7 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         for (service_name, _), result in zip(save_tasks, results, strict=False):
             if isinstance(result, Exception):
-                self.logger.error("Failed to save %s to disk: %s", service_name, result, exc_info=result)
+                self.logger.error("Failed to save %s to disk: %s", LogFormat.entity(service_name), result, exc_info=result)
 
         self.logger.info("All caches saved to disk")
 
@@ -377,9 +382,15 @@ class CacheOrchestrator(CacheServiceProtocol):
         await self.save_all_to_disk()
 
     async def get_last_run_timestamp(self) -> datetime:
-        """Get the timestamp of the last cache run."""
-        # For now, return current time - this could be enhanced to track actual timestamps
-        return datetime.now(UTC)
+        """Get the timestamp of the last cache run.
+
+        Returns:
+            Last run timestamp, or epoch (1970-01-01) if never run
+        """
+        tracker = IncrementalRunTracker(self.config)
+        timestamp = await tracker.get_last_run_timestamp()
+        # Protocol requires datetime, return epoch if None (never run)
+        return timestamp or datetime(1970, 1, 1, tzinfo=UTC)
 
     async def get_album_year_from_cache(self, artist: str, album: str) -> str | None:
         """Get cached album year for an artist/album pair."""

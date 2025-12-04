@@ -58,6 +58,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         context_artist: str | None = None,
         context_album: str | None = None,
         context_track: str | None = None,
+        label: str | None = None,
     ) -> str | None:
         """Run an AppleScript by name in dry run mode.
 
@@ -71,6 +72,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
             context_artist: Artist name for contextual logging (optional).
             context_album: Album name for contextual logging (optional).
             context_track: Track name for contextual logging (optional).
+            label: Custom label for logging (defaults to script_name).
 
         Returns:
             str | None: The script output if this is a fetch operation, DRY_RUN_SUCCESS_MESSAGE otherwise.
@@ -99,6 +101,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
                 context_artist=context_artist,
                 context_album=context_album,
                 context_track=context_track,
+                label=label,
             )
             return str(result) if result is not None else None
 
@@ -173,6 +176,19 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         """
         self.console_logger.info("DRY-RUN: Fetching %d tracks by ID (delegating to real client)", len(track_ids))
         return await self._real_client.fetch_tracks_by_ids(track_ids, batch_size=batch_size, timeout=timeout)
+
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Fetch all track IDs - delegates to real client in dry-run mode.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            List of track ID strings
+
+        """
+        self.console_logger.info("DRY-RUN: Fetching all track IDs (delegating to real client)")
+        return await self._real_client.fetch_all_track_ids(timeout=timeout)
 
     def get_actions(self) -> list[dict[str, Any]]:
         """Get the list of actions performed during the dry run."""

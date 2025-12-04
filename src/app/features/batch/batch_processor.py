@@ -31,9 +31,7 @@ class BatchProcessor:
         self.error_logger = error_logger
 
     # noinspection PyTypeChecker
-    async def process_from_file(
-        self, file_path: str, operation: str = "full", force: bool = False
-    ) -> dict[str, list[str]]:
+    async def process_from_file(self, file_path: str, operation: str = "full", force: bool = False) -> dict[str, list[str]]:
         """Process artists from a file.
 
         Args:
@@ -74,15 +72,13 @@ class BatchProcessor:
         # Process the artists using the dedicated method
         return await self.process_artists(artists, operation, force)
 
-    async def process_artists(
-        self, artists: list[str], operation: str = "full", force: bool = False
-    ) -> dict[str, list[str]]:
+    async def process_artists(self, artists: list[str], operation: str = "full", force: bool = False) -> dict[str, list[str]]:
         """Process a list of artists.
 
         Args:
             artists: List of artist names to process
             operation: Operation to perform (clean, years, full)
-            force: Force processing
+            force: Force processing (used for year updates)
 
         Returns:
             Dictionary with successful and failed artists
@@ -96,12 +92,12 @@ class BatchProcessor:
 
             try:
                 if operation == "clean":
-                    await self.music_updater.run_clean_artist(artist, _force=force)
+                    await self.music_updater.run_clean_artist(artist)
                 elif operation == "years":
                     await self.music_updater.run_update_years(artist, force)
                 else:  # full
                     # First clean, then update genres and years
-                    await self.music_updater.run_clean_artist(artist, _force=force)
+                    await self.music_updater.run_clean_artist(artist)
                     # Genre update happens as part of the main pipeline
                     await self.music_updater.run_update_years(artist, force)
 
@@ -142,14 +138,13 @@ class BatchProcessor:
         self.console_logger.info("✅ Successful: %d", successful)
 
         if failed:
-            self.console_logger.error("❌ Failed: %d", failed)
+            self.console_logger.error("Failed: %d", failed)
             for artist in results["failed"]:
                 self.console_logger.error("  - %s", artist)
         if skipped:
-            self.console_logger.warning("⏭️  Skipped: %d", skipped)
+            self.console_logger.warning("Skipped: %d", skipped)
             for artist in results["skipped"]:
                 self.console_logger.warning("  - %s", artist)
-            self.console_logger.warning("⏭️  Skipped: %d", skipped)
 
         # Success rate
         if total > 0:

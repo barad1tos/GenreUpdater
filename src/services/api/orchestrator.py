@@ -28,6 +28,7 @@ import aiohttp
 import certifi
 
 from src.core.debug_utils import debug
+from src.core.logger import LogFormat
 from src.core.models.script_detection import ScriptType, detect_primary_script
 from src.core.models.validators import is_valid_year
 from src.metrics import Analytics
@@ -198,7 +199,7 @@ class ExternalApiOrchestrator:
         self.secure_config: SecureConfig | None = None
         try:
             self.secure_config = SecureConfig(logger=self.error_logger)
-            self.console_logger.debug("SecureConfig initialized for encrypted token storage")
+            self.console_logger.debug("%s initialized for encrypted token storage", LogFormat.entity("SecureConfig"))
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to initialize SecureConfig: %s", e)
             self.secure_config = None
@@ -295,7 +296,7 @@ class ExternalApiOrchestrator:
                 "MusicBrainz API requires valid contact information for compliance.",
             )
             self.console_logger.warning(
-                "⚠️  Missing contact email - using placeholder. MusicBrainz API requests may be rate-limited or rejected.",
+                "Missing contact email - using placeholder. MusicBrainz API may reject or rate-limit requests.",
             )
             self.contact_email = "no-email-provided@example.com"
 
@@ -385,11 +386,9 @@ class ExternalApiOrchestrator:
         assert self.secure_config is not None  # Caller ensures this
         try:
             encrypted_token = self.secure_config.encrypt_token(raw_token, key)
-            self.console_logger.info(
-                "Encrypted %s token for secure storage. Consider updating config to use encrypted value: %s",
-                key,
-                encrypted_token,
-            )
+            self.console_logger.info("Token '%s' encrypted. Update config.yaml with the encrypted value.", key)
+            # Store encrypted value for manual config update (visible only in debug logs)
+            self.console_logger.debug("Encrypted value for %s: %s", key, encrypted_token)
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to encrypt %s: %s", key, e)
 
@@ -643,7 +642,7 @@ class ExternalApiOrchestrator:
         self.console_logger.info("---------------------------")
 
         await self.session.close()
-        self.console_logger.info("External API session closed")
+        self.console_logger.info("%s session closed", LogFormat.entity("ExternalApiOrchestrator"))
 
     async def _make_api_request(
         self,
@@ -920,23 +919,9 @@ class ExternalApiOrchestrator:
         if not debug.api:
             return
 
-        script_emoji_map = {
-            ScriptType.CYRILLIC: "🇺🇦",
-            ScriptType.CHINESE: "🇨🇳",
-            ScriptType.JAPANESE: "🇯🇵",
-            ScriptType.KOREAN: "🇰🇷",
-            ScriptType.ARABIC: "🇸🇦",
-            ScriptType.HEBREW: "🇮🇱",
-            ScriptType.GREEK: "🇬🇷",
-            ScriptType.THAI: "🇹🇭",
-            ScriptType.DEVANAGARI: "🇮🇳",
-            ScriptType.MIXED: "🌍",
-        }
-
-        emoji = script_emoji_map.get(script_type, "🌍")
-        self.console_logger.info(f"{emoji} Processing {script_type.value} artist")
+        self.console_logger.info("Processing %s artist", script_type.value)
         self.console_logger.info(
-            f"{emoji} Token status: Discogs=%s, LastFM=%s",
+            "Token status: Discogs=%s, LastFM=%s",
             "LOADED" if self.discogs_token else "MISSING",
             "LOADED" if self.lastfm_api_key else "MISSING",
         )
@@ -947,7 +932,7 @@ class ExternalApiOrchestrator:
         default_config = script_api_priorities.get("default", {})
         script_priorities = script_api_priorities.get(script_type.value, default_config)
         primary_apis = script_priorities.get("primary", ["musicbrainz"])
-        self.console_logger.info(f"{emoji} Primary APIs for {script_type.value}: {primary_apis}")
+        self.console_logger.info("Primary APIs for %s: %s", script_type.value, primary_apis)
 
     def _log_search_initialization(
         self, log_artist: str, log_album: str, current_library_year: str | None, artist_norm: str, album_norm: str
@@ -1112,9 +1097,10 @@ class ExternalApiOrchestrator:
 
         if not year_scores:
             self.console_logger.warning(
-                "No valid years found after processing API results for '%s - %s'",
+                "No valid years found for '%s - %s' (%d releases processed)",
                 log_artist,
                 log_album,
+                len(all_releases) if all_releases else 0,
             )
             await self._safe_mark_for_verification(artist, album)
             fallback_year = self._get_fallback_year_when_no_api_results(
@@ -1179,10 +1165,16 @@ class ExternalApiOrchestrator:
         str_result = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
 
         # Convert string years to integers to match protocol
-        start_year = int(str_result[0]) if str_result[0] else None
-        end_year = int(str_result[1]) if str_result[1] else None
+        def safe_int(val: str | None) -> int | None:
+            """Convert string to int, returning None for invalid or empty values."""
+            if not val:
+                return None
+            try:
+                return int(val)
+            except ValueError:
+                return None
 
-        return start_year, end_year
+        return safe_int(str_result[0]), safe_int(str_result[1])
 
     async def get_year_from_discogs(
         self,
