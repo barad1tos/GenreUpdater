@@ -221,7 +221,8 @@ class YearRetriever:
                 )
 
             # Generate report for problematic albums
-            min_attempts = self.config.get("reporting", {}).get("min_attempts_for_report", 3)
+            raw_min_attempts = self.config.get("reporting", {}).get("min_attempts_for_report", 3)
+            min_attempts = resolve_positive_int(raw_min_attempts, default=3)
             problematic_count = await self.pending_verification.generate_problematic_albums_report(min_attempts=min_attempts)
             if problematic_count > 0:
                 self.console_logger.warning(
@@ -349,17 +350,26 @@ class YearRetriever:
 
     async def update_album_tracks_bulk_async(
         self,
-        track_ids: list[str],
+        tracks: list[TrackDict],
         year: str,
+        artist: str,
+        album: str,
     ) -> tuple[int, int]:
         """Update year for multiple tracks.
         Delegates to YearBatchProcessor.
 
         Args:
-            track_ids: List of track IDs to update.
+            tracks: List of tracks to update.
             year: Year value to set.
+            artist: Artist name for contextual logging.
+            album: Album name for contextual logging.
 
         Returns:
             Tuple of (successful_count, failed_count).
         """
-        return await self._batch_processor.update_album_tracks_bulk_async(track_ids, year)
+        return await self._batch_processor.update_album_tracks_bulk_async(
+            tracks=tracks,
+            year=year,
+            artist=artist,
+            album=album,
+        )

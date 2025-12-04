@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from rich.console import Console
+
 from src.core.models.metadata_utils import parse_tracks
+from src.services.apple.applescript_client import NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
     import logging
@@ -120,47 +123,43 @@ class BatchTrackFetcher:
         batch_number = 0
         consecutive_failures = 0
 
-        self.console_logger.info("Starting batch processing with batch_size=%d", batch_size)
+        console = Console()
+        with console.status("[cyan]Fetching library...[/cyan]") as status:
+            while True:
+                batch_number += 1
+                status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
 
-        while True:
-            batch_number += 1
-            self.console_logger.info(
-                "Fetching batch %d (offset=%d, limit=%d)...",
-                batch_number,
-                offset,
-                batch_size,
-            )
+                try:
+                    batch_result = await self._fetch_and_validate_batch(batch_number, offset, batch_size)
+                    if batch_result is None:
+                        break
 
-            try:
-                batch_result = await self._fetch_and_validate_batch(batch_number, offset, batch_size)
-                if batch_result is None:
+                    validated_tracks, should_continue, parse_failed = batch_result
+
+                    consecutive_failures, should_continue_loop = self._update_failure_counter(
+                        consecutive_failures,
+                        parse_failed,
+                        batch_number,
+                    )
+                    if not should_continue_loop:
+                        break
+
+                    all_tracks.extend(validated_tracks)
+                    status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
+
+                    if not should_continue:
+                        break
+
+                    offset += batch_size
+
+                except (OSError, ValueError, RuntimeError) as error:
+                    self.error_logger.exception(
+                        "Error in batch %d (offset=%d): %s",
+                        batch_number,
+                        offset,
+                        error,
+                    )
                     break
-
-                validated_tracks, should_continue, parse_failed = batch_result
-
-                consecutive_failures, should_continue_loop = self._update_failure_counter(
-                    consecutive_failures,
-                    parse_failed,
-                    batch_number,
-                )
-                if not should_continue_loop:
-                    break
-
-                all_tracks.extend(validated_tracks)
-
-                if not should_continue:
-                    break
-
-                offset += batch_size
-
-            except (OSError, ValueError, RuntimeError) as error:
-                self.error_logger.exception(
-                    "Error in batch %d (offset=%d): %s",
-                    batch_number,
-                    offset,
-                    error,
-                )
-                break
 
         self.console_logger.info(
             "Batch processing completed: %d batches processed, %d total tracks fetched",
@@ -202,7 +201,7 @@ class BatchTrackFetcher:
         if raw_output.startswith("ERROR:"):
             self.error_logger.error("Batch %d AppleScript error: %s", batch_number, raw_output)
             return None
-        if raw_output == "NO_TRACKS_FOUND":
+        if raw_output == NO_TRACKS_FOUND:
             self.console_logger.info("Batch %d: no tracks found", batch_number)
             return None
 

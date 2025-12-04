@@ -17,6 +17,7 @@ from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
 from src.services.cache.snapshot import LibrarySnapshotService
 from src.core.models.metadata_utils import parse_tracks
 from src.core.models.track_models import TrackDict
+from src.services.apple.applescript_client import NO_TRACKS_FOUND
 from src.core.models.validators import SecurityValidationError, SecurityValidator
 from src.metrics import Analytics
 
@@ -384,7 +385,7 @@ class TrackProcessor:
             if raw_output.startswith("ERROR:"):
                 self.error_logger.error(f"AppleScript error: {raw_output}")
                 return []
-            if raw_output == "NO_TRACKS_FOUND":
+            if raw_output == NO_TRACKS_FOUND:
                 self.console_logger.info("No tracks found matching filter criteria")
                 return []
 

@@ -306,8 +306,12 @@ class MusicUpdater:
                 # Year found! Update tracks
                 tracks = await self.track_processor.fetch_tracks_async(artist=entry.artist)
                 if album_tracks := [t for t in tracks if t.get("album", "") == entry.album]:
-                    track_ids = [t.get("id", "") for t in album_tracks if t.get("id")]
-                    successful, _ = await self.year_retriever.update_album_tracks_bulk_async(track_ids, str(year))
+                    successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
+                        tracks=album_tracks,
+                        year=str(year),
+                        artist=entry.artist,
+                        album=entry.album,
+                    )
 
                     if successful > 0:
                         # Remove from pending
