@@ -14,7 +14,7 @@ import yaml
 from src.app.features.batch.batch_processor import BatchProcessor
 from src.app.music_updater import MusicUpdater
 from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
-from src.core.models.metadata_utils import is_music_app_running
+from src.core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
 
 if TYPE_CHECKING:
     from src.services.dependency_container import DependencyContainer
@@ -45,6 +45,9 @@ class Orchestrator:
             args: Parsed command-line arguments
 
         """
+        # Reset per-run state
+        reset_cleaning_exceptions_log()
+
         command = getattr(args, "command", None)
 
         # Check if Music app is running for commands that depend on it

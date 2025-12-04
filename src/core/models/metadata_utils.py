@@ -25,6 +25,14 @@ from typing import Any
 
 from src.core.models.track_models import TrackDict
 
+# Track already-logged cleaning exceptions to avoid duplicate messages
+_logged_cleaning_exceptions: set[tuple[str, str]] = set()
+
+
+def reset_cleaning_exceptions_log() -> None:
+    """Reset the set of logged cleaning exceptions (call at start of new run)."""
+    _logged_cleaning_exceptions.clear()
+
 
 class TrackField(IntEnum):
     """Enumeration of track data field indices with auto-incrementing values."""
@@ -577,11 +585,15 @@ def clean_names(
 
     exceptions = config.get("exceptions", {}).get("track_cleaning", [])
     if _is_cleaning_exception(artist, album_name, exceptions):
-        console_logger.info(
-            "No cleaning applied due to exceptions for artist '%s', album '%s'.",
-            artist,
-            album_name,
-        )
+        # Log only once per artist/album combination
+        key = (artist.lower(), album_name.lower())
+        if key not in _logged_cleaning_exceptions:
+            _logged_cleaning_exceptions.add(key)
+            console_logger.info(
+                "No cleaning applied due to exceptions for artist '%s', album '%s'.",
+                artist,
+                album_name,
+            )
         return track_name.strip(), album_name.strip()
 
     cleaning_config = config.get("cleaning", {})
