@@ -1,4 +1,11 @@
-"""Tests for should_force_scan logic."""
+"""Tests for should_force_scan logic.
+
+Logic: Weekly auto-force (7+ days), no first-run force.
+- CLI --force: always force
+- First run (no metadata): fast mode (nothing to compare)
+- < 7 days since last force: fast mode
+- 7+ days since last force: auto-force for manual edit detection
+"""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -29,19 +36,21 @@ class TestShouldForceScan:
     @pytest.mark.asyncio
     async def test_force_flag_true_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
         """CLI --force flag should always trigger force scan."""
-        result = await snapshot_service.should_force_scan(force_flag=True)
-        assert result is True
+        should_force, reason = await snapshot_service.should_force_scan(force_flag=True)
+        assert should_force is True
+        assert "CLI --force" in reason
 
     @pytest.mark.asyncio
-    async def test_no_metadata_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
-        """First run (no metadata) should trigger force scan."""
+    async def test_no_metadata_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
+        """First run (no metadata) should NOT trigger force scan - nothing to compare."""
         with patch.object(snapshot_service, "get_snapshot_metadata", return_value=None):
-            result = await snapshot_service.should_force_scan(force_flag=False)
-            assert result is True
+            should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
+            assert should_force is False
+            assert "first run" in reason
 
     @pytest.mark.asyncio
-    async def test_no_last_force_scan_time_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
-        """Missing last_force_scan_time should trigger force scan."""
+    async def test_no_last_force_scan_time_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
+        """Missing last_force_scan_time should NOT trigger force scan - nothing to compare."""
         metadata = LibraryCacheMetadata(
             version="1.0",
             last_full_scan=datetime.now(UTC),
@@ -51,42 +60,45 @@ class TestShouldForceScan:
             last_force_scan_time=None,
         )
         with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
-            result = await snapshot_service.should_force_scan(force_flag=False)
-            assert result is True
+            should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
+            assert should_force is False
+            assert "first run" in reason
 
     @pytest.mark.asyncio
-    async def test_same_day_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
-        """Same calendar day should NOT trigger force scan."""
+    async def test_within_week_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
+        """Force scan within 7 days should NOT trigger force scan."""
         now = datetime.now(UTC)
-        same_day = now - timedelta(hours=2)
+        three_days_ago = now - timedelta(days=3)
         metadata = LibraryCacheMetadata(
             version="1.0",
             last_full_scan=datetime.now(UTC),
             library_mtime=datetime.now(UTC),
             track_count=100,
             snapshot_hash="abc123",
-            last_force_scan_time=same_day.isoformat(),
+            last_force_scan_time=three_days_ago.isoformat(),
         )
         with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
-            result = await snapshot_service.should_force_scan(force_flag=False)
-            assert result is False
+            should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
+            assert should_force is False
+            assert "fast mode" in reason
 
     @pytest.mark.asyncio
-    async def test_previous_day_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
-        """Previous calendar day should trigger force scan."""
+    async def test_week_old_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
+        """Force scan 7+ days ago should trigger weekly auto-force."""
         now = datetime.now(UTC)
-        yesterday = now - timedelta(days=1)
+        eight_days_ago = now - timedelta(days=8)
         metadata = LibraryCacheMetadata(
             version="1.0",
             last_full_scan=datetime.now(UTC),
             library_mtime=datetime.now(UTC),
             track_count=100,
             snapshot_hash="abc123",
-            last_force_scan_time=yesterday.isoformat(),
+            last_force_scan_time=eight_days_ago.isoformat(),
         )
         with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
-            result = await snapshot_service.should_force_scan(force_flag=False)
-            assert result is True
+            should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
+            assert should_force is True
+            assert "weekly" in reason
 
 
 class TestUpdateForceScanTime:

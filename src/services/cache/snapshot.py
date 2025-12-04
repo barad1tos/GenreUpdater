@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 from src.services.cache.json_utils import dumps_json, loads_json
 from src.core.tracks.track_delta import TrackDelta, has_track_changed
-from src.core.logger import ensure_directory
+from src.core.logger import ensure_directory, spinner
 from src.core.models.track_models import TrackDict
 
 SNAPSHOT_VERSION = "1.0"
@@ -379,13 +379,16 @@ class LibrarySnapshotService:
         """Compute track delta using Hybrid Smart Delta approach.
 
         Two modes:
-        - Fast mode (default): Detects new/removed by ID comparison only (~1s)
+        - Fast mode (default): Detects new/removed by ID comparison only (~1-2s)
         - Force mode: Full metadata comparison for manual change detection (~30-60s)
 
         Force mode triggers when:
         - force=True (CLI --force)
-        - No previous force scan
-        - Last force scan was on previous calendar day
+        - Last force scan was 7+ days ago (weekly auto-force)
+
+        Fast mode (skips full scan) when:
+        - First run (nothing to compare against)
+        - Force scan was within last 7 days
 
         Args:
             applescript_client: AppleScriptClient instance for fetching tracks
@@ -395,9 +398,9 @@ class LibrarySnapshotService:
             TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
 
         """
-        is_force = await self.should_force_scan(force)
+        is_force, reason = await self.should_force_scan(force)
         mode_label = "force" if is_force else "fast"
-        self.logger.info("Computing Smart Delta (%s mode)...", mode_label)
+        self.logger.info("Smart Delta [cyan]%s[/cyan] mode: %s", mode_label, reason)
 
         # Load snapshot
         snapshot_tracks = await self.load_snapshot()
@@ -462,8 +465,8 @@ class LibrarySnapshotService:
 
         Fetches full library metadata and compares with snapshot.
         """
-        self.logger.info("Force mode: fetching full library metadata...")
-        result = await applescript_client.run_script("fetch_tracks.scpt", arguments=["", ""])
+        async with spinner("Force mode: fetching full library metadata..."):
+            result = await applescript_client.run_script("fetch_tracks.scpt", arguments=["", ""])
         raw_tracks = self._parse_fetch_tracks_output(result) if result else []
 
         if not raw_tracks:
@@ -501,32 +504,46 @@ class LibrarySnapshotService:
         """Return whether delta caching is enabled."""
         return self.enabled and self.delta_enabled
 
-    async def should_force_scan(self, force_flag: bool = False) -> bool:
+    async def should_force_scan(self, force_flag: bool = False) -> tuple[bool, str]:
         """Determine if full metadata scan is needed.
 
         Force scan triggers when:
         - force_flag is True (CLI --force)
-        - No previous force scan recorded
-        - Last force scan was on a previous calendar day
+        - Last force scan was 7+ days ago (weekly auto-force)
+
+        Fast mode (no full scan) when:
+        - First run (nothing to compare against)
+        - Force scan was within last 7 days
 
         Args:
             force_flag: CLI --force flag value
 
         Returns:
-            True if force scan should be performed
+            Tuple of (should_force, reason) explaining the decision
 
         """
         if force_flag:
-            return True
+            return True, "CLI --force flag"
 
         metadata = await self.get_snapshot_metadata()
+
+        # First run or no previous force scan - use fast mode
+        # (nothing to compare against anyway)
         if not metadata or not metadata.last_force_scan_time:
-            return True
+            return False, "first run (use --force to detect manual edits)"
 
         last_scan = datetime.fromisoformat(metadata.last_force_scan_time)
+        # Normalize to naive (strip timezone if present) for comparison with _now()
+        if last_scan.tzinfo is not None:
+            last_scan = last_scan.replace(tzinfo=None)
         now = _now()
+        days_since = (now - last_scan).days
 
-        return now.date() > last_scan.date()
+        # Weekly auto-force for manual edit detection
+        if days_since >= 7:
+            return True, f"weekly scan ({days_since} days since last force)"
+
+        return False, f"fast mode ({days_since}d since last force scan)"
 
     async def _update_force_scan_time(self) -> None:
         """Update metadata with current force scan timestamp."""
