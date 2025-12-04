@@ -103,6 +103,7 @@ class TrackProcessor:
             snapshot_persister=self._update_snapshot,
             can_use_snapshot=self._can_use_snapshot,
             dry_run=dry_run,
+            analytics=analytics,
         )
 
     def set_dry_run_context(self, mode: str, test_artists: set[str]) -> None:

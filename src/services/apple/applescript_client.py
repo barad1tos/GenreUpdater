@@ -16,16 +16,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
-
 from src.core.logger import LogFormat, spinner
 from src.core.models.protocols import AppleScriptClientProtocol
 from src.metrics import Analytics
@@ -390,23 +380,14 @@ class AppleScriptClient(AppleScriptClientProtocol):
         all_tracks: list[dict[str, str]] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size
 
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[cyan]{task.description}[/cyan]"),
-            BarColumn(bar_width=30),
-            TaskProgressColumn(),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-        )
-
-        # Process in batches to avoid command-line length limits
-        with progress:
-            task_id = progress.add_task("Fetching tracks by ID", total=total_batches)
-
+        # Use analytics batch_mode to suppress per-call console logging
+        async with self.analytics.batch_mode("Fetching tracks by ID...") as status:
             for i in range(0, len(track_ids), batch_size):
                 batch = track_ids[i : i + batch_size]
                 ids_csv = ",".join(batch)
                 batch_num = i // batch_size + 1
+
+                status.update(f"[cyan]Fetching tracks by ID... ({batch_num}/{total_batches})[/cyan]")
 
                 batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
 
@@ -416,8 +397,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     timeout=timeout_float,
                     label=batch_label,
                 )
-
-                progress.update(task_id, advance=1)
 
                 if not raw_output or raw_output == NO_TRACKS_FOUND:
                     continue
