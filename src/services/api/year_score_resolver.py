@@ -208,13 +208,9 @@ class YearScoreResolver:
             all_years, best_year_int, best_year
         )
 
-        # Look for earlier years that might be the original release
-        valid_candidates = self._find_original_release_candidates(
+        if valid_candidates := self._find_original_release_candidates(
             sorted_years, best_year_int, best_score, effective_score_threshold
-        )
-
-        # If we found valid candidates, pick the earliest year
-        if valid_candidates:
+        ):
             return self._select_earliest_candidate(
                 valid_candidates, best_year, best_year_int, best_score, effective_score_threshold
             )

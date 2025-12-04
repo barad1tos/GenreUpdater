@@ -318,27 +318,21 @@ def detect_album_type(album_name: str) -> AlbumTypeInfo:
     normalized = _normalize_for_matching(album_name)
     patterns = get_patterns()
 
-    # Check special patterns first (highest priority - always skip)
-    pattern = _find_pattern_match(normalized, patterns.special)
-    if pattern:
+    if pattern := _find_pattern_match(normalized, patterns.special):
         return AlbumTypeInfo(
             album_type=AlbumType.SPECIAL,
             detected_pattern=pattern,
             strategy=YearHandlingStrategy.MARK_AND_SKIP,
         )
 
-    # Check compilation patterns (mark and skip)
-    pattern = _find_pattern_match(normalized, patterns.compilation)
-    if pattern:
+    if pattern := _find_pattern_match(normalized, patterns.compilation):
         return AlbumTypeInfo(
             album_type=AlbumType.COMPILATION,
             detected_pattern=pattern,
             strategy=YearHandlingStrategy.MARK_AND_SKIP,
         )
 
-    # Check reissue patterns (mark but still update - reissue year is often correct)
-    pattern = _find_pattern_match(normalized, patterns.reissue)
-    if pattern:
+    if pattern := _find_pattern_match(normalized, patterns.reissue):
         return AlbumTypeInfo(
             album_type=AlbumType.REISSUE,
             detected_pattern=pattern,

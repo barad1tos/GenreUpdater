@@ -394,10 +394,7 @@ class GenericCacheService:
                     prepared_list.append(item)
             return prepared_list
 
-        if isinstance(value, BaseModel):
-            return value.model_dump()
-
-        return value
+        return value.model_dump() if isinstance(value, BaseModel) else value
 
     @staticmethod
     def _restore_value_from_disk(value: CacheableValue) -> CacheableValue:

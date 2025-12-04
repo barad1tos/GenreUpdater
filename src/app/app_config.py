@@ -33,18 +33,18 @@ class Config:
 
             # Try environment variable first, then try each default config file
             config_path = os.getenv("CONFIG_PATH")
-            if config_path is None:
-                for default_file in DEFAULT_CONFIG_FILES:
-                    if Path(default_file).exists():
-                        config_path = default_file
-                        break
-                else:
-                    # Fail fast - no config file found
-                    msg = (
-                        f"No configuration file found. Checked CONFIG_PATH env var and files: {DEFAULT_CONFIG_FILES}. "
-                        "Please create a config.yaml file or set CONFIG_PATH environment variable."
-                    )
-                    raise FileNotFoundError(msg)
+        if config_path is None:
+            for default_file in DEFAULT_CONFIG_FILES:
+                if Path(default_file).exists():
+                    config_path = default_file
+                    break
+            else:
+                # Fail fast - no config file found
+                msg = (
+                    f"No configuration file found. Checked CONFIG_PATH env var and files: {DEFAULT_CONFIG_FILES}. "
+                    "Please create a config.yaml file or set CONFIG_PATH environment variable."
+                )
+                raise FileNotFoundError(msg)
 
         # config_path is guaranteed to be not None at this point
         self.config_path = config_path

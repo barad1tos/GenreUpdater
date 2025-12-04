@@ -105,14 +105,14 @@ class AppleScriptFileValidator:
                 try:
                     resolved_path.relative_to(allowed_dir)
                 except ValueError:
-                    self.error_logger.error(
+                    self.error_logger.exception(
                         "Resolved path escapes allowed directory: %s -> %s",
                         script_path,
                         resolved_path,
                     )
                     return False
         except (OSError, ValueError) as e:
-            self.error_logger.error("Could not resolve script path %s: %s", script_path, e)
+            self.error_logger.exception("Could not resolve script path %s: %s", script_path, e)
             return False
 
         # Check if file exists (without following symlinks)
@@ -134,8 +134,8 @@ class AppleScriptFileValidator:
         try:
             with script_file.open("rb") as f:
                 f.read(1)  # Read one byte to verify access
-        except (OSError, PermissionError) as e:
-            self.error_logger.error("AppleScript file is not readable: %s (%s)", script_path, e)
+        except OSError as e:
+            self.error_logger.exception("AppleScript file is not readable: %s (%s)", script_path, e)
             return False
 
         return True

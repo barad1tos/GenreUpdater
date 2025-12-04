@@ -155,6 +155,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args(dry_run=dry_run, test_mode=test_mode)
 
@@ -283,6 +285,9 @@ class TestOrchestratorAllure:
             orchestrator = Orchestrator(deps)
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
+            orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args()
 
@@ -433,6 +438,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             args = self.create_mock_args(test_mode=True)
 
@@ -466,6 +473,8 @@ class TestOrchestratorAllure:
             orchestrator.music_updater = Mock(spec=MusicUpdater)
             orchestrator.music_updater.run_main_pipeline = AsyncMock()
             orchestrator.music_updater.set_dry_run_context = Mock()
+            orchestrator.music_updater.database_verifier = Mock()
+            orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
 
             # Normal mode but with test_artists in config
             args = self.create_mock_args()

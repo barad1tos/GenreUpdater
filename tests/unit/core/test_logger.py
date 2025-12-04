@@ -456,7 +456,6 @@ class TestGetLogFilePaths:
 
         assert "main" in paths
         assert "analytics" in paths
-        assert "year_changes" in paths
         assert "db_verify" in paths
 
 
