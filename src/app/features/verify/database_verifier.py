@@ -6,14 +6,19 @@ and managing incremental run timestamps.
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.core.logger import get_full_log_path
+from src.core.logger import LogFormat, get_full_log_path
+
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.types import TrackDict
 from src.metrics.change_reports import load_track_list, save_to_csv
+
+# Constants
+LAST_VERIFY_SUFFIX = "_last_verify.txt"
 
 if TYPE_CHECKING:
     from src.core.models.protocols import AppleScriptClientProtocol
@@ -29,6 +34,7 @@ class DatabaseVerifier:
         ap_client: "AppleScriptClientProtocol",
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
         *,
         analytics: "Analytics",
         config: dict[str, Any],
@@ -40,6 +46,7 @@ class DatabaseVerifier:
             ap_client: AppleScript client for Music.app communication
             console_logger: Logger for console output
             error_logger: Logger for error messages
+            db_verify_logger: Logger for verification log file
             analytics: Analytics instance for tracking
             config: Configuration dictionary
             dry_run: Whether to run in dry-run mode
@@ -48,10 +55,150 @@ class DatabaseVerifier:
         self.ap_client = ap_client
         self.console_logger = console_logger
         self.error_logger = error_logger
+        self.db_verify_logger = db_verify_logger
         self.analytics = analytics
         self.config = config
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
+        self._verify_start_time: float = 0.0
+
+    # -------------------------------------------------------------------------
+    # Compact Logging Methods (db_verify_logger + console with IDE-like highlighting)
+    # -------------------------------------------------------------------------
+
+    def _log_verify_start(self, track_count: int) -> None:
+        """Log verification start with IDE-like highlighting."""
+        self._verify_start_time = time.time()
+        # File log (plain)
+        self.db_verify_logger.info("VERIFY START | tracks=%d", track_count)
+        # Console log (highlighted)
+        self.console_logger.info(
+            "%s %s | tracks: %s",
+            LogFormat.label("VERIFY"),
+            LogFormat.success("START"),
+            LogFormat.number(track_count),
+        )
+
+    def _log_batch_progress(
+        self, batch_num: int, total_batches: int, checked: int, valid: int, invalid: int
+    ) -> None:
+        """Log batch progress with IDE-like highlighting."""
+        # File log (plain)
+        self.db_verify_logger.info(
+            "BATCH %d/%d | checked=%d valid=%d invalid=%d",
+            batch_num,
+            total_batches,
+            checked,
+            valid,
+            invalid,
+        )
+        # Console log (highlighted) - only show if there are invalid tracks
+        if invalid > 0:
+            self.console_logger.info(
+                "%s %s | valid: %s invalid: %s",
+                LogFormat.dim(f"BATCH {batch_num}/{total_batches}"),
+                LogFormat.number(checked),
+                LogFormat.success(str(valid)),
+                LogFormat.error(str(invalid)),
+            )
+
+    def _log_verify_complete(self, total: int, invalid: int, removed: int) -> None:
+        """Log verification completion with IDE-like highlighting."""
+        duration = time.time() - self._verify_start_time
+        # File log (plain)
+        self.db_verify_logger.info(
+            "VERIFY DONE | total=%d invalid=%d removed=%d duration=%.1fs",
+            total,
+            invalid,
+            removed,
+            duration,
+        )
+        # Console log (highlighted)
+        if invalid == 0:
+            self.console_logger.info(
+                "%s %s | %s tracks verified %s",
+                LogFormat.label("VERIFY"),
+                LogFormat.success("DONE"),
+                LogFormat.number(total),
+                LogFormat.duration(duration),
+            )
+        else:
+            self.console_logger.info(
+                "%s %s | %s invalid of %s removed %s",
+                LogFormat.label("VERIFY"),
+                LogFormat.warning("DONE"),
+                LogFormat.error(str(invalid)),
+                LogFormat.number(total),
+                LogFormat.duration(duration),
+            )
+
+    # -------------------------------------------------------------------------
+    # Auto-Verify Check (for startup integration)
+    # -------------------------------------------------------------------------
+
+    async def should_auto_verify(self) -> bool:
+        """Check if automatic database verification should run.
+
+        Returns True if:
+        - auto_verify_days has passed since last verification
+        - No previous verification exists
+
+        Returns:
+            True if auto-verify should run, False otherwise
+
+        """
+        verify_config = self.config.get("database_verification", {})
+        auto_verify_days = verify_config.get("auto_verify_days", 7)
+
+        if auto_verify_days <= 0:
+            return False
+
+        csv_path = get_full_log_path(
+            self.config,
+            "csv_output_file",
+            "csv/track_list.csv",
+        )
+        last_verify_file = csv_path.replace(".csv", LAST_VERIFY_SUFFIX)
+        last_verify_path = Path(last_verify_file)
+
+        if not last_verify_path.exists():
+            self.console_logger.debug("No previous verification found, auto-verify needed")
+            return True
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            def _read_last_verify() -> str:
+                with last_verify_path.open(encoding="utf-8") as f:
+                    return f.read().strip()
+
+            last_verify_str = await loop.run_in_executor(None, _read_last_verify)
+            last_verify = datetime.fromisoformat(last_verify_str)
+
+            if last_verify.tzinfo is None:
+                last_verify = last_verify.replace(tzinfo=UTC)
+
+            days_since = (datetime.now(tz=UTC) - last_verify).days
+
+            if days_since >= auto_verify_days:
+                self.console_logger.info(
+                    "%s needed: %s days since last check %s",
+                    LogFormat.label("AUTO-VERIFY"),
+                    LogFormat.number(days_since),
+                    LogFormat.dim(f"(threshold: {auto_verify_days})"),
+                )
+                return True
+
+            self.console_logger.debug(
+                "Auto-verify not needed: %d days since last check (threshold: %d)",
+                days_since,
+                auto_verify_days,
+            )
+            return False
+
+        except (OSError, ValueError, RuntimeError) as e:
+            self.error_logger.warning("Error checking auto-verify status: %s", e)
+            return True  # Run verification if we can't determine last run
 
     async def can_run_incremental(self, force_run: bool = False) -> bool:
         """Check if enough time has passed since the last incremental run.
@@ -253,7 +400,7 @@ class DatabaseVerifier:
         if force:
             return False
 
-        last_verify_file = csv_path.replace(".csv", "_last_verify.txt")
+        last_verify_file = csv_path.replace(".csv", LAST_VERIFY_SUFFIX)
         last_verify_path = Path(last_verify_file)
 
         if not last_verify_path.exists():
@@ -327,8 +474,9 @@ class DatabaseVerifier:
         batch_size: int = verify_config.get("batch_size", 20)
         pause_seconds: float = verify_config.get("pause_seconds", 0.2)
         invalid_tracks: list[str] = []
+        total_batches = (len(tracks_to_verify) + batch_size - 1) // batch_size
 
-        for i in range(0, len(tracks_to_verify), batch_size):
+        for batch_num, i in enumerate(range(0, len(tracks_to_verify), batch_size), start=1):
             batch: list[TrackDict] = tracks_to_verify[i : i + batch_size]
 
             # Create verification tasks with track IDs
@@ -342,20 +490,20 @@ class DatabaseVerifier:
             # Execute batch concurrently (AppleScriptClient semaphore limits actual concurrency)
             results: list[bool] = await asyncio.gather(*tasks)
 
-            # Process results
+            # Process results and count invalid tracks in this batch
+            batch_invalid = 0
             for track_id, exists in zip(track_ids, results, strict=True):
                 if not exists:
                     invalid_tracks.append(track_id)
-                    self.console_logger.info(
-                        "Found invalid track ID: %s",
-                        track_id,
-                    )
+                    batch_invalid += 1
 
-            # Progress logging
-            self.console_logger.debug(
-                "Verified batch %d/%d",
-                min(i + batch_size, len(tracks_to_verify)),
-                len(tracks_to_verify),
+            # Log batch progress (compact format)
+            self._log_batch_progress(
+                batch_num=batch_num,
+                total_batches=total_batches,
+                checked=len(batch),
+                valid=len(batch) - batch_invalid,
+                invalid=batch_invalid,
             )
 
             # Pause between batches
@@ -375,14 +523,15 @@ class DatabaseVerifier:
             csv_path: The path to CSV file
 
         """
-        if not invalid_tracks:
-            self.console_logger.info("All tracks in database are valid")
-            return
-
-        self.console_logger.info(
-            "Found %d tracks that no longer exist in Music.app",
+        # Log to file for audit trail
+        self.db_verify_logger.info(
+            "INVALID_TRACKS | count=%d ids=%s",
             len(invalid_tracks),
+            ",".join(invalid_tracks[:10]) + ("..." if len(invalid_tracks) > 10 else ""),
         )
+
+        if not invalid_tracks:
+            return
 
         if not self.dry_run:
             # Filter out invalid tracks
@@ -394,16 +543,7 @@ class DatabaseVerifier:
                 csv_path,
                 error_logger=self.error_logger,
             )
-
-            self.console_logger.info(
-                "Removed %d invalid tracks from database",
-                len(invalid_tracks),
-            )
         else:
-            self.console_logger.info(
-                "DRY RUN: Would remove %d invalid tracks",
-                len(invalid_tracks),
-            )
             self._dry_run_actions.append(
                 {
                     "action": "remove_invalid_tracks",
@@ -422,7 +562,7 @@ class DatabaseVerifier:
         if self.dry_run:
             return
 
-        last_verify_file = csv_path.replace(".csv", "_last_verify.txt")
+        last_verify_file = csv_path.replace(".csv", LAST_VERIFY_SUFFIX)
         last_verify_path = Path(last_verify_file)
 
         try:
@@ -478,10 +618,8 @@ class DatabaseVerifier:
         # Get tracks to verify (with optional test filter)
         tracks_to_verify = self._get_tracks_to_verify(existing_tracks, apply_test_filter)
 
-        self.console_logger.info(
-            "Verifying %d tracks in database against Music.app",
-            len(tracks_to_verify),
-        )
+        # Log verification start
+        self._log_verify_start(len(tracks_to_verify))
 
         # Verify tracks in batches
         invalid_tracks = await self._verify_tracks_in_batches(tracks_to_verify, verify_config)
@@ -491,6 +629,10 @@ class DatabaseVerifier:
 
         # Update last verification timestamp
         await self._update_verification_timestamp(csv_path)
+
+        # Log verification complete
+        removed_count = 0 if self.dry_run else len(invalid_tracks)
+        self._log_verify_complete(len(tracks_to_verify), len(invalid_tracks), removed_count)
 
         return len(invalid_tracks)
 

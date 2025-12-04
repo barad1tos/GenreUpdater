@@ -141,7 +141,7 @@ async def main() -> None:
     config = load_config(str(config_path))
 
     # Setup loggers using centralized system
-    console_logger, error_logger, analytics_logger, year_updates_logger, db_verify_logger, listener = get_loggers(config)
+    console_logger, error_logger, analytics_logger, db_verify_logger, listener = get_loggers(config)
 
     # Initialize variables for cleanup
     deps = None
@@ -153,7 +153,6 @@ async def main() -> None:
             console_logger=console_logger,
             error_logger=error_logger,
             analytics_logger=analytics_logger,
-            year_updates_logger=year_updates_logger,
             db_verify_logger=db_verify_logger,
         )
         await deps.initialize()

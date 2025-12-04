@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# === Environment ===
+# launchd runs with minimal PATH, add Homebrew for uv
+export PATH="/opt/homebrew/bin:$PATH"
+
 # === Configuration ===
 SUPPORT_DIR="$HOME/Library/Application Support/GenreUpdater"
 STATE_DIR="$SUPPORT_DIR/state"

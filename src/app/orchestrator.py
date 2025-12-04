@@ -13,8 +13,8 @@ import yaml
 
 from src.app.features.batch.batch_processor import BatchProcessor
 from src.app.music_updater import MusicUpdater
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
 from src.core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
+from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 if TYPE_CHECKING:
     from src.services.dependency_container import DependencyContainer
@@ -115,12 +115,20 @@ class Orchestrator:
 
     async def _run_main_workflow(self, args: argparse.Namespace) -> None:
         """Run the main update workflow when no specific command is given."""
+        # Auto-verify database if threshold days passed (before main workflow)
+        await self._maybe_auto_verify()
+
         # Check if in test mode
         if getattr(args, "test_mode", False):
             await self._run_test_mode(args)
         else:
             # Run the main pipeline
             await self.music_updater.run_main_pipeline(force=args.force)
+
+    async def _maybe_auto_verify(self) -> None:
+        """Run automatic database verification if threshold days have passed."""
+        if await self.music_updater.database_verifier.should_auto_verify():
+            await self.music_updater.run_verify_database()
 
     async def _run_test_mode(self, args: argparse.Namespace) -> None:
         """Run in test mode with a limited artist set."""

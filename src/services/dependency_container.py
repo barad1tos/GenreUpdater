@@ -69,7 +69,6 @@ class DependencyContainer:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics_logger: logging.Logger,
-        year_updates_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         *,
         logging_listener: SafeQueueListener | None = None,
@@ -82,7 +81,6 @@ class DependencyContainer:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics_logger: Logger for analytics events
-            year_updates_logger: Logger for year update operations
             db_verify_logger: Logger for database verification operations
             logging_listener: Optional queue listener for logging
             dry_run: Whether to run in dry-run mode (no changes made)
@@ -93,7 +91,6 @@ class DependencyContainer:
         self._console_logger = console_logger
         self._error_logger = error_logger
         self._analytics_logger = analytics_logger
-        self._year_updates_logger = year_updates_logger
         self._db_verify_logger = db_verify_logger
         self._listener = logging_listener
 
@@ -185,6 +182,11 @@ class DependencyContainer:
     def analytics_logger(self) -> logging.Logger:
         """Get the analytics logger."""
         return self._analytics_logger
+
+    @property
+    def db_verify_logger(self) -> logging.Logger:
+        """Get the database verification logger."""
+        return self._db_verify_logger
 
     async def _initialize_service(
         self,

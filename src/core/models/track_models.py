@@ -116,7 +116,6 @@ class LogLevelsConfig(BaseModel):
     console: LogLevel
     main_file: LogLevel
     analytics_file: LogLevel
-    year_updates_file: LogLevel
 
 
 class LoggingConfig(BaseModel):
@@ -126,13 +125,11 @@ class LoggingConfig(BaseModel):
     main_log_file: str
     analytics_log_file: str
     csv_output_file: str
-    album_cache_csv: str
     changes_report_file: str
     dry_run_report_file: str
     last_incremental_run_file: str
     pending_verification_file: str
     last_db_verify_log: str
-    year_changes_log_file: str
     levels: LogLevelsConfig
 
 

@@ -3,6 +3,7 @@
 This is a streamlined version that uses the new modular components.
 """
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,7 +17,7 @@ from src.core.tracks.genre_manager import GenreManager
 from src.core.tracks.incremental_filter import IncrementalFilterService
 from src.core.tracks.track_processor import TrackProcessor
 from src.core.tracks.year_retriever import YearRetriever
-from src.core.logger import get_full_log_path
+from src.core.logger import LogFormat, get_full_log_path
 from src.core.run_tracking import IncrementalRunTracker
 from src.core.models.metadata_utils import is_music_app_running
 from src.core.models.track_models import ChangeLogEntry, TrackDict
@@ -92,6 +93,7 @@ class MusicUpdater:
             ap_client=deps.ap_client,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
+            db_verify_logger=deps.db_verify_logger,
             analytics=deps.analytics,
             config=deps.config,
             dry_run=deps.dry_run,
@@ -278,6 +280,41 @@ class MusicUpdater:
         """
         await self.year_service.run_update_years(artist, force)
 
+    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
+        """Verify and update a single pending album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+            year: Year string found from API
+
+        Returns:
+            True if verification succeeded, False otherwise
+
+        """
+        tracks = await self.track_processor.fetch_tracks_async(artist=artist)
+        album_tracks = [t for t in tracks if t.get("album", "") == album]
+        if not album_tracks:
+            return False
+
+        successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
+            tracks=album_tracks,
+            year=year,
+            artist=artist,
+            album=album,
+        )
+        if successful <= 0:
+            return False
+
+        await self.deps.pending_verification_service.remove_from_pending(artist, album)
+        self.console_logger.debug(
+            "  %s %s - %s",
+            LogFormat.success(year),
+            artist,
+            album,
+        )
+        return True
+
     async def run_verify_pending(self, _force: bool = False) -> None:
         """Re-verify albums that are pending year verification.
 
@@ -285,50 +322,54 @@ class MusicUpdater:
             _force: Force verification even if recently done (currently unused)
 
         """
-        self.console_logger.info("Starting pending year verification")
-
-        # Get pending albums
+        start_time = time.time()
         pending_albums = await self.deps.pending_verification_service.get_all_pending_albums()
 
         if not pending_albums:
-            self.console_logger.info("No albums pending verification")
+            self.console_logger.info(
+                "%s %s | no albums pending",
+                LogFormat.label("PENDING"),
+                LogFormat.dim("SKIP"),
+            )
             return
 
-        self.console_logger.info("Found %d albums pending year verification", len(pending_albums))
-
-        # Process each pending album
-        verified_count = 0
-        for entry in pending_albums:
-            # Try to get year again
-            year = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
-
-            if year:
-                # Year found! Update tracks
-                tracks = await self.track_processor.fetch_tracks_async(artist=entry.artist)
-                if album_tracks := [t for t in tracks if t.get("album", "") == entry.album]:
-                    successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
-                        tracks=album_tracks,
-                        year=str(year),
-                        artist=entry.artist,
-                        album=entry.album,
-                    )
-
-                    if successful > 0:
-                        # Remove from pending
-                        await self.deps.pending_verification_service.remove_from_pending(entry.artist, entry.album)
-                        verified_count += 1
-                        self.console_logger.info(
-                            "Verified year %s for '%s - %s'",
-                            year,
-                            entry.artist,
-                            entry.album,
-                        )
-
         self.console_logger.info(
-            "Pending verification complete. Verified %d/%d albums",
-            verified_count,
-            len(pending_albums),
+            "%s %s | albums: %s",
+            LogFormat.label("PENDING"),
+            LogFormat.success("START"),
+            LogFormat.number(len(pending_albums)),
         )
+
+        verified_count = 0
+        failed_count = 0
+        for entry in pending_albums:
+            year_str, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            if not year_str:
+                failed_count += 1
+                continue
+
+            if await self._verify_single_pending_album(entry.artist, entry.album, year_str):
+                verified_count += 1
+            else:
+                failed_count += 1
+
+        duration = time.time() - start_time
+        if verified_count > 0:
+            self.console_logger.info(
+                "%s %s | verified: %s failed: %s %s",
+                LogFormat.label("PENDING"),
+                LogFormat.success("DONE"),
+                LogFormat.success(str(verified_count)),
+                LogFormat.dim(str(failed_count)),
+                LogFormat.duration(duration),
+            )
+        else:
+            self.console_logger.info(
+                "%s %s | no years found %s",
+                LogFormat.label("PENDING"),
+                LogFormat.warning("DONE"),
+                LogFormat.duration(duration),
+            )
 
     async def run_verify_database(self, force: bool = False) -> None:
         """Verify track database against Music.app.
