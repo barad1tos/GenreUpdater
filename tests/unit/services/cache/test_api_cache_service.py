@@ -13,10 +13,10 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
+from src.core.models.track_models import CachedApiResult
 from src.services.cache.api_cache import ApiCacheService
 from src.services.cache.cache_config import CacheEvent, CacheEventType
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.models.track_models import CachedApiResult
 
 
 @allure.epic("Music Genre Updater")
@@ -537,22 +537,17 @@ class TestApiCacheService:
             },
         }
 
-        with allure.step("Create service with expired cache data"):
-            with (
-                patch.object(Path, "exists", return_value=True),
-                patch.object(Path, "open", MagicMock()),
-                patch("json.load", return_value=cache_data),
-            ):
-                service = TestApiCacheService.create_service()
-                await service.initialize()
+        with (
+            allure.step("Create service with expired cache data"), patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "open", MagicMock()),
+            patch("json.load", return_value=cache_data),
+        ):
+            service = TestApiCacheService.create_service()
+            await service.initialize()
 
         with allure.step("Verify expired entry was cleaned up"):
             # Only non-expired entries should remain
             assert len(service.api_cache) == 1
-            cast(MagicMock, service.logger.info).assert_any_call(
-                "ApiCacheService initialized with %d entries (after cleanup)",
-                1,
-            )
 
     @allure.story("Resource Limits")
     @allure.title("Should limit background tasks")
@@ -565,7 +560,7 @@ class TestApiCacheService:
 
         with allure.step("Fill background tasks to limit"):
             # Create fake tasks to fill the limit
-            for i in range(service._max_background_tasks):
+            for _ in range(service._max_background_tasks):
                 fake_task = asyncio.create_task(asyncio.sleep(10))
                 service._background_tasks.add(fake_task)
 

@@ -9,11 +9,13 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, Self, TypeGuard
+
+from pydantic import BaseModel
 
 from src.services.cache.cache_config import CacheContentType, SmartCacheConfig
 from src.services.cache.hash_service import UnifiedHashService
-from src.core.logger import ensure_directory, get_full_log_path
+from src.core.logger import LogFormat, ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:
     from src.core.models.protocols import CacheableKey, CacheableValue
@@ -68,13 +70,13 @@ class GenericCacheService:
 
     async def initialize(self) -> None:
         """Initialize generic cache service and start cleanup task."""
-        self.logger.info("Initializing GenericCacheService...")
+        self.logger.info("Initializing %s...", LogFormat.entity("GenericCacheService"))
 
         await self._load_from_disk()
         # Start periodic cleanup task
         self._start_cleanup_task()
 
-        self.logger.info("GenericCacheService initialized with %ds default TTL", self.default_ttl)
+        self.logger.info("%s initialized with %ds default TTL", LogFormat.entity("GenericCacheService"), self.default_ttl)
 
     def _resolve_default_ttl(self) -> int:
         """Resolve default TTL from configuration sources."""
@@ -318,7 +320,7 @@ class GenericCacheService:
             if self.cache_file.exists():
                 try:
                     self.cache_file.unlink()
-                    self.logger.info("Deleted empty generic cache file: %s", self.cache_file)
+                    self.logger.info("Deleted empty generic cache file: [cyan]%s[/cyan]", self.cache_file.name)
                 except OSError as e:
                     self.logger.warning("Failed to remove generic cache file %s: %s", self.cache_file, e)
             return
@@ -339,7 +341,7 @@ class GenericCacheService:
 
         try:
             await asyncio.to_thread(blocking_save)
-            self.logger.info("Generic cache saved to %s (%d entries)", self.cache_file, len(self.cache))
+            self.logger.info("Generic cache saved to [cyan]%s[/cyan] (%d entries)", self.cache_file.name, len(self.cache))
         except OSError as e:
             self.logger.exception("Failed to save generic cache to %s: %s", self.cache_file, e)
 
@@ -378,7 +380,7 @@ class GenericCacheService:
             self.cache.update(restored_cache)
             self.cleanup_expired()
             self.enforce_size_limits()
-            self.logger.info("Loaded %d generic cache entries from %s", len(restored_cache), self.cache_file)
+            self.logger.info("Loaded %d generic cache entries from [cyan]%s[/cyan]", len(restored_cache), self.cache_file.name)
 
     @staticmethod
     def _prepare_value_for_disk(value: CacheableValue) -> CacheableValue:
@@ -386,14 +388,14 @@ class GenericCacheService:
         if isinstance(value, list):
             prepared_list: list[Any] = []
             for item in value:
-                if hasattr(item, "model_dump"):
-                    prepared_list.append(cast(Any, item).model_dump())
+                if isinstance(item, BaseModel):
+                    prepared_list.append(item.model_dump())
                 else:
                     prepared_list.append(item)
-            return cast(CacheableValue, prepared_list)
+            return prepared_list
 
-        if hasattr(value, "model_dump"):
-            return cast(CacheableValue, cast(Any, value).model_dump())
+        if isinstance(value, BaseModel):
+            return value.model_dump()
 
         return value
 
