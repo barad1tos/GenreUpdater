@@ -33,6 +33,8 @@ import sys
 import syslog
 import time
 import traceback
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
@@ -40,6 +42,7 @@ from typing import Any, Literal, cast
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.status import Status
 
 
 class SafeQueueListener(QueueListener):
@@ -78,6 +81,79 @@ LEVEL_ABBREV = {
 }
 
 
+class LogFormat:
+    """Rich markup helpers for consistent log formatting.
+
+    Provides IDE-like syntax highlighting for log messages using Rich markup.
+    Use these methods to wrap values that should be highlighted in console output.
+
+    Example:
+        from src.core.logger import LogFormat as LF
+        logger.info("Initializing %s...", LF.entity("CacheService"))
+        logger.info("Loaded %s entries from %s", LF.number(100), LF.file("cache.json"))
+    """
+
+    @staticmethod
+    def entity(name: str) -> str:
+        """Format entity/class name with IDE-like highlighting (yellow).
+
+        Args:
+            name: Class, service, or component name
+
+        Returns:
+            Rich-formatted string with yellow highlighting
+        """
+        return f"[yellow]{name}[/yellow]"
+
+    @staticmethod
+    def file(name: str) -> str:
+        """Format filename with cyan highlighting.
+
+        Args:
+            name: Filename or path
+
+        Returns:
+            Rich-formatted string with cyan highlighting
+        """
+        return f"[cyan]{name}[/cyan]"
+
+    @staticmethod
+    def number(value: float) -> str:
+        """Format numbers with bright white highlighting.
+
+        Args:
+            value: Numeric value to format (int or float, since int is a subtype)
+
+        Returns:
+            Rich-formatted string with bright white highlighting
+        """
+        return f"[bright_white]{value}[/bright_white]"
+
+
+@asynccontextmanager
+async def spinner(message: str, console: Console | None = None) -> AsyncGenerator[Status]:
+    """Async context manager for indeterminate spinner during long operations.
+
+    Use this for operations where progress cannot be tracked (e.g., AppleScript
+    calls that return all data at once). The spinner provides visual feedback
+    that the application is working.
+
+    Args:
+        message: Message to display next to the spinner
+        console: Optional Rich Console instance (creates new one if not provided)
+
+    Yields:
+        Rich Status object that can be used to update the message
+
+    Example:
+        async with spinner("Fetching all track IDs from Music.app..."):
+            result = await run_applescript(...)
+    """
+    _console = console or Console()
+    with _console.status(f"[cyan]{message}[/cyan]") as status:
+        yield status
+
+
 class LoggerFilter:
     """Filter that only allows records from specific logger names."""
 
@@ -87,10 +163,7 @@ class LoggerFilter:
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Filter records based on logger name or child loggers."""
-        return any(
-            record.name == logger or record.name.startswith(f"{logger}.")
-            for logger in self.allowed_loggers
-        )
+        return any(record.name == logger or record.name.startswith(f"{logger}.") for logger in self.allowed_loggers)
 
 
 class RunHandler:
@@ -611,6 +684,7 @@ def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
             show_path=False,
             enable_link_path=False,
             log_time_format="%H:%M:%S",
+            markup=True,
         )
         ch.setLevel(levels["console"])
         console_logger.addHandler(ch)
