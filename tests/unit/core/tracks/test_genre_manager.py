@@ -210,20 +210,23 @@ class TestGenreManager:
 
     @pytest.mark.asyncio
     async def test_update_track_genre_force_update(self) -> None:
-        """Test force update with same genre."""
+        """Test force update syncs to Music.app but doesn't log if genre unchanged."""
         mock_processor = MagicMock()
         mock_processor.update_track_async = AsyncMock(return_value=True)
         manager = TestGenreManager.create_manager(mock_processor)
 
         track = DummyTrackData.create(
             track_id="123",
+            genre="Rock",  # Same as new_genre
         )
 
         result_track, change_log = await manager.test_update_track_genre(track, "Rock", True)
 
+        # Force mode still syncs to Music.app
         assert result_track is not None
-        assert change_log is not None
         mock_processor.update_track_async.assert_called_once()
+        # But no change_log since genre didn't actually change
+        assert change_log is None
 
     @pytest.mark.asyncio
     async def test_update_track_genre_prerelease_skip(self) -> None:

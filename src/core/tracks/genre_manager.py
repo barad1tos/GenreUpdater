@@ -237,8 +237,11 @@ class GenreManager(BaseProcessor):
         # Log decision
         self._log_track_update_decision(track, track_id, current_genre, new_genre, force_update)
 
-        # Check if update is needed
-        if not force_update and current_genre.strip() == new_genre.strip():
+        # Check if genre actually differs
+        genre_changed = current_genre.strip() != new_genre.strip()
+
+        # Skip if no change needed (unless force mode for Music.app sync)
+        if not force_update and not genre_changed:
             return None, None
 
         # Perform the update
@@ -251,9 +254,13 @@ class GenreManager(BaseProcessor):
         )
 
         if success:
-            # Create updated track and change log
+            # Create updated track
             track.genre = new_genre
             updated_track = track.copy(genre=new_genre)
+
+            # Only log if genre actually changed (not just force-sync)
+            if not genre_changed:
+                return updated_track, None
 
             change_log = ChangeLogEntry(
                 timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
