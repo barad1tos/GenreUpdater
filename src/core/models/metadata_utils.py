@@ -186,7 +186,10 @@ def group_tracks_by_artist(
         # Use dict.get() for dictionary access, not getattr() which is for object attributes
         artist = track.get("artist", "Unknown")
         if artist and isinstance(artist, str):
-            artists[artist].append(track)
+            # Normalize to lowercase for case-insensitive grouping
+            # (e.g., "2CELLOS" and "2Cellos" become same group)
+            artist_key = artist.lower()
+            artists[artist_key].append(track)
     # Convert to dict for type safety (function signature promises dict, not defaultdict)
     return dict(artists)
 
