@@ -11,9 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CodeQL security scanning workflow
 - Integration & E2E tests in GitHub Actions (nightly)
 - Dependabot for automated dependency updates
+- CHANGELOG.md following Keep a Changelog format
+- SECURITY.md with vulnerability reporting process
+- CONTRIBUTING.md with development guidelines
+- CODE_OF_CONDUCT.md (Contributor Covenant v2.1)
+- Bandit security scanning in CI workflow
+- Pull request template with checklist
+- Issue templates (bug report, feature request)
+- CODEOWNERS file for automatic reviewers
+- Pre-commit hooks configuration (ruff, mypy)
+- Test coverage enforcement (--cov-fail-under=70)
 
 ### Changed
 - Upgraded GitHub Actions to latest versions (checkout v6, setup-uv v7, upload-artifact v5, codeql v4)
+- README Python badge updated to 3.13+
 
 ### Fixed
 - E2E test assertions for test_mode + dry_run scenarios
