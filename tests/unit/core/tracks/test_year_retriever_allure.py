@@ -73,9 +73,7 @@ class _MockCacheService:
         """Get album year from cache."""
         return self._cache.get(f"{_artist}|{_album}_year")
 
-    async def store_album_year_in_cache(
-        self, _artist: str, _album: str, _year: str
-    ) -> None:
+    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str) -> None:
         """Store album year in cache."""
 
 
@@ -87,9 +85,7 @@ class _MockExternalApiService:
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
         self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
 
-    async def get_album_year(
-        self, artist: str, album: str, existing_year: str | None = None
-    ) -> tuple[str | None, bool]:
+    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool]:
         """Get album year from API."""
         self.get_album_year_calls.append((artist, album, existing_year))
         return self.get_album_year_response
@@ -98,9 +94,7 @@ class _MockExternalApiService:
 class _MockPendingVerificationService:
     """Mock pending verification service for testing."""
 
-    async def mark_for_verification(
-        self, artist: str, album: str, reason: str
-    ) -> None:
+    async def mark_for_verification(self, artist: str, album: str, reason: str) -> None:
         """Mark album for verification."""
 
 

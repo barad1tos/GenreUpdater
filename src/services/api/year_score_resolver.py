@@ -60,9 +60,7 @@ class YearScoreResolver:
         self.definitive_score_threshold = definitive_score_threshold
         self.definitive_score_diff = definitive_score_diff
 
-    def aggregate_year_scores(
-        self, all_releases: list[ScoredRelease]
-    ) -> defaultdict[str, list[int]]:
+    def aggregate_year_scores(self, all_releases: list[ScoredRelease]) -> defaultdict[str, list[int]]:
         """Aggregate release scores by year, filtering out invalid years."""
         year_scores: defaultdict[str, list[int]] = defaultdict(list)
 
@@ -75,9 +73,7 @@ class YearScoreResolver:
 
         return year_scores
 
-    def select_best_year(
-        self, year_scores: defaultdict[str, list[int]]
-    ) -> tuple[str, bool]:
+    def select_best_year(self, year_scores: defaultdict[str, list[int]]) -> tuple[str, bool]:
         """Select the best year from aggregated scores and determine if definitive."""
         if not year_scores:
             self.console_logger.warning("No year scores to evaluate")
@@ -92,9 +88,7 @@ class YearScoreResolver:
 
         self._log_ranked_years(sorted_years)
 
-        best_year, best_score, best_year_is_future = self._determine_best_year_candidate(
-            sorted_years
-        )
+        best_year, best_score, best_year_is_future = self._determine_best_year_candidate(sorted_years)
 
         # Initialize variables to avoid potential unbound variable errors
         score_thresholds = self._calculate_score_thresholds(best_score)
@@ -110,28 +104,20 @@ class YearScoreResolver:
                 )
                 return best_year, False
         else:
-            is_definitive = self._determine_definitiveness(
-                score_thresholds, best_year_is_future, has_score_conflict
-            )
+            is_definitive = self._determine_definitiveness(score_thresholds, best_year_is_future, has_score_conflict)
 
         if not is_definitive:
-            self._log_non_definitive_reasons(
-                best_year_is_future, score_thresholds, has_score_conflict, best_score
-            )
+            self._log_non_definitive_reasons(best_year_is_future, score_thresholds, has_score_conflict, best_score)
 
         return best_year, is_definitive
 
     @staticmethod
-    def _compute_final_year_scores(
-        year_scores: defaultdict[str, list[int]]
-    ) -> dict[str, int]:
+    def _compute_final_year_scores(year_scores: defaultdict[str, list[int]]) -> dict[str, int]:
         """Get the maximum score for each year."""
         return {year: max(scores) for year, scores in year_scores.items() if scores}
 
     @staticmethod
-    def _sort_years_by_score(
-        final_year_scores: dict[str, int]
-    ) -> list[tuple[str, int]]:
+    def _sort_years_by_score(final_year_scores: dict[str, int]) -> list[tuple[str, int]]:
         """Sort years primarily by score (desc), secondarily by year (asc)."""
         return sorted(final_year_scores.items(), key=lambda item: (-item[1], int(item[0])))
 
@@ -139,13 +125,9 @@ class YearScoreResolver:
         """Log the ranked years for debugging."""
         log_scores = ", ".join([f"{y}:{s}" for y, s in sorted_years[:MAX_LOGGED_YEARS]])
         truncation_indicator = "..." if len(sorted_years) > MAX_LOGGED_YEARS else ""
-        self.console_logger.info(
-            "Ranked year scores (Year:MaxScore): %s%s", log_scores, truncation_indicator
-        )
+        self.console_logger.info("Ranked year scores (Year:MaxScore): %s%s", log_scores, truncation_indicator)
 
-    def _determine_best_year_candidate(
-        self, sorted_years: list[tuple[str, int]]
-    ) -> tuple[str, int, bool]:
+    def _determine_best_year_candidate(self, sorted_years: list[tuple[str, int]]) -> tuple[str, int, bool]:
         """Determine the best year candidate.
 
         Handles future vs non-future and reissue vs original preferences.
@@ -155,15 +137,11 @@ class YearScoreResolver:
 
         # If we have multiple candidates, check for future vs non-future preference
         if len(sorted_years) > 1 and best_year_is_future:
-            best_year, best_score, best_year_is_future = self._apply_future_year_preference(
-                sorted_years, best_year, best_score, best_year_is_future
-            )
+            best_year, best_score, best_year_is_future = self._apply_future_year_preference(sorted_years, best_year, best_score, best_year_is_future)
 
         # After handling future year preference, check for original vs reissue preference
         if len(sorted_years) > 1 and not best_year_is_future:
-            best_year, best_score = self._apply_original_release_preference(
-                sorted_years, best_year, best_score
-            )
+            best_year, best_score = self._apply_original_release_preference(sorted_years, best_year, best_score)
 
         return best_year, best_score, best_year_is_future
 
@@ -204,16 +182,10 @@ class YearScoreResolver:
 
         # Enhanced reissue detection: check for large year gaps
         all_years = [int(year_str) for year_str, _ in sorted_years]
-        effective_score_threshold = self._calculate_reissue_threshold(
-            all_years, best_year_int, best_year
-        )
+        effective_score_threshold = self._calculate_reissue_threshold(all_years, best_year_int, best_year)
 
-        if valid_candidates := self._find_original_release_candidates(
-            sorted_years, best_year_int, best_score, effective_score_threshold
-        ):
-            return self._select_earliest_candidate(
-                valid_candidates, best_year, best_year_int, best_score, effective_score_threshold
-            )
+        if valid_candidates := self._find_original_release_candidates(sorted_years, best_year_int, best_score, effective_score_threshold):
+            return self._select_earliest_candidate(valid_candidates, best_year, best_year_int, best_score, effective_score_threshold)
 
         return best_year, best_score
 
@@ -233,8 +205,7 @@ class YearScoreResolver:
             # it's likely a reissue scenario
             if year_gap > MIN_YEAR_GAP_FOR_REISSUE_DETECTION and best_year_int > earliest_year:
                 self.console_logger.info(
-                    "[ORIGINAL_RELEASE_FIX] Detected potential reissue scenario: "
-                    "year range %d-%d (%d years gap), best year %s not earliest",
+                    "[ORIGINAL_RELEASE_FIX] Detected potential reissue scenario: year range %d-%d (%d years gap), best year %s not earliest",
                     earliest_year,
                     latest_year,
                     year_gap,
@@ -262,10 +233,7 @@ class YearScoreResolver:
 
             # If we find an earlier year within the score threshold, and it's at least
             # a few years earlier, add it as a candidate for the likely original release
-            if (
-                score_difference <= effective_score_threshold
-                and year_difference >= MIN_REISSUE_YEAR_DIFFERENCE
-            ):
+            if score_difference <= effective_score_threshold and year_difference >= MIN_REISSUE_YEAR_DIFFERENCE:
                 valid_candidates.append((candidate_year, candidate_score))
 
             # If the score difference is significant, stop looking
@@ -283,9 +251,7 @@ class YearScoreResolver:
         effective_score_threshold: int,
     ) -> tuple[str, int]:
         """Select the earliest year from valid candidates."""
-        earliest_candidate_tuple: tuple[str, int] = min(
-            valid_candidates, key=lambda x: int(x[0])
-        )
+        earliest_candidate_tuple: tuple[str, int] = min(valid_candidates, key=lambda x: int(x[0]))
         selected_year: str = earliest_candidate_tuple[0]
         selected_score: int = earliest_candidate_tuple[1]
         year_difference = best_year_int - int(selected_year)
@@ -302,9 +268,7 @@ class YearScoreResolver:
         )
         return selected_year, selected_score
 
-    def _validate_single_result(
-        self, best_year: str, best_score: int
-    ) -> tuple[str, bool]:
+    def _validate_single_result(self, best_year: str, best_score: int) -> tuple[str, bool]:
         """Validate single API results for suspicious old years."""
         year_int = int(best_year)
         current_year = self.current_year
@@ -313,10 +277,7 @@ class YearScoreResolver:
         # and we only got one result with a low-to-medium score, be cautious
         year_diff = current_year - year_int
 
-        if (
-            year_diff > MAX_SUSPICIOUS_YEAR_DIFFERENCE
-            and best_score < MIN_CONFIDENT_SCORE_THRESHOLD
-        ):
+        if year_diff > MAX_SUSPICIOUS_YEAR_DIFFERENCE and best_score < MIN_CONFIDENT_SCORE_THRESHOLD:
             self.console_logger.warning(
                 "SINGLE_RESULT_VALIDATION: Year %s is %d years old with only score %d "
                 "from single API - this could be incorrect metadata, marking as non-definitive",
@@ -339,9 +300,7 @@ class YearScoreResolver:
             "high_score_met": best_score >= self.definitive_score_threshold,
         }
 
-    def _check_score_conflicts(
-        self, sorted_years: list[tuple[str, int]], best_year_is_future: bool
-    ) -> bool:
+    def _check_score_conflicts(self, sorted_years: list[tuple[str, int]], best_year_is_future: bool) -> bool:
         """Check for score conflicts between competing years."""
         if len(sorted_years) <= 1:
             self.console_logger.debug("Only one candidate year found.")
@@ -384,9 +343,7 @@ class YearScoreResolver:
         second_is_future = int(second_year) > self.current_year
 
         if not best_year_is_future and second_is_future:
-            self.console_logger.debug(
-                "Keeping non-future year %s over future %s", best_year, second_year
-            )
+            self.console_logger.debug("Keeping non-future year %s over future %s", best_year, second_year)
             return False
 
         # Both future or both non-future with similar scores = conflict
@@ -408,11 +365,7 @@ class YearScoreResolver:
         has_score_conflict: bool,
     ) -> bool:
         """Determine if the year selection is definitive."""
-        return (
-            score_thresholds["high_score_met"]
-            and not best_year_is_future
-            and (score_thresholds["very_high_score"] or not has_score_conflict)
-        )
+        return score_thresholds["high_score_met"] and not best_year_is_future and (score_thresholds["very_high_score"] or not has_score_conflict)
 
     def _log_non_definitive_reasons(
         self,

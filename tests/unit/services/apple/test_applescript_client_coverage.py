@@ -158,9 +158,7 @@ class TestInitializationErrors:
             await client.initialize()
 
     @pytest.mark.asyncio
-    async def test_initialize_skips_if_already_initialized(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_initialize_skips_if_already_initialized(self, client: AppleScriptClient) -> None:
         """Test initialize() skips semaphore creation if already initialized."""
         await client.initialize()
         original_semaphore = client.semaphore
@@ -222,9 +220,7 @@ class TestRunScript:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_invalid_script_path(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_invalid_script_path(self, client: AppleScriptClient) -> None:
         """Test returns None for path traversal attempt."""
         await client.initialize()
         # Path traversal attempt
@@ -232,9 +228,7 @@ class TestRunScript:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_dangerous_arguments(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_dangerous_arguments(self, client: AppleScriptClient) -> None:
         """Test returns None when arguments contain dangerous chars."""
         await client.initialize()
         result = await client.run_script(
@@ -244,9 +238,7 @@ class TestRunScript:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_logs_context_info_when_provided(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_logs_context_info_when_provided(self, client: AppleScriptClient) -> None:
         """Test logs contextual information when provided."""
         await client.initialize()
         with patch.object(client.executor, "run_osascript", new_callable=AsyncMock) as mock_run:
@@ -282,27 +274,21 @@ class TestRunScriptCode:
     """Tests for run_script_code method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_empty_code(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_empty_code(self, client: AppleScriptClient) -> None:
         """Test returns None for empty script code."""
         await client.initialize()
         result = await client.run_script_code("")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_whitespace_only(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_whitespace_only(self, client: AppleScriptClient) -> None:
         """Test returns None for whitespace-only code."""
         await client.initialize()
         result = await client.run_script_code("   \n\t  ")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_executes_via_temp_file_for_large_script(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_executes_via_temp_file_for_large_script(self, client: AppleScriptClient) -> None:
         """Test uses temp file execution for large scripts."""
         await client.initialize()
         # Use a moderately sized script that triggers temp file but passes validation
@@ -318,9 +304,7 @@ class TestRunScriptCode:
             mock_run.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_security_violation_temp_file(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_security_violation_temp_file(self, client: AppleScriptClient) -> None:
         """Test returns None when script fails security validation in temp file mode."""
         await client.initialize()
         dangerous_script = 'do shell script "rm -rf /"'
@@ -329,9 +313,7 @@ class TestRunScriptCode:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_security_violation_inline(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_for_security_violation_inline(self, client: AppleScriptClient) -> None:
         """Test returns None when script fails security validation in inline mode."""
         await client.initialize()
         dangerous_script = 'do shell script "rm -rf /"'
@@ -340,9 +322,7 @@ class TestRunScriptCode:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_handles_sanitization_value_error(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_handles_sanitization_value_error(self, client: AppleScriptClient) -> None:
         """Test handles ValueError during sanitization."""
         await client.initialize()
         with (
@@ -353,9 +333,7 @@ class TestRunScriptCode:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_executes_inline_for_small_script(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_executes_inline_for_small_script(self, client: AppleScriptClient) -> None:
         """Test uses inline execution for small scripts."""
         await client.initialize()
         small_script = 'return "test"'
@@ -407,9 +385,7 @@ class TestRunScriptFileAccessValidation:
     """Tests for run_script file access validation."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_file_access_validation_fails(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_none_when_file_access_validation_fails(self, client: AppleScriptClient) -> None:
         """Test returns None when file_validator.validate_script_file_access returns False."""
         await client.initialize()
         with (
@@ -424,18 +400,14 @@ class TestFetchTracksByIds:
     """Tests for fetch_tracks_by_ids method."""
 
     @pytest.mark.asyncio
-    async def test_returns_empty_list_when_no_ids(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_returns_empty_list_when_no_ids(self, client: AppleScriptClient) -> None:
         """Test returns empty list when track_ids is empty."""
         await client.initialize()
         result = await client.fetch_tracks_by_ids([])
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_fetches_tracks_in_batches(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_fetches_tracks_in_batches(self, client: AppleScriptClient) -> None:
         """Test fetches tracks in batches and combines results."""
         await client.initialize()
 
@@ -455,9 +427,7 @@ class TestFetchTracksByIds:
             assert mock_run.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_handles_no_tracks_found_response(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_handles_no_tracks_found_response(self, client: AppleScriptClient) -> None:
         """Test handles NO_TRACKS_FOUND response from script."""
         await client.initialize()
 
@@ -467,9 +437,7 @@ class TestFetchTracksByIds:
             assert result == []
 
     @pytest.mark.asyncio
-    async def test_handles_empty_response(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_handles_empty_response(self, client: AppleScriptClient) -> None:
         """Test handles empty response from script."""
         await client.initialize()
 
@@ -479,9 +447,7 @@ class TestFetchTracksByIds:
             assert result == []
 
     @pytest.mark.asyncio
-    async def test_uses_default_timeout(
-        self, client: AppleScriptClient
-    ) -> None:
+    async def test_uses_default_timeout(self, client: AppleScriptClient) -> None:
         """Test uses default timeout when not specified."""
         await client.initialize()
 
@@ -574,9 +540,7 @@ class TestParseTrackOutput:
 class TestFormatScriptPreview:
     """Tests for _format_script_preview method."""
 
-    def test_formats_tell_application_pattern(
-        self, client: AppleScriptClient
-    ) -> None:
+    def test_formats_tell_application_pattern(self, client: AppleScriptClient) -> None:
         """Test formats script with tell application pattern."""
         script = """
         tell application "Music"
@@ -587,34 +551,26 @@ class TestFormatScriptPreview:
         assert 'tell application "Music"' in result
         assert "..." in result
 
-    def test_formats_long_script_with_fallback(
-        self, client: AppleScriptClient
-    ) -> None:
+    def test_formats_long_script_with_fallback(self, client: AppleScriptClient) -> None:
         """Test truncates long script without tell application pattern."""
         script = "return " + "x" * 200
         result = client._format_script_preview(script)
         assert "..." in result
         assert len(result) < len(script)
 
-    def test_formats_short_script_without_truncation(
-        self, client: AppleScriptClient
-    ) -> None:
+    def test_formats_short_script_without_truncation(self, client: AppleScriptClient) -> None:
         """Test doesn't truncate short script without tell application pattern."""
         script = 'return "hello"'
         result = client._format_script_preview(script)
         assert result == 'return "hello"'
 
-    def test_handles_exception_gracefully(
-        self, client: AppleScriptClient
-    ) -> None:
+    def test_handles_exception_gracefully(self, client: AppleScriptClient) -> None:
         """Test handles exception during formatting and returns error message."""
         # Use None to trigger TypeError
         result = client._format_script_preview(None)  # type: ignore[arg-type]
         assert result == "[Script preview error]"
 
-    def test_handles_attribute_error_gracefully(
-        self, client: AppleScriptClient
-    ) -> None:
+    def test_handles_attribute_error_gracefully(self, client: AppleScriptClient) -> None:
         """Test handles AttributeError during formatting."""
         # Create a mock that raises AttributeError when accessed
         mock_script = MagicMock()

@@ -93,12 +93,7 @@ def _validate_track_fields(track_data: dict[str, Any]) -> bool:
 
     # Check optional fields if present
     optional_fields = ["genre", "year", "date_added", "track_status"]
-    return not any(
-        field in track_data
-        and track_data[field] is not None
-        and not isinstance(track_data[field], str)
-        for field in optional_fields
-    )
+    return not any(field in track_data and track_data[field] is not None and not isinstance(track_data[field], str) for field in optional_fields)
 
 
 def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:
@@ -500,10 +495,7 @@ class SecurityValidator:
             elif isinstance(value, int | float | bool):
                 sanitized_value = value
             elif isinstance(value, list):
-                sanitized_value = [
-                    (self.sanitize_string(str(item), f"{sanitized_key}_item") if isinstance(item, str) else item)
-                    for item in value
-                ]
+                sanitized_value = [(self.sanitize_string(str(item), f"{sanitized_key}_item") if isinstance(item, str) else item) for item in value]
             elif isinstance(value, dict):
                 sanitized_value = self.validate_api_input(
                     value,

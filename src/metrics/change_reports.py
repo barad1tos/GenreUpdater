@@ -349,9 +349,7 @@ def _print_change_line(
     old_display = old_val or "(empty)"
     suffix_str = f" [dim]{suffix}[/dim]" if suffix else ""
     if highlight:
-        console.print(
-            f"  {item}{suffix_str}: [dim]{old_display}[/dim] → [bold yellow]{new_val}[/bold yellow]"
-        )
+        console.print(f"  {item}{suffix_str}: [dim]{old_display}[/dim] → [bold yellow]{new_val}[/bold yellow]")
     else:
         console.print(f"  {item}{suffix_str}: {old_display} → {new_val}")
 
@@ -362,9 +360,7 @@ def _render_genre_change(console: Console, record: dict[str, Any]) -> None:
     track = record.get(Key.TRACK_NAME, "")
     album = record.get(Key.ALBUM, "")
     item = f"{artist} - {track or album}"
-    _print_change_line(
-        console, item, record.get(Key.OLD_GENRE, ""), record.get(Key.NEW_GENRE, "")
-    )
+    _print_change_line(console, item, record.get(Key.OLD_GENRE, ""), record.get(Key.NEW_GENRE, ""))
 
 
 def _render_year_change(console: Console, record: dict[str, Any]) -> None:
@@ -425,6 +421,7 @@ def _render_compact_change(console: Console, change_type: str, record: dict[str,
     """Render a single change record in compact arrow format."""
     if renderer := _CHANGE_RENDERERS.get(change_type):
         renderer(console, record)
+
 
 def _render_compact_group(console: Console, change_type: str, records: list[dict[str, str]]) -> None:
     """Render a group of changes in compact mode with arrows."""
@@ -807,5 +804,3 @@ def save_unified_dry_run(
         error_logger,
         "dry run report",
     )
-
-

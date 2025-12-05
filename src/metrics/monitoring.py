@@ -169,7 +169,8 @@ class ThresholdRule(AlertRule):
         elif self.operator == "equal":
             should_alert = abs(value - self.threshold) < FLOAT_COMPARISON_TOLERANCE
         else:
-            raise ValueError(f"Unrecognized operator '{self.operator}' in ThresholdRule")
+            msg = f"Unrecognized operator '{self.operator}' in ThresholdRule"
+            raise ValueError(msg)
 
         if should_alert:
             return Alert(
@@ -583,9 +584,7 @@ class MetricsCollector:
                 resource_metrics = self.resource_monitor.collect_all_metrics()
 
                 # Get performance metrics from the last minute (not just current minute)
-                recent_performance = self.performance_tracker.get_metrics(
-                    since=datetime.now(UTC) - timedelta(minutes=1)
-                )
+                recent_performance = self.performance_tracker.get_metrics(since=datetime.now(UTC) - timedelta(minutes=1))
 
                 # Evaluate alerts
                 all_metrics = resource_metrics + recent_performance

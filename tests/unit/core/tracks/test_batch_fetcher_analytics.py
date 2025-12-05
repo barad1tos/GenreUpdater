@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.models.track_models import TrackDict
 from src.core.tracks.batch_fetcher import BatchTrackFetcher
 from src.metrics.analytics import Analytics, LoggerContainer
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture
@@ -101,9 +97,7 @@ class TestBatchFetcherInit:
         config: dict[str, Any],
     ) -> None:
         """Should initialize without analytics parameter."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=None
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
         assert fetcher.analytics is None
 
     def test_init_with_analytics(
@@ -115,9 +109,7 @@ class TestBatchFetcherInit:
         analytics: Analytics,
     ) -> None:
         """Should initialize with analytics parameter."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=analytics
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
         assert fetcher.analytics is analytics
 
 
@@ -134,16 +126,12 @@ class TestFetchTracksInBatchesRouting:
         analytics: Analytics,
     ) -> None:
         """Should use analytics batch mode when analytics is available."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=analytics
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
 
         # Mock to return empty to stop loop
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
-        with patch.object(
-            fetcher, "_fetch_tracks_in_batches_with_analytics", new_callable=AsyncMock
-        ) as mock_with_analytics:
+        with patch.object(fetcher, "_fetch_tracks_in_batches_with_analytics", new_callable=AsyncMock) as mock_with_analytics:
             mock_with_analytics.return_value = []
             await fetcher._fetch_tracks_in_batches(100)
             mock_with_analytics.assert_called_once_with(100)
@@ -157,13 +145,9 @@ class TestFetchTracksInBatchesRouting:
         config: dict[str, Any],
     ) -> None:
         """Should use raw method when analytics is not available."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=None
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
 
-        with patch.object(
-            fetcher, "_fetch_tracks_in_batches_raw", new_callable=AsyncMock
-        ) as mock_raw:
+        with patch.object(fetcher, "_fetch_tracks_in_batches_raw", new_callable=AsyncMock) as mock_raw:
             mock_raw.return_value = []
             await fetcher._fetch_tracks_in_batches(100)
             mock_raw.assert_called_once_with(100)
@@ -182,16 +166,13 @@ class TestFetchTracksWithAnalytics:
         analytics: Analytics,
     ) -> None:
         """Should use analytics.batch_mode context manager."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=analytics
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
 
         # Track suppress state changes
         suppress_states_during_run: list[bool] = []
 
         async def capture_suppress_state(*args: Any, **kwargs: Any) -> None:
             suppress_states_during_run.append(analytics._suppress_console_logging)
-            return None
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_suppress_state)
 
@@ -217,15 +198,12 @@ class TestFetchTracksWithAnalytics:
         analytics: Analytics,
     ) -> None:
         """Should suppress console logging while fetching."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=analytics
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
 
         suppress_states: list[bool] = []
 
         async def capture_state(*args: Any, **kwargs: Any) -> None:
             suppress_states.append(analytics._suppress_console_logging)
-            return None
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_state)
         await fetcher._fetch_tracks_in_batches_with_analytics(100)
@@ -247,9 +225,7 @@ class TestFetchTracksRawFallback:
         config: dict[str, Any],
     ) -> None:
         """Should work correctly without analytics."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=None
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
@@ -266,9 +242,7 @@ class TestFetchTracksRawFallback:
         config: dict[str, Any],
     ) -> None:
         """Should use Rich Console status for progress display."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config, analytics=None
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
@@ -297,9 +271,7 @@ class TestProcessSingleBatch:
         config: dict[str, Any],
     ) -> None:
         """Should return None when batch returns no results."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
@@ -315,9 +287,7 @@ class TestProcessSingleBatch:
         config: dict[str, Any],
     ) -> None:
         """Should return None and log error on exception."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         mock_ap_client.run_script = AsyncMock(side_effect=OSError("Test error"))
 
@@ -337,9 +307,7 @@ class TestProcessSingleBatch:
         config: dict[str, Any],
     ) -> None:
         """Should return (tracks, new_offset, failures, continue) on success."""
-        fetcher = create_batch_fetcher(
-            mock_ap_client, mock_cache_service, loggers, config
-        )
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         # Create valid track output with all required fields
         # Fields: ID, NAME, ARTIST, ALBUM_ARTIST, ALBUM, GENRE, DATE_ADDED

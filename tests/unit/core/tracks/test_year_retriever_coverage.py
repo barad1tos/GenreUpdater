@@ -338,9 +338,7 @@ class TestUpdateAlbumTracksBulkAsync:
             TrackDict(id="", name="T1", artist="A", album="Al", genre="R", year=""),
             TrackDict(id="", name="T2", artist="A", album="Al", genre="R", year=""),
         ]
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="Al"
-        )
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(tracks=tracks, year="2020", artist="A", album="Al")
         assert result == (0, 2)
 
     @pytest.mark.asyncio
@@ -359,9 +357,7 @@ class TestUpdateAlbumTracksBulkAsync:
             TrackDict(id="123", name="T1", artist="A", album="Al", genre="R", year=""),
             TrackDict(id="456", name="T2", artist="A", album="Al", genre="R", year=""),
         ]
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="Al"
-        )
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(tracks=tracks, year="2020", artist="A", album="Al")
         # One success (from else branch returning False after exception), one failure
         # Actually the retry logic handles exceptions
         assert result[1] >= 0  # At least 0 failures tracked
@@ -1646,9 +1642,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
         target_year = "2020"
         # Filter out tracks with empty IDs and use _track_needs_year_update
         track_ids = [
-            t.id
-            for t in tracks
-            if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
+            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
         ]
         assert len(track_ids) == 1
         assert "1" in track_ids
@@ -1665,7 +1659,12 @@ class TestIdentifyTracksNeedingUpdateBranches:
         seen_ids: set[str] = set()
         track_ids = []
         for t in tracks:
-            if t.id and t.id not in seen_ids and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year):
+            if (
+                t.id
+                and t.id not in seen_ids
+                and can_edit_metadata(t.track_status)
+                and YearBatchProcessor._track_needs_year_update(t.year, target_year)
+            ):
                 track_ids.append(t.id)
                 seen_ids.add(t.id)
         assert len(track_ids) == 1
@@ -1680,9 +1679,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
         ]
         target_year = "2020"
         track_ids = [
-            t.id
-            for t in tracks
-            if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
+            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
         ]
         assert "1" not in track_ids
         assert "2" in track_ids
@@ -1755,9 +1752,7 @@ class TestUpdateAlbumTracksBulkAsyncBranches:
         # Return None (falsy but not error string)
         mock_track_processor.update_track_async.return_value = None
         tracks = [TrackDict(id="123", name="T1", artist="A", album="Al", genre="R", year="")]
-        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="Al"
-        )
+        result = await year_retriever._batch_processor.update_album_tracks_bulk_async(tracks=tracks, year="2020", artist="A", album="Al")
         # Should count as failure
         assert result[1] >= 1  # At least 1 failure
 

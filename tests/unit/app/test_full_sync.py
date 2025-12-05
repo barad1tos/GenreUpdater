@@ -68,9 +68,7 @@ class TestRunFullResync:
         mock_track_processor: MagicMock,
     ) -> None:
         """Should exit early when Music.app is not running."""
-        with patch(
-            "src.app.full_sync.is_music_app_running", return_value=False
-        ) as mock_check:
+        with patch("src.app.full_sync.is_music_app_running", return_value=False) as mock_check:
             await run_full_resync(
                 console_logger,
                 error_logger,

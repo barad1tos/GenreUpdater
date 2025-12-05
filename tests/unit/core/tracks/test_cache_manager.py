@@ -75,9 +75,7 @@ class TestGetCachedTracks:
     """Tests for get_cached_tracks method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_cache_empty(
-        self, cache_manager: TrackCacheManager
-    ) -> None:
+    async def test_returns_none_when_cache_empty(self, cache_manager: TrackCacheManager) -> None:
         """Test returns None when cache is empty."""
         result = await cache_manager.get_cached_tracks("test_key")
         assert result is None
@@ -270,10 +268,7 @@ class TestMergeTracks:
 
     def test_merge_with_updates(self, sample_tracks: list[TrackDict]) -> None:
         """Test merge with track updates."""
-        updated_track = TrackDict(
-            id="1", name="Updated Song A", artist="Artist 1",
-            album="Album 1", genre="Rock", year="2021"
-        )
+        updated_track = TrackDict(id="1", name="Updated Song A", artist="Artist 1", album="Album 1", genre="Rock", year="2021")
 
         result = TrackCacheManager.merge_tracks(sample_tracks, [updated_track])
 
@@ -283,10 +278,7 @@ class TestMergeTracks:
 
     def test_merge_with_new_tracks(self, sample_tracks: list[TrackDict]) -> None:
         """Test merge adds new tracks."""
-        new_track = TrackDict(
-            id="4", name="New Song", artist="Artist 3",
-            album="Album 3", genre="Jazz", year="2022"
-        )
+        new_track = TrackDict(id="4", name="New Song", artist="Artist 3", album="Album 3", genre="Jazz", year="2022")
 
         result = TrackCacheManager.merge_tracks(sample_tracks, [new_track])
 
@@ -295,10 +287,7 @@ class TestMergeTracks:
 
     def test_merge_preserves_order(self, sample_tracks: list[TrackDict]) -> None:
         """Test merge preserves track order."""
-        updated_track = TrackDict(
-            id="2", name="Updated Song B", artist="Artist 1",
-            album="Album 1", genre="Rock", year="2020"
-        )
+        updated_track = TrackDict(id="2", name="Updated Song B", artist="Artist 1", album="Album 1", genre="Rock", year="2020")
 
         result = TrackCacheManager.merge_tracks(sample_tracks, [updated_track])
 

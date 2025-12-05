@@ -104,9 +104,7 @@ class YearConsistencyChecker:
         most_common: tuple[str, int] = year_counts.most_common(1)[0]
 
         # Check for release_year inconsistency case
-        if result := self._check_release_year_inconsistency(
-            tracks, years, most_common[0]
-        ):
+        if result := self._check_release_year_inconsistency(tracks, years, most_common[0]):
             return result
 
         # Check for clear majority
@@ -114,9 +112,7 @@ class YearConsistencyChecker:
             return result
 
         # Handle collaboration albums (some empty years but otherwise consistent)
-        if result := self._check_collaboration_pattern(
-            year_counts, years, most_common, total_tracks, tracks
-        ):
+        if result := self._check_collaboration_pattern(year_counts, years, most_common, total_tracks, tracks):
             return result
 
         # Check for parity
@@ -125,8 +121,7 @@ class YearConsistencyChecker:
 
         # Most frequent year but not a strong majority
         self.console_logger.info(
-            "No dominant year (below %.0f%%): %s has %d/%d album tracks (%.1f%%) "
-            "- need API",
+            "No dominant year (below %.0f%%): %s has %d/%d album tracks (%.1f%%) - need API",
             self.dominance_min_share * 100,
             most_common[0],
             most_common[1],
@@ -145,9 +140,7 @@ class YearConsistencyChecker:
                 years.append(str(year))
         return years
 
-    def _check_majority_dominance(
-        self, most_common: tuple[str, int], total_tracks: int, tracks: list[TrackDict]
-    ) -> str | None:
+    def _check_majority_dominance(self, most_common: tuple[str, int], total_tracks: int, tracks: list[TrackDict]) -> str | None:
         """Check if most common year has clear majority (>50% of all tracks)."""
         if most_common[1] < total_tracks * self.dominance_min_share:
             return None
@@ -185,8 +178,7 @@ class YearConsistencyChecker:
         year_ratio = len(years) / total_tracks
         if year_ratio < self.dominance_min_share:
             self.console_logger.info(
-                "Not trusting year %s - only %d/%d tracks (%.1f%%) have it, "
-                "rest are empty. Need API verification.",
+                "Not trusting year %s - only %d/%d tracks (%.1f%%) have it, rest are empty. Need API verification.",
                 most_common[0],
                 len(years),
                 total_tracks,
@@ -203,30 +195,22 @@ class YearConsistencyChecker:
             return None
 
         self.console_logger.info(
-            "Using available year %s for %d tracks without years "
-            "(collaboration album pattern, %.1f%% have year)",
+            "Using available year %s for %d tracks without years (collaboration album pattern, %.1f%% have year)",
             most_common[0],
             len(tracks_with_empty),
             year_ratio * 100,
         )
         return most_common[0]
 
-    def _check_release_year_inconsistency(
-        self, tracks: list[TrackDict], years: list[str], most_common_year: str
-    ) -> str | None:
+    def _check_release_year_inconsistency(self, tracks: list[TrackDict], years: list[str], most_common_year: str) -> str | None:
         """Check if all tracks have same year but different release_years."""
         if len(set(years)) != 1:  # Not all tracks have same year
             return None
 
-        release_years = [
-            str(track.get("release_year"))
-            for track in tracks
-            if track.get("release_year") and str(track.get("release_year")).strip()
-        ]
+        release_years = [str(track.get("release_year")) for track in tracks if track.get("release_year") and str(track.get("release_year")).strip()]
         if len(set(release_years)) > 1:
             self.console_logger.info(
-                "All tracks have same year %s but inconsistent release_years %s "
-                "- using consistent track year",
+                "All tracks have same year %s but inconsistent release_years %s - using consistent track year",
                 most_common_year,
                 ", ".join(sorted(set(release_years))),
             )
@@ -251,9 +235,7 @@ class YearConsistencyChecker:
             return True
         return False
 
-    def _is_year_suspiciously_old(
-        self, dominant_year: str, tracks: list[TrackDict]
-    ) -> bool:
+    def _is_year_suspiciously_old(self, dominant_year: str, tracks: list[TrackDict]) -> bool:
         """Check if dominant year is suspiciously old compared to when tracks were added.
 
         This catches cases where all tracks have an incorrect year (e.g., 2001)
@@ -293,8 +275,7 @@ class YearConsistencyChecker:
         year_gap = earliest_added_year - dominant_year_int
         if year_gap > self.suspicion_threshold_years:
             self.console_logger.warning(
-                "Suspicious year detected: dominant year %s is %d years older "
-                "than earliest track added (%d) - triggering API verification",
+                "Suspicious year detected: dominant year %s is %d years older than earliest track added (%d) - triggering API verification",
                 dominant_year,
                 year_gap,
                 earliest_added_year,
@@ -313,11 +294,7 @@ class YearConsistencyChecker:
             Consensus release_year string if found, None otherwise
 
         """
-        release_years = [
-            str(track.get("release_year"))
-            for track in tracks
-            if track.get("release_year")
-        ]
+        release_years = [str(track.get("release_year")) for track in tracks if track.get("release_year")]
 
         if not release_years:
             return None
@@ -343,9 +320,7 @@ class YearConsistencyChecker:
 
         return None
 
-    def identify_anomalous_tracks(
-        self, tracks: list[TrackDict], dominant_year: str
-    ) -> list[TrackDict]:
+    def identify_anomalous_tracks(self, tracks: list[TrackDict], dominant_year: str) -> list[TrackDict]:
         """Identify tracks with years different from dominant year.
 
         Args:
@@ -361,11 +336,7 @@ class YearConsistencyChecker:
             track_year = str(track.get("year", ""))
 
             # Track has year but it's not a dominant anomaly
-            if (
-                track_year
-                and track_year.strip() not in ["", "0"]
-                and track_year != dominant_year
-            ):
+            if track_year and track_year.strip() not in ["", "0"] and track_year != dominant_year:
                 anomalous_tracks.append(track)
                 self.console_logger.info(
                     "Track '%s' has anomalous year %s (dominant: %s)",

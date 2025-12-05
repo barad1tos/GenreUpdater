@@ -3,7 +3,6 @@
 These mocks properly implement the protocol interfaces defined in src.core.models.protocols.
 """
 
-
 from __future__ import annotations
 
 import contextlib

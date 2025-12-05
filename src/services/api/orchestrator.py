@@ -668,7 +668,6 @@ class ExternalApiOrchestrator:
             timeout_override=timeout_override,
         )
 
-
     async def _safe_mark_for_verification(
         self,
         artist: str,
@@ -989,9 +988,7 @@ class ExternalApiOrchestrator:
         return artist_norm, album_norm, log_artist, log_album
 
     @staticmethod
-    def _parse_activity_period(
-            activity_result: tuple[int | None, int | None] | None
-    ) -> tuple[int | None, int | None]:
+    def _parse_activity_period(activity_result: tuple[int | None, int | None] | None) -> tuple[int | None, int | None]:
         """Parse activity period result into start/end years."""
         if not activity_result or len(activity_result) != ACTIVITY_PERIOD_TUPLE_LENGTH:
             return None, None
@@ -1002,11 +999,7 @@ class ExternalApiOrchestrator:
 
     def _log_activity_period(self, start_year: int | None, end_year: int | None) -> None:
         """Log the artist activity period."""
-        activity_log = (
-            f"({start_year or '?'} - {end_year or 'present'})"
-            if start_year or end_year
-            else "(activity period unknown)"
-        )
+        activity_log = f"({start_year or '?'} - {end_year or 'present'})" if start_year or end_year else "(activity period unknown)"
         self.console_logger.info("Artist activity period context: %s", activity_log)
 
     async def _setup_artist_context(self, artist_norm: str, log_artist: str) -> str | None:
@@ -1046,13 +1039,7 @@ class ExternalApiOrchestrator:
         log_album: str,
     ) -> list[ScoredRelease]:
         """Fetch scored releases from all API providers with script-aware logic."""
-        return await self.year_search_coordinator.fetch_all_api_results(
-            artist_norm,
-            album_norm,
-            artist_region,
-            log_artist,
-            log_album
-        )
+        return await self.year_search_coordinator.fetch_all_api_results(artist_norm, album_norm, artist_region, log_artist, log_album)
 
     async def _handle_no_results(
         self,
@@ -1103,9 +1090,7 @@ class ExternalApiOrchestrator:
                 len(all_releases) if all_releases else 0,
             )
             await self._safe_mark_for_verification(artist, album)
-            fallback_year = self._get_fallback_year_when_no_api_results(
-                current_library_year, log_artist, log_album
-            )
+            fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album)
             return fallback_year, False
 
         # Determine the best year and definitive status using YearScoreResolver

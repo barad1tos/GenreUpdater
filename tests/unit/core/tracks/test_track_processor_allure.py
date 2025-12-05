@@ -112,14 +112,16 @@ class _MockAppleScriptClient:
     ) -> str | None:
         """Run an AppleScript file by name."""
         self.scripts_run.append((script_name, arguments))
-        self.script_contexts.append({
-            "script_name": script_name,
-            "arguments": list(arguments) if arguments is not None else None,
-            "timeout": timeout,
-            "context_artist": context_artist,
-            "context_album": context_album,
-            "context_track": context_track,
-        })
+        self.script_contexts.append(
+            {
+                "script_name": script_name,
+                "arguments": list(arguments) if arguments is not None else None,
+                "timeout": timeout,
+                "context_artist": context_artist,
+                "context_album": context_album,
+                "context_track": context_track,
+            }
+        )
 
         if self.should_fail:
             msg = self.failure_message
@@ -249,7 +251,7 @@ class _MockCacheService:
 
     async def get_cached_api_result(self, artist: str, album: str, source: str) -> CachedApiResult | None:
         """Get cached API result."""
-        key = f'{f"{artist}::{album}".lower()}:{source}'
+        key = f"{f'{artist}::{album}'.lower()}:{source}"
         return self.api_cache.get(key)
 
     async def set_cached_api_result(
@@ -263,7 +265,7 @@ class _MockCacheService:
         is_negative: bool = False,
     ) -> None:
         """Cache an API result."""
-        key = f'{f"{artist}::{album}".lower()}:{source}'
+        key = f"{f'{artist}::{album}'.lower()}:{source}"
         metadata_payload = dict(metadata or {})
         metadata_payload["is_negative"] = is_negative
         self.api_cache[key] = CachedApiResult(
@@ -414,9 +416,7 @@ class TestTrackProcessorAllure:
             safe_track = _create_track(track_id="safe_001", name="Safe Track", artist="Safe Artist")
 
             # Create potentially unsafe track (but within bounds for testing)
-            edge_case_track = _create_track(
-                track_id="edge_001", name="Track with Special Characters: !@#$%", artist="Artist & Co.", genre="Rock/Pop"
-            )
+            edge_case_track = _create_track(track_id="edge_001", name="Track with Special Characters: !@#$%", artist="Artist & Co.", genre="Rock/Pop")
 
             test_tracks = [safe_track, edge_case_track]
 

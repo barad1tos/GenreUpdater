@@ -437,9 +437,7 @@ class LibrarySnapshotService:
 
         # Updated detection depends on mode
         if is_force:
-            updated_ids = await self._detect_updated_tracks(
-                applescript_client, current_ids, snapshot_ids, snapshot_map
-            )
+            updated_ids = await self._detect_updated_tracks(applescript_client, current_ids, snapshot_ids, snapshot_map)
         else:
             self.logger.info("Fast mode: skipping updated detection (trusting snapshot)")
             updated_ids = []
@@ -487,9 +485,7 @@ class LibrarySnapshotService:
         updated_ids = [
             track_id
             for track_id in common_ids
-            if track_id in current_map
-            and track_id in snapshot_map
-            and has_track_changed(current_map[track_id], snapshot_map[track_id])
+            if track_id in current_map and track_id in snapshot_map and has_track_changed(current_map[track_id], snapshot_map[track_id])
         ]
         self.logger.info("Force scan found %d updated tracks", len(updated_ids))
 

@@ -27,20 +27,14 @@ class TestConfigInit:
 
     def test_init_finds_existing_config_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Config should find existing config file from defaults."""
-        self._setup_config_file(
-            monkeypatch, tmp_path, "config.yaml"
-        )
+        self._setup_config_file(monkeypatch, tmp_path, "config.yaml")
 
     def test_init_falls_back_to_my_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Config should fall back to my-config.yaml if config.yaml doesn't exist."""
-        self._setup_config_file(
-            monkeypatch, tmp_path, "my-config.yaml"
-        )
+        self._setup_config_file(monkeypatch, tmp_path, "my-config.yaml")
 
     @staticmethod
-    def _setup_config_file(
-        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, config_filename: str
-    ) -> None:
+    def _setup_config_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, config_filename: str) -> None:
         """Set up a config file in tmp_path and verify Config finds it."""
         monkeypatch.delenv("CONFIG_PATH", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -49,9 +43,7 @@ class TestConfigInit:
         config = Config()
         assert config.config_path == config_filename
 
-    def test_init_raises_when_no_config_found(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_raises_when_no_config_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Config should raise FileNotFoundError when no config file exists."""
         monkeypatch.delenv("CONFIG_PATH", raising=False)
         monkeypatch.chdir(tmp_path)

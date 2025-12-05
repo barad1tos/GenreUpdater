@@ -215,7 +215,8 @@ class DependencyContainer:
         initialize_method = getattr(service, "initialize", None)
         if not callable(initialize_method):
             self._error_logger.warning(
-                " %s instance has no initialize method", LogFormat.entity(service_name),
+                " %s instance has no initialize method",
+                LogFormat.entity(service_name),
             )
             return
 
@@ -240,9 +241,7 @@ class DependencyContainer:
 
         except Exception as e:
             elapsed = time.monotonic() - start
-            self._error_logger.exception(
-                " Failed to initialize %s after %.2fs: %s", LogFormat.entity(service_name), elapsed, e
-            )
+            self._error_logger.exception(" Failed to initialize %s after %.2fs: %s", LogFormat.entity(service_name), elapsed, e)
             raise
 
     def _initialize_apple_script_client(self, dry_run: bool) -> None:
@@ -306,9 +305,7 @@ class DependencyContainer:
         if self._library_snapshot_service is None:
             self._library_snapshot_service = LibrarySnapshotService(self._config, self._console_logger)
         if self._pending_verification_service is None:
-            self._pending_verification_service = PendingVerificationService(
-                self._config, self._console_logger, self._error_logger
-            )
+            self._pending_verification_service = PendingVerificationService(self._config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
                 self._config,
@@ -380,10 +377,7 @@ class DependencyContainer:
         # Close API Orchestrator's aiohttp session properly
         if self._api_orchestrator is not None:
             if not hasattr(self._api_orchestrator, "close"):
-                self._console_logger.error(
-                    "API Orchestrator does not have a 'close' method. "
-                    "Possible interface change or initialization error."
-                )
+                self._console_logger.error("API Orchestrator does not have a 'close' method. Possible interface change or initialization error.")
             else:
                 try:
                     await self._api_orchestrator.close()

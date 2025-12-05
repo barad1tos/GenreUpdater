@@ -16,6 +16,7 @@ T = TypeVar("T")
 # Prioritize standard config name, fallback to legacy name for compatibility
 DEFAULT_CONFIG_FILES = ["config.yaml", "my-config.yaml"]
 
+
 class Config:
     """Configuration manager for the application."""
 

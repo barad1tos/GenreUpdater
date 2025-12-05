@@ -28,7 +28,12 @@ class TestIncrementalPipelineIntegration:
         dry_run: bool = False,
     ) -> IncrementalFilterService:
         """Create an IncrementalFilterService instance for testing."""
-        test_config = config or {"logs_base_dir": "/tmp/test_logs", "force_update": False, "processing": {"batch_size": 100}, "paths": {"csv_output_file": "csv/track_list.csv"}}
+        test_config = config or {
+            "logs_base_dir": "/tmp/test_logs",
+            "force_update": False,
+            "processing": {"batch_size": 100},
+            "paths": {"csv_output_file": "csv/track_list.csv"},
+        }
 
         return IncrementalFilterService(
             console_logger=MockLogger(),  # type: ignore[arg-type]
@@ -270,10 +275,7 @@ class TestIncrementalPipelineIntegration:
 
             # Identify tracks with status changes
             status_changes = [
-                track.id
-                for track in tracks
-                for summary in summaries
-                if track.id == summary.id and track.track_status != summary.track_status
+                track.id for track in tracks for summary in summaries if track.id == summary.id and track.track_status != summary.track_status
             ]
 
             allure.attach(f"{len(status_changes)}", "Status Changes Detected", allure.attachment_type.TEXT)

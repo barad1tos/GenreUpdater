@@ -114,11 +114,7 @@ async def main() -> None:
     # Determine config path - look for it in the current project directory
     # Try standard config names in order of preference
     config_files = ["config.yaml", "my-config.yaml"]
-    if found_configs := [
-        project_root / name
-        for name in config_files
-        if (project_root / name).exists()
-    ]:
+    if found_configs := [project_root / name for name in config_files if (project_root / name).exists()]:
         config_path = found_configs[0]
         if len(found_configs) > 1:
             print(

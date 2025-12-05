@@ -148,17 +148,13 @@ class TestCanRunIncremental:
     """Tests for can_run_incremental method."""
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_force_run(
-        self, verifier: DatabaseVerifier
-    ) -> None:
+    async def test_returns_true_when_force_run(self, verifier: DatabaseVerifier) -> None:
         """Should return True when force_run is True."""
         result = await verifier.can_run_incremental(force_run=True)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_no_previous_run(
-        self, verifier: DatabaseVerifier, tmp_path: Path
-    ) -> None:
+    async def test_returns_true_when_no_previous_run(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return True when no previous run file exists."""
         with patch(
             "src.app.features.verify.database_verifier.get_full_log_path",
@@ -169,9 +165,7 @@ class TestCanRunIncremental:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_enough_time_passed(
-        self, verifier: DatabaseVerifier, tmp_path: Path
-    ) -> None:
+    async def test_returns_true_when_enough_time_passed(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return True when enough time has passed."""
         last_run_file = tmp_path / "last_run.log"
         old_time = datetime.now(tz=UTC) - timedelta(hours=2)
@@ -186,9 +180,7 @@ class TestCanRunIncremental:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_not_enough_time_passed(
-        self, verifier: DatabaseVerifier, tmp_path: Path
-    ) -> None:
+    async def test_returns_false_when_not_enough_time_passed(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return False when not enough time has passed."""
         last_run_file = tmp_path / "last_run.log"
         recent_time = datetime.now(tz=UTC) - timedelta(minutes=30)
@@ -203,9 +195,7 @@ class TestCanRunIncremental:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_handles_future_timestamp(
-        self, verifier: DatabaseVerifier, tmp_path: Path
-    ) -> None:
+    async def test_handles_future_timestamp(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return True when timestamp is in the future."""
         last_run_file = tmp_path / "last_run.log"
         future_time = datetime.now(tz=UTC) + timedelta(hours=1)
@@ -224,14 +214,10 @@ class TestUpdateLastIncrementalRun:
     """Tests for update_last_incremental_run method."""
 
     @pytest.mark.asyncio
-    async def test_updates_timestamp(
-        self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_updates_timestamp(self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture) -> None:
         """Should update timestamp via IncrementalRunTracker."""
         with (
-            patch(
-                "src.app.features.verify.database_verifier.IncrementalRunTracker"
-            ) as mock_tracker_class,
+            patch("src.app.features.verify.database_verifier.IncrementalRunTracker") as mock_tracker_class,
             caplog.at_level(logging.INFO),
         ):
             mock_tracker = MagicMock()
@@ -248,18 +234,14 @@ class TestUpdateLastIncrementalRun:
 class TestHandleInvalidTracks:
     """Tests for _handle_invalid_tracks method."""
 
-    def test_logs_when_no_invalid_tracks(
-        self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_logs_when_no_invalid_tracks(self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture) -> None:
         """Should log when no invalid tracks found."""
         with caplog.at_level(logging.INFO):
             verifier._handle_invalid_tracks([], [], "/path/tracks.csv")
 
         assert "INVALID_TRACKS | count=0" in caplog.text
 
-    def test_removes_invalid_tracks_in_normal_mode(
-        self, verifier: DatabaseVerifier
-    ) -> None:
+    def test_removes_invalid_tracks_in_normal_mode(self, verifier: DatabaseVerifier) -> None:
         """Should remove invalid tracks when not in dry run."""
         existing_tracks = [
             _create_track("1", "Track 1"),
@@ -267,12 +249,8 @@ class TestHandleInvalidTracks:
         ]
         invalid_tracks = ["2"]
 
-        with patch(
-            "src.app.features.verify.database_verifier.save_to_csv"
-        ) as mock_save:
-            verifier._handle_invalid_tracks(
-                invalid_tracks, existing_tracks, "/path/tracks.csv"
-            )
+        with patch("src.app.features.verify.database_verifier.save_to_csv") as mock_save:
+            verifier._handle_invalid_tracks(invalid_tracks, existing_tracks, "/path/tracks.csv")
 
             mock_save.assert_called_once()
             saved_tracks = mock_save.call_args[0][0]
@@ -302,9 +280,7 @@ class TestHandleInvalidTracks:
         existing_tracks = [_create_track("1"), _create_track("2")]
         invalid_tracks = ["2"]
 
-        verifier._handle_invalid_tracks(
-            invalid_tracks, existing_tracks, "/path/tracks.csv"
-        )
+        verifier._handle_invalid_tracks(invalid_tracks, existing_tracks, "/path/tracks.csv")
 
         actions = verifier.get_dry_run_actions()
         assert len(actions) == 1

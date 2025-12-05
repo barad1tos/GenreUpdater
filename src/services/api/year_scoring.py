@@ -652,9 +652,7 @@ class ReleaseScorer:
             score_components=score_components,
         )
 
-        char_score, rg_first_year = self._calculate_release_characteristics_score(
-            release, year_str, source, score_components
-        )
+        char_score, rg_first_year = self._calculate_release_characteristics_score(release, year_str, source, score_components)
         score += char_score
 
         score += self._calculate_contextual_score(year, rg_first_year, score_components)
@@ -664,9 +662,7 @@ class ReleaseScorer:
         final_score = max(0, score)
 
         # Debug logging for significant scores
-        if final_score > self.definitive_score_threshold - 20 or any(
-            "penalty" in comp.lower() for comp in score_components
-        ):
+        if final_score > self.definitive_score_threshold - 20 or any("penalty" in comp.lower() for comp in score_components):
             debug_log_msg = f"Score Calculation for '{release_title_orig}' ({year_str}) [{source}]:\n"
             debug_log_msg += "\n".join([f"  - {comp}" for comp in score_components])
             debug_log_msg += f"\n  ==> Final Score: {final_score}"

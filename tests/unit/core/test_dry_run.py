@@ -84,9 +84,7 @@ class TestDryRunClientInitialize:
     """Tests for initialize method."""
 
     @pytest.mark.asyncio
-    async def test_initialize_delegates_to_real_client(
-        self, dry_run_client: DryRunAppleScriptClient, mock_real_client: Any
-    ) -> None:
+    async def test_initialize_delegates_to_real_client(self, dry_run_client: DryRunAppleScriptClient, mock_real_client: Any) -> None:
         """Should delegate initialization to real client."""
         await dry_run_client.initialize()
         mock_real_client.initialize.assert_called_once()
@@ -96,13 +94,9 @@ class TestDryRunClientRunScript:
     """Tests for run_script method."""
 
     @pytest.mark.asyncio
-    async def test_fetch_script_delegates_to_real_client(
-        self, dry_run_client: DryRunAppleScriptClient, mock_real_client: Any
-    ) -> None:
+    async def test_fetch_script_delegates_to_real_client(self, dry_run_client: DryRunAppleScriptClient, mock_real_client: Any) -> None:
         """Fetch operations should delegate to real client."""
-        result = await dry_run_client.run_script(
-            "fetch_tracks.scpt", arguments=["Artist Name"]
-        )
+        result = await dry_run_client.run_script("fetch_tracks.scpt", arguments=["Artist Name"])
 
         mock_real_client.run_script.assert_called_once()
         assert result == "real_output"
@@ -116,18 +110,14 @@ class TestDryRunClientRunScript:
     ) -> None:
         """Update operations should log and return success message."""
         with caplog.at_level(logging.INFO):
-            result = await dry_run_client.run_script(
-                "update_track.scpt", arguments=["track_id", "new_genre"]
-            )
+            result = await dry_run_client.run_script("update_track.scpt", arguments=["track_id", "new_genre"])
 
         assert result == DRY_RUN_SUCCESS_MESSAGE
         mock_real_client.run_script.assert_not_called()
         assert "DRY-RUN: Would run update_track.scpt" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_update_script_records_action(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    async def test_update_script_records_action(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Update operations should record actions."""
         await dry_run_client.run_script("update.scpt", arguments=["arg1", "arg2"])
 
@@ -165,17 +155,13 @@ class TestDryRunClientRunScriptCode:
     """Tests for run_script_code method."""
 
     @pytest.mark.asyncio
-    async def test_run_script_code_returns_success(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    async def test_run_script_code_returns_success(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should return success message for inline code."""
         result = await dry_run_client.run_script_code("tell application Music")
         assert result == DRY_RUN_SUCCESS_MESSAGE
 
     @pytest.mark.asyncio
-    async def test_run_script_code_records_action(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    async def test_run_script_code_records_action(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should record inline code execution."""
         code = "tell application Music to play"
         await dry_run_client.run_script_code(code, arguments=["arg"])
@@ -185,13 +171,9 @@ class TestDryRunClientRunScriptCode:
         assert dry_run_client.actions[0]["args"] == ["arg"]
 
     @pytest.mark.asyncio
-    async def test_run_script_code_with_timeout(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    async def test_run_script_code_with_timeout(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should handle timeout parameter."""
-        result = await dry_run_client.run_script_code(
-            "tell application Music", timeout=5.0
-        )
+        result = await dry_run_client.run_script_code("tell application Music", timeout=5.0)
         assert result == DRY_RUN_SUCCESS_MESSAGE
 
 
@@ -211,9 +193,7 @@ class TestDryRunClientFetchTracksByIds:
         with caplog.at_level(logging.INFO):
             result = await dry_run_client.fetch_tracks_by_ids(track_ids, batch_size=100)
 
-        mock_real_client.fetch_tracks_by_ids.assert_called_once_with(
-            track_ids, batch_size=100, timeout=None
-        )
+        mock_real_client.fetch_tracks_by_ids.assert_called_once_with(track_ids, batch_size=100, timeout=None)
         assert result == [{"id": "1", "name": "Track"}]
         assert "DRY-RUN: Fetching 3 tracks" in caplog.text
 
@@ -221,16 +201,12 @@ class TestDryRunClientFetchTracksByIds:
 class TestDryRunClientGetActions:
     """Tests for get_actions method."""
 
-    def test_get_actions_returns_empty_initially(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    def test_get_actions_returns_empty_initially(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should return empty list initially."""
         assert dry_run_client.get_actions() == []
 
     @pytest.mark.asyncio
-    async def test_get_actions_returns_recorded_actions(
-        self, dry_run_client: DryRunAppleScriptClient
-    ) -> None:
+    async def test_get_actions_returns_recorded_actions(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should return all recorded actions."""
         await dry_run_client.run_script("update1.scpt", arguments=["a"])
         await dry_run_client.run_script_code("code1")

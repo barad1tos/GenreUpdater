@@ -47,7 +47,7 @@ class TestGenreManager:
             console_logger=console_logger,  # type: ignore[arg-type]
             error_logger=error_logger,  # type: ignore[arg-type]
             analytics=analytics,
-            config=test_config
+            config=test_config,
         )
 
     def test_is_missing_or_unknown_genre_empty(self) -> None:

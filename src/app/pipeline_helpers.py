@@ -120,9 +120,4 @@ def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:
 
     # Check optional int fields if present
     optional_int_fields = ["original_pos"]
-    return not any(
-        field in item
-        and item[field] is not None
-        and not isinstance(item[field], int)
-        for field in optional_int_fields
-    )
+    return not any(field in item and item[field] is not None and not isinstance(item[field], int) for field in optional_int_fields)

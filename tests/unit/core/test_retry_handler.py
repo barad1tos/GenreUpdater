@@ -229,9 +229,7 @@ class TestAsyncRetryOperation:
     """Tests for async retry operation context manager."""
 
     @pytest.mark.asyncio
-    async def test_successful_operation_no_retry(
-        self, retry_handler: DatabaseRetryHandler
-    ) -> None:
+    async def test_successful_operation_no_retry(self, retry_handler: DatabaseRetryHandler) -> None:
         """Test successful operation doesn't retry."""
         attempts = 0
 
@@ -244,9 +242,7 @@ class TestAsyncRetryOperation:
         assert ctx.attempt_count == 1
 
     @pytest.mark.asyncio
-    async def test_non_transient_error_no_retry(
-        self, retry_handler: DatabaseRetryHandler
-    ) -> None:
+    async def test_non_transient_error_no_retry(self, retry_handler: DatabaseRetryHandler) -> None:
         """Test non-transient error doesn't retry."""
         attempts = 0
         policy = RetryPolicy(max_retries=3, base_delay_seconds=0.01)
@@ -269,9 +265,7 @@ class TestExecuteWithRetry:
     """Tests for execute_with_retry convenience method."""
 
     @pytest.mark.asyncio
-    async def test_successful_execution(
-        self, retry_handler: DatabaseRetryHandler
-    ) -> None:
+    async def test_successful_execution(self, retry_handler: DatabaseRetryHandler) -> None:
         """Test successful execution returns result."""
 
         async def operation() -> str:
@@ -285,9 +279,7 @@ class TestExecuteWithRetry:
 class TestConfigurationRetryHandler:
     """Tests for ConfigurationRetryHandler."""
 
-    def test_load_config_success(
-        self, config_retry_handler: ConfigurationRetryHandler
-    ) -> None:
+    def test_load_config_success(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test successful config load."""
         with patch("src.core.core_config.load_config") as mock_load:
             mock_load.return_value = {"key": "value"}
@@ -297,9 +289,7 @@ class TestConfigurationRetryHandler:
             assert result == {"key": "value"}
             mock_load.assert_called_once_with("config.yaml")
 
-    def test_load_config_fallback(
-        self, config_retry_handler: ConfigurationRetryHandler
-    ) -> None:
+    def test_load_config_fallback(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test fallback when primary fails."""
         with patch("src.core.core_config.load_config") as mock_load:
             # First call fails, second succeeds
@@ -316,9 +306,7 @@ class TestConfigurationRetryHandler:
             assert result == {"fallback": "config"}
             assert mock_load.call_count == 2
 
-    def test_load_config_all_fail(
-        self, config_retry_handler: ConfigurationRetryHandler
-    ) -> None:
+    def test_load_config_all_fail(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test ConfigurationError when all configs fail."""
         with patch("src.core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
@@ -329,9 +317,7 @@ class TestConfigurationRetryHandler:
                     fallback_paths=["fallback1.yaml", "fallback2.yaml"],
                 )
 
-    def test_load_config_no_fallback_paths(
-        self, config_retry_handler: ConfigurationRetryHandler
-    ) -> None:
+    def test_load_config_no_fallback_paths(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test failure with no fallback paths."""
         with patch("src.core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
@@ -371,9 +357,7 @@ class TestRetryMetadata:
     """Tests for retry metadata handling."""
 
     @pytest.mark.asyncio
-    async def test_metadata_preserved(
-        self, retry_handler: DatabaseRetryHandler
-    ) -> None:
+    async def test_metadata_preserved(self, retry_handler: DatabaseRetryHandler) -> None:
         """Test metadata is preserved across attempts."""
         async with retry_handler.async_retry_operation("test_op") as ctx:
             ctx.metadata["table"] = "tracks"
