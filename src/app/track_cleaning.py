@@ -6,11 +6,21 @@ normalizing names, etc.).
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.core.models.metadata_utils import clean_names
 from src.core.models.track_models import ChangeLogEntry, TrackFieldValue
+
+
+def _normalize_whitespace(value: str) -> str:
+    """Normalize whitespace: collapse multiple spaces and strip.
+
+    This matches the normalization done by clean_names() to ensure
+    whitespace-only differences don't get logged as changes.
+    """
+    return re.sub(r"\s+", " ", value).strip()
 
 if TYPE_CHECKING:
     import logging
@@ -130,9 +140,9 @@ class TrackCleaningService:
         if not track_id:
             return None, None
 
-        # Normalize originals for comparison (strip whitespace to match cleaned values)
-        track_name_normalized = str(track_name).strip() if track_name else ""
-        album_name_normalized = str(album_name).strip() if album_name else ""
+        # Normalize originals for comparison (collapse whitespace to match clean_names behavior)
+        track_name_normalized = _normalize_whitespace(str(track_name)) if track_name else ""
+        album_name_normalized = _normalize_whitespace(str(album_name)) if album_name else ""
 
         # Check if update needed (compare against normalized values)
         if cleaned_track_name == track_name_normalized and cleaned_album_name == album_name_normalized:
@@ -189,7 +199,10 @@ class TrackCleaningService:
 
         track_name = track.get("name", "")
         album_name = track.get("album", "")
-        if cleaned_track_name == track_name and cleaned_album_name == album_name:
+        track_name_normalized = _normalize_whitespace(str(track_name)) if track_name else ""
+        album_name_normalized = _normalize_whitespace(str(album_name)) if album_name else ""
+
+        if cleaned_track_name == track_name_normalized and cleaned_album_name == album_name_normalized:
             return None
 
         track_id = track.get("id", "")
@@ -198,8 +211,8 @@ class TrackCleaningService:
 
         success = await self._track_processor.update_track_async(
             track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name else None),
+            new_track_name=(cleaned_track_name if cleaned_track_name != track_name_normalized else None),
+            new_album_name=(cleaned_album_name if cleaned_album_name != album_name_normalized else None),
             track_status=track.track_status,
             original_artist=str(track.get("artist", "")),
             original_album=str(album_name) if album_name is not None else None,
