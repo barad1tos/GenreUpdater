@@ -38,6 +38,9 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy src/ main.py
 
+      - name: Security scan with bandit
+        run: uv run bandit -r src/ -c pyproject.toml
+
   test:
     name: Tests
     runs-on: ubuntu-latest
