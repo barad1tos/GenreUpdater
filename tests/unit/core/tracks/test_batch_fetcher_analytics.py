@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import CacheServiceProtocol
+    from src.core.models.types import AppleScriptClientProtocol
 
 from src.core.tracks.batch_fetcher import BatchTrackFetcher
 from src.metrics.analytics import Analytics, LoggerContainer
@@ -71,8 +75,8 @@ def create_batch_fetcher(
     """Factory to create BatchTrackFetcher with common dependencies."""
     console_logger, error_logger = loggers
     return BatchTrackFetcher(
-        ap_client=ap_client,
-        cache_service=cache_service,
+        ap_client=cast("AppleScriptClientProtocol", ap_client),
+        cache_service=cast("CacheServiceProtocol", cache_service),
         console_logger=console_logger,
         error_logger=error_logger,
         config=config,
@@ -97,7 +101,7 @@ class TestBatchFetcherInit:
         config: dict[str, Any],
     ) -> None:
         """Should initialize without analytics parameter."""
-        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
         assert fetcher.analytics is None
 
     def test_init_with_analytics(
@@ -145,7 +149,7 @@ class TestFetchTracksInBatchesRouting:
         config: dict[str, Any],
     ) -> None:
         """Should use raw method when analytics is not available."""
-        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         with patch.object(fetcher, "_fetch_tracks_in_batches_raw", new_callable=AsyncMock) as mock_raw:
             mock_raw.return_value = []
@@ -171,7 +175,8 @@ class TestFetchTracksWithAnalytics:
         # Track suppress state changes
         suppress_states_during_run: list[bool] = []
 
-        async def capture_suppress_state(*args: Any, **kwargs: Any) -> None:
+        async def capture_suppress_state(*_args: Any, **_kwargs: Any) -> None:
+            """Capture console logging suppression state during run_script call."""
             suppress_states_during_run.append(analytics._suppress_console_logging)
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_suppress_state)
@@ -202,7 +207,8 @@ class TestFetchTracksWithAnalytics:
 
         suppress_states: list[bool] = []
 
-        async def capture_state(*args: Any, **kwargs: Any) -> None:
+        async def capture_state(*_args: Any, **_kwargs: Any) -> None:
+            """Capture console logging suppression state during execution."""
             suppress_states.append(analytics._suppress_console_logging)
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_state)
@@ -225,7 +231,7 @@ class TestFetchTracksRawFallback:
         config: dict[str, Any],
     ) -> None:
         """Should work correctly without analytics."""
-        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
@@ -242,7 +248,7 @@ class TestFetchTracksRawFallback:
         config: dict[str, Any],
     ) -> None:
         """Should use Rich Console status for progress display."""
-        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=None)
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
@@ -295,8 +301,9 @@ class TestProcessSingleBatch:
         assert result is None
 
         # Error should be logged
-        console_logger, error_logger = loggers
-        error_logger.exception.assert_called()
+        _console_logger, error_logger = loggers
+        exception_mock = cast(MagicMock, error_logger.exception)
+        exception_mock.assert_called()
 
     @pytest.mark.asyncio
     async def test_returns_tuple_on_success(

@@ -30,7 +30,7 @@ from rich.console import Console
 from src.metrics.change_reports import save_html_report
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncIterator, Callable
 
     from rich.status import Status
 
@@ -416,7 +416,7 @@ class Analytics:
         self,
         message: str = "Processing...",
         console: Console | None = None,
-    ) -> AsyncGenerator[Status]:
+    ) -> AsyncIterator[Status]:
         """Context manager that suppresses console logging and shows a spinner instead.
 
         Use this when executing many tracked operations in a loop to avoid

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -143,12 +144,13 @@ async def test_concurrent_writes_are_serialized(tmp_path_factory: pytest.TempPat
 
     original_write = service._write_bytes_atomic
 
-    def tracking_write(path, data):
+    def tracking_write(path: Path, data: bytes) -> None:
+        """Track write execution order for concurrency testing."""
         execution_order.append(f"start_{len(data)}")
         original_write(path, data)
         execution_order.append(f"end_{len(data)}")
 
-    service._write_bytes_atomic = tracking_write  # type: ignore[method-assign]
+    service._write_bytes_atomic = tracking_write  # type: ignore[method-assign,assignment]
 
     tracks1 = [TrackDict(id="1", name="Track1", artist="Artist1", album="Album1")]
     tracks2 = [

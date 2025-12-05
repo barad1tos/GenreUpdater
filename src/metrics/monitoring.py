@@ -161,16 +161,16 @@ class ThresholdRule(AlertRule):
         """Evaluate threshold rule."""
         value = metric.value if isinstance(metric, PerformanceMetric) else metric.usage_percent
 
-        should_alert = False
-        if self.operator == "greater":
-            should_alert = value > self.threshold
-        elif self.operator == "less":
-            should_alert = value < self.threshold
-        elif self.operator == "equal":
-            should_alert = abs(value - self.threshold) < FLOAT_COMPARISON_TOLERANCE
-        else:
-            msg = f"Unrecognized operator '{self.operator}' in ThresholdRule"
-            raise ValueError(msg)
+        match self.operator:
+            case "greater":
+                should_alert = value > self.threshold
+            case "less":
+                should_alert = value < self.threshold
+            case "equal":
+                should_alert = abs(value - self.threshold) < FLOAT_COMPARISON_TOLERANCE
+            case _:
+                msg = f"Unrecognized operator '{self.operator}' in ThresholdRule"
+                raise ValueError(msg)
 
         if should_alert:
             return Alert(
