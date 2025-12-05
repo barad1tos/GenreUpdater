@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.models.track_models import TrackDict
 from src.core.tracks.batch_fetcher import BatchTrackFetcher
 from src.metrics.analytics import Analytics, LoggerContainer
 
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture
@@ -191,7 +188,6 @@ class TestFetchTracksWithAnalytics:
 
         async def capture_suppress_state(*args: Any, **kwargs: Any) -> None:
             suppress_states_during_run.append(analytics._suppress_console_logging)
-            return None
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_suppress_state)
 
@@ -225,7 +221,6 @@ class TestFetchTracksWithAnalytics:
 
         async def capture_state(*args: Any, **kwargs: Any) -> None:
             suppress_states.append(analytics._suppress_console_logging)
-            return None
 
         mock_ap_client.run_script = AsyncMock(side_effect=capture_state)
         await fetcher._fetch_tracks_in_batches_with_analytics(100)

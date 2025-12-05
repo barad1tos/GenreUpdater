@@ -179,6 +179,20 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
   "SLF001",  # Tests can access private members
   "S108",    # Tests can use /tmp/ paths (mocked configs, fixtures)
   "PT011",   # Tests can use explicit default argument values for clarity
+  "ARG001",  # Tests can have unused function arguments (mocks)
+  "ARG005",  # Tests can have unused lambda arguments
+  "TC003",   # Tests can have imports outside TYPE_CHECKING
+  "PLC0415", # Tests can have imports inside functions
+  "PT012",   # Tests can have complex pytest.raises blocks
+  "TRY003",  # Tests can have long exception messages
+  "EM101",   # Tests can use string literals in exceptions
+  "EM102",   # Tests can use f-strings in exceptions
+  "B007",    # Tests can have unused loop variables
+  "DTZ005",  # Tests can use datetime.now() without tz
+  "ANN001",  # Tests can skip argument annotations
+  "ANN202",  # Tests can skip return annotations for private funcs
+  "RUF059",  # Tests can have unused unpacked variables
+  "E501",    # Tests can have longer lines for readability
 ]
 "src/services/api/orchestrator.py" = [
   "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types

@@ -71,7 +71,7 @@ class TestCLIE2E:
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()
 
-        async def smart_run_script(script_name: str, args: list[str] | None = None, timeout: int = 30) -> str:  # noqa: ARG001
+        async def smart_run_script(script_name: str, args: list[str] | None = None, timeout: int = 30) -> str:
             """Mock AppleScript execution with context-aware responses."""
             if "fetch_tracks" in script_name:
                 return ""  # Empty to signal end of batch

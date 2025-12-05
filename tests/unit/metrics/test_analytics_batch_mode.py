@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
 
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture

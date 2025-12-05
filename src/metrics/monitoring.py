@@ -169,7 +169,8 @@ class ThresholdRule(AlertRule):
         elif self.operator == "equal":
             should_alert = abs(value - self.threshold) < FLOAT_COMPARISON_TOLERANCE
         else:
-            raise ValueError(f"Unrecognized operator '{self.operator}' in ThresholdRule")
+            msg = f"Unrecognized operator '{self.operator}' in ThresholdRule"
+            raise ValueError(msg)
 
         if should_alert:
             return Alert(
