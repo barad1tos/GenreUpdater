@@ -526,17 +526,7 @@ def save_unified_changes_report(
     # Handle case where all changes were filtered out (e.g., force_update with no real changes)
     if not console_changes:
         _print_no_changes_summary()
-        # Still save CSV with all entries (including force_update) for audit trail
-        if file_path:
-            ensure_directory(str(Path(file_path).parent), error_logger)
-            _save_csv(
-                changes_sorted,  # Use full unfiltered list for CSV audit trail
-                _get_csv_fieldnames(),
-                file_path,
-                console_logger,
-                error_logger,
-                Misc.CHANGES_REPORT_TYPE,
-            )
+        # No real changes to save - skip CSV creation
         return
 
     grouped = _group_changes_by_type(console_changes)
@@ -554,11 +544,11 @@ def save_unified_changes_report(
 
     console.print("-" * Format.SEPARATOR_100)
 
-    # CSV export if file path provided (save ALL changes including force_update duplicates)
+    # CSV export if file path provided (only real changes where old != new)
     if file_path:
         ensure_directory(str(Path(file_path).parent), error_logger)
         _save_csv(
-            changes_sorted,  # Use full unfiltered list for CSV audit trail
+            console_changes,  # Use filtered list - only actual changes
             _get_csv_fieldnames(),
             file_path,
             console_logger,
