@@ -288,6 +288,7 @@ addopts = [
   "--cov=src",
   "--cov-report=html:reports/html/coverage",
   "--cov-report=term-missing",
+  "--cov-fail-under=70",
   "--tb=short",
   "-v",
   # Allure reporting

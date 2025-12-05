@@ -3,7 +3,7 @@
 ![image](images/logo.png)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
+![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)
 ![GitHub Issues](https://img.shields.io/github/issues/barad1tos/music-genre-updater)
 ![GitHub Forks](https://img.shields.io/github/forks/barad1tos/music-genre-updater)
 ![GitHub Stars](https://img.shields.io/github/stars/barad1tos/music-genre-updater)
