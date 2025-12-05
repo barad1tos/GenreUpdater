@@ -345,7 +345,7 @@ class EventDrivenCacheManager:
         for handler in handlers:
             try:
                 handler(event)
-            except Exception:  # noqa: BLE001 - intentionally broad to ensure remaining handlers execute
+            except Exception:  # Intentionally broad to ensure remaining handlers execute
                 self.logger.exception("Event handler %r failed while processing event %r", handler, event)
 
     def should_invalidate_for_event(self, content_type: CacheContentType, event: CacheEvent) -> bool:
