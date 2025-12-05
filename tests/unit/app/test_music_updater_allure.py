@@ -363,12 +363,13 @@ class TestMusicUpdaterAllure:
             deps = self.create_mock_dependencies()
             updater = MusicUpdater(deps)
 
-            # Mock Music app running
-            with patch("src.app.music_updater.is_music_app_running", return_value=True):
-                # Mock empty track list
-                await deps.cache_service.set_async("tracks_NonExistentArtist", [])
+            # Mock empty track list
+            await deps.cache_service.set_async("tracks_NonExistentArtist", [])
 
-        with allure.step("Execute clean artist with no tracks"):
+        with (
+            allure.step("Execute clean artist with no tracks"),
+            patch("src.app.music_updater.is_music_app_running", return_value=True),
+        ):
             await updater.run_clean_artist("NonExistentArtist")
 
         with allure.step("Verify warning logged"):
