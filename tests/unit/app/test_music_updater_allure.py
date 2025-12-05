@@ -195,32 +195,29 @@ class TestMusicUpdaterAllure:
             deps = self.create_mock_dependencies()
             updater = MusicUpdater(deps)
 
-            # Mock Music app running check
-            with patch("src.app.music_updater.is_music_app_running", return_value=True):
-                # Setup test tracks with names that need cleaning
-                track1 = DummyTrackData.create(
-                    track_id="1",
-                    name="Track 1 (Remastered)",
-                    album="Album 1 (Deluxe Edition)",
-                )
-                track2 = DummyTrackData.create(
-                    track_id="2",
-                    name="Track 2",
-                    album="Album 2",
-                )
+            # Setup test tracks with names that need cleaning
+            track1 = DummyTrackData.create(
+                track_id="1",
+                name="Track 1 (Remastered)",
+                album="Album 1 (Deluxe Edition)",
+            )
+            track2 = DummyTrackData.create(
+                track_id="2",
+                name="Track 2",
+                album="Album 2",
+            )
 
-                # Mock track fetching
-                deps.ap_client.set_response("fetch_tracks.scpt", "")  # Will use cache
-                await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
+            # Mock track fetching
+            deps.ap_client.set_response("fetch_tracks.scpt", "")  # Will use cache
+            await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
-                # Mock track updating to succeed
-                deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
+            # Mock track updating to succeed
+            deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
 
         with (
             allure.step("Execute clean artist operation"),
-            patch(
-                "src.app.music_updater.save_changes_report",
-            ) as mock_save,
+            patch("src.app.music_updater.is_music_app_running", return_value=True),
+            patch("src.app.music_updater.save_changes_report") as mock_save,
         ):
             await updater.run_clean_artist("Test Artist")
 
