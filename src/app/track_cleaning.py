@@ -22,6 +22,7 @@ def _normalize_whitespace(value: str) -> str:
     """
     return re.sub(r"\s+", " ", value).strip()
 
+
 if TYPE_CHECKING:
     import logging
 
