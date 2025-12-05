@@ -183,6 +183,11 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
 "src/services/api/orchestrator.py" = [
   "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
 ]
+"src/core/models/script_detection.py" = [
+  "RUF001", # Allow ambiguous Unicode (intentional for script detection examples)
+  "RUF002", # Allow ambiguous Unicode in docstrings
+  "RUF003", # Allow ambiguous Unicode in comments
+]
 
 [tool.mypy]
 python_version = "3.13"
