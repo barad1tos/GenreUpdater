@@ -280,7 +280,8 @@ def has_latin(text: str) -> bool:
     if not text:
         return False
     return any(
-        c.isalpha() and (
+        c.isalpha()
+        and (
             "\u0041" <= c <= "\u005a"  # A-Z
             or "\u0061" <= c <= "\u007a"  # a-z
             or "\u0080" <= c <= "\u00ff"  # Latin-1 Supplement
@@ -349,11 +350,7 @@ def get_all_scripts(text: str) -> list[ScriptType]:
     if not text:
         return []
 
-    return [
-        script_type
-        for script_type, detector in SCRIPT_DETECTORS.items()
-        if detector(text)
-    ]
+    return [script_type for script_type, detector in SCRIPT_DETECTORS.items() if detector(text)]
 
 
 def _handle_cjk_detection(text: str) -> ScriptType | None:
@@ -370,10 +367,7 @@ def _handle_cjk_detection(text: str) -> ScriptType | None:
         return None
 
     # Check for Hiragana or Katakana which are unique to Japanese
-    has_hiragana_katakana = any(
-        "\u3040" <= char <= "\u309f" or "\u30a0" <= char <= "\u30ff"
-        for char in text
-    )
+    has_hiragana_katakana = any("\u3040" <= char <= "\u309f" or "\u30a0" <= char <= "\u30ff" for char in text)
     # If only Kanji (shared), default to Chinese as it's more common
     return ScriptType.JAPANESE if has_hiragana_katakana else ScriptType.CHINESE
 

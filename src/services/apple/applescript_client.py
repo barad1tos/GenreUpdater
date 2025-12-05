@@ -137,7 +137,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 self.executor.update_semaphore(self.semaphore)
                 self.console_logger.info(
                     "%s initialized (%d scripts, concurrency: %d)",
-                    LogFormat.entity("AppleScriptClient"), len(scripts), concurrent_limit,
+                    LogFormat.entity("AppleScriptClient"),
+                    len(scripts),
+                    concurrent_limit,
                 )
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
                 self.error_logger.exception("Error initializing AppleScriptClient: %s", e)
@@ -423,9 +425,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         """
         if timeout is None:
-            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get(
-                "applescript_timeout_seconds", 600
-            )
+            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 600)
 
         timeout_float = float(timeout) if timeout is not None else 600.0
 

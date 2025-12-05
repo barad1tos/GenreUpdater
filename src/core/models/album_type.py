@@ -75,76 +75,82 @@ class AlbumTypeInfo:
 # Patterns that indicate special albums (B-Sides, Demo collections, etc.)
 # These albums often have compilation years that differ from original tracks
 # NOTE: Use hyphenated forms - matching normalizes hyphens to spaces
-_DEFAULT_SPECIAL_PATTERNS: Final[frozenset[str]] = frozenset({
-    "b-sides",
-    "b-side",
-    "d-sides",
-    "d-side",
-    "demo",
-    "demos",
-    "vault",
-    "rarities",
-    "rarity",
-    "archive",
-    "archives",
-    "outtakes",
-    "outtake",
-    "unreleased",
-    "sessions",
-    "session",
-    "bonus-tracks",
-    "bonus",
-    "extras",
-    "bootleg",
-    "bootlegs",
-    "alternate",
-    "alternates",
-    "acoustic-versions",
-    "live-sessions",
-    "remixes",
-    "remix",
-})
+_DEFAULT_SPECIAL_PATTERNS: Final[frozenset[str]] = frozenset(
+    {
+        "b-sides",
+        "b-side",
+        "d-sides",
+        "d-side",
+        "demo",
+        "demos",
+        "vault",
+        "rarities",
+        "rarity",
+        "archive",
+        "archives",
+        "outtakes",
+        "outtake",
+        "unreleased",
+        "sessions",
+        "session",
+        "bonus-tracks",
+        "bonus",
+        "extras",
+        "bootleg",
+        "bootlegs",
+        "alternate",
+        "alternates",
+        "acoustic-versions",
+        "live-sessions",
+        "remixes",
+        "remix",
+    }
+)
 
 # Patterns that indicate compilation albums
 # These usually have their own release year separate from individual tracks
-_DEFAULT_COMPILATION_PATTERNS: Final[frozenset[str]] = frozenset({
-    "greatest hits",
-    "best of",
-    "collection",
-    "anthology",
-    "compilation",
-    "complete",
-    "essential",
-    "definitive",
-    "ultimate",
-    "gold",
-    "platinum",
-    "hits",
-    "singles",
-    "collected",
-    "retrospective",
-    "хіти",  # Ukrainian: "hits"
-    "хіт",  # Ukrainian: "hit"
-})
+_DEFAULT_COMPILATION_PATTERNS: Final[frozenset[str]] = frozenset(
+    {
+        "greatest hits",
+        "best of",
+        "collection",
+        "anthology",
+        "compilation",
+        "complete",
+        "essential",
+        "definitive",
+        "ultimate",
+        "gold",
+        "platinum",
+        "hits",
+        "singles",
+        "collected",
+        "retrospective",
+        "хіти",  # Ukrainian: "hits"
+        "хіт",  # Ukrainian: "hit"
+    }
+)
 
 # Patterns that indicate reissued/remastered albums
 # May have reissue year instead of original release year
-_DEFAULT_REISSUE_PATTERNS: Final[frozenset[str]] = frozenset({
-    "remaster",
-    "remastered",
-    "anniversary",
-    "deluxe",
-    "expanded",
-    "special edition",
-    "collector",
-    "redux",
-    "revisited",
-    "re-release",
-    "re-issue",
-    "reissue",
-    "rerelease",
-    "remanufacture",
-})
+_DEFAULT_REISSUE_PATTERNS: Final[frozenset[str]] = frozenset(
+    {
+        "remaster",
+        "remastered",
+        "anniversary",
+        "deluxe",
+        "expanded",
+        "special edition",
+        "collector",
+        "redux",
+        "revisited",
+        "re-release",
+        "re-issue",
+        "reissue",
+        "rerelease",
+        "remanufacture",
+    }
+)
 
 
 # ============================================================================
@@ -262,9 +268,7 @@ def _normalize_for_matching(text: str) -> str:
     return " ".join(text.split())
 
 
-def _find_pattern_match(
-    normalized_text: str, patterns: frozenset[str]
-) -> str | None:
+def _find_pattern_match(normalized_text: str, patterns: frozenset[str]) -> str | None:
     """Find first matching pattern in text.
 
     Args:

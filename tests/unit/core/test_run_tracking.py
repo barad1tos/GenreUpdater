@@ -85,9 +85,7 @@ class TestUpdateLastRunTimestamp:
         assert file_path.exists()
 
     @pytest.mark.asyncio
-    async def test_handles_write_error_gracefully(
-        self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_handles_write_error_gracefully(self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture) -> None:
         """Should log warning on write error without raising."""
         with patch("src.core.run_tracking.Path.open", side_effect=OSError("Permission denied")):
             with caplog.at_level(logging.WARNING):
@@ -135,9 +133,7 @@ class TestGetLastRunTimestamp:
         assert result.tzinfo == UTC
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_timestamp_gracefully(
-        self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_handles_invalid_timestamp_gracefully(self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture) -> None:
         """Should return None and log warning for invalid timestamp."""
         file_path = Path(tracker.get_last_run_file_path())
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,9 +146,7 @@ class TestGetLastRunTimestamp:
         assert "Failed to read last run timestamp" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_handles_read_error_gracefully(
-        self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_handles_read_error_gracefully(self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture) -> None:
         """Should return None and log warning on read error."""
         # Create the file first
         file_path = Path(tracker.get_last_run_file_path())
@@ -171,9 +165,7 @@ class TestRoundTrip:
     """Integration tests for update/read cycle."""
 
     @pytest.mark.asyncio
-    async def test_write_then_read_preserves_timestamp(
-        self, tracker: IncrementalRunTracker
-    ) -> None:
+    async def test_write_then_read_preserves_timestamp(self, tracker: IncrementalRunTracker) -> None:
         """Written timestamp should be readable."""
         before = datetime.now(UTC)
         await tracker.update_last_run_timestamp()

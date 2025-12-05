@@ -300,4 +300,3 @@ class AppleMusicClient:
             return None
 
         return scored_release
-

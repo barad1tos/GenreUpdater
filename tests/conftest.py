@@ -29,4 +29,3 @@ def mock_console_logger() -> MagicMock:
 def mock_error_logger() -> MagicMock:
     """Mock error logger for testing."""
     return MagicMock(spec=logging.Logger)
-

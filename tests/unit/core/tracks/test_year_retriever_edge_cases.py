@@ -24,6 +24,7 @@ from src.core.models.validators import is_empty_year
 from src.core.tracks.year_batch import YearBatchProcessor
 from src.core.tracks.year_retriever import YearRetriever
 from src.core.models.track_models import TrackDict
+
 # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics
 from tests.mocks.csv_mock import MockLogger
@@ -153,9 +154,7 @@ class TestYearRetrieverEdgeCases:
 
         with allure.step("Verify: Album was marked for verification"):
             # The album should be marked because it's a B-Sides album
-            assert mock_pending.marked_albums, (
-                "Album should be marked for verification (B-Sides detected)"
-            )
+            assert mock_pending.marked_albums, "Album should be marked for verification (B-Sides detected)"
 
             allure.attach(
                 str(mock_pending.marked_albums),
@@ -165,9 +164,7 @@ class TestYearRetrieverEdgeCases:
 
         with allure.step("FIXED: B-Sides album update is now blocked"):
             # After the fix: B-Sides albums return None to skip update
-            assert determined_year is None, (
-                "FIXED: B-Sides albums now return None to preserve existing year"
-            )
+            assert determined_year is None, "FIXED: B-Sides albums now return None to preserve existing year"
 
             allure.attach(
                 f"Existing year: 2011\n"
@@ -205,19 +202,14 @@ class TestYearRetrieverEdgeCases:
             needs_update = YearBatchProcessor._track_needs_year_update(current_year, api_year)
 
             allure.attach(
-                f"Current year: {current_year}\n"
-                f"API year: {api_year}\n"
-                f"Year difference: {year_difference} years\n"
-                f"needs_update: {needs_update}",
+                f"Current year: {current_year}\nAPI year: {api_year}\nYear difference: {year_difference} years\nneeds_update: {needs_update}",
                 "Test Data",
                 allure.attachment_type.TEXT,
             )
 
         with allure.step("Low-level method returns True (fix is in fallback layer)"):
             # This is expected - the low-level method just checks if years differ
-            assert needs_update is True, (
-                "_track_needs_year_update only checks if years differ"
-            )
+            assert needs_update is True, "_track_needs_year_update only checks if years differ"
 
             allure.attach(
                 "NOTE: _track_needs_year_update() only checks if years differ.\n"
@@ -269,9 +261,7 @@ class TestYearRetrieverEdgeCases:
 
         with allure.step("Low-level method returns False (no cache, queries API)"):
             # Without cache, the method returns False to query API
-            assert should_skip is False, (
-                "_should_skip_album_due_to_existing_years returns False when no cache exists"
-            )
+            assert should_skip is False, "_should_skip_album_due_to_existing_years returns False when no cache exists"
 
             allure.attach(
                 "NOTE: _should_skip_album_due_to_existing_years() now trusts cache (API data).\n"
@@ -304,7 +294,7 @@ class TestYearRetrieverEdgeCases:
         """
         with allure.step("Analyze Demo Vault scenario"):
             original_year = "2003"  # When demos were recorded
-            release_year = "2021"   # When Demo Vault was released
+            release_year = "2021"  # When Demo Vault was released
 
             # The _track_needs_year_update sees they're different and says "update"
             needs_update = YearBatchProcessor._track_needs_year_update(original_year, release_year)
@@ -439,15 +429,13 @@ class TestTrackNeedsYearUpdate:
     @pytest.mark.parametrize(
         ("current_year", "target_year", "year_diff"),
         [
-            ("2019", "2020", 1),    # Small difference
-            ("2015", "2020", 5),    # Medium difference
-            ("2010", "2020", 10),   # Large difference
-            ("1998", "2018", 20),   # Very large difference (Abney Park case)
+            ("2019", "2020", 1),  # Small difference
+            ("2015", "2020", 5),  # Medium difference
+            ("2010", "2020", 10),  # Large difference
+            ("1998", "2018", 20),  # Very large difference (Abney Park case)
         ],
     )
-    def test_different_year_triggers_update(
-        self, current_year: str, target_year: str, year_diff: int
-    ) -> None:
+    def test_different_year_triggers_update(self, current_year: str, target_year: str, year_diff: int) -> None:
         """Test that different years trigger update regardless of difference magnitude."""
         result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
 
@@ -455,9 +443,7 @@ class TestTrackNeedsYearUpdate:
         assert result is True
 
         allure.attach(
-            f"Year difference: {year_diff} years\n"
-            f"Result: update triggered\n"
-            f"NOTE: No threshold check for suspicious large differences",
+            f"Year difference: {year_diff} years\nResult: update triggered\nNOTE: No threshold check for suspicious large differences",
             "Test Data",
             allure.attachment_type.TEXT,
         )
@@ -482,23 +468,16 @@ class TestDominantYearEdgeCases:
 
         # 10 tracks total
         # 5 with year 2020 (50%), 3 with 2019, 2 with empty
-        album_tracks = [
-            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2020")
-            for i in range(1, 6)
-        ] + [
-            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2019")
-            for i in range(6, 9)
-        ] + [
-            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="")
-            for i in range(9, 11)
-        ]
+        album_tracks = (
+            [DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2020") for i in range(1, 6)]
+            + [DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2019") for i in range(6, 9)]
+            + [DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="") for i in range(9, 11)]
+        )
 
         dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
 
         # 5/10 = 50% < 60% threshold
-        assert dominant is None, (
-            "50% is below 60% threshold - no dominant year"
-        )
+        assert dominant is None, "50% is below 60% threshold - no dominant year"
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("60%+ majority establishes dominant year")
@@ -507,12 +486,8 @@ class TestDominantYearEdgeCases:
         retriever = self.create_retriever()
 
         # 10 tracks, 7 with 2020 (70%)
-        album_tracks = [
-            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2020")
-            for i in range(1, 8)
-        ] + [
-            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2019")
-            for i in range(8, 11)
+        album_tracks = [DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2020") for i in range(1, 8)] + [
+            DummyTrackData.create(track_id=str(i), name=f"Track {i}", year="2019") for i in range(8, 11)
         ]
 
         dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
@@ -569,12 +544,12 @@ class TestYearFallbackLogic:
     @pytest.mark.parametrize(
         ("existing", "proposed", "threshold", "expected_dramatic"),
         [
-            ("2018", "1998", 5, True),   # 20 years - dramatic
+            ("2018", "1998", 5, True),  # 20 years - dramatic
             ("2018", "2020", 5, False),  # 2 years - normal
-            ("2005", "2012", 5, True),   # 7 years - dramatic
-            ("2005", "2012", 10, False), # 7 years with 10 threshold - normal
+            ("2005", "2012", 5, True),  # 7 years - dramatic
+            ("2005", "2012", 10, False),  # 7 years with 10 threshold - normal
             ("2020", "2015", 5, False),  # 5 years exactly = not dramatic (> threshold)
-            ("2020", "2014", 5, True),   # 6 years - dramatic
+            ("2020", "2014", 5, True),  # 6 years - dramatic
         ],
     )
     def test_is_year_change_dramatic(
@@ -592,8 +567,7 @@ class TestYearFallbackLogic:
         is_dramatic = retriever.year_fallback_handler.is_year_change_dramatic(existing, proposed)
 
         assert is_dramatic == expected_dramatic, (
-            f"Expected {existing}→{proposed} to be "
-            f"{'dramatic' if expected_dramatic else 'normal'} with threshold={threshold}"
+            f"Expected {existing}→{proposed} to be {'dramatic' if expected_dramatic else 'normal'} with threshold={threshold}"
         )
 
     @allure.story("Existing Year Extraction")
@@ -694,10 +668,8 @@ class TestYearFallbackLogic:
         )
 
         tracks = [
-            TrackDict(id="1", name="T1", artist="Blue Stahli",
-                      album="B-Sides and Other Things I Forgot", year="2011"),
-            TrackDict(id="2", name="T2", artist="Blue Stahli",
-                      album="B-Sides and Other Things I Forgot", year="2011"),
+            TrackDict(id="1", name="T1", artist="Blue Stahli", album="B-Sides and Other Things I Forgot", year="2011"),
+            TrackDict(id="2", name="T2", artist="Blue Stahli", album="B-Sides and Other Things I Forgot", year="2011"),
         ]
 
         with allure.step("Apply fallback for B-Sides album"):
@@ -719,11 +691,7 @@ class TestYearFallbackLogic:
             assert "special_album" in reason
 
             allure.attach(
-                f"Album type: B-Sides (special)\n"
-                f"Existing year: 2011\n"
-                f"Proposed year: 2013\n"
-                f"Result: Update BLOCKED\n"
-                f"Reason: {reason}",
+                f"Album type: B-Sides (special)\nExisting year: 2011\nProposed year: 2013\nResult: Update BLOCKED\nReason: {reason}",
                 "Fix Verification",
                 allure.attachment_type.TEXT,
             )
@@ -743,8 +711,7 @@ class TestYearFallbackLogic:
         )
 
         tracks = [
-            TrackDict(id="1", name="T1", artist="Celldweller",
-                      album="Demo Vault: Wasteland", year="2003"),
+            TrackDict(id="1", name="T1", artist="Celldweller", album="Demo Vault: Wasteland", year="2003"),
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -821,8 +788,7 @@ class TestYearFallbackLogic:
         )
 
         tracks = [
-            TrackDict(id="1", name="T1", artist="Artist",
-                      album="Album (Remastered)", year="2000"),
+            TrackDict(id="1", name="T1", artist="Artist", album="Album (Remastered)", year="2000"),
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -850,8 +816,7 @@ class TestYearFallbackLogic:
         )
 
         tracks = [
-            TrackDict(id="1", name="T1", artist="Abney Park",
-                      album="Scallywag", year="2018"),
+            TrackDict(id="1", name="T1", artist="Abney Park", album="Scallywag", year="2018"),
         ]
 
         # With fallback disabled, dramatic changes are allowed
@@ -931,8 +896,7 @@ class TestAbsurdYearDetection:
 
         # Track with NO existing year
         tracks = [
-            TrackDict(id="1", name="The Mountain", artist="Gorillaz",
-                      album="The Mountain", year=""),  # No existing year
+            TrackDict(id="1", name="The Mountain", artist="Gorillaz", album="The Mountain", year=""),  # No existing year
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -963,8 +927,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist",
-                      album="Album", year=""),  # No existing year
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year=""),  # No existing year
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -994,8 +957,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist",
-                      album="Album", year="2000"),  # HAS existing year
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year="2000"),  # HAS existing year
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -1027,8 +989,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist",
-                      album="Album", year=""),
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year=""),
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -1057,8 +1018,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist",
-                      album="Album", year=""),
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year=""),
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -1079,9 +1039,9 @@ class TestAbsurdYearDetection:
     @pytest.mark.parametrize(
         ("threshold", "proposed", "expected_result"),
         [
-            (1970, "1969", None),   # Below default threshold
+            (1970, "1969", None),  # Below default threshold
             (1970, "1971", "1971"),  # Above default threshold
-            (1980, "1975", None),   # Below custom threshold
+            (1980, "1975", None),  # Below custom threshold
             (1980, "1985", "1985"),  # Above custom threshold
             (1950, "1960", "1960"),  # Lower threshold = more permissive
         ],
@@ -1098,8 +1058,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist",
-                      album="Album", year=""),  # No existing
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year=""),  # No existing
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -1127,8 +1086,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="The Mountain", artist="Gorillaz",
-                      album="Plastic Beach", year=""),
+            TrackDict(id="1", name="The Mountain", artist="Gorillaz", album="Plastic Beach", year=""),
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
@@ -1167,8 +1125,7 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Modern Band",
-                      album="Album", year=""),
+            TrackDict(id="1", name="Track", artist="Modern Band", album="Album", year=""),
         ]
 
         # Test various clearly absurd years
@@ -1239,14 +1196,9 @@ class TestSuspiciousOldYearDetection:
         ]
 
         # Check if year is suspicious
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2001", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2001", album_tracks)
 
-        assert is_suspicious is True, (
-            "Year 2001 should be suspicious when tracks added in 2025 "
-            "(24 year gap > 10 year threshold)"
-        )
+        assert is_suspicious is True, "Year 2001 should be suspicious when tracks added in 2025 (24 year gap > 10 year threshold)"
 
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Dominant year returns None when suspiciously old")
@@ -1273,9 +1225,7 @@ class TestSuspiciousOldYearDetection:
         dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
 
         # Should return None to trigger API lookup
-        assert dominant is None, (
-            "Should return None for suspiciously old year to trigger API verification"
-        )
+        assert dominant is None, "Should return None for suspiciously old year to trigger API verification"
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Non-suspicious year passes through")
@@ -1296,9 +1246,7 @@ class TestSuspiciousOldYearDetection:
             for i in range(1, 11)
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2023", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2023", album_tracks)
 
         assert is_suspicious is False, "1 year gap should not be suspicious"
 
@@ -1320,13 +1268,9 @@ class TestSuspiciousOldYearDetection:
             for i in range(1, 11)
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2001", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2001", album_tracks)
 
-        assert is_suspicious is False, (
-            "Without date_added, can't determine suspicion"
-        )
+        assert is_suspicious is False, "Without date_added, can't determine suspicion"
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Boundary case: exactly at threshold (10 years)")
@@ -1346,14 +1290,10 @@ class TestSuspiciousOldYearDetection:
             )
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2014", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2014", album_tracks)
 
         # threshold check is > not >=, so exactly 10 should NOT be suspicious
-        assert is_suspicious is False, (
-            "Exactly 10 year gap should not be suspicious (> not >=)"
-        )
+        assert is_suspicious is False, "Exactly 10 year gap should not be suspicious (> not >=)"
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Boundary case: one year over threshold (11 years)")
@@ -1373,9 +1313,7 @@ class TestSuspiciousOldYearDetection:
             )
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2013", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2013", album_tracks)
 
         assert is_suspicious is True, "11 year gap should be suspicious"
 
@@ -1404,14 +1342,10 @@ class TestSuspiciousOldYearDetection:
             ),
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2015", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2015", album_tracks)
 
         # Earliest added: 2020, year: 2015 = 5 years gap (not suspicious)
-        assert is_suspicious is False, (
-            "Should use earliest date_added (2020). 5 year gap is not suspicious."
-        )
+        assert is_suspicious is False, "Should use earliest date_added (2020). 5 year gap is not suspicious."
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Invalid year string doesn't crash")
@@ -1430,9 +1364,7 @@ class TestSuspiciousOldYearDetection:
             )
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "invalid", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("invalid", album_tracks)
 
         assert is_suspicious is False, "Invalid year should not be suspicious"
 
@@ -1461,14 +1393,10 @@ class TestSuspiciousOldYearDetection:
             ),
         ]
 
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(
-            "2001", album_tracks
-        )
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2001", album_tracks)
 
         # Uses valid date from track 2: 2025 - 2001 = 24 years gap
-        assert is_suspicious is True, (
-            "Should use valid date_added and detect 24 year gap as suspicious"
-        )
+        assert is_suspicious is True, "Should use valid date_added and detect 24 year gap as suspicious"
 
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Collaboration album pattern still works")
@@ -1512,6 +1440,4 @@ class TestSuspiciousOldYearDetection:
         # 7/10 = 70% have 2001 (above 50% threshold)
         # But 2001 is suspicious (24 year gap from 2025)
         # Should NOT trust this year
-        assert dominant is None, (
-            "Collaboration pattern should still check for suspicious years"
-        )
+        assert dominant is None, "Collaboration pattern should still check for suspicious years"

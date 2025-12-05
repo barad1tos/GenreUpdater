@@ -1,6 +1,5 @@
 """Unit tests for iCloud conflict cleanup utilities."""
 
-
 from __future__ import annotations
 
 import logging
@@ -529,9 +528,7 @@ class TestCleanupICloudConflicts:
         assert renamed == 0
         assert conflict2.exists()
 
-    def test_respects_min_age_preserves_new_conflict(
-        self, temp_cache_dir: Path, mock_logger: MagicMock
-    ) -> None:
+    def test_respects_min_age_preserves_new_conflict(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test that conflicts newer than min_age_seconds are preserved."""
         base_file = temp_cache_dir / "data.json"
         base_file.write_text("{}")
@@ -553,9 +550,7 @@ class TestCleanupICloudConflicts:
         assert renamed == 0
         assert conflict.exists()
 
-    def test_respects_min_age_deletes_old_conflict(
-        self, temp_cache_dir: Path, mock_logger: MagicMock
-    ) -> None:
+    def test_respects_min_age_deletes_old_conflict(self, temp_cache_dir: Path, mock_logger: MagicMock) -> None:
         """Test that conflicts older than min_age_seconds are deleted."""
         base_file = temp_cache_dir / "data.json"
         base_file.write_text("{}")
@@ -744,9 +739,7 @@ class TestCleanupConflictFilesWithDirectories:
         conflict_info = is_icloud_conflict(conflict_dir)
         assert conflict_info is not None
 
-        deleted, skipped = cleanup_conflict_files(
-            [conflict_info], mock_logger, min_age_seconds=60, dry_run=True
-        )
+        deleted, skipped = cleanup_conflict_files([conflict_info], mock_logger, min_age_seconds=60, dry_run=True)
 
         assert deleted == 1  # Reports what WOULD be deleted
         assert skipped == 0

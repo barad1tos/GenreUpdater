@@ -32,6 +32,7 @@ def _add_update_years_command(subparsers: Any) -> None:
         help="Artist name (optional, processes all if not specified)",
     )
 
+
 def _add_revert_years_command(subparsers: Any) -> None:
     """Add revert years command."""
     parser = subparsers.add_parser(
@@ -39,8 +40,7 @@ def _add_revert_years_command(subparsers: Any) -> None:
         aliases=["revert"],
         help="Revert year changes for an artist (optionally per album)",
         description=(
-            "Revert previously applied year updates. By default uses the latest changes_report.csv; "
-            "you can also provide a backup CSV path."
+            "Revert previously applied year updates. By default uses the latest changes_report.csv; you can also provide a backup CSV path."
         ),
     )
     parser.add_argument(

@@ -200,6 +200,7 @@ class Orchestrator:
                     preserve_existing=True,  # Critical: preserve previous key backups
                 )
         self._create_backup_file(config_path, ".yaml.backup", "Created backup of config: %s")
+
     def _create_backup_file(self, source_path: Path, suffix: str, success_message: str, preserve_existing: bool = False) -> None:
         """Create a backup of a file with the specified suffix.
 

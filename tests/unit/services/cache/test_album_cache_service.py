@@ -27,10 +27,7 @@ class TestAlbumCacheService:
         """Create an AlbumCacheService instance for testing."""
         # Use tempfile for secure temporary paths
         temp_dir = tempfile.gettempdir()
-        default_config = {
-            "album_years_cache_file": f"{temp_dir}/test_album_years.csv",
-            "log_directory": f"{temp_dir}/logs"
-        }
+        default_config = {"album_years_cache_file": f"{temp_dir}/test_album_years.csv", "log_directory": f"{temp_dir}/logs"}
         test_config = {**default_config, **(config or {})}
         mock_logger = MagicMock()
         return AlbumCacheService(test_config, mock_logger)
@@ -125,14 +122,10 @@ class TestAlbumCacheService:
         base_time = 1000.0
         ttl_seconds = service.policy.ttl_seconds
 
-        with allure.step("Store album at base time"), patch(
-            "src.services.cache.album_cache.time.time", return_value=base_time
-        ):
+        with allure.step("Store album at base time"), patch("src.services.cache.album_cache.time.time", return_value=base_time):
             await service.store_album_year("Artist", "Album", "2000")
 
-        with allure.step("Advance time beyond TTL"), patch(
-            "src.services.cache.album_cache.time.time", return_value=base_time + ttl_seconds + 5
-        ):
+        with allure.step("Advance time beyond TTL"), patch("src.services.cache.album_cache.time.time", return_value=base_time + ttl_seconds + 5):
             result = await service.get_album_year("Artist", "Album")
             assert result is None
 
@@ -231,9 +224,12 @@ class TestAlbumCacheService:
             await service.store_album_year("David Bowie", "The Rise and Fall of Ziggy Stardust", "1972")
             await service.store_album_year("David Bowie", "Station to Station", "1976")
 
-        with allure.step("Mock file operations"), patch("pathlib.Path.open", MagicMock()), patch(
-            "src.core.logger.ensure_directory"
-        ), patch.object(AlbumCacheService, "_write_csv_data") as mock_write:
+        with (
+            allure.step("Mock file operations"),
+            patch("pathlib.Path.open", MagicMock()),
+            patch("src.core.logger.ensure_directory"),
+            patch.object(AlbumCacheService, "_write_csv_data") as mock_write,
+        ):
             await service.save_to_disk()
 
         with allure.step("Verify save was attempted"):

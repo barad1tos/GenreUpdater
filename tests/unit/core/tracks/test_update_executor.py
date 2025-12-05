@@ -173,9 +173,7 @@ class TestUpdateProperty:
     """Tests for _update_property method."""
 
     @pytest.mark.asyncio
-    async def test_success_returns_true_true(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_success_returns_true_true(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test successful update returns (True, True)."""
         mock_ap_client.run_script.return_value = "Success: updated genre"
         success, changed = await executor._update_property("123", "genre", "Rock")
@@ -183,9 +181,7 @@ class TestUpdateProperty:
         assert changed is True
 
     @pytest.mark.asyncio
-    async def test_no_change_returns_true_false(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_no_change_returns_true_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test no-change result returns (True, False)."""
         mock_ap_client.run_script.return_value = "No Change: genre already set"
         success, changed = await executor._update_property("123", "genre", "Rock")
@@ -193,9 +189,7 @@ class TestUpdateProperty:
         assert changed is False
 
     @pytest.mark.asyncio
-    async def test_failure_returns_false_false(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_failure_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test failure result returns (False, False)."""
         mock_ap_client.run_script.return_value = "Error: track not found"
         success, changed = await executor._update_property("123", "genre", "Rock")
@@ -203,9 +197,7 @@ class TestUpdateProperty:
         assert changed is False
 
     @pytest.mark.asyncio
-    async def test_none_result_returns_false_false(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_none_result_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test None result returns (False, False)."""
         mock_ap_client.run_script.return_value = None
         success, changed = await executor._update_property("123", "genre", "Rock")
@@ -213,9 +205,7 @@ class TestUpdateProperty:
         assert changed is False
 
     @pytest.mark.asyncio
-    async def test_exception_returns_false_false(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_exception_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test exception returns (False, False)."""
         mock_ap_client.run_script.side_effect = OSError("Script failed")
         success, changed = await executor._update_property("123", "genre", "Rock")
@@ -223,14 +213,10 @@ class TestUpdateProperty:
         assert changed is False
 
     @pytest.mark.asyncio
-    async def test_passes_context_to_script(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_passes_context_to_script(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test passes artist/album/track context to script."""
         mock_ap_client.run_script.return_value = "Success"
-        await executor._update_property(
-            "123", "genre", "Rock", artist="Beatles", album="Abbey Road", track_name="Come Together"
-        )
+        await executor._update_property("123", "genre", "Rock", artist="Beatles", album="Abbey Road", track_name="Come Together")
         mock_ap_client.run_script.assert_called_with(
             "update_property.applescript",
             ["123", "genre", "Rock"],
@@ -274,9 +260,7 @@ class TestValidateAndSanitizeUpdateParameters:
 
     def test_valid_parameters(self, executor: TrackUpdateExecutor) -> None:
         """Test valid parameters are sanitized."""
-        result = executor._validate_and_sanitize_update_parameters(
-            "123", "Track Name", "Album Name", "Rock", "2020"
-        )
+        result = executor._validate_and_sanitize_update_parameters("123", "Track Name", "Album Name", "Rock", "2020")
         assert result is not None
         track_id, name, album, genre, year = result
         assert track_id == "123"
@@ -296,14 +280,10 @@ class TestValidateAndSanitizeUpdateParameters:
         assert genre is None
         assert year is None
 
-    def test_security_validation_error(
-        self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock
-    ) -> None:
+    def test_security_validation_error(self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock) -> None:
         """Test returns None on security validation error."""
         mock_security_validator.sanitize_string.side_effect = SecurityValidationError("Invalid")
-        result = executor._validate_and_sanitize_update_parameters(
-            "123<script>", "Track", None, None, None
-        )
+        result = executor._validate_and_sanitize_update_parameters("123<script>", "Track", None, None, None)
         assert result is None
 
 
@@ -312,9 +292,7 @@ class TestHandleDryRunUpdate:
 
     def test_records_all_updates(self, dry_run_executor: TrackUpdateExecutor) -> None:
         """Test records all provided updates."""
-        result = dry_run_executor._handle_dry_run_update(
-            "123", "Track Name", "Album Name", "Rock", "2020"
-        )
+        result = dry_run_executor._handle_dry_run_update("123", "Track Name", "Album Name", "Rock", "2020")
         assert result is True
         actions = dry_run_executor.get_dry_run_actions()
         assert len(actions) == 1
@@ -326,9 +304,7 @@ class TestHandleDryRunUpdate:
 
     def test_records_artist_update(self, dry_run_executor: TrackUpdateExecutor) -> None:
         """Test records artist update."""
-        result = dry_run_executor._handle_dry_run_update(
-            "123", None, None, None, None, sanitized_artist_name="New Artist"
-        )
+        result = dry_run_executor._handle_dry_run_update("123", None, None, None, None, sanitized_artist_name="New Artist")
         assert result is True
         actions = dry_run_executor.get_dry_run_actions()
         assert actions[0]["updates"]["artist"] == "New Artist"
@@ -347,9 +323,7 @@ class TestUpdateSingleProperty:
     """Tests for _update_single_property method."""
 
     @pytest.mark.asyncio
-    async def test_logs_on_success_with_change(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_logs_on_success_with_change(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test logs success message when change made."""
         mock_ap_client.run_script.return_value = "Success: updated"
         with patch.object(executor.console_logger, "info") as mock_log:
@@ -358,9 +332,7 @@ class TestUpdateSingleProperty:
             mock_log.assert_called()
 
     @pytest.mark.asyncio
-    async def test_logs_debug_on_no_change(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_logs_debug_on_no_change(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test logs debug message when no change needed."""
         mock_ap_client.run_script.return_value = "No Change"
         with patch.object(executor.console_logger, "debug") as mock_log:
@@ -369,9 +341,7 @@ class TestUpdateSingleProperty:
             mock_log.assert_called()
 
     @pytest.mark.asyncio
-    async def test_logs_warning_on_failure(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_logs_warning_on_failure(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test logs warning message on failure."""
         mock_ap_client.run_script.return_value = "Error"
         with patch.object(executor.console_logger, "warning") as mock_log:
@@ -384,21 +354,15 @@ class TestPerformPropertyUpdates:
     """Tests for _perform_property_updates method."""
 
     @pytest.mark.asyncio
-    async def test_updates_all_properties(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_updates_all_properties(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test updates all provided properties."""
         mock_ap_client.run_script.return_value = "Success"
-        result = await executor._perform_property_updates(
-            "123", "Track", "Album", "Rock", "2020"
-        )
+        result = await executor._perform_property_updates("123", "Track", "Album", "Rock", "2020")
         assert result is True
         assert mock_ap_client.run_script.call_count == 4
 
     @pytest.mark.asyncio
-    async def test_skips_none_properties(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_skips_none_properties(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test skips None properties."""
         mock_ap_client.run_script.return_value = "Success"
         result = await executor._perform_property_updates("123", None, None, "Rock", None)
@@ -426,30 +390,22 @@ class TestNotifyTrackCacheInvalidation:
     """Tests for _notify_track_cache_invalidation method."""
 
     @pytest.mark.asyncio
-    async def test_invalidates_cache(
-        self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock
-    ) -> None:
+    async def test_invalidates_cache(self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock) -> None:
         """Test calls cache invalidation."""
         await executor._notify_track_cache_invalidation("123", "Artist", "Album", "Track")
         mock_cache_service.invalidate_for_track.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handles_cache_exception(
-        self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock
-    ) -> None:
+    async def test_handles_cache_exception(self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock) -> None:
         """Test handles cache exception gracefully."""
         mock_cache_service.invalidate_for_track.side_effect = Exception("Cache error")
         # Should not raise
         await executor._notify_track_cache_invalidation("123", "Artist", "Album", "Track")
 
     @pytest.mark.asyncio
-    async def test_includes_original_artist(
-        self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock
-    ) -> None:
+    async def test_includes_original_artist(self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock) -> None:
         """Test includes original artist in payload."""
-        await executor._notify_track_cache_invalidation(
-            "123", "New Artist", "Album", "Track", original_artist="Old Artist"
-        )
+        await executor._notify_track_cache_invalidation("123", "New Artist", "Album", "Track", original_artist="Old Artist")
         call_args = mock_cache_service.invalidate_for_track.call_args
         payload = call_args[0][0]
         assert payload.__dict__.get("original_artist") == "Old Artist"
@@ -459,9 +415,7 @@ class TestTryBatchUpdate:
     """Tests for _try_batch_update method."""
 
     @pytest.mark.asyncio
-    async def test_success(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_success(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test successful batch update."""
         mock_ap_client.run_script.return_value = "Success: batch updated"
         updates = [("genre", "Rock"), ("year", "2020")]
@@ -469,9 +423,7 @@ class TestTryBatchUpdate:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_failure_raises(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_failure_raises(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test failed batch update raises RuntimeError."""
         mock_ap_client.run_script.return_value = "Error: failed"
         updates = [("genre", "Rock"), ("year", "2020")]
@@ -479,9 +431,7 @@ class TestTryBatchUpdate:
             await executor._try_batch_update("123", updates)
 
     @pytest.mark.asyncio
-    async def test_builds_correct_command(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_builds_correct_command(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test builds correct batch command string."""
         mock_ap_client.run_script.return_value = "Success"
         updates = [("genre", "Rock"), ("year", "2020")]
@@ -492,9 +442,7 @@ class TestTryBatchUpdate:
         assert "123:year:2020" in command
 
     @pytest.mark.asyncio
-    async def test_invalid_timeout_raises(
-        self, executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_invalid_timeout_raises(self, executor: TrackUpdateExecutor) -> None:
         """Test invalid timeout configuration raises ValueError."""
         executor.config["applescript_timeouts"]["batch_update"] = -1
         updates = [("genre", "Rock")]
@@ -502,9 +450,7 @@ class TestTryBatchUpdate:
             await executor._try_batch_update("123", updates)
 
     @pytest.mark.asyncio
-    async def test_invalid_timeout_string_uses_default(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_invalid_timeout_string_uses_default(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test invalid timeout string falls back to default."""
         executor.config["applescript_timeouts"]["batch_update"] = "invalid"
         mock_ap_client.run_script.return_value = "Success"
@@ -514,9 +460,7 @@ class TestTryBatchUpdate:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_fallback_to_applescript_timeout_seconds(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_fallback_to_applescript_timeout_seconds(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test falls back to applescript_timeout_seconds when batch_update not set."""
         # Remove batch_update from config to trigger fallback
         del executor.config["applescript_timeouts"]["batch_update"]
@@ -534,17 +478,13 @@ class TestApplyTrackUpdates:
     """Tests for _apply_track_updates method."""
 
     @pytest.mark.asyncio
-    async def test_empty_updates_returns_true(
-        self, executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_empty_updates_returns_true(self, executor: TrackUpdateExecutor) -> None:
         """Test empty updates list returns True."""
         result = await executor._apply_track_updates("123", [])
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_individual_updates_when_batch_disabled(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_individual_updates_when_batch_disabled(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test uses individual updates when batch disabled."""
         mock_ap_client.run_script.return_value = "Success"
         updates = [("genre", "Rock"), ("year", "2020")]
@@ -554,9 +494,7 @@ class TestApplyTrackUpdates:
         assert mock_ap_client.run_script.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_batch_update_when_enabled(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_batch_update_when_enabled(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test uses batch update when enabled."""
         executor.config["experimental"]["batch_updates_enabled"] = True
         mock_ap_client.run_script.return_value = "Success"
@@ -569,9 +507,7 @@ class TestApplyTrackUpdates:
         assert call_args[0][0] == "batch_update_tracks.applescript"
 
     @pytest.mark.asyncio
-    async def test_falls_back_on_batch_failure(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_falls_back_on_batch_failure(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test falls back to individual updates on batch failure."""
         executor.config["experimental"]["batch_updates_enabled"] = True
         # First call (batch) fails, subsequent calls (individual) succeed
@@ -600,37 +536,27 @@ class TestUpdateTrackAsync:
     """Tests for update_track_async method."""
 
     @pytest.mark.asyncio
-    async def test_success(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_success(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test successful track update."""
         mock_ap_client.run_script.return_value = "Success"
         result = await executor.update_track_async("123", new_genre="Rock")
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_skips_read_only_track(
-        self, executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_skips_read_only_track(self, executor: TrackUpdateExecutor) -> None:
         """Test skips read-only tracks (prerelease status)."""
-        result = await executor.update_track_async(
-            "123", new_genre="Rock", track_status="Prerelease"
-        )
+        result = await executor.update_track_async("123", new_genre="Rock", track_status="Prerelease")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_validation_failure(
-        self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock
-    ) -> None:
+    async def test_validation_failure(self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock) -> None:
         """Test returns False on validation failure."""
         mock_security_validator.sanitize_string.side_effect = SecurityValidationError("Invalid")
         result = await executor.update_track_async("123", new_genre="Rock")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_dry_run_mode(
-        self, dry_run_executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_dry_run_mode(self, dry_run_executor: TrackUpdateExecutor) -> None:
         """Test dry run mode records action."""
         result = await dry_run_executor.update_track_async("123", new_genre="Rock")
         assert result is True
@@ -661,10 +587,7 @@ class TestPrepareArtistUpdate:
 
     def test_returns_none_for_read_only_track(self, executor: TrackUpdateExecutor) -> None:
         """Test returns None for read-only tracks (prerelease status)."""
-        track = TrackDict(
-            id="123", name="Track", artist="Artist", album="Album",
-            genre="Rock", year="2020", track_status="Prerelease"
-        )
+        track = TrackDict(id="123", name="Track", artist="Artist", album="Album", genre="Rock", year="2020", track_status="Prerelease")
         result = executor._prepare_artist_update(track, "New Artist")
         assert result is None
 
@@ -678,9 +601,7 @@ class TestPrepareArtistUpdate:
         assert sanitized_artist == "New Artist"
         assert current_artist == "Old Artist"
 
-    def test_returns_none_on_security_error(
-        self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock
-    ) -> None:
+    def test_returns_none_on_security_error(self, executor: TrackUpdateExecutor, mock_security_validator: MagicMock) -> None:
         """Test returns None on security validation error."""
         mock_security_validator.sanitize_string.side_effect = SecurityValidationError("Invalid")
         track = TrackDict(id="123", name="Track", artist="Old Artist", album="Album", genre="Rock", year="2020")
@@ -692,9 +613,7 @@ class TestUpdateArtistAsync:
     """Tests for update_artist_async method."""
 
     @pytest.mark.asyncio
-    async def test_success(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_success(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test successful artist update."""
         mock_ap_client.run_script.return_value = "Success"
         track = TrackDict(id="123", name="Track", artist="Old Artist", album="Album", genre="Rock", year="2020")
@@ -703,18 +622,14 @@ class TestUpdateArtistAsync:
         assert track.artist == "New Artist"
 
     @pytest.mark.asyncio
-    async def test_returns_false_on_prepare_failure(
-        self, executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_returns_false_on_prepare_failure(self, executor: TrackUpdateExecutor) -> None:
         """Test returns False when prepare fails."""
         track = TrackDict(id="", name="Track", artist="Artist", album="Album", genre="Rock", year="2020")
         result = await executor.update_artist_async(track, "New Artist")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_dry_run_mode(
-        self, dry_run_executor: TrackUpdateExecutor
-    ) -> None:
+    async def test_dry_run_mode(self, dry_run_executor: TrackUpdateExecutor) -> None:
         """Test dry run mode records action."""
         track = TrackDict(id="123", name="Track", artist="Old Artist", album="Album", genre="Rock", year="2020")
         result = await dry_run_executor.update_artist_async(track, "New Artist")
@@ -724,9 +639,7 @@ class TestUpdateArtistAsync:
         assert actions[0]["updates"]["artist"] == "New Artist"
 
     @pytest.mark.asyncio
-    async def test_update_album_artist_when_matches(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_update_album_artist_when_matches(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test updates album_artist when it matches old artist."""
         mock_ap_client.run_script.return_value = "Success"
         track = TrackDict(id="123", name="Track", artist="Old Artist", album="Album", genre="Rock", year="2020")
@@ -737,9 +650,7 @@ class TestUpdateArtistAsync:
         assert track.album_artist == "New Artist"
 
     @pytest.mark.asyncio
-    async def test_does_not_update_album_artist_when_different(
-        self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock
-    ) -> None:
+    async def test_does_not_update_album_artist_when_different(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test does not update album_artist when it doesn't match."""
         mock_ap_client.run_script.return_value = "Success"
         track = TrackDict(id="123", name="Track", artist="Old Artist", album="Album", genre="Rock", year="2020")

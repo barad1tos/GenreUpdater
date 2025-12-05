@@ -172,8 +172,7 @@ class PendingVerificationService:
             30,
         )
         self.prerelease_recheck_days = (
-            self._normalize_recheck_days(processing_config.get("prerelease_recheck_days"))
-            or self.verification_interval_days
+            self._normalize_recheck_days(processing_config.get("prerelease_recheck_days")) or self.verification_interval_days
         )
 
         # Set up the pending file path using the utility function
@@ -287,9 +286,7 @@ class PendingVerificationService:
                 )
                 return timestamp
             except ValueError:
-                self._error_callback(
-                    f"WARNING: Invalid timestamp format in pending file for '{artist} - {album}': {timestamp_str}"
-                )
+                self._error_callback(f"WARNING: Invalid timestamp format in pending file for '{artist} - {album}': {timestamp_str}")
                 return None
 
     def _process_csv_row(self, row: dict[str, str]) -> tuple[str, PendingAlbumEntry] | None:
@@ -327,9 +324,7 @@ class PendingVerificationService:
             )
             return key_hash, entry
         except (ValueError, TypeError) as row_e:
-            self._error_callback(
-                f"WARNING: Error processing row in pending file for '{artist} - {album}': {row_e}"
-            )
+            self._error_callback(f"WARNING: Error processing row in pending file for '{artist} - {album}': {row_e}")
             return None
 
     def _read_csv_data(self) -> dict[str, PendingAlbumEntry]:
@@ -365,14 +360,10 @@ class PendingVerificationService:
             return pending_data
 
         except FileNotFoundError as csv_error:
-            self._error_callback(
-                f"ERROR reading pending verification file {self.pending_file_path}: {csv_error}"
-            )
+            self._error_callback(f"ERROR reading pending verification file {self.pending_file_path}: {csv_error}")
             return {}
         except (OSError, csv.Error, UnicodeDecodeError) as csv_error:
-            self._error_callback(
-                f"UNEXPECTED ERROR during CSV read from {self.pending_file_path}: {csv_error}"
-            )
+            self._error_callback(f"UNEXPECTED ERROR during CSV read from {self.pending_file_path}: {csv_error}")
             return {}
 
     def _blocking_load(self) -> dict[str, PendingAlbumEntry]:
@@ -380,9 +371,7 @@ class PendingVerificationService:
         self._ensure_pending_file_directory()
 
         if not os.path.exists(self.pending_file_path):
-            self.console_logger.info(
-                f"Pending verification file not found, will create at: {self.pending_file_path}"
-            )
+            self.console_logger.info(f"Pending verification file not found, will create at: {self.pending_file_path}")
             return {}
 
         self.console_logger.debug(f"Reading pending verification file: {self.pending_file_path}")
@@ -399,9 +388,7 @@ class PendingVerificationService:
             self.pending_albums = await loop.run_in_executor(None, self._blocking_load)
 
         if self.pending_albums:
-            self.console_logger.info(
-                f"Loaded {len(self.pending_albums)} pending albums for verification"
-            )
+            self.console_logger.info(f"Loaded {len(self.pending_albums)} pending albums for verification")
         else:
             self.console_logger.info("No pending albums loaded (file not found or empty).")
 
@@ -423,28 +410,26 @@ class PendingVerificationService:
                 writer.writeheader()
 
                 for entry in entries:
-                    writer.writerow({
-                        "artist": entry.artist,
-                        "album": entry.album,
-                        "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        "reason": entry.reason.value,
-                        "metadata": entry.metadata,
-                    })
+                    writer.writerow(
+                        {
+                            "artist": entry.artist,
+                            "album": entry.album,
+                            "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                            "reason": entry.reason.value,
+                            "metadata": entry.metadata,
+                        }
+                    )
 
             # Atomic rename
             Path(temp_file).replace(self.pending_file_path)
 
         except (OSError, csv.Error) as save_error:
-            self._error_callback(
-                f"ERROR during blocking save of pending verification file: {save_error}"
-            )
+            self._error_callback(f"ERROR during blocking save of pending verification file: {save_error}")
             if Path(temp_file).exists():
                 try:
                     Path(temp_file).unlink()
                 except OSError as cleanup_e:
-                    self._error_callback(
-                        f"WARNING: Could not remove temporary pending file {temp_file}: {cleanup_e}"
-                    )
+                    self._error_callback(f"WARNING: Could not remove temporary pending file {temp_file}: {cleanup_e}")
             raise
 
     async def _save_pending_albums(self) -> None:
@@ -456,11 +441,10 @@ class PendingVerificationService:
 
         try:
             await loop.run_in_executor(None, self._blocking_save, entries)
-            self.console_logger.info(
-                f"Saved {len(entries)} pending albums for verification"
-            )
+            self.console_logger.info(f"Saved {len(entries)} pending albums for verification")
         except (OSError, csv.Error) as e:
             self.error_logger.exception(f"Error saving pending verification file: {e}")
+
     async def mark_for_verification(
         self,
         artist: str,
@@ -638,11 +622,7 @@ class PendingVerificationService:
         reason_enum = VerificationReason.from_string(reason) if isinstance(reason, str) else reason
 
         async with self._lock:
-            return [
-                entry
-                for entry in self.pending_albums.values()
-                if entry.reason == reason_enum
-            ]
+            return [entry for entry in self.pending_albums.values() if entry.reason == reason_enum]
 
     # get_verified_album_keys is now an async method because it needs to acquire the lock
     # to safely access the in-memory cache.

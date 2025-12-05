@@ -770,9 +770,7 @@ class YearBatchProcessor:
             return 0, len(tracks)
 
         # Build mapping from track_id to track name for logging
-        track_names: dict[str, str] = {
-            str(t.get("id", "")): str(t.get("name", "")) for t in tracks if t.get("id")
-        }
+        track_names: dict[str, str] = {str(t.get("id", "")): str(t.get("name", "")) for t in tracks if t.get("id")}
 
         # Process in batches
         batch_size = self.config.get("apple_script_concurrency", 2)

@@ -79,9 +79,7 @@ class DatabaseVerifier:
             LogFormat.number(track_count),
         )
 
-    def _log_batch_progress(
-        self, batch_num: int, total_batches: int, checked: int, valid: int, invalid: int
-    ) -> None:
+    def _log_batch_progress(self, batch_num: int, total_batches: int, checked: int, valid: int, invalid: int) -> None:
         """Log batch progress with IDE-like highlighting."""
         # File log (plain)
         self.db_verify_logger.info(
@@ -458,9 +456,7 @@ class DatabaseVerifier:
             return tracks
         return existing_tracks
 
-    async def _verify_tracks_in_batches(
-        self, tracks_to_verify: list[TrackDict], verify_config: dict[str, Any]
-    ) -> list[str]:
+    async def _verify_tracks_in_batches(self, tracks_to_verify: list[TrackDict], verify_config: dict[str, Any]) -> list[str]:
         """Verify tracks in batches and return a list of invalid track IDs.
 
         Args:
@@ -512,9 +508,7 @@ class DatabaseVerifier:
 
         return invalid_tracks
 
-    def _handle_invalid_tracks(
-        self, invalid_tracks: list[str], existing_tracks: list[TrackDict], csv_path: str
-    ) -> None:
+    def _handle_invalid_tracks(self, invalid_tracks: list[str], existing_tracks: list[TrackDict], csv_path: str) -> None:
         """Handle removal or logging of invalid tracks.
 
         Args:

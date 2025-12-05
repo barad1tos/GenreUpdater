@@ -329,12 +329,9 @@ class GenericCacheService:
             """Write current cache entries to disk within a worker thread."""
             ensure_directory(str(self.cache_file.parent))
             payload = {
-                key: {"value": self._prepare_value_for_disk(value), "expires_at": expires_at}
-                for key, (value, expires_at) in self.cache.items()
+                key: {"value": self._prepare_value_for_disk(value), "expires_at": expires_at} for key, (value, expires_at) in self.cache.items()
             }
-            with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", dir=str(self.cache_file.parent), delete=False
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(self.cache_file.parent), delete=False) as tmp_file:
                 json.dump(payload, tmp_file, ensure_ascii=False, indent=2)
                 temp_path = Path(tmp_file.name)
             temp_path.replace(self.cache_file)

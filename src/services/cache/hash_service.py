@@ -98,11 +98,7 @@ class UnifiedHashService:
         args_string = "|".join(safe_serialize(arg) for arg in args)
 
         # Build kwargs string from sorted key-value pairs
-        kwargs_string = (
-            "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs.items()))
-            if kwargs
-            else ""
-        )
+        kwargs_string = "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs.items())) if kwargs else ""
 
         combined_string = f"{args_string}|{kwargs_string}".strip("|")
 

@@ -426,9 +426,8 @@ class MusicBrainzClient(BaseApiClient):
         album_fb = album_orig or album_norm
 
         # Attempt 2: Broader search (artist + album), fallback to Attempt 3: Album title only
-        return (
-            await self._search_release_groups(f"{artist_fb} {album_fb}", artist_norm, attempt_num=2)
-            or await self._search_release_groups(album_fb, artist_norm, attempt_num=3)
+        return await self._search_release_groups(f"{artist_fb} {album_fb}", artist_norm, attempt_num=2) or await self._search_release_groups(
+            album_fb, artist_norm, attempt_num=3
         )
 
     async def _fetch_releases_for_groups(self, release_groups: list[MBApiData]) -> list[tuple[MBApiData | None, MBApiData]]:

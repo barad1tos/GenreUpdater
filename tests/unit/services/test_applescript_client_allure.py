@@ -804,9 +804,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
     @pytest.mark.asyncio
     async def test_rate_limiter_validation(self) -> None:
         """Test rate limiter parameter validation."""
-        with allure.step("Test invalid requests_per_window"), pytest.raises(
-            ValueError, match="requests_per_window must be a positive integer"
-        ):
+        with allure.step("Test invalid requests_per_window"), pytest.raises(ValueError, match="requests_per_window must be a positive integer"):
             EnhancedRateLimiter(requests_per_window=0, window_size=1.0)
 
         with allure.step("Test invalid window_size"), pytest.raises(ValueError, match="window_size must be a positive number"):
@@ -894,12 +892,8 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         """Test validation of AppleScript reserved words."""
         sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
 
-        with allure.step("Test Finder operations are blocked"), pytest.raises(
-            AppleScriptSanitizationError, match="Dangerous AppleScript pattern"
-        ):
-            sanitizer.validate_script_code(
-                'tell application "Finder" to delete file "test.txt"', allow_music_app=False
-            )
+        with allure.step("Test Finder operations are blocked"), pytest.raises(AppleScriptSanitizationError, match="Dangerous AppleScript pattern"):
+            sanitizer.validate_script_code('tell application "Finder" to delete file "test.txt"', allow_music_app=False)
 
         with allure.step("Test Music.app operations allowed when enabled"):
             # This should not raise an error (allow_music_app=True is default)

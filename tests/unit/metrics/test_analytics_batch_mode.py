@@ -11,7 +11,6 @@ import pytest
 from src.metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
 
 
-
 @pytest.fixture
 def loggers() -> LoggerContainer:
     """Create mock loggers for testing."""
@@ -108,9 +107,7 @@ class TestBatchModeContextManager:
             status.update("[cyan]Updated message[/cyan]")
 
     @pytest.mark.asyncio
-    async def test_logs_summary_on_exit_with_calls(
-        self, analytics: Analytics, loggers: LoggerContainer
-    ) -> None:
+    async def test_logs_summary_on_exit_with_calls(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should log summary when exiting with recorded calls."""
         async with analytics.batch_mode("Test"):
             # Simulate recorded calls
@@ -127,9 +124,7 @@ class TestBatchModeContextManager:
         assert call_args[0][1] == 5
 
     @pytest.mark.asyncio
-    async def test_no_summary_log_when_no_calls(
-        self, analytics: Analytics, loggers: LoggerContainer
-    ) -> None:
+    async def test_no_summary_log_when_no_calls(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should not log summary when no calls were recorded."""
         loggers.console.info.reset_mock()
 
@@ -179,9 +174,7 @@ class TestRecordFunctionCallInBatchMode:
         assert analytics._batch_call_count == 3
         assert analytics._batch_total_duration == 30.0
 
-    def test_skips_console_logging_when_suppressed(
-        self, analytics: Analytics, loggers: LoggerContainer
-    ) -> None:
+    def test_skips_console_logging_when_suppressed(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should skip console logging when in batch mode."""
         analytics._suppress_console_logging = True
         loggers.console.info.reset_mock()
@@ -197,9 +190,7 @@ class TestRecordFunctionCallInBatchMode:
         loggers.console.info.assert_not_called()
         loggers.console.debug.assert_not_called()
 
-    def test_still_logs_to_analytics_file_when_suppressed(
-        self, analytics: Analytics, loggers: LoggerContainer
-    ) -> None:
+    def test_still_logs_to_analytics_file_when_suppressed(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should still log to analytics file even in batch mode."""
         analytics._suppress_console_logging = True
 
@@ -223,9 +214,7 @@ class TestRecordFunctionCallInBatchMode:
         assert len(analytics.events) == 1
         assert analytics.events[0]["Function"] == "test_func"
 
-    def test_normal_logging_when_not_suppressed(
-        self, analytics: Analytics, loggers: LoggerContainer
-    ) -> None:
+    def test_normal_logging_when_not_suppressed(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should log normally when not in batch mode."""
         assert analytics._suppress_console_logging is False
 

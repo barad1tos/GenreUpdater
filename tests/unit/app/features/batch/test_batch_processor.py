@@ -67,9 +67,7 @@ class TestProcessFromFile:
     """Tests for process_from_file method."""
 
     @pytest.mark.asyncio
-    async def test_returns_empty_when_file_not_found(
-        self, processor: BatchProcessor, tmp_path: Path
-    ) -> None:
+    async def test_returns_empty_when_file_not_found(self, processor: BatchProcessor, tmp_path: Path) -> None:
         """Should return empty results when file doesn't exist."""
         result = await processor.process_from_file(str(tmp_path / "nonexistent.txt"))
 
@@ -114,9 +112,7 @@ class TestProcessArtists:
     """Tests for process_artists method."""
 
     @pytest.mark.asyncio
-    async def test_full_operation_runs_clean_and_years(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_full_operation_runs_clean_and_years(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Full operation should run clean_artist and update_years."""
         result = await processor.process_artists(["Test Artist"])
 
@@ -125,9 +121,7 @@ class TestProcessArtists:
         mock_music_updater.run_update_years.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_clean_operation_only_runs_clean(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_clean_operation_only_runs_clean(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Clean operation should only run clean_artist."""
         result = await processor.process_artists(["Test Artist"], operation="clean")
 
@@ -136,9 +130,7 @@ class TestProcessArtists:
         mock_music_updater.run_update_years.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_years_operation_only_runs_years(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_years_operation_only_runs_years(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Years operation should only run update_years."""
         result = await processor.process_artists(["Test Artist"], operation="years")
 
@@ -147,9 +139,7 @@ class TestProcessArtists:
         mock_music_updater.run_update_years.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handles_failed_artists(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_handles_failed_artists(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Should add failed artists to results."""
         mock_music_updater.run_clean_artist.side_effect = RuntimeError("Processing failed")
 
@@ -159,81 +149,57 @@ class TestProcessArtists:
         assert not result["successful"]
 
     @pytest.mark.asyncio
-    async def test_continues_after_failure(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_continues_after_failure(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Should continue processing after individual failure."""
         mock_music_updater.run_clean_artist.side_effect = [
             RuntimeError("First failed"),
             None,  # Second succeeds
         ]
 
-        result = await processor.process_artists(
-            ["Artist 1", "Artist 2"], operation="clean"
-        )
+        result = await processor.process_artists(["Artist 1", "Artist 2"], operation="clean")
 
         assert "Artist 1" in result["failed"]
         assert "Artist 2" in result["successful"]
 
     @pytest.mark.asyncio
-    async def test_passes_force_flag_to_years(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_passes_force_flag_to_years(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Should pass force flag to run_update_years (run_clean_artist doesn't use force)."""
         await processor.process_artists(["Test Artist"], operation="years", force=True)
 
-        mock_music_updater.run_update_years.assert_called_once_with(
-            "Test Artist", True
-        )
+        mock_music_updater.run_update_years.assert_called_once_with("Test Artist", True)
 
     @pytest.mark.asyncio
-    async def test_clean_does_not_use_force(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_clean_does_not_use_force(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """operation='clean' should ignore force and only call run_clean_artist."""
-        await processor.process_artists(
-            ["Test Artist"], operation="clean", force=True
-        )
+        await processor.process_artists(["Test Artist"], operation="clean", force=True)
 
         mock_music_updater.run_clean_artist.assert_called_once_with("Test Artist")
         mock_music_updater.run_update_years.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_full_uses_force_for_years_only(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_full_uses_force_for_years_only(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """operation='full' with force=True should pass force only to run_update_years."""
-        await processor.process_artists(
-            ["Test Artist"], operation="full", force=True
-        )
+        await processor.process_artists(["Test Artist"], operation="full", force=True)
 
         # run_clean_artist called without force
         mock_music_updater.run_clean_artist.assert_called_once_with("Test Artist")
         # run_update_years called with force=True
-        mock_music_updater.run_update_years.assert_called_once_with(
-            "Test Artist", True
-        )
+        mock_music_updater.run_update_years.assert_called_once_with("Test Artist", True)
 
     @pytest.mark.asyncio
-    async def test_cancelled_error_adds_remaining_to_skipped(
-        self, processor: BatchProcessor, mock_music_updater: MagicMock
-    ) -> None:
+    async def test_cancelled_error_adds_remaining_to_skipped(self, processor: BatchProcessor, mock_music_updater: MagicMock) -> None:
         """Should add remaining artists to skipped on cancellation."""
         # First artist triggers cancellation
         mock_music_updater.run_clean_artist.side_effect = asyncio.CancelledError()
 
         with pytest.raises(asyncio.CancelledError):
-            await processor.process_artists(
-                ["Artist 1", "Artist 2", "Artist 3"], operation="clean"
-            )
+            await processor.process_artists(["Artist 1", "Artist 2", "Artist 3"], operation="clean")
 
 
 class TestPrintSummary:
     """Tests for print_summary method."""
 
-    def test_prints_success_count(
-        self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_prints_success_count(self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture) -> None:
         """Should log successful count."""
         results = {"successful": ["A", "B"], "failed": [], "skipped": []}
 
@@ -242,9 +208,7 @@ class TestPrintSummary:
 
         assert "Successful: 2" in caplog.text
 
-    def test_prints_failed_artists(
-        self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_prints_failed_artists(self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture) -> None:
         """Should log failed artists."""
         results = {"successful": [], "failed": ["Bad Artist"], "skipped": []}
 
@@ -254,9 +218,7 @@ class TestPrintSummary:
         assert "Failed: 1" in caplog.text
         assert "Bad Artist" in caplog.text
 
-    def test_prints_skipped_artists(
-        self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_prints_skipped_artists(self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture) -> None:
         """Should log skipped artists."""
         results = {"successful": [], "failed": [], "skipped": ["Skipped Artist"]}
 
@@ -266,9 +228,7 @@ class TestPrintSummary:
         assert "Skipped: 1" in caplog.text
         assert "Skipped Artist" in caplog.text
 
-    def test_prints_success_rate(
-        self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_prints_success_rate(self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture) -> None:
         """Should calculate and log success rate."""
         results = {"successful": ["A"], "failed": ["B"], "skipped": []}
 
@@ -277,9 +237,7 @@ class TestPrintSummary:
 
         assert "Success rate: 50.0%" in caplog.text
 
-    def test_handles_zero_total(
-        self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_handles_zero_total(self, processor: BatchProcessor, caplog: pytest.LogCaptureFixture) -> None:
         """Should handle zero total without division error."""
         results: dict[str, list[str]] = {"successful": [], "failed": [], "skipped": []}
 

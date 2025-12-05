@@ -149,9 +149,7 @@ class EnhancedRateLimiter:
             "window_seconds": self.window_seconds,
             "current_calls_in_window": len(current_calls),
             "available_capacity": max(0, self.requests_per_window - len(current_calls)),
-            "window_utilization": (
-                len(current_calls) / self.requests_per_window if self.requests_per_window > 0 else 0
-            ),
+            "window_utilization": (len(current_calls) / self.requests_per_window if self.requests_per_window > 0 else 0),
             "total_requests": self.total_requests,
             "avg_wait_time": self.total_wait_time / max(1, self.total_requests),
         }

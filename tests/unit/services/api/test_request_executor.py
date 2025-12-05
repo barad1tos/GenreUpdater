@@ -195,23 +195,15 @@ class TestBuildCacheKey:
 
     def test_build_cache_key_deterministic(self) -> None:
         """Test cache key is deterministic."""
-        key1 = ApiRequestExecutor._build_cache_key(
-            "lastfm", "https://api.example.com", {"param": "value"}
-        )
-        key2 = ApiRequestExecutor._build_cache_key(
-            "lastfm", "https://api.example.com", {"param": "value"}
-        )
+        key1 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
+        key2 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
 
         assert key1 == key2
 
     def test_build_cache_key_different_for_different_params(self) -> None:
         """Test different params produce different keys."""
-        key1 = ApiRequestExecutor._build_cache_key(
-            "api", "https://api.example.com", {"param": "value1"}
-        )
-        key2 = ApiRequestExecutor._build_cache_key(
-            "api", "https://api.example.com", {"param": "value2"}
-        )
+        key1 = ApiRequestExecutor._build_cache_key("api", "https://api.example.com", {"param": "value1"})
+        key2 = ApiRequestExecutor._build_cache_key("api", "https://api.example.com", {"param": "value2"})
 
         assert key1 != key2
 
@@ -424,9 +416,7 @@ class TestPrepareRequest:
         """Test request preparation with header override."""
         executor.set_session(mock_session)
 
-        result = executor._prepare_request(
-            "musicbrainz", "url", {"Accept": "application/json"}, None
-        )
+        result = executor._prepare_request("musicbrainz", "url", {"Accept": "application/json"}, None)
 
         assert result is not None
         headers, _, _ = result
@@ -690,9 +680,7 @@ class TestExecuteWithRetry:
         """Test successful request on first attempt."""
         expected_result = {"data": "value"}
 
-        with patch.object(
-            configured_executor, "_attempt_request", new_callable=AsyncMock
-        ) as mock_attempt:
+        with patch.object(configured_executor, "_attempt_request", new_callable=AsyncMock) as mock_attempt:
             mock_attempt.return_value = expected_result
 
             result = await configured_executor._execute_with_retry(
@@ -718,9 +706,7 @@ class TestExecuteWithRetry:
         """Test successful request after retries."""
         expected_result = {"data": "value"}
 
-        with patch.object(
-            configured_executor, "_attempt_request", new_callable=AsyncMock
-        ) as mock_attempt:
+        with patch.object(configured_executor, "_attempt_request", new_callable=AsyncMock) as mock_attempt:
             # First two attempts fail, third succeeds
             mock_attempt.side_effect = [None, None, expected_result]
 
@@ -745,9 +731,7 @@ class TestExecuteWithRetry:
         mock_rate_limiter: AsyncMock,
     ) -> None:
         """Test all retry attempts fail."""
-        with patch.object(
-            configured_executor, "_attempt_request", new_callable=AsyncMock
-        ) as mock_attempt:
+        with patch.object(configured_executor, "_attempt_request", new_callable=AsyncMock) as mock_attempt:
             mock_attempt.return_value = None
 
             result = await configured_executor._execute_with_retry(
@@ -799,14 +783,10 @@ class TestAttemptRequest:
         mock_rate_limiter: AsyncMock,
     ) -> None:
         """Test handling RuntimeError in attempt."""
-        with patch.object(
-            configured_executor, "_execute_single_request", new_callable=AsyncMock
-        ) as mock_execute:
+        with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = RuntimeError("Event loop is closed")
 
-            with patch.object(
-                configured_executor, "_handle_runtime_error", new_callable=AsyncMock
-            ) as mock_handler:
+            with patch.object(configured_executor, "_handle_runtime_error", new_callable=AsyncMock) as mock_handler:
                 mock_handler.return_value = None
 
                 result = await configured_executor._attempt_request(
@@ -832,14 +812,10 @@ class TestAttemptRequest:
         mock_rate_limiter: AsyncMock,
     ) -> None:
         """Test handling TimeoutError in attempt."""
-        with patch.object(
-            configured_executor, "_execute_single_request", new_callable=AsyncMock
-        ) as mock_execute:
+        with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = TimeoutError()
 
-            with patch.object(
-                configured_executor, "_handle_client_error", new_callable=AsyncMock
-            ) as mock_handler:
+            with patch.object(configured_executor, "_handle_client_error", new_callable=AsyncMock) as mock_handler:
                 mock_handler.return_value = None
 
                 result = await configured_executor._attempt_request(
@@ -865,17 +841,13 @@ class TestAttemptRequest:
         mock_rate_limiter: AsyncMock,
     ) -> None:
         """Test handling ClientConnectorError in attempt."""
-        with patch.object(
-            configured_executor, "_execute_single_request", new_callable=AsyncMock
-        ) as mock_execute:
+        with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = aiohttp.ClientConnectorError(
                 connection_key=MagicMock(),
                 os_error=OSError("Connection refused"),
             )
 
-            with patch.object(
-                configured_executor, "_handle_client_error", new_callable=AsyncMock
-            ) as mock_handler:
+            with patch.object(configured_executor, "_handle_client_error", new_callable=AsyncMock) as mock_handler:
                 mock_handler.return_value = None
 
                 result = await configured_executor._attempt_request(
@@ -901,14 +873,10 @@ class TestAttemptRequest:
         mock_rate_limiter: AsyncMock,
     ) -> None:
         """Test handling unexpected errors in attempt."""
-        with patch.object(
-            configured_executor, "_execute_single_request", new_callable=AsyncMock
-        ) as mock_execute:
+        with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = ValueError("Unexpected error")
 
-            with patch.object(
-                configured_executor, "_handle_unexpected_error"
-            ) as mock_handler:
+            with patch.object(configured_executor, "_handle_unexpected_error") as mock_handler:
                 result = await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
@@ -959,9 +927,7 @@ class TestExecuteSingleRequest:
         cm.__aexit__ = AsyncMock(return_value=None)
         mock_session.get.return_value = cm
 
-        with patch.object(
-            executor, "_process_response", new_callable=AsyncMock
-        ) as mock_process:
+        with patch.object(executor, "_process_response", new_callable=AsyncMock) as mock_process:
             mock_process.return_value = {"data": "value"}
 
             result = await executor._execute_single_request(
@@ -999,9 +965,7 @@ class TestExecuteSingleRequest:
         cm.__aexit__ = AsyncMock(return_value=None)
         mock_session.get.return_value = cm
 
-        with patch.object(
-            executor, "_process_response", new_callable=AsyncMock
-        ) as mock_process:
+        with patch.object(executor, "_process_response", new_callable=AsyncMock) as mock_process:
             mock_process.return_value = {"data": "value"}
 
             result = await executor._execute_single_request(
@@ -1072,19 +1036,13 @@ class TestProcessResponse:
         """Test processing successful JSON response."""
         mock_response.json = AsyncMock(return_value={"results": []})
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = '{"results": []}'
 
-            with patch.object(
-                executor, "_parse_json_response", new_callable=AsyncMock
-            ) as mock_parse:
+            with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                result = await executor._process_response(
-                    mock_response, "musicbrainz", "url", 0, "log_url", 0.5
-                )
+                result = await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
 
                 assert result == {"results": []}
 
@@ -1098,15 +1056,11 @@ class TestProcessResponse:
         mock_response.status = HTTP_TOO_MANY_REQUESTS
         mock_response.ok = False
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "Rate limited"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(
-                    mock_response, "musicbrainz", "url", 0, "log_url", 0.5
-                )
+                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
 
             assert exc_info.value.status == HTTP_TOO_MANY_REQUESTS
 
@@ -1120,15 +1074,11 @@ class TestProcessResponse:
         mock_response.status = HTTP_SERVER_ERROR
         mock_response.ok = False
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "Internal Server Error"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(
-                    mock_response, "musicbrainz", "url", 0, "log_url", 0.5
-                )
+                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
 
             assert exc_info.value.status == HTTP_SERVER_ERROR
 
@@ -1142,15 +1092,11 @@ class TestProcessResponse:
         mock_response.status = 404
         mock_response.ok = False
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "Not Found"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(
-                    mock_response, "musicbrainz", "url", 0, "log_url", 0.5
-                )
+                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
 
             assert exc_info.value.status == 404
 
@@ -1163,14 +1109,10 @@ class TestProcessResponse:
         """Test processing non-JSON response."""
         mock_response.headers = {"Content-Type": "text/html"}
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "<html>Not JSON</html>"
 
-            result = await executor._process_response(
-                mock_response, "musicbrainz", "url", 0, "log_url", 0.5
-            )
+            result = await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
 
             assert result is None
 
@@ -1183,19 +1125,13 @@ class TestProcessResponse:
         """Test iTunes API with text/javascript content type."""
         mock_response.headers = {"Content-Type": "text/javascript; charset=utf-8"}
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = '{"resultCount": 1, "results": []}'
 
-            with patch.object(
-                executor, "_parse_json_response", new_callable=AsyncMock
-            ) as mock_parse:
+            with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"resultCount": 1, "results": []}
 
-                result = await executor._process_response(
-                    mock_response, "itunes", "url", 0, "log_url", 0.5
-                )
+                result = await executor._process_response(mock_response, "itunes", "url", 0, "log_url", 0.5)
 
                 assert result == {"resultCount": 1, "results": []}
                 mock_parse.assert_called_once()
@@ -1209,20 +1145,14 @@ class TestProcessResponse:
         """Test Discogs logs request headers."""
         mock_response.headers = {"Content-Type": "application/json"}
 
-        with patch.object(
-            executor, "_read_response_text", new_callable=AsyncMock
-        ) as mock_read:
+        with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = '{"results": []}'
 
-            with patch.object(
-                executor, "_parse_json_response", new_callable=AsyncMock
-            ) as mock_parse:
+            with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
                 # Should not raise
-                await executor._process_response(
-                    mock_response, "discogs", "url", 0, "log_url", 0.5
-                )
+                await executor._process_response(mock_response, "discogs", "url", 0, "log_url", 0.5)
 
 
 class TestReadResponseText:
@@ -1307,9 +1237,7 @@ class TestHandleRuntimeError:
         executor.set_session(mock_session)
         error = RuntimeError("Event loop is closed")
 
-        result = await executor._handle_runtime_error(
-            error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com"
-        )
+        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
         assert executor.session is None  # Session should be cleared
@@ -1322,9 +1250,7 @@ class TestHandleRuntimeError:
         """Test event loop closed error at max retries."""
         error = RuntimeError("Event loop is closed")
 
-        result = await executor._handle_runtime_error(
-            error, "musicbrainz", attempt=3, max_retries=3, url="https://api.example.com"
-        )
+        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=3, max_retries=3, url="https://api.example.com")
 
         assert result is None
 
@@ -1336,9 +1262,7 @@ class TestHandleRuntimeError:
         """Test other RuntimeError types."""
         error = RuntimeError("Some other runtime error")
 
-        result = await executor._handle_runtime_error(
-            error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com"
-        )
+        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
 
@@ -1357,9 +1281,7 @@ class TestHandleRuntimeError:
         error = RuntimeError("Event loop is closed")
 
         # Should not raise, handles close failure gracefully
-        result = await executor._handle_runtime_error(
-            error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com"
-        )
+        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
         assert executor.session is None
@@ -1482,9 +1404,7 @@ class TestParseJsonResponse:
         mock_response = MagicMock()
         mock_response.json = AsyncMock(return_value={"results": []})
 
-        result = await executor._parse_json_response(
-            mock_response, "musicbrainz", "url", "snippet"
-        )
+        result = await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
 
         assert result == {"results": []}
 
@@ -1497,9 +1417,7 @@ class TestParseJsonResponse:
         mock_response = MagicMock()
         mock_response.json = AsyncMock(return_value=["list", "not", "dict"])
 
-        result = await executor._parse_json_response(
-            mock_response, "musicbrainz", "url", "snippet"
-        )
+        result = await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
 
         assert result is None
 
@@ -1518,14 +1436,10 @@ class TestParseJsonResponse:
             )
         )
 
-        with patch.object(
-            executor, "_handle_content_type_error", new_callable=AsyncMock
-        ) as mock_handler:
+        with patch.object(executor, "_handle_content_type_error", new_callable=AsyncMock) as mock_handler:
             mock_handler.return_value = {"fallback": "data"}
 
-            result = await executor._parse_json_response(
-                mock_response, "itunes", "url", "snippet"
-            )
+            result = await executor._parse_json_response(mock_response, "itunes", "url", "snippet")
 
             assert result == {"fallback": "data"}
             mock_handler.assert_called_once()
@@ -1537,13 +1451,9 @@ class TestParseJsonResponse:
     ) -> None:
         """Test JSONDecodeError handling."""
         mock_response = MagicMock()
-        mock_response.json = AsyncMock(
-            side_effect=json.JSONDecodeError("Invalid JSON", "", 0)
-        )
+        mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
 
-        result = await executor._parse_json_response(
-            mock_response, "musicbrainz", "url", "snippet"
-        )
+        result = await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
 
         assert result is None
 
@@ -1564,9 +1474,7 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(
-            mock_response, "musicbrainz", "url", "snippet", error
-        )
+        result = await executor._handle_content_type_error(mock_response, "musicbrainz", "url", "snippet", error)
 
         assert result is None
 
@@ -1577,18 +1485,14 @@ class TestHandleContentTypeError:
     ) -> None:
         """Test iTunes manual JSON parsing success."""
         mock_response = MagicMock()
-        mock_response.text = AsyncMock(
-            return_value='{"resultCount": 1, "results": [{"trackId": 1}]}'
-        )
+        mock_response.text = AsyncMock(return_value='{"resultCount": 1, "results": [{"trackId": 1}]}')
         error = aiohttp.ContentTypeError(
             request_info=MagicMock(),
             history=(),
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(
-            mock_response, "itunes", "url", "snippet", error
-        )
+        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
         assert result == {"resultCount": 1, "results": [{"trackId": 1}]}
 
@@ -1606,9 +1510,7 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(
-            mock_response, "itunes", "url", "snippet", error
-        )
+        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
         assert result is None
 
@@ -1626,9 +1528,7 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(
-            mock_response, "itunes", "url", "snippet", error
-        )
+        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
         assert result is None
 
@@ -1639,18 +1539,14 @@ class TestHandleContentTypeError:
     ) -> None:
         """Test iTunes UnicodeDecodeError handling."""
         mock_response = MagicMock()
-        mock_response.text = AsyncMock(
-            side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, "Invalid")
-        )
+        mock_response.text = AsyncMock(side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, "Invalid"))
         error = aiohttp.ContentTypeError(
             request_info=MagicMock(),
             history=(),
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(
-            mock_response, "itunes", "url", "snippet", error
-        )
+        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
         assert result is None
 
@@ -1690,9 +1586,7 @@ class TestExecuteRequestIntegration:
         executor.set_session(mock_session)
 
         # Mock _execute_with_retry
-        with patch.object(
-            executor, "_execute_with_retry", new_callable=AsyncMock
-        ) as mock_retry:
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock) as mock_retry:
             mock_retry.return_value = {"data": "value"}
 
             result = await executor.execute_request(
@@ -1719,9 +1613,7 @@ class TestExecuteRequestIntegration:
         mock_cache_service.get_async.return_value = None
         executor.set_session(mock_session)
 
-        with patch.object(
-            executor, "_execute_with_retry", new_callable=AsyncMock
-        ) as mock_retry:
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock) as mock_retry:
             mock_retry.return_value = {"data": "value"}
 
             # Pass invalid values
@@ -1747,14 +1639,10 @@ class TestExecuteRequestIntegration:
         mock_cache_service.get_async.return_value = None
         executor.set_session(mock_session)
 
-        with patch.object(
-            executor, "_execute_with_retry", new_callable=AsyncMock
-        ) as mock_retry:
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock) as mock_retry:
             mock_retry.return_value = {"data": "value"}
 
-            with patch.object(
-                executor, "_cache_result", new_callable=AsyncMock
-            ) as mock_cache:
+            with patch.object(executor, "_cache_result", new_callable=AsyncMock) as mock_cache:
                 await executor.execute_request(
                     "musicbrainz",
                     "https://api.example.com",

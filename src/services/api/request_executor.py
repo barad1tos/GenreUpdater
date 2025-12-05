@@ -146,16 +146,8 @@ class ApiRequestExecutor:
         request_headers, limiter, request_timeout = prepared
 
         # Execute with retry
-        retry_attempts = (
-            max_retries
-            if isinstance(max_retries, int) and max_retries > 0
-            else self.default_max_retries
-        )
-        retry_delay = (
-            base_delay
-            if isinstance(base_delay, (int, float)) and base_delay >= 0
-            else self.default_retry_delay
-        )
+        retry_attempts = max_retries if isinstance(max_retries, int) and max_retries > 0 else self.default_max_retries
+        retry_delay = base_delay if isinstance(base_delay, (int, float)) and base_delay >= 0 else self.default_retry_delay
 
         result = await self._execute_with_retry(
             api_name,
@@ -182,7 +174,7 @@ class ApiRequestExecutor:
 
     @staticmethod
     def _build_cache_key(
-            api_name: str,
+        api_name: str,
         url: str,
         params: dict[str, str] | None,
     ) -> str:
@@ -262,8 +254,7 @@ class ApiRequestExecutor:
         # Ensure session is available
         if self.session is None or self.session.closed:
             self.error_logger.error(
-                "[%s] Session not available for request to %s. "
-                "Initialize method was not called or failed.",
+                "[%s] Session not available for request to %s. Initialize method was not called or failed.",
                 api_name,
                 url,
             )
@@ -273,9 +264,7 @@ class ApiRequestExecutor:
         request_headers = dict(self.session.headers)
         if api_name == "discogs":
             if not self.discogs_token:
-                self.error_logger.error(
-                    "Discogs token is missing or could not be loaded"
-                )
+                self.error_logger.error("Discogs token is missing or could not be loaded")
                 return None
             request_headers["Authorization"] = f"Discogs token={self.discogs_token}"
             if "User-Agent" not in request_headers:
@@ -294,11 +283,7 @@ class ApiRequestExecutor:
             return None
 
         # Setup request timeout
-        request_timeout = (
-            aiohttp.ClientTimeout(total=timeout_override)
-            if timeout_override
-            else self.session.timeout
-        )
+        request_timeout = aiohttp.ClientTimeout(total=timeout_override) if timeout_override else self.session.timeout
 
         return request_headers, limiter, request_timeout
 
@@ -338,9 +323,7 @@ class ApiRequestExecutor:
     @staticmethod
     def _build_log_url(url: str, params: dict[str, str] | None) -> str:
         """Build URL string for logging purposes."""
-        return url + (
-            f"?{urllib.parse.urlencode(params or {}, safe=':/')}" if params else ""
-        )
+        return url + (f"?{urllib.parse.urlencode(params or {}, safe=':/')}" if params else "")
 
     async def _attempt_request(
         self,
@@ -369,13 +352,9 @@ class ApiRequestExecutor:
                 log_url=log_url,
             )
         except RuntimeError as rt:
-            return await self._handle_runtime_error(
-                rt, api_name, attempt, max_retries, url
-            )
+            return await self._handle_runtime_error(rt, api_name, attempt, max_retries, url)
         except (TimeoutError, aiohttp.ClientError) as e:
-            return await self._handle_client_error(
-                e, api_name, attempt, max_retries, base_delay, url
-            )
+            return await self._handle_client_error(e, api_name, attempt, max_retries, base_delay, url)
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             self._handle_unexpected_error(e, api_name, url)
             return None
@@ -425,9 +404,7 @@ class ApiRequestExecutor:
                 elapsed = time.monotonic() - start_time
                 self.api_call_durations[api_name].append(elapsed)
 
-                return await self._process_response(
-                    response, api_name, url, attempt, log_url, elapsed
-                )
+                return await self._process_response(response, api_name, url, attempt, log_url, elapsed)
 
         finally:
             if acquired:
@@ -475,10 +452,7 @@ class ApiRequestExecutor:
         )
 
         # Handle rate limiting and server errors
-        if (
-            response_status == HTTP_TOO_MANY_REQUESTS
-            or response_status >= HTTP_SERVER_ERROR
-        ):
+        if response_status == HTTP_TOO_MANY_REQUESTS or response_status >= HTTP_SERVER_ERROR:
             raise self._create_response_error(
                 response=response,
                 status=response_status,
@@ -501,12 +475,8 @@ class ApiRequestExecutor:
 
         # Process successful response
         content_type = response.headers.get("Content-Type", "")
-        if "application/json" in content_type or (
-            api_name == "itunes" and "text/javascript" in content_type
-        ):
-            return await self._parse_json_response(
-                response, api_name, url, response_text_snippet
-            )
+        if "application/json" in content_type or (api_name == "itunes" and "text/javascript" in content_type):
+            return await self._parse_json_response(response, api_name, url, response_text_snippet)
 
         self.error_logger.warning(
             "[%s] Received non-JSON response from %s. Content-Type: %s",
@@ -696,9 +666,7 @@ class ApiRequestExecutor:
                 str(data)[:200],
             )
         except aiohttp.ContentTypeError as cte:
-            return await self._handle_content_type_error(
-                response, api_name, url, snippet, cte
-            )
+            return await self._handle_content_type_error(response, api_name, url, snippet, cte)
         except json.JSONDecodeError:
             self.error_logger.exception(
                 "[%s] Error parsing JSON response from %s. Snippet: %s",

@@ -271,10 +271,7 @@ class Analytics:
             return asyncio.run(self._wrapped_call(func, event_type, False, *args, **kwargs))
         except RuntimeError as e:
             if "cannot be called from a running event loop" in str(e):
-                self.console_logger.warning(
-                    f"Cannot track {func.__name__} with asyncio.run() from within event loop; "
-                    "executing without tracking"
-                )
+                self.console_logger.warning(f"Cannot track {func.__name__} with asyncio.run() from within event loop; executing without tracking")
                 # Execute function directly without tracking to avoid blocking
                 return func(*args, **kwargs)
             raise
@@ -540,9 +537,7 @@ class Analytics:
             return 0
 
         if self.compact_time:
-            self.console_logger.warning(
-                "Age-based pruning not supported in compact_time mode; using count-based pruning"
-            )
+            self.console_logger.warning("Age-based pruning not supported in compact_time mode; using count-based pruning")
             prune = min(len(self.events) // 2, 1_000)
             self.events = self.events[prune:]
             return prune
@@ -564,9 +559,7 @@ class Analytics:
             to_add = other.events[-num_to_add:] if num_to_add > 0 else []
             num_dropped = len(other.events) - num_to_add
             if num_dropped > 0:
-                self.console_logger.warning(
-                    f"Dropped {num_dropped} events during merge due to max_events={self.max_events} limit"
-                )
+                self.console_logger.warning(f"Dropped {num_dropped} events during merge due to max_events={self.max_events} limit")
         else:
             to_add = other.events
         self.events.extend(to_add)

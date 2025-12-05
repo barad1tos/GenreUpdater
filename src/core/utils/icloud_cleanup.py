@@ -228,11 +228,7 @@ def cleanup_icloud_conflicts(
     ctx.files_renamed = _handle_winner_rename(ctx, logger)
 
     # Delete conflict files
-    files_deleted = sum(
-        _delete_conflict(conflict, ctx, logger)
-        for conflict in conflicts
-        if not _should_skip_conflict(conflict, ctx)
-    )
+    files_deleted = sum(_delete_conflict(conflict, ctx, logger) for conflict in conflicts if not _should_skip_conflict(conflict, ctx))
 
     return files_deleted, ctx.files_renamed
 
@@ -657,7 +653,8 @@ Examples:
         help=f"Minimum file age in seconds before deletion (default: {DEFAULT_MIN_AGE_SECONDS})",
     )
     parser.add_argument(
-        "-q", "--quiet",
+        "-q",
+        "--quiet",
         action="store_true",
         help="Only show summary, not individual files",
     )

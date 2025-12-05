@@ -347,9 +347,7 @@ class TestApiCacheService:
             service.event_manager.emit_event(event)
 
         with allure.step("Verify logger was called"):
-            cast(MagicMock, service.logger.debug).assert_called_once_with(
-                "Track modified: %s, API cache unaffected", "track456"
-            )
+            cast(MagicMock, service.logger.debug).assert_called_once_with("Track modified: %s, API cache unaffected", "track456")
 
     @allure.story("Statistics")
     @allure.title("Should provide cache statistics")
@@ -505,9 +503,7 @@ class TestApiCacheService:
 
         with allure.step("Verify save deletes empty cache file"):
             mock_open.assert_not_called()
-            cast(MagicMock, service.logger.debug).assert_any_call(
-                "API cache is empty, deleting cache file if exists"
-            )
+            cast(MagicMock, service.logger.debug).assert_any_call("API cache is empty, deleting cache file if exists")
 
     @allure.story("Initialization")
     @allure.title("Should cleanup expired entries on init")
@@ -538,7 +534,8 @@ class TestApiCacheService:
         }
 
         with (
-            allure.step("Create service with expired cache data"), patch.object(Path, "exists", return_value=True),
+            allure.step("Create service with expired cache data"),
+            patch.object(Path, "exists", return_value=True),
             patch.object(Path, "open", MagicMock()),
             patch("json.load", return_value=cache_data),
         ):

@@ -139,9 +139,7 @@ class BatchTrackFetcher:
                 batch_number += 1
                 status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
 
-                result = await self._process_single_batch(
-                    batch_number, offset, batch_size, consecutive_failures
-                )
+                result = await self._process_single_batch(batch_number, offset, batch_size, consecutive_failures)
                 if result is None:
                     break
 
@@ -175,9 +173,7 @@ class BatchTrackFetcher:
                 batch_number += 1
                 status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
 
-                result = await self._process_single_batch(
-                    batch_number, offset, batch_size, consecutive_failures
-                )
+                result = await self._process_single_batch(batch_number, offset, batch_size, consecutive_failures)
                 if result is None:
                     break
 
@@ -325,7 +321,7 @@ class BatchTrackFetcher:
         """
         if not raw_output:
             return 0
-        record_separator = "\x1D"
+        record_separator = "\x1d"
         rows = raw_output.strip().split(record_separator)
         return len([row for row in rows if row.strip()])
 

@@ -62,10 +62,7 @@ class TestAlbumTypeDetection:
             assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
 
             allure.attach(
-                f"Album: {album_name}\n"
-                f"Type: {info.album_type.value}\n"
-                f"Pattern: {info.detected_pattern}\n"
-                f"Strategy: {info.strategy.value}",
+                f"Album: {album_name}\nType: {info.album_type.value}\nPattern: {info.detected_pattern}\nStrategy: {info.strategy.value}",
                 "Detection Result",
                 allure.attachment_type.TEXT,
             )
@@ -107,9 +104,7 @@ class TestAlbumTypeDetection:
             ("Album (Re-Issue)", "re-issue"),
         ],
     )
-    def test_reissue_album_detection(
-        self, album_name: str, expected_pattern: str
-    ) -> None:
+    def test_reissue_album_detection(self, album_name: str, expected_pattern: str) -> None:
         """Test detection of reissue albums (MARK_AND_UPDATE strategy)."""
         with allure.step(f"Detect type for: {album_name}"):
             info = detect_album_type(album_name)
@@ -196,8 +191,7 @@ class TestRealWorldAlbumCases:
         assert info.album_type == AlbumType.SPECIAL
         assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
         allure.attach(
-            "This album would have its year preserved (2011) instead of "
-            "being updated to API result (2013).",
+            "This album would have its year preserved (2011) instead of being updated to API result (2013).",
             "Fix Verification",
             allure.attachment_type.TEXT,
         )

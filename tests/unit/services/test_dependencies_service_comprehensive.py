@@ -61,9 +61,7 @@ class TestDependencyContainer:
             db_verify_logger=mock_loggers["db_verify"],
         )
 
-    def test_initialization(
-        self, container: DependencyContainer, mock_loggers: dict[str, Mock]
-    ) -> None:
+    def test_initialization(self, container: DependencyContainer, mock_loggers: dict[str, Mock]) -> None:
         """Test container initialization."""
         assert container.console_logger == mock_loggers["console"]
         assert container.error_logger == mock_loggers["error"]
@@ -82,9 +80,7 @@ class TestDependencyContainer:
         assert container.dry_run is True
 
     @pytest.mark.asyncio
-    async def test_initialize_services(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    async def test_initialize_services(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),
@@ -134,29 +130,19 @@ class TestDependencyContainer:
         with pytest.raises(RuntimeError, match="AppleScript client not initialized"):
             _ = container.ap_client
 
-    def test_get_cache_service_not_initialized(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_get_cache_service_not_initialized(self, container: DependencyContainer) -> None:
         """Test getting cache service when not initialized."""
         with pytest.raises(RuntimeError, match="Cache service not initialized"):
             _ = container.cache_service
 
-    def test_get_pending_verification_not_initialized(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_get_pending_verification_not_initialized(self, container: DependencyContainer) -> None:
         """Test getting pending verification service when not initialized."""
-        with pytest.raises(
-            RuntimeError, match="Pending verification service not initialized"
-        ):
+        with pytest.raises(RuntimeError, match="Pending verification service not initialized"):
             _ = container.pending_verification_service
 
-    def test_get_external_api_not_initialized(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_get_external_api_not_initialized(self, container: DependencyContainer) -> None:
         """Test getting external API service when not initialized."""
-        with pytest.raises(
-            RuntimeError, match="External API orchestrator not initialized"
-        ):
+        with pytest.raises(RuntimeError, match="External API orchestrator not initialized"):
             _ = container.external_api_service
 
     @pytest.mark.asyncio
@@ -196,9 +182,7 @@ class TestDependencyContainer:
             await container.initialize()
 
     @pytest.mark.asyncio
-    async def test_initialize_service_with_force(
-        self, container: DependencyContainer
-    ) -> None:
+    async def test_initialize_service_with_force(self, container: DependencyContainer) -> None:
         """Test service initialization with force flag."""
         service = MagicMock()
         service.initialize = AsyncMock()
@@ -217,9 +201,7 @@ class TestDependencyContainer:
         assert service.initialize.await_args.kwargs.get("force") is True
 
     @pytest.mark.asyncio
-    async def test_initialize_service_no_method(
-        self, container: DependencyContainer
-    ) -> None:
+    async def test_initialize_service_no_method(self, container: DependencyContainer) -> None:
         """Test service initialization when service has no initialize method."""
         mock_service = MagicMock()
         del mock_service.initialize  # Remove initialize method
@@ -230,9 +212,7 @@ class TestDependencyContainer:
         # Verify warning would be called through normal flow
 
     @pytest.mark.asyncio
-    async def test_initialize_service_failure(
-        self, container: DependencyContainer
-    ) -> None:
+    async def test_initialize_service_failure(self, container: DependencyContainer) -> None:
         """Test service initialization failure."""
         service = MagicMock()
         service.initialize = AsyncMock(side_effect=RuntimeError("Init failed"))
@@ -242,9 +222,7 @@ class TestDependencyContainer:
         with pytest.raises(RuntimeError, match="Init failed"):
             await init_method(service, "Failing Service")
 
-    def test_initialize_apple_script_client_dry_run(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    def test_initialize_apple_script_client_dry_run(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test AppleScript client initialization in dry-run mode."""
         # Use patch.object to mock container attributes
         with (
@@ -261,9 +239,7 @@ class TestDependencyContainer:
             # This test validates that the client would be initialized correctly
             assert container.dry_run is True
 
-    def test_initialize_apple_script_client_normal(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    def test_initialize_apple_script_client_normal(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test AppleScript client initialization in normal mode."""
         # Use patch.object to mock container attributes
         with (
@@ -279,9 +255,7 @@ class TestDependencyContainer:
             # Verify the client can be created with the correct config
             assert hasattr(container, "dry_run")
 
-    def test_initialize_apple_script_client_no_analytics(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_initialize_apple_script_client_no_analytics(self, container: DependencyContainer) -> None:
         """Test AppleScript client initialization without analytics."""
         # Use patch.object to mock container attributes
         with patch.object(container, "_analytics", None), pytest.raises(RuntimeError, match="Analytics service not initialized"):
@@ -345,9 +319,7 @@ class TestDependencyContainer:
         # Check listener was cleared
         assert getattr(container, "_listener", None) is None
 
-    def test_load_config(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    def test_load_config(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test configuration loading."""
         with patch(
             "src.services.dependency_container.load_config",
@@ -387,9 +359,7 @@ class TestDependencyContainer:
             assert hasattr(mock_client, "apple_scripts_dir")
             assert isinstance(mock_client.apple_scripts_dir, Path)
 
-    def test_log_apple_scripts_dir_dry_run(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_log_apple_scripts_dir_dry_run(self, container: DependencyContainer) -> None:
         """Test logging AppleScripts directory in dry-run mode."""
         mock_client = MagicMock()
         mock_client.apple_scripts_dir = Path("/path/to/scripts")
@@ -403,9 +373,7 @@ class TestDependencyContainer:
             assert container.dry_run is True
             assert hasattr(mock_client, "apple_scripts_dir")
 
-    def test_log_apple_scripts_dir_not_exists(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_log_apple_scripts_dir_not_exists(self, container: DependencyContainer) -> None:
         """Test logging when AppleScripts directory doesn't exist."""
         mock_client = MagicMock()
         mock_client.apple_scripts_dir = Path("/path/to/scripts")
@@ -414,17 +382,13 @@ class TestDependencyContainer:
             # Test validates error handling for missing directory
             assert hasattr(mock_client, "apple_scripts_dir")
 
-    def test_log_apple_scripts_dir_no_client(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_log_apple_scripts_dir_no_client(self, container: DependencyContainer) -> None:
         """Test logging with no client."""
         # Test validates handling when client not initialized
         with patch.object(container, "_ap_client", None):
             assert getattr(container, "_ap_client", None) is None
 
-    def test_log_apple_scripts_dir_no_attribute(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_log_apple_scripts_dir_no_attribute(self, container: DependencyContainer) -> None:
         """Test logging when client has no apple_scripts_dir attribute."""
         mock_client = MagicMock()
         del mock_client.apple_scripts_dir
@@ -456,27 +420,21 @@ class TestDependencyContainer:
         assert container.error_logger is not None
         # Errors would be handled by logging
 
-    def test_handle_initialization_errors(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_handle_initialization_errors(self, container: DependencyContainer) -> None:
         """Test error handling during initialization."""
         # Test through public interface
         # Since _handle_initialization_errors is private, test indirectly
         # This test validates error handling works correctly
         assert container.error_logger is not None
 
-    def test_handle_initialization_errors_keyboard_interrupt(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_handle_initialization_errors_keyboard_interrupt(self, container: DependencyContainer) -> None:
         """Test handling keyboard interrupt during initialization."""
         # Test through public interface
         # For KeyboardInterrupt, exc_info should be False
         # This test validates keyboard interrupt handling
         assert container.error_logger is not None
 
-    def test_property_getters(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    def test_property_getters(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test property getters when services are initialized."""
         # Set up initialized services using patch.object
         with (
@@ -501,25 +459,19 @@ class TestDependencyContainer:
         with patch.object(container, "_analytics", mock_analytics):
             assert container.get_analytics() == mock_analytics
 
-    def test_get_analytics_method_not_initialized(
-        self, container: DependencyContainer
-    ) -> None:
+    def test_get_analytics_method_not_initialized(self, container: DependencyContainer) -> None:
         """Test get_analytics method when not initialized."""
         with pytest.raises(RuntimeError, match="Analytics not initialized"):
             container.get_analytics()
 
-    def test_get_logger_methods(
-        self, container: DependencyContainer, mock_loggers: dict[str, Mock]
-    ) -> None:
+    def test_get_logger_methods(self, container: DependencyContainer, mock_loggers: dict[str, Mock]) -> None:
         """Test logger getter methods."""
         assert container.get_console_logger() == mock_loggers["console"]
         assert container.get_error_logger() == mock_loggers["error"]
         assert container.analytics_logger == mock_loggers["analytics"]
 
     @pytest.mark.asyncio
-    async def test_initialize_with_listener(
-        self, mock_loggers: dict[str, Mock]
-    ) -> None:
+    async def test_initialize_with_listener(self, mock_loggers: dict[str, Mock]) -> None:
         """Test container initialization with logging listener."""
         mock_listener = MagicMock()
         container = DependencyContainer(
@@ -538,9 +490,7 @@ class TestDependencyContainer:
         mock_listener.stop.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_concurrent_initialization(
-        self, container: DependencyContainer, mock_config: dict[str, Any]
-    ) -> None:
+    async def test_concurrent_initialization(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test concurrent service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),

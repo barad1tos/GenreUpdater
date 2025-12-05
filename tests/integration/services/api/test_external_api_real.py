@@ -288,9 +288,7 @@ class TestArtistActivityPeriod:
         api_orchestrator: ExternalApiOrchestrator,
     ) -> None:
         """Test returns (None, None) for non-existent artist."""
-        period = await api_orchestrator.get_artist_activity_period(
-            "Completely Fake Artist That Does Not Exist 12345"
-        )
+        period = await api_orchestrator.get_artist_activity_period("Completely Fake Artist That Does Not Exist 12345")
 
         # Method returns (None, None) when artist not found
         assert period is not None

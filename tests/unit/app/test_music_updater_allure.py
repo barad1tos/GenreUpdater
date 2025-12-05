@@ -216,9 +216,12 @@ class TestMusicUpdaterAllure:
                 # Mock track updating to succeed
                 deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
 
-        with allure.step("Execute clean artist operation"), patch(
-            "src.app.music_updater.save_changes_report",
-        ) as mock_save:
+        with (
+            allure.step("Execute clean artist operation"),
+            patch(
+                "src.app.music_updater.save_changes_report",
+            ) as mock_save,
+        ):
             await updater.run_clean_artist("Test Artist")
 
         with allure.step("Verify cleaning operations"):
@@ -243,9 +246,12 @@ class TestMusicUpdaterAllure:
             deps = self.create_mock_dependencies()
             updater = MusicUpdater(deps)
 
-        with allure.step("Mock Music app not running"), patch(
-            "src.app.music_updater.is_music_app_running",
-            return_value=False,
+        with (
+            allure.step("Mock Music app not running"),
+            patch(
+                "src.app.music_updater.is_music_app_running",
+                return_value=False,
+            ),
         ):
             await updater.run_clean_artist("Test Artist")
 
@@ -279,12 +285,16 @@ class TestMusicUpdaterAllure:
                 # Mock API year retrieval
                 deps.external_api_service.get_album_year_response = ("2021", True)
 
-        with allure.step("Execute year update operation"), patch(
-            "src.metrics.change_reports.sync_track_list_with_current",
-            new_callable=AsyncMock,
-        ) as _mock_sync, patch(
-            "src.metrics.change_reports.save_changes_report",
-        ) as _mock_save:
+        with (
+            allure.step("Execute year update operation"),
+            patch(
+                "src.metrics.change_reports.sync_track_list_with_current",
+                new_callable=AsyncMock,
+            ) as _mock_sync,
+            patch(
+                "src.metrics.change_reports.save_changes_report",
+            ) as _mock_save,
+        ):
             await updater.run_update_years("Test Artist", force=False)
 
         with allure.step("Verify year update operations"):
@@ -292,9 +302,7 @@ class TestMusicUpdaterAllure:
             assert len(deps.external_api_service.get_album_year_calls) > 0
 
             allure.attach(
-                f"Updated years for {len(deps.external_api_service.get_album_year_calls)} albums",
-                "Year Update Result",
-                allure.attachment_type.TEXT
+                f"Updated years for {len(deps.external_api_service.get_album_year_calls)} albums", "Year Update Result", allure.attachment_type.TEXT
             )
 
     @allure.story("Main Pipeline")
@@ -311,27 +319,9 @@ class TestMusicUpdaterAllure:
             # Mock Music app running check
             with patch("src.app.music_updater.is_music_app_running", return_value=True):
                 # Setup test tracks
-                track1 = DummyTrackData.create(
-                    track_id="1",
-                    artist="Pipeline Artist",
-                    album="Album 1",
-                    genre="Pop",
-                    year=""
-                )
-                track2 = DummyTrackData.create(
-                    track_id="2",
-                    artist="Pipeline Artist",
-                    album="Album 1",
-                    genre="Alternative",
-                    year="2020"
-                )
-                track3 = DummyTrackData.create(
-                    track_id="3",
-                    artist="Pipeline Artist",
-                    album="Album 1",
-                    genre="Indie",
-                    year=""
-                )
+                track1 = DummyTrackData.create(track_id="1", artist="Pipeline Artist", album="Album 1", genre="Pop", year="")
+                track2 = DummyTrackData.create(track_id="2", artist="Pipeline Artist", album="Album 1", genre="Alternative", year="2020")
+                track3 = DummyTrackData.create(track_id="3", artist="Pipeline Artist", album="Album 1", genre="Indie", year="")
 
                 # Mock track fetching
                 await deps.cache_service.set_async("tracks_all", [track1, track2, track3])
@@ -340,11 +330,13 @@ class TestMusicUpdaterAllure:
                 deps.external_api_service.get_album_year_response = ("2021", True)
                 deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
 
-        with allure.step("Execute main pipeline"), patch(
-            "src.app.music_updater.IncrementalRunTracker"
-        ) as mock_tracker, patch(
-            "src.metrics.change_reports.save_changes_report",
-            new_callable=AsyncMock,
+        with (
+            allure.step("Execute main pipeline"),
+            patch("src.app.music_updater.IncrementalRunTracker") as mock_tracker,
+            patch(
+                "src.metrics.change_reports.save_changes_report",
+                new_callable=AsyncMock,
+            ),
         ):
             mock_tracker.return_value.should_process.return_value = True
             mock_tracker.return_value.mark_run_complete = MagicMock()
@@ -358,9 +350,7 @@ class TestMusicUpdaterAllure:
             # Verify external API was used for year retrieval
             if deps.external_api_service.get_album_year_calls:
                 allure.attach(
-                    f"Processed {len(deps.external_api_service.get_album_year_calls)} albums",
-                    "Pipeline Result",
-                    allure.attachment_type.TEXT
+                    f"Processed {len(deps.external_api_service.get_album_year_calls)} albums", "Pipeline Result", allure.attachment_type.TEXT
                 )
 
             allure.attach("Main pipeline executed successfully", "Pipeline Status", allure.attachment_type.TEXT)
@@ -412,9 +402,7 @@ class TestMusicUpdaterAllure:
             await updater.run_verify_database()
 
         with allure.step("Verify database verifier was called"):
-            cast(
-                MagicMock, updater.database_verifier.verify_and_clean_track_database
-            ).assert_called_once()
+            cast(MagicMock, updater.database_verifier.verify_and_clean_track_database).assert_called_once()
 
             allure.attach("Database verification completed", "Verification Result", allure.attachment_type.TEXT)
 
@@ -430,16 +418,15 @@ class TestMusicUpdaterAllure:
             updater = MusicUpdater(deps)
 
             # Add some pending albums to the service
-            await deps.pending_verification_service.mark_for_verification(
-                "Artist 1", "Album 1", "no_year_found"
-            )
-            await deps.pending_verification_service.mark_for_verification(
-                "Artist 2", "Album 2", "api_error"
-            )
+            await deps.pending_verification_service.mark_for_verification("Artist 1", "Album 1", "no_year_found")
+            await deps.pending_verification_service.mark_for_verification("Artist 2", "Album 2", "api_error")
 
-        with allure.step("Mock Music app running"), patch(
-            "src.app.music_updater.is_music_app_running",
-            return_value=True,
+        with (
+            allure.step("Mock Music app running"),
+            patch(
+                "src.app.music_updater.is_music_app_running",
+                return_value=True,
+            ),
         ):
             # Mock successful year retrieval
             deps.external_api_service.get_album_year_response = ("2022", True)
@@ -464,5 +451,5 @@ class TestMusicUpdaterAllure:
             allure.attach(
                 f"Processed {len(deps.pending_verification_service.pending_albums)} pending albums",
                 "Pending Verification Result",
-                allure.attachment_type.TEXT
+                allure.attachment_type.TEXT,
             )

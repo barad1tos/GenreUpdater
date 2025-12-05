@@ -42,8 +42,7 @@ def _validate_csv_header(
     fieldnames: Sequence[str] = reader.fieldnames or []
     if any(field not in fieldnames for field in expected_fieldnames):
         logger.warning(
-            "CSV header in %s does not match expected fieldnames. "
-            "Expected: %s, Found: %s. Attempting to load with available fields.",
+            "CSV header in %s does not match expected fieldnames. Expected: %s, Found: %s. Attempting to load with available fields.",
             csv_path,
             expected_fieldnames,
             fieldnames,
@@ -109,9 +108,7 @@ def load_track_list(csv_path: str) -> dict[str, TrackDict]:
     try:
         with Path(csv_path).open(encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            fields_to_read = _validate_csv_header(
-                reader, expected_fieldnames, csv_path, logger
-            )
+            fields_to_read = _validate_csv_header(reader, expected_fieldnames, csv_path, logger)
             if not fields_to_read:
                 return track_map
 
@@ -175,9 +172,7 @@ async def _build_current_map(
 
         # Handle partial sync with cache coordination
         if partial_sync:
-            await _handle_partial_sync_cache(
-                tr, processed_albums, cache_service, album_key, artist, album, error_logger
-            )
+            await _handle_partial_sync_cache(tr, processed_albums, cache_service, album_key, artist, album, error_logger)
 
         # Create normalized track dictionary
         current[tid] = _create_normalized_track_dict(tr, tid, artist, album)
@@ -263,10 +258,7 @@ def _check_if_track_needs_update(
     fields: list[str],
 ) -> bool:
     """Check if a track needs updating based on field differences."""
-    return any(
-        getattr(old_data, field, "") != getattr(new_data, field, "")
-        for field in fields
-    )
+    return any(getattr(old_data, field, "") != getattr(new_data, field, "") for field in fields)
 
 
 def _update_existing_track_fields(
@@ -362,11 +354,7 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
 
     line_separator = chr(29) if chr(29) in raw_output else None
     field_separator = chr(30) if chr(30) in raw_output else "\t"
-    tracks_data = (
-        raw_output.strip().split(line_separator)
-        if line_separator
-        else raw_output.strip().splitlines()
-    )
+    tracks_data = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
         if not track_line.strip():  # Skip empty lines
@@ -386,19 +374,9 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
         # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
         missing_value = "missing value"
         tracks_cache[track_id] = {
-            "date_added": (
-                fields[date_added_index]
-                if fields[date_added_index] != missing_value
-                else ""
-            ),
-            "track_status": (
-                fields[status_index] if fields[status_index] != missing_value else ""
-            ),
-            "old_year": (
-                fields[old_year_index]
-                if fields[old_year_index] != missing_value
-                else ""
-            ),
+            "date_added": (fields[date_added_index] if fields[date_added_index] != missing_value else ""),
+            "track_status": (fields[status_index] if fields[status_index] != missing_value else ""),
+            "old_year": (fields[old_year_index] if fields[old_year_index] != missing_value else ""),
         }
 
     return tracks_cache
@@ -413,18 +391,14 @@ def _handle_osascript_error(
     error_msg = stderr.decode() if stderr else "No error message"
     print(f"DEBUG: osascript failed with return code {process_returncode}: {error_msg}")
     print(f"DEBUG: stdout was: {stdout.decode() if stdout else 'None'}")
-    logging.getLogger(__name__).warning(
-        "osascript failed (return code %d): %s", process_returncode, error_msg
-    )
+    logging.getLogger(__name__).warning("osascript failed (return code %d): %s", process_returncode, error_msg)
 
 
 async def _execute_osascript_process(
     cmd: list[str],
 ) -> tuple[int, bytes | None, bytes | None]:
     """Execute osascript subprocess and return results."""
-    process = await asyncio.create_subprocess_exec(
-        *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = await process.communicate()
     return (process.returncode or 0), stdout, stderr
 
@@ -456,13 +430,9 @@ async def _fetch_track_fields_direct(
             _handle_osascript_error(returncode, stdout, stderr)
 
     except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
-        logging.getLogger(__name__).warning(
-            "Failed to fetch track fields directly: %s", e
-        )
+        logging.getLogger(__name__).warning("Failed to fetch track fields directly: %s", e)
     except (AttributeError, ValueError, IndexError) as e:
-        logging.getLogger(__name__).exception(
-            "Parsing or process error in _fetch_track_fields_direct: %s", e
-        )
+        logging.getLogger(__name__).exception("Parsing or process error in _fetch_track_fields_direct: %s", e)
 
     return tracks_cache
 
@@ -475,11 +445,7 @@ async def _fetch_missing_track_fields_for_sync(
     """Fetch missing track fields via AppleScript if needed for sync operation."""
     tracks_cache: dict[str, dict[str, str]] = {}
 
-    has_missing_fields = any(
-        not track.date_added or not track.track_status or not track.old_year
-        for track in final_list
-        if track.id
-    )
+    has_missing_fields = any(not track.date_added or not track.track_status or not track.old_year for track in final_list if track.id)
 
     if has_missing_fields and applescript_client is not None:
         try:
@@ -487,9 +453,7 @@ async def _fetch_missing_track_fields_for_sync(
 
             # Use applescript_client's configured directory instead of hardcoded path
             if applescript_client.apple_scripts_dir:
-                script_path = str(
-                    Path(applescript_client.apple_scripts_dir) / "fetch_tracks.scpt"
-                )
+                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.scpt")
             else:
                 # Fallback to relative path if apple_scripts_dir is not available
                 script_path = str(Path("applescripts") / "fetch_tracks.scpt")
@@ -502,17 +466,11 @@ async def _fetch_missing_track_fields_for_sync(
             )
 
             tracks_cache = await _fetch_track_fields_direct(script_path, artist_filter)
-            console_logger.info(
-                "Cached %d track records via osascript", len(tracks_cache)
-            )
+            console_logger.info("Cached %d track records via osascript", len(tracks_cache))
         except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
-            console_logger.warning(
-                "Failed to fetch track fields via osascript: %s", e
-            )
+            console_logger.warning("Failed to fetch track fields via osascript: %s", e)
         except (AttributeError, ValueError, IndexError) as e:
-            console_logger.exception(
-                "Parsing or process error fetching track fields via osascript: %s", e
-            )
+            console_logger.exception("Parsing or process error fetching track fields via osascript: %s", e)
 
     return tracks_cache
 
@@ -533,9 +491,7 @@ def _update_track_with_cached_fields_for_sync(
 
     if not track.date_added and cached_fields.get("date_added"):
         track.date_added = cached_fields["date_added"]
-    if not getattr(track, "last_modified", "") and (
-        cached_value := cached_fields.get("last_modified")
-    ):
+    if not getattr(track, "last_modified", "") and (cached_value := cached_fields.get("last_modified")):
         track.last_modified = cached_value
     if not track.track_status and cached_fields.get("track_status"):
         track.track_status = cached_fields["track_status"]
@@ -628,20 +584,13 @@ async def sync_track_list_with_current(
     missing_fields_count = 0
 
     # Fetch missing track fields via AppleScript if needed
-    tracks_cache = await _fetch_missing_track_fields_for_sync(
-        final_list, applescript_client, console_logger
-    )
+    tracks_cache = await _fetch_missing_track_fields_for_sync(final_list, applescript_client, console_logger)
 
     # Process tracks and convert to CSV format
     for track in final_list:
         _update_track_with_cached_fields_for_sync(track, tracks_cache)
 
-        if (
-            not track.date_added
-            and track.id
-            and track.id in tracks_cache
-            and tracks_cache[track.id]["date_added"]
-        ):
+        if not track.date_added and track.id and track.id in tracks_cache and tracks_cache[track.id]["date_added"]:
             missing_fields_count += 1
 
         track_dict = _convert_track_to_csv_dict(track)

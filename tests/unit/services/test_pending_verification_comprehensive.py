@@ -20,10 +20,13 @@ from src.services.pending_verification import (
 
 async def initialize_service_without_io(service: PendingVerificationService) -> None:
     """Initialize the service while avoiding real disk operations."""
-    with patch.object(service, "_load_pending_albums", new=AsyncMock()), patch.object(
-        service,
-        "_normalize_pending_album_keys",
-        new=AsyncMock(),
+    with (
+        patch.object(service, "_load_pending_albums", new=AsyncMock()),
+        patch.object(
+            service,
+            "_normalize_pending_album_keys",
+            new=AsyncMock(),
+        ),
     ):
         await service.initialize()
 
@@ -236,15 +239,15 @@ async def test_save_and_load_pending_albums(
     handle = mocked_open.return_value.__enter__.return_value
     handle.write.assert_called()
 
-    csv_content = (
-        "artist,album,timestamp,reason,metadata\n"
-        "Artist,Album,2024-01-01 00:00:00,no_year_found,\n"
-    )
+    csv_content = "artist,album,timestamp,reason,metadata\nArtist,Album,2024-01-01 00:00:00,no_year_found,\n"
     service.pending_albums.clear()
 
-    with patch("os.path.exists", return_value=True), patch(
-        "pathlib.Path.open",
-        mock_open(read_data=csv_content),
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "pathlib.Path.open",
+            mock_open(read_data=csv_content),
+        ),
     ):
         load_method_name = "_load_pending_albums"
         load_method = cast(Callable[[], Awaitable[None]], getattr(service, load_method_name))
@@ -340,9 +343,12 @@ async def test_csv_file_operations(service: PendingVerificationService) -> None:
     ]
     csv_content = "\n".join(csv_rows) + "\n"
 
-    with patch("os.path.exists", return_value=True), patch(
-        "pathlib.Path.open",
-        mock_open(read_data=csv_content),
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "pathlib.Path.open",
+            mock_open(read_data=csv_content),
+        ),
     ):
         load_method_name = "_load_pending_albums"
         load_method = cast(Callable[[], Awaitable[None]], getattr(service, load_method_name))
@@ -358,14 +364,14 @@ async def test_error_handling(service: PendingVerificationService) -> None:
     """Invalid CSV rows should be ignored without raising exceptions."""
     await initialize_service_without_io(service)
 
-    csv_content = (
-        "artist,album,timestamp,reason,metadata\n"
-        "Artist,,2024-01-01 00:00:00,no_year_found,\n"
-    )
+    csv_content = "artist,album,timestamp,reason,metadata\nArtist,,2024-01-01 00:00:00,no_year_found,\n"
 
-    with patch("os.path.exists", return_value=True), patch(
-        "pathlib.Path.open",
-        mock_open(read_data=csv_content),
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "pathlib.Path.open",
+            mock_open(read_data=csv_content),
+        ),
     ):
         load_method_name = "_load_pending_albums"
         load_method = cast(Callable[[], Awaitable[None]], getattr(service, load_method_name))

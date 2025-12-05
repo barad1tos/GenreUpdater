@@ -34,9 +34,7 @@ def valid_track_data() -> dict[str, Any]:
 class TestFingerprintGeneration:
     """Tests for fingerprint generation."""
 
-    def test_generate_fingerprint_with_valid_data(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_generate_fingerprint_with_valid_data(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test generating fingerprint with valid track data."""
         fingerprint = generator.generate_track_fingerprint(valid_track_data)
 
@@ -44,36 +42,24 @@ class TestFingerprintGeneration:
         assert len(fingerprint) == 64  # SHA-256 produces 64 hex characters
         assert all(c in "0123456789abcdef" for c in fingerprint)
 
-    def test_fingerprint_deterministic(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_fingerprint_deterministic(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that same data always produces same fingerprint."""
         fp1 = generator.generate_track_fingerprint(valid_track_data)
         fp2 = generator.generate_track_fingerprint(valid_track_data)
 
         assert fp1 == fp2
 
-    def test_fingerprint_changes_with_different_data(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_fingerprint_changes_with_different_data(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that different data produces different fingerprint."""
         self._assert_fingerprint_changes(generator, valid_track_data, "file_size", 9999999)
 
-    def test_fingerprint_changes_with_location(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_fingerprint_changes_with_location(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that changed location produces different fingerprint."""
-        self._assert_fingerprint_changes(
-            generator, valid_track_data, "location", "/different/path/song.mp3"
-        )
+        self._assert_fingerprint_changes(generator, valid_track_data, "location", "/different/path/song.mp3")
 
-    def test_fingerprint_changes_with_persistent_id(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_fingerprint_changes_with_persistent_id(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that changed persistent_id produces different fingerprint."""
-        self._assert_fingerprint_changes(
-            generator, valid_track_data, "persistent_id", "DIFFERENT_ID"
-        )
+        self._assert_fingerprint_changes(generator, valid_track_data, "persistent_id", "DIFFERENT_ID")
 
     @staticmethod
     def _assert_fingerprint_changes(
@@ -216,18 +202,14 @@ class TestFingerprintComparison:
 class TestFingerprintSummary:
     """Tests for fingerprint summary."""
 
-    def test_get_summary_contains_fingerprint(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_get_summary_contains_fingerprint(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that summary contains fingerprint."""
         summary = generator.get_fingerprint_summary(valid_track_data)
 
         assert "fingerprint" in summary
         assert len(summary["fingerprint"]) == 64
 
-    def test_get_summary_contains_properties(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_get_summary_contains_properties(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that summary contains properties used."""
         summary = generator.get_fingerprint_summary(valid_track_data)
 
@@ -235,17 +217,13 @@ class TestFingerprintSummary:
         assert "persistent_id" in summary["properties_used"]
         assert "location" in summary["properties_used"]
 
-    def test_get_summary_contains_track_id(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_get_summary_contains_track_id(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that summary contains track_id."""
         summary = generator.get_fingerprint_summary(valid_track_data)
 
         assert summary["track_id"] == valid_track_data["persistent_id"]
 
-    def test_get_summary_property_count(
-        self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]
-    ) -> None:
+    def test_get_summary_property_count(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
         """Test that summary has correct property count."""
         summary = generator.get_fingerprint_summary(valid_track_data)
 
@@ -300,9 +278,7 @@ class TestNormalization:
 class TestDefaultValues:
     """Tests for default value handling."""
 
-    def test_missing_optional_fields_use_defaults(
-        self, generator: FingerprintGenerator
-    ) -> None:
+    def test_missing_optional_fields_use_defaults(self, generator: FingerprintGenerator) -> None:
         """Test that missing optional fields use defaults."""
         minimal_data = {
             "persistent_id": "TEST123",

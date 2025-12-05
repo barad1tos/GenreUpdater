@@ -30,16 +30,16 @@ class RetryMetadata(TypedDict, total=False):
 
     # Timing metadata
     created_at: str  # ISO format timestamp
-    timestamp: str   # ISO format timestamp
+    timestamp: str  # ISO format timestamp
 
     # Music metadata fields
     expected_year: str  # Release year as string
-    track_count: str    # Number of tracks as string
+    track_count: str  # Number of tracks as string
 
     # Generic fields for extensibility
     operation_type: str  # Type of operation being retried
-    source: str         # Data source identifier
-    reason: str         # Reason for retry or operation
+    source: str  # Data source identifier
+    reason: str  # Reason for retry or operation
 
 
 def _create_empty_metadata() -> RetryMetadata:
@@ -348,9 +348,7 @@ class DatabaseRetryHandler:
             TimeoutError: Operation exceeded total timeout
 
         """
-        timeout_error = TimeoutError(
-            f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s"
-        )
+        timeout_error = TimeoutError(f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s")
         context.last_error = timeout_error
         self.logger.error(
             "Operation '%s' timed out after %.2fs (max: %.2fs)",

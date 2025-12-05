@@ -113,9 +113,7 @@ class TestExternalApiOrchestrator:
             await orch.close()
 
     @pytest.mark.asyncio
-    async def test_init_state(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_init_state(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test orchestrator initialization."""
         assert orchestrator.config is not None
         assert orchestrator.console_logger is not None
@@ -130,9 +128,7 @@ class TestExternalApiOrchestrator:
         }
 
     @pytest.mark.asyncio
-    async def test_configuration_parsing(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_configuration_parsing(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test configuration parsing and setup."""
         # Check that configuration was properly parsed
         assert hasattr(orchestrator, "preferred_api")
@@ -144,9 +140,7 @@ class TestExternalApiOrchestrator:
         assert orchestrator.current_year >= 2024
 
     @pytest.mark.asyncio
-    async def test_rate_limiting_setup(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_rate_limiting_setup(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test rate limiting setup."""
         # Check that rate limiters are configured
         assert hasattr(orchestrator, "rate_limiters")
@@ -157,17 +151,13 @@ class TestExternalApiOrchestrator:
         assert "itunes" in orchestrator.rate_limiters
 
     @pytest.mark.asyncio
-    async def test_scoring_system_initialization(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_scoring_system_initialization(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test scoring system initialization."""
         assert hasattr(orchestrator, "release_scorer")
         assert orchestrator.release_scorer is not None
 
     @pytest.mark.asyncio
-    async def test_api_client_initialization(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_api_client_initialization(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test API client initialization."""
         # Before initialization, clients should not be set up yet
         # Check using hasattr to avoid accessing private members
@@ -183,9 +173,7 @@ class TestExternalApiOrchestrator:
         assert orchestrator.session is not None
 
     @pytest.mark.asyncio
-    async def test_initialize_multiple_times(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_initialize_multiple_times(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that initialize can be called multiple times."""
         await orchestrator.initialize()
         # Check initialization using session existence
@@ -202,9 +190,7 @@ class TestExternalApiOrchestrator:
         assert orchestrator.session is not None
 
     @pytest.mark.asyncio
-    async def test_close_session(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_close_session(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test closing the session."""
         await orchestrator.initialize()
         assert orchestrator.session is not None
@@ -214,9 +200,7 @@ class TestExternalApiOrchestrator:
         assert orchestrator.session.closed
 
     @pytest.mark.asyncio
-    async def test_request_counts_tracking(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_request_counts_tracking(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that request counts are tracked."""
         await orchestrator.initialize()
 
@@ -230,9 +214,7 @@ class TestExternalApiOrchestrator:
         assert orchestrator.request_counts["musicbrainz"] == 1
 
     @pytest.mark.asyncio
-    async def test_api_call_durations_tracking(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_api_call_durations_tracking(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that API call durations are tracked."""
         await orchestrator.initialize()
 
@@ -268,38 +250,28 @@ class TestExternalApiOrchestrator:
             )
 
     @pytest.mark.asyncio
-    async def test_secure_config_initialization(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_secure_config_initialization(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that SecureConfig is initialized properly."""
         # SecureConfig may or may not initialize successfully
         # depending on system configuration
         assert hasattr(orchestrator, "secure_config")
         # It should be either None or a SecureConfig instance
-        assert orchestrator.secure_config is None or hasattr(
-            orchestrator.secure_config, "encrypt_token"
-        )
+        assert orchestrator.secure_config is None or hasattr(orchestrator.secure_config, "encrypt_token")
 
     @pytest.mark.asyncio
-    async def test_user_agent_setup(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_user_agent_setup(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that User-Agent is set up correctly."""
         assert hasattr(orchestrator, "user_agent")
         assert "TestApp/1.0" in orchestrator.user_agent
         assert "test@example.com" in orchestrator.user_agent
 
     @pytest.mark.asyncio
-    async def test_preferred_api_normalization(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_preferred_api_normalization(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test that preferred API is normalized correctly."""
         assert orchestrator.preferred_api == "musicbrainz"
 
     @pytest.mark.asyncio
-    async def test_apply_preferred_order(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_apply_preferred_order(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test applying preferred API order."""
         # Create a test orchestrator to test the method
         mock_orch = ExternalApiOrchestrator(
@@ -315,9 +287,7 @@ class TestExternalApiOrchestrator:
         assert mock_orch.preferred_api == "musicbrainz"
 
     @pytest.mark.asyncio
-    async def test_coerce_integer_methods(
-        self, orchestrator: ExternalApiOrchestrator
-    ) -> None:
+    async def test_coerce_integer_methods(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Test integer coercion helper methods."""
         # Test coercion methods using the config values that were coerced
         # Check that configuration values were properly coerced

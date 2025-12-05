@@ -168,9 +168,7 @@ class TestSelectBestYear:
         # Should prefer 2023 (non-future) over 2025 (future) when scores are close
         assert best_year == "2023"
 
-    def test_keeps_future_year_with_large_score_diff(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_keeps_future_year_with_large_score_diff(self, resolver: YearScoreResolver) -> None:
         """Test keeps future year when score difference is large."""
         year_scores: defaultdict[str, list[int]] = defaultdict(list)
         year_scores["2025"] = [95]  # Future year with much higher score
@@ -248,28 +246,20 @@ class TestDetermineBestYearCandidate:
 class TestApplyFutureYearPreference:
     """Tests for _apply_future_year_preference method."""
 
-    def test_prefers_non_future_when_scores_close(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_prefers_non_future_when_scores_close(self, resolver: YearScoreResolver) -> None:
         """Test prefers non-future year when scores are close."""
         sorted_years = [("2025", 85), ("2023", 80)]
 
-        year, _score, is_future = resolver._apply_future_year_preference(
-            sorted_years, "2025", 85, True
-        )
+        year, _score, is_future = resolver._apply_future_year_preference(sorted_years, "2025", 85, True)
 
         assert year == "2023"
         assert is_future is False
 
-    def test_keeps_future_when_score_diff_large(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_keeps_future_when_score_diff_large(self, resolver: YearScoreResolver) -> None:
         """Test keeps future year when score difference is large."""
         sorted_years = [("2025", 95), ("2023", 60)]
 
-        year, _score, is_future = resolver._apply_future_year_preference(
-            sorted_years, "2025", 95, True
-        )
+        year, _score, is_future = resolver._apply_future_year_preference(sorted_years, "2025", 95, True)
 
         assert year == "2025"
         assert is_future is True
@@ -278,28 +268,20 @@ class TestApplyFutureYearPreference:
 class TestApplyOriginalReleasePreference:
     """Tests for _apply_original_release_preference method."""
 
-    def test_prefers_earlier_year_for_reissue(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_prefers_earlier_year_for_reissue(self, resolver: YearScoreResolver) -> None:
         """Test prefers earlier year when scores are similar (reissue detection)."""
         sorted_years = [("2020", 85), ("2010", 80)]
 
-        year, _score = resolver._apply_original_release_preference(
-            sorted_years, "2020", 85
-        )
+        year, _score = resolver._apply_original_release_preference(sorted_years, "2020", 85)
 
         # With 10 year gap and close scores, should prefer 2010 (original)
         assert year == "2010"
 
-    def test_keeps_later_year_with_large_score_diff(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_keeps_later_year_with_large_score_diff(self, resolver: YearScoreResolver) -> None:
         """Test keeps later year when score difference is significant."""
         sorted_years = [("2020", 95), ("2010", 50)]
 
-        year, _score = resolver._apply_original_release_preference(
-            sorted_years, "2020", 95
-        )
+        year, _score = resolver._apply_original_release_preference(sorted_years, "2020", 95)
 
         assert year == "2020"
 
@@ -307,9 +289,7 @@ class TestApplyOriginalReleasePreference:
 class TestValidateSingleResult:
     """Tests for _validate_single_result method."""
 
-    def test_marks_old_low_score_as_non_definitive(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_marks_old_low_score_as_non_definitive(self, resolver: YearScoreResolver) -> None:
         """Test marks suspiciously old year with low score as non-definitive."""
         best_year, is_definitive = resolver._validate_single_result("2015", 50)
 
@@ -317,9 +297,7 @@ class TestValidateSingleResult:
         assert best_year == "2015"
         assert is_definitive is False
 
-    def test_accepts_recent_year_with_good_score(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_accepts_recent_year_with_good_score(self, resolver: YearScoreResolver) -> None:
         """Test accepts recent year with good score."""
         best_year, is_definitive = resolver._validate_single_result("2023", 80)
 
@@ -386,9 +364,7 @@ class TestDeterminDefinitiveness:
         """Test definitive when high score and no conflict."""
         thresholds = {"very_high_score": False, "high_score_met": True}
 
-        result = YearScoreResolver._determine_definitiveness(
-            thresholds, best_year_is_future=False, has_score_conflict=False
-        )
+        result = YearScoreResolver._determine_definitiveness(thresholds, best_year_is_future=False, has_score_conflict=False)
 
         assert result is True
 
@@ -396,9 +372,7 @@ class TestDeterminDefinitiveness:
         """Test not definitive when best year is future."""
         thresholds = {"very_high_score": True, "high_score_met": True}
 
-        result = YearScoreResolver._determine_definitiveness(
-            thresholds, best_year_is_future=True, has_score_conflict=False
-        )
+        result = YearScoreResolver._determine_definitiveness(thresholds, best_year_is_future=True, has_score_conflict=False)
 
         assert result is False
 
@@ -406,9 +380,7 @@ class TestDeterminDefinitiveness:
         """Test not definitive when score threshold not met."""
         thresholds = {"very_high_score": False, "high_score_met": False}
 
-        result = YearScoreResolver._determine_definitiveness(
-            thresholds, best_year_is_future=False, has_score_conflict=False
-        )
+        result = YearScoreResolver._determine_definitiveness(thresholds, best_year_is_future=False, has_score_conflict=False)
 
         assert result is False
 
@@ -416,9 +388,7 @@ class TestDeterminDefinitiveness:
         """Test definitive when very high score despite conflict."""
         thresholds = {"very_high_score": True, "high_score_met": True}
 
-        result = YearScoreResolver._determine_definitiveness(
-            thresholds, best_year_is_future=False, has_score_conflict=True
-        )
+        result = YearScoreResolver._determine_definitiveness(thresholds, best_year_is_future=False, has_score_conflict=True)
 
         assert result is True
 
@@ -460,9 +430,7 @@ class TestIntegration:
         assert best_year == "2020"
         assert is_definitive is True
 
-    def test_full_workflow_reissue_detection(
-        self, resolver: YearScoreResolver
-    ) -> None:
+    def test_full_workflow_reissue_detection(self, resolver: YearScoreResolver) -> None:
         """Test full workflow detects reissue and prefers original."""
         releases = [
             create_scored_release("2020", 85),  # Reissue

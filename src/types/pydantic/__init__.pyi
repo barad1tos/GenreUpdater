@@ -3,7 +3,6 @@
 from collections.abc import Callable
 from typing import Any, Self, overload
 
-
 class BaseModel:
     def __init__(self, **data: Any) -> None: ...
     def dict(self, **kwargs: Any) -> dict[str, Any]: ...

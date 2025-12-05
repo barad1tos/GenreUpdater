@@ -386,10 +386,7 @@ def save_html_report(
     report_file = get_full_log_path(
         config,
         "analytics_html_report_file",
-        str(
-            Path("analytics")
-            / ("analytics_full.html" if force_mode else "analytics_incremental.html")
-        ),
+        str(Path("analytics") / ("analytics_full.html" if force_mode else "analytics_incremental.html")),
     )
     duration_thresholds = config.get("analytics", {}).get(
         "duration_thresholds",
@@ -410,18 +407,10 @@ def save_html_report(
     )
 
     # Generate HTML sections
-    html_content = _generate_main_html_template(
-        date_str, call_counts, success_counts, events, force_mode
-    )
-    html_content += _generate_grouped_success_table(
-        grouped_short_success, group_successful_short_calls
-    )
-    html_content += _generate_detailed_events_table_html(
-        big_or_fail_events, duration_thresholds, error_logger
-    )
-    html_content += _generate_summary_table_html(
-        call_counts, success_counts, decorator_overhead
-    )
+    html_content = _generate_main_html_template(date_str, call_counts, success_counts, events, force_mode)
+    html_content += _generate_grouped_success_table(grouped_short_success, group_successful_short_calls)
+    html_content += _generate_detailed_events_table_html(big_or_fail_events, duration_thresholds, error_logger)
+    html_content += _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
     # Save the report
     try:
@@ -518,11 +507,7 @@ def save_detailed_dry_run_report(
         # If the type is unknown, fallback to the old behavior as a backup option.
         headers = header_map.get(
             change_type,
-            [
-                h
-                for h in change_list[0]
-                if h not in ["change_type", "timestamp", "track_id", "date_added"]
-            ],
+            [h for h in change_list[0] if h not in ["change_type", "timestamp", "track_id", "date_added"]],
         )
 
         html += "<table><thead><tr>"

@@ -115,16 +115,12 @@ class YearFallbackHandler:
             return proposed_year
 
         # Rule 4: Check for special album types
-        special_result = await self._handle_special_album_type(
-            proposed_year, existing_year, artist, album
-        )
+        special_result = await self._handle_special_album_type(proposed_year, existing_year, artist, album)
         if special_result is not None:
             return special_result if special_result != "" else None
 
         # Rule 5: Check for dramatic year change
-        if await self._handle_dramatic_year_change(
-            proposed_year, existing_year, artist, album
-        ):
+        if await self._handle_dramatic_year_change(proposed_year, existing_year, artist, album):
             return None
 
         # Rule 6: Apply year (low confidence but reasonable change)
@@ -162,8 +158,7 @@ class YearFallbackHandler:
                 },
             )
             self.console_logger.warning(
-                "[FALLBACK] Skipping absurd year %s for %s - %s "
-                "(year < %d threshold, no existing year to validate)",
+                "[FALLBACK] Skipping absurd year %s for %s - %s (year < %d threshold, no existing year to validate)",
                 proposed_year,
                 artist,
                 album,
@@ -200,9 +195,7 @@ class YearFallbackHandler:
 
         if album_info.strategy == YearHandlingStrategy.MARK_AND_SKIP:
             self.console_logger.warning(
-                "[FALLBACK] Skipping year update for %s - %s "
-                "(special album type: %s, pattern: '%s'). "
-                "Existing: %s, Proposed: %s",
+                "[FALLBACK] Skipping year update for %s - %s (special album type: %s, pattern: '%s'). Existing: %s, Proposed: %s",
                 artist,
                 album,
                 album_info.album_type.value,
@@ -244,8 +237,7 @@ class YearFallbackHandler:
             },
         )
         self.console_logger.warning(
-            "[FALLBACK] Preserving existing year %s for %s - %s "
-            "(dramatic change to %s detected, diff > %d years)",
+            "[FALLBACK] Preserving existing year %s for %s - %s (dramatic change to %s detected, diff > %d years)",
             existing_year,
             artist,
             album,
@@ -267,11 +259,7 @@ class YearFallbackHandler:
             Most common year string, or None if no valid years found
 
         """
-        years = [
-            str(track.get("year"))
-            for track in tracks
-            if track.get("year") and not is_empty_year(track.get("year"))
-        ]
+        years = [str(track.get("year")) for track in tracks if track.get("year") and not is_empty_year(track.get("year"))]
         if not years:
             return None
         counter = Counter(years)

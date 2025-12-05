@@ -170,9 +170,7 @@ class TestApplyPreferredOrder:
         assert "discogs" in result
         assert "lastfm" in result
 
-    def test_no_change_when_not_in_list(
-        self, coordinator: YearSearchCoordinator
-    ) -> None:
+    def test_no_change_when_not_in_list(self, coordinator: YearSearchCoordinator) -> None:
         """Test no change when preferred API not in list."""
         api_list = ["discogs", "lastfm"]
 
@@ -275,9 +273,7 @@ class TestGetScriptApiPriorities:
         assert "discogs" in priorities["primary"]
         assert "musicbrainz" in priorities["primary"]
 
-    def test_get_default_priorities_for_unknown_script(
-        self, coordinator: YearSearchCoordinator
-    ) -> None:
+    def test_get_default_priorities_for_unknown_script(self, coordinator: YearSearchCoordinator) -> None:
         """Test getting default priorities for unknown script."""
         priorities = coordinator._get_script_api_priorities(ScriptType.LATIN)
 
@@ -288,9 +284,7 @@ class TestGetScriptApiPriorities:
 class TestProcessApiTaskResults:
     """Tests for _process_api_task_results method."""
 
-    def test_processes_successful_results(
-        self, coordinator: YearSearchCoordinator
-    ) -> None:
+    def test_processes_successful_results(self, coordinator: YearSearchCoordinator) -> None:
         """Test processing successful results."""
         results: list[Any] = [
             [{"title": "Album1", "year": "2020", "score": 85}],
@@ -319,9 +313,7 @@ class TestProcessApiTaskResults:
     ) -> None:
         """Assert that processing results yields expected count."""
         api_order = ["musicbrainz", "discogs"]
-        processed = coordinator._process_api_task_results(
-            results, api_order, "Artist", "Album"
-        )
+        processed = coordinator._process_api_task_results(results, api_order, "Artist", "Album")
         assert len(processed) == expected_count
 
 
@@ -339,9 +331,7 @@ class TestFetchAllApiResults:
         mock_musicbrainz_client.get_scored_releases.return_value = []
         mock_discogs_client.get_scored_releases.return_value = []
 
-        results = await coordinator.fetch_all_api_results(
-            "pink floyd", "dark side", None, "Pink Floyd", "Dark Side"
-        )
+        results = await coordinator.fetch_all_api_results("pink floyd", "dark side", None, "Pink Floyd", "Dark Side")
 
         assert results == []
 
@@ -353,16 +343,10 @@ class TestFetchAllApiResults:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test combines results from multiple APIs."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [
-            {"title": "Album", "year": "2020", "score": 85}
-        ]
-        mock_discogs_client.get_scored_releases.return_value = [
-            {"title": "Album", "year": "2020", "score": 90}
-        ]
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 90}]
 
-        results = await coordinator.fetch_all_api_results(
-            "artist", "album", None, "Artist", "Album"
-        )
+        results = await coordinator.fetch_all_api_results("artist", "album", None, "Artist", "Album")
 
         assert len(results) >= 1
 
@@ -377,25 +361,17 @@ class TestTrySingleApi:
         mock_musicbrainz_client: AsyncMock,
     ) -> None:
         """Test returns results on successful API call."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [
-            {"title": "Album", "year": "2020", "score": 85}
-        ]
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
-        results = await coordinator._try_single_api(
-            "musicbrainz", "artist", "album", None, ScriptType.LATIN, False
-        )
+        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
 
         assert results is not None
         assert len(results) == 1
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_unknown_api(
-        self, coordinator: YearSearchCoordinator
-    ) -> None:
+    async def test_returns_none_on_unknown_api(self, coordinator: YearSearchCoordinator) -> None:
         """Test returns None for unknown API."""
-        results = await coordinator._try_single_api(
-            "unknown", "artist", "album", None, ScriptType.LATIN, False
-        )
+        results = await coordinator._try_single_api("unknown", "artist", "album", None, ScriptType.LATIN, False)
 
         assert results is None
 
@@ -408,9 +384,7 @@ class TestTrySingleApi:
         """Test returns None when API returns empty results."""
         mock_musicbrainz_client.get_scored_releases.return_value = []
 
-        results = await coordinator._try_single_api(
-            "musicbrainz", "artist", "album", None, ScriptType.LATIN, False
-        )
+        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
 
         assert results is None
 
@@ -423,9 +397,7 @@ class TestTrySingleApi:
         """Test handles API exception gracefully."""
         mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("API error")
 
-        results = await coordinator._try_single_api(
-            "musicbrainz", "artist", "album", None, ScriptType.LATIN, False
-        )
+        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
 
         assert results is None
 
@@ -442,9 +414,7 @@ class TestTryApiList:
     ) -> None:
         """Test returns first successful result."""
         mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.return_value = [
-            {"title": "Album", "year": "2020", "score": 85}
-        ]
+        mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_api_list(
             ["musicbrainz", "discogs"],
@@ -513,15 +483,11 @@ class TestExecuteStandardApiSearch:
         mock_applemusic_client: AsyncMock,
     ) -> None:
         """Test executes all APIs."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [
-            {"title": "Album", "year": "2020", "score": 85}
-        ]
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
         mock_discogs_client.get_scored_releases.return_value = []
         mock_applemusic_client.get_scored_releases.return_value = []
 
-        results = await coordinator._execute_standard_api_search(
-            "artist", "album", None, "Artist", "Album"
-        )
+        results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
 
         assert len(results) >= 1
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
@@ -537,9 +503,7 @@ class TestScriptOptimizedSearch:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test uses script-optimized search for Cyrillic."""
-        mock_discogs_client.get_scored_releases.return_value = [
-            {"title": "Альбом", "year": "2020", "score": 85}
-        ]
+        mock_discogs_client.get_scored_releases.return_value = [{"title": "Альбом", "year": "2020", "score": 85}]
 
         results = await coordinator.fetch_all_api_results(
             "московский исполнитель",

@@ -451,9 +451,7 @@ class TestOrchestratorAllure:
                 "test",
                 {"Test Artist 1", "Test Artist 2"},
             )
-            cast(MagicMock, orchestrator.console_logger.info).assert_any_call(
-                "--- Running in Test Mode ---"
-            )
+            cast(MagicMock, orchestrator.console_logger.info).assert_any_call("--- Running in Test Mode ---")
             orchestrator.music_updater.run_main_pipeline.assert_called_once()
             pipeline_kwargs = orchestrator.music_updater.run_main_pipeline.call_args.kwargs
             assert pipeline_kwargs.get("force", False) is False

@@ -188,14 +188,8 @@ class TestIncrementalFilterService:
 
         # Mock CSV data showing old status
         old_tracks = [
-            _create_track(
-                track_id="1", track_status="prerelease", genre="Jazz",
-                date_added="2023-12-31 12:00:00"
-            ),  # Status changed
-            _create_track(
-                track_id="2", genre="Blues",
-                date_added="2023-12-31 12:00:00"
-            ),  # Status unchanged (subscription default)
+            _create_track(track_id="1", track_status="prerelease", genre="Jazz", date_added="2023-12-31 12:00:00"),  # Status changed
+            _create_track(track_id="2", genre="Blues", date_added="2023-12-31 12:00:00"),  # Status unchanged (subscription default)
         ]
 
         # Current tracks with new status

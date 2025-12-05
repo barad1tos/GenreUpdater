@@ -90,9 +90,7 @@ class FakeTrackProcessor:
     def set_dry_run_context(*_args: Any, **_kwargs: Any) -> None:
         """Mock set_dry_run_context method."""
 
-    async def fetch_tracks_in_batches(
-        self, batch_size: int = 1000, skip_snapshot_check: bool = False
-    ) -> list[TrackDict]:
+    async def fetch_tracks_in_batches(self, batch_size: int = 1000, skip_snapshot_check: bool = False) -> list[TrackDict]:
         """Mock fetch_tracks_in_batches method."""
         _ = skip_snapshot_check  # Unused in mock
         self.fetch_batches_calls += 1
@@ -139,9 +137,7 @@ class FakeYearService:
         """Initialize fake year service."""
         self._snapshot_manager = snapshot_manager
 
-    async def update_all_years_with_logs(
-        self, tracks: list[TrackDict], force: bool = False
-    ) -> list[dict[str, Any]]:
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool = False) -> list[dict[str, Any]]:
         """Mock update_all_years_with_logs method."""
         assert force
         updated_tracks = [track.copy(year="2024") for track in tracks]

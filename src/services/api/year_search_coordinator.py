@@ -27,9 +27,7 @@ if TYPE_CHECKING:
 class _RegionAwareApi(Protocol):
     """Protocol for APIs that accept artist_region parameter."""
 
-    async def get_scored_releases(
-        self, artist_norm: str, album_norm: str, artist_region: str | None
-    ) -> list[ScoredRelease]:
+    async def get_scored_releases(self, artist_norm: str, album_norm: str, artist_region: str | None) -> list[ScoredRelease]:
         """Get scored releases with region awareness."""
         ...
 
@@ -37,9 +35,7 @@ class _RegionAwareApi(Protocol):
 class _SimpleApi(Protocol):
     """Protocol for APIs that don't accept artist_region parameter."""
 
-    async def get_scored_releases(
-        self, artist_norm: str, album_norm: str
-    ) -> list[ScoredRelease]:
+    async def get_scored_releases(self, artist_norm: str, album_norm: str) -> list[ScoredRelease]:
         """Get scored releases."""
         ...
 
@@ -110,16 +106,12 @@ class YearSearchCoordinator:
         primary_script = artist_script if artist_script != ScriptType.UNKNOWN else album_script
 
         if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
-            script_results = await self._try_script_optimized_search(
-                primary_script, artist_norm, album_norm, artist_region
-            )
+            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_region)
             if script_results:
                 return script_results
 
         # Standard API search (all providers concurrently)
-        return await self._execute_standard_api_search(
-            artist_norm, album_norm, artist_region, log_artist, log_album
-        )
+        return await self._execute_standard_api_search(artist_norm, album_norm, artist_region, log_artist, log_album)
 
     def _log_api_search_start(
         self,
@@ -155,18 +147,14 @@ class YearSearchCoordinator:
         api_lists = self._get_script_api_priorities(script_type)
 
         # Try primary APIs first
-        results = await self._try_api_list(
-            api_lists["primary"], artist_norm, album_norm, artist_region, script_type, is_fallback=False
-        )
+        results = await self._try_api_list(api_lists["primary"], artist_norm, album_norm, artist_region, script_type, is_fallback=False)
         if results:
             return results
 
         # Try fallback APIs if primary failed
         if debug.api:
             self.console_logger.info(f"Primary APIs failed for {script_type.value} - trying fallback")
-        return await self._try_api_list(
-            api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True
-        )
+        return await self._try_api_list(api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True)
 
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
         """Get script-specific API priorities from config."""
@@ -219,9 +207,7 @@ class YearSearchCoordinator:
         """Try a list of API names and return the first successful result."""
         normalized_names = [self._normalize_api_name(name) for name in api_names]
         for api_name in normalized_names:
-            results = await self._try_single_api(
-                api_name, artist_norm, album_norm, artist_region, script_type, is_fallback
-            )
+            results = await self._try_single_api(api_name, artist_norm, album_norm, artist_region, script_type, is_fallback)
             if results:
                 return results
         return None
@@ -245,9 +231,7 @@ class YearSearchCoordinator:
 
             if debug.api:
                 self.console_logger.info(f"Trying {api_name} for {script_type.value} text")
-            results: list[ScoredRelease] = await self._call_api_with_proper_params(
-                api_client, api_name, artist_norm, album_norm, artist_region
-            )
+            results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
 
             if results:
                 if debug.api:
@@ -279,15 +263,11 @@ class YearSearchCoordinator:
         """
         if api_name in {"musicbrainz", "discogs"}:
             # Cast to protocol that accepts artist_region
-            return await cast(_RegionAwareApi, api_client).get_scored_releases(
-                artist_norm, album_norm, artist_region
-            )
+            return await cast(_RegionAwareApi, api_client).get_scored_releases(artist_norm, album_norm, artist_region)
         # Cast to protocol that doesn't accept artist_region
         return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
 
-    def _get_api_client(
-        self, api_name: str
-    ) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
+    def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
         """Get API client by name."""
         api_mapping: dict[str, MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient] = {
             "musicbrainz": self.musicbrainz_client,
@@ -307,9 +287,7 @@ class YearSearchCoordinator:
         log_album: str,
     ) -> list[ScoredRelease]:
         """Execute standard concurrent API search across all providers."""
-        api_order = self._apply_preferred_order(
-            ["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else [])
-        )
+        api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else []))
         api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = [
             self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
             for api_name in api_order
@@ -345,9 +323,7 @@ class YearSearchCoordinator:
 
         return all_releases
 
-    def _log_api_error(
-        self, api_name: str, log_artist: str, log_album: str, error: BaseException
-    ) -> None:
+    def _log_api_error(self, api_name: str, log_artist: str, log_album: str, error: BaseException) -> None:
         """Log API error."""
         self.error_logger.warning(
             "[%s] Error fetching release for '%s - %s': %s",
@@ -357,9 +333,7 @@ class YearSearchCoordinator:
             error,
         )
 
-    def _log_empty_api_result(
-        self, api_name: str, log_artist: str, log_album: str
-    ) -> None:
+    def _log_empty_api_result(self, api_name: str, log_artist: str, log_album: str) -> None:
         """Log empty API result for debugging."""
         self.console_logger.debug(
             "[%s] No results for '%s - %s'",
