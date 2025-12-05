@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -115,9 +116,10 @@ class TestBatchModeContextManager:
             analytics._batch_total_duration = 25.0
 
         # Should have logged summary
-        loggers.console.info.assert_called()
+        info_mock = cast(MagicMock, loggers.console.info)
+        info_mock.assert_called()
         # Check that the format string and args contain batch info
-        call_args = loggers.console.info.call_args
+        call_args = info_mock.call_args
         format_str = call_args[0][0]
         assert "Batch completed" in format_str
         # Check the args contain the call count (5)
@@ -126,13 +128,14 @@ class TestBatchModeContextManager:
     @pytest.mark.asyncio
     async def test_no_summary_log_when_no_calls(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should not log summary when no calls were recorded."""
-        loggers.console.info.reset_mock()
+        info_mock = cast(MagicMock, loggers.console.info)
+        info_mock.reset_mock()
 
         async with analytics.batch_mode("Test"):
             pass  # No calls recorded
 
         # Should not have logged batch summary (batch_call_count == 0)
-        for call in loggers.console.info.call_args_list:
+        for call in info_mock.call_args_list:
             assert "Batch completed" not in str(call)
 
     @pytest.mark.asyncio
@@ -166,7 +169,7 @@ class TestRecordFunctionCallInBatchMode:
         """Should accumulate batch stats across multiple calls."""
         analytics._suppress_console_logging = True
 
-        for i in range(3):
+        for _ in range(3):
             call_info = CallInfo("test_func", "test_event", True)
             timing_info = TimingInfo(0, 10, 10.0, 0.001)
             analytics._record_function_call(call_info, timing_info)
@@ -177,8 +180,10 @@ class TestRecordFunctionCallInBatchMode:
     def test_skips_console_logging_when_suppressed(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should skip console logging when in batch mode."""
         analytics._suppress_console_logging = True
-        loggers.console.info.reset_mock()
-        loggers.console.debug.reset_mock()
+        info_mock = cast(MagicMock, loggers.console.info)
+        debug_mock = cast(MagicMock, loggers.console.debug)
+        info_mock.reset_mock()
+        debug_mock.reset_mock()
 
         # Long duration that would normally log to console
         call_info = CallInfo("test_func", "test_event", True)
@@ -187,8 +192,8 @@ class TestRecordFunctionCallInBatchMode:
         analytics._record_function_call(call_info, timing_info)
 
         # Console logger should not have been called
-        loggers.console.info.assert_not_called()
-        loggers.console.debug.assert_not_called()
+        info_mock.assert_not_called()
+        debug_mock.assert_not_called()
 
     def test_still_logs_to_analytics_file_when_suppressed(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Should still log to analytics file even in batch mode."""
@@ -200,7 +205,9 @@ class TestRecordFunctionCallInBatchMode:
         analytics._record_function_call(call_info, timing_info)
 
         # Analytics logger should still be called
-        assert loggers.analytics.info.called or loggers.analytics.debug.called
+        analytics_info_mock = cast(MagicMock, loggers.analytics.info)
+        analytics_debug_mock = cast(MagicMock, loggers.analytics.debug)
+        assert analytics_info_mock.called or analytics_debug_mock.called
 
     def test_still_records_events_when_suppressed(self, analytics: Analytics) -> None:
         """Should still record events to events list in batch mode."""
@@ -225,7 +232,9 @@ class TestRecordFunctionCallInBatchMode:
         analytics._record_function_call(call_info, timing_info)
 
         # Console logger should have been called
-        assert loggers.console.info.called or loggers.console.debug.called
+        console_info_mock = cast(MagicMock, loggers.console.info)
+        console_debug_mock = cast(MagicMock, loggers.console.debug)
+        assert console_info_mock.called or console_debug_mock.called
 
 
 class TestBatchModeIntegration:
@@ -237,6 +246,7 @@ class TestBatchModeIntegration:
 
         @analytics.track("test_operation")
         async def slow_operation() -> str:
+            """Simulate a slow async operation for testing."""
             await asyncio.sleep(0.01)
             return "done"
 

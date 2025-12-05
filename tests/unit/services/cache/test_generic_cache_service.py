@@ -34,7 +34,7 @@ class TestGenericCacheService:
         test_config = default_config.copy()
         if config:
             if logging_cfg := config.get("logging"):
-                existing_logging = cast(dict[str, Any], test_config.get("logging", {}))
+                existing_logging = test_config.get("logging", {})
                 merged_logging = {**existing_logging, **logging_cfg}
                 test_config["logging"] = merged_logging
             for key, value in config.items():
