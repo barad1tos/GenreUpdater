@@ -41,6 +41,12 @@ jobs:
       - name: Security scan with bandit
         run: uv run bandit -r src/ -c pyproject.toml
 
+      - name: Dead code check with vulture
+        run: uv run vulture src/ vulture_whitelist.py --min-confidence 80
+
+      - name: Dependency vulnerability scan
+        run: uv run pip-audit
+
   test:
     name: Tests
     runs-on: ubuntu-latest

@@ -40,6 +40,7 @@ dev = [
   "sourcery>=1.41.1; sys_platform == 'darwin'",  # macOS only
   "vulture>=2.14",
   "bandit>=1.8.0",
+  "pip-audit>=2.7.0",
   # Testing
   "pytest==9.0.1",
   "pytest-asyncio==1.3.0",
@@ -395,4 +396,8 @@ disable = [
 # Bandit configuration - Security linting
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.bandit]
-skips = ["B404", "B101"] # B101: Allow assert for type narrowing
+skips = ["B101", "B311", "B404", "B603"]
+# B101: Allow assert for type narrowing
+# B311: random.uniform used for jitter, not security
+# B404: subprocess module is required for AppleScript
+# B603: shell=False is safe (we control the command)
