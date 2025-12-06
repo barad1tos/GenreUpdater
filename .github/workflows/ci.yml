@@ -39,7 +39,7 @@ jobs:
         run: uv run mypy src/ main.py
 
       - name: Security scan with bandit
-        run: uv run bandit -r src/ --skip B101,B311,B404,B603
+        run: uv run bandit -r src/ -c pyproject.toml
 
       - name: Dead code check with vulture
         run: uv run vulture src/ vulture_whitelist.py --min-confidence 80
