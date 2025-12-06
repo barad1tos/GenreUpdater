@@ -12,7 +12,7 @@
 If you discover a security vulnerability in this project, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue for security vulnerabilities
-2. Email the maintainer directly at: [roman.borodavkin@gmail.com](mailto:barad1tos@gmail.com)
+2. Email the maintainer directly at: [roman.borodavkin@gmail.com](mailto:roman.borodavkin@gmail.com)
 3. Include as much detail as possible:
     - Description of the vulnerability
     - Steps to reproduce

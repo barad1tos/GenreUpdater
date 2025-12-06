@@ -655,7 +655,7 @@ class TestIntegration:
         assert stats.unique_errors >= 1
 
         # Check alerts were triggered
-        assert len(alerts_received) > 0
+        assert alerts_received
 
     def test_pattern_detection_workflow(self) -> None:
         """Test pattern detection with repeated errors."""

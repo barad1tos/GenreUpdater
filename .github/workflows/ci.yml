@@ -39,7 +39,7 @@ jobs:
         run: uv run mypy src/ main.py
 
       - name: Security scan with bandit
-        run: uv run bandit -r src/ -c pyproject.toml
+        run: uv run bandit -r src/
 
       - name: Dead code check with vulture
         run: uv run vulture src/ vulture_whitelist.py --min-confidence 80
@@ -74,6 +74,7 @@ jobs:
             -x
 
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v5
         with:
           files: coverage.xml

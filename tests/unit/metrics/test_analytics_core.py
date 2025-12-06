@@ -182,6 +182,10 @@ class TestTrackDecorator:
         result = my_func()
         assert result == "works"
 
+        # Disabled analytics should not record any metrics or counters
+        assert disabled_analytics.call_counts == {}
+        assert disabled_analytics.success_counts == {}
+
 
 class TestTrackInstanceMethod:
     """Tests for track_instance_method decorator."""

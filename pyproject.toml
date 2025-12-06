@@ -36,7 +36,7 @@ dependencies = [
 dev = [
   # Linting & formatting
   "ruff==0.14.8",
-  "mypy==1.19.0",
+  "mypy==1.13.0",
   "sourcery>=1.41.1; sys_platform == 'darwin'",  # macOS only
   "vulture>=2.14",
   "bandit>=1.8.0",
