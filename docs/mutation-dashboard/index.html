@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mutation Testing Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --border: #30363d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { margin-bottom: 0.5rem; }
+        .subtitle { color: var(--text-secondary); margin-bottom: 2rem; }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .metric-label { color: var(--text-secondary); font-size: 0.9rem; }
+        .trend-up { color: var(--accent-green); }
+        .trend-down { color: var(--accent-red); }
+        .trend-stable { color: var(--accent-yellow); }
+        .chart-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-title { margin-bottom: 1rem; font-size: 1.1rem; }
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .history-table th, .history-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .history-table th {
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .history-table tr:last-child td { border-bottom: none; }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .badge-success { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .badge-warning { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); }
+        .badge-danger { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+        .commit-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: monospace;
+        }
+        .commit-link:hover { color: var(--text-primary); text-decoration: underline; }
+        .loading { text-align: center; padding: 2rem; color: var(--text-secondary); }
+        .no-data { text-align: center; padding: 3rem; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mutation Testing Dashboard</h1>
+        <p class="subtitle">Track mutation score trends and test quality over time</p>
+
+        <div class="metrics-grid" id="metrics">
+            <div class="loading">Loading metrics...</div>
+        </div>
+
+        <div class="chart-container">
+            <h3 class="chart-title">Mutation Score Trend</h3>
+            <canvas id="scoreChart" height="100"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h3 class="chart-title">Mutations: Killed vs Survived</h3>
+            <canvas id="mutationsChart" height="100"></canvas>
+        </div>
+
+        <h3 style="margin-bottom: 1rem;">History</h3>
+        <table class="history-table" id="historyTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Commit</th>
+                    <th>Score</th>
+                    <th>Killed</th>
+                    <th>Survived</th>
+                    <th>Trend</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr><td colspan="6" class="loading">Loading history...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const HISTORY_URL = './history.json';
+        const REPO_URL = 'https://github.com/barad1tos/GenreUpdater';
+
+        async function loadData() {
+            try {
+                const response = await fetch(HISTORY_URL);
+                if (!response.ok) throw new Error('No data yet');
+                return await response.json();
+            } catch (e) {
+                console.error('Failed to load history:', e);
+                return [];
+            }
+        }
+
+        function calculateTrend(history) {
+            if (history.length < 2) return { value: 0, direction: 'stable' };
+            const current = history[history.length - 1].score;
+            const previous = history[history.length - 2].score;
+            const diff = current - previous;
+            return {
+                value: Math.abs(diff).toFixed(1),
+                direction: diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'stable'
+            };
+        }
+
+        function renderMetrics(history) {
+            const container = document.getElementById('metrics');
+            if (history.length === 0) {
+                container.innerHTML = '<div class="no-data">No mutation testing data yet. Run the workflow to generate data.</div>';
+                return;
+            }
+
+            const latest = history[history.length - 1];
+            const trend = calculateTrend(history);
+            const avgScore = (history.reduce((a, b) => a + b.score, 0) / history.length).toFixed(1);
+
+            const trendIcon = trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→';
+            const trendClass = trend.direction === 'up' ? 'trend-up' : trend.direction === 'down' ? 'trend-down' : 'trend-stable';
+
+            container.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-value">${latest.score.toFixed(1)}%</div>
+                    <div class="metric-label">Current Score</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value ${trendClass}">${trendIcon} ${trend.value}%</div>
+                    <div class="metric-label">vs Previous</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${avgScore}%</div>
+                    <div class="metric-label">Average Score</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${history.length}</div>
+                    <div class="metric-label">Total Runs</div>
+                </div>
+            `;
+        }
+
+        function renderScoreChart(history) {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: history.map(h => new Date(h.date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Mutation Score (%)',
+                        data: history.map(h => h.score),
+                        borderColor: '#3fb950',
+                        backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }, {
+                        label: 'Threshold (60%)',
+                        data: history.map(() => 60),
+                        borderColor: '#d29922',
+                        borderDash: [5, 5],
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                    scales: {
+                        y: { min: 0, max: 100, ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                        x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+                    }
+                }
+            });
+        }
+
+        function renderMutationsChart(history) {
+            const ctx = document.getElementById('mutationsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: history.map(h => new Date(h.date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Killed',
+                        data: history.map(h => h.killed),
+                        backgroundColor: '#3fb950'
+                    }, {
+                        label: 'Survived',
+                        data: history.map(h => h.survived),
+                        backgroundColor: '#f85149'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                    scales: {
+                        y: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                        x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+                    }
+                }
+            });
+        }
+
+        function renderHistory(history) {
+            const tbody = document.getElementById('historyBody');
+            if (history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No data yet</td></tr>';
+                return;
+            }
+
+            const reversed = [...history].reverse();
+            tbody.innerHTML = reversed.map((h, i) => {
+                const prev = reversed[i + 1];
+                let trendBadge = '';
+                if (prev) {
+                    const diff = h.score - prev.score;
+                    if (diff > 0.5) trendBadge = `<span class="badge badge-success">+${diff.toFixed(1)}%</span>`;
+                    else if (diff < -0.5) trendBadge = `<span class="badge badge-danger">${diff.toFixed(1)}%</span>`;
+                    else trendBadge = `<span class="badge badge-warning">stable</span>`;
+                } else {
+                    trendBadge = '<span class="badge">baseline</span>';
+                }
+
+                const scoreBadgeClass = h.score >= 70 ? 'badge-success' : h.score >= 60 ? 'badge-warning' : 'badge-danger';
+
+                return `<tr>
+                    <td>${new Date(h.date).toLocaleString()}</td>
+                    <td><a href="${REPO_URL}/commit/${h.commit}" class="commit-link" target="_blank">${h.commit.substring(0, 7)}</a></td>
+                    <td><span class="badge ${scoreBadgeClass}">${h.score.toFixed(1)}%</span></td>
+                    <td>${h.killed}</td>
+                    <td>${h.survived}</td>
+                    <td>${trendBadge}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function init() {
+            const history = await loadData();
+            renderMetrics(history);
+            if (history.length > 0) {
+                renderScoreChart(history);
+                renderMutationsChart(history);
+            }
+            renderHistory(history);
+        }
+
+        init();
+    </script>
+</body>
+</html>

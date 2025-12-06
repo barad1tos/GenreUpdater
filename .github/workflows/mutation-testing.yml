@@ -1,0 +1,466 @@
+name: Mutation Testing Pipeline
+
+on:
+  # Weekly schedule (Sunday at 02:00 UTC) - primary trigger
+  schedule:
+    - cron: '0 2 * * 0'
+
+  # Run after PR is merged to main (optional, for immediate feedback)
+  push:
+    branches: [main]
+    paths:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+
+  # Run when PR is approved
+  pull_request_review:
+    types: [submitted]
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module to test (e.g., src/metrics/)'
+        required: false
+        default: 'src/metrics/'
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 1: Wait for CI to pass
+  # ═══════════════════════════════════════════════════════════════════════════
+  wait-for-ci:
+    name: "1. Wait for CI"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
+    outputs:
+      should_continue: ${{ steps.check.outputs.continue }}
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          check-name: 'Tests'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success
+
+      - name: Set continue flag
+        id: check
+        run: echo "continue=true" >> $GITHUB_OUTPUT
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 2: Run Mutation Testing
+  # ═══════════════════════════════════════════════════════════════════════════
+  mutation-test:
+    name: "2. Mutation Testing"
+    runs-on: ubuntu-latest
+    needs: wait-for-ci
+    timeout-minutes: 120
+    outputs:
+      score: ${{ steps.results.outputs.score }}
+      killed: ${{ steps.results.outputs.killed }}
+      survived: ${{ steps.results.outputs.survived }}
+      total: ${{ steps.results.outputs.total }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Configure cosmic-ray
+        run: |
+          MODULE="${{ github.event.inputs.module || 'src/metrics/' }}"
+
+          cat > cosmic-ray-ci.toml << EOF
+          [cosmic-ray]
+          module-path = "${MODULE}"
+          timeout = 30.0
+          excluded-modules = []
+          test-command = "uv run pytest tests/unit/ -x -q --no-cov --tb=no"
+
+          [cosmic-ray.distributor]
+          name = "local"
+          EOF
+
+      - name: Initialize & run baseline
+        run: |
+          uv run cosmic-ray init cosmic-ray-ci.toml session.sqlite
+          uv run cosmic-ray baseline cosmic-ray-ci.toml
+
+      - name: Execute mutation testing
+        run: uv run cosmic-ray exec cosmic-ray-ci.toml session.sqlite 2>&1 || true
+
+      - name: Extract results
+        id: results
+        run: |
+          # Parse results using Python for reliability
+          uv run cosmic-ray dump session.sqlite > /tmp/mutations.jsonl
+
+          python3 << 'PYTHON'
+          import json
+          import os
+
+          killed = 0
+          survived = 0
+          total = 0
+
+          with open('/tmp/mutations.jsonl', 'r') as f:
+              for line in f:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      entry = json.loads(line)
+                      total += 1
+                      outcome = entry.get('worker_outcome', {})
+                      if outcome.get('killed', False):
+                          killed += 1
+                      else:
+                          survived += 1
+                  except json.JSONDecodeError:
+                      continue
+
+          score = round(killed * 100 / total, 2) if total > 0 else 0.0
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"score={score}\n")
+              f.write(f"killed={killed}\n")
+              f.write(f"survived={survived}\n")
+              f.write(f"total={total}\n")
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write("### Mutation Results\n")
+              f.write("| Metric | Value |\n")
+              f.write("|--------|-------|\n")
+              f.write(f"| Score | **{score}%** |\n")
+              f.write(f"| Killed | {killed} |\n")
+              f.write(f"| Survived | {survived} |\n")
+              f.write(f"| Total | {total} |\n")
+
+          print(f"Score: {score}%, Killed: {killed}, Survived: {survived}, Total: {total}")
+          PYTHON
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 3: Update Metrics & Detect Trends
+  # ═══════════════════════════════════════════════════════════════════════════
+  update-metrics:
+    name: "3. Update Metrics"
+    runs-on: ubuntu-latest
+    needs: mutation-test
+    timeout-minutes: 10
+    outputs:
+      trend: ${{ steps.analyze.outputs.trend }}
+      trend_value: ${{ steps.analyze.outputs.trend_value }}
+      regression: ${{ steps.analyze.outputs.regression }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Load current history
+        id: load
+        run: |
+          if [ -f docs/mutation-dashboard/history.json ]; then
+            cat docs/mutation-dashboard/history.json
+          else
+            echo "[]"
+          fi > /tmp/history.json
+
+      - name: Append new result
+        run: |
+          NEW_ENTRY=$(cat << EOF
+          {
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "score": ${{ needs.mutation-test.outputs.score }},
+            "killed": ${{ needs.mutation-test.outputs.killed }},
+            "survived": ${{ needs.mutation-test.outputs.survived }},
+            "total": ${{ needs.mutation-test.outputs.total }},
+            "module": "${{ github.event.inputs.module || 'src/metrics/' }}"
+          }
+          EOF
+          )
+
+          # Append to history (keep last 100 entries)
+          python3 << PYTHON
+          import json
+
+          with open('/tmp/history.json', 'r') as f:
+              history = json.load(f)
+
+          new_entry = json.loads('''${NEW_ENTRY}''')
+          history.append(new_entry)
+
+          # Keep last 100 entries
+          history = history[-100:]
+
+          with open('/tmp/history.json', 'w') as f:
+              json.dump(history, f, indent=2)
+          PYTHON
+
+      - name: Analyze trends
+        id: analyze
+        run: |
+          python3 << 'PYTHON'
+          import json
+          import os
+
+          with open('/tmp/history.json', 'r') as f:
+              history = json.load(f)
+
+          if len(history) < 2:
+              trend = "baseline"
+              trend_value = 0
+              regression = "false"
+          else:
+              current = history[-1]['score']
+              previous = history[-2]['score']
+              diff = current - previous
+
+              if diff > 1:
+                  trend = "improvement"
+              elif diff < -1:
+                  trend = "regression"
+              else:
+                  trend = "stable"
+
+              trend_value = round(diff, 2)
+
+              # Check for significant regression (>5% drop)
+              regression = "true" if diff < -5 else "false"
+
+              # Also check against 5-run average (need at least 6 entries)
+              if len(history) >= 6:
+                  prev_5 = history[-6:-1]  # 5 entries before current
+                  avg_5 = sum(h['score'] for h in prev_5) / len(prev_5)
+                  if current < avg_5 - 5:
+                      regression = "true"
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"trend={trend}\n")
+              f.write(f"trend_value={trend_value}\n")
+              f.write(f"regression={regression}\n")
+
+          print(f"Trend: {trend} ({trend_value:+.2f}%)")
+          print(f"Regression detected: {regression}")
+          PYTHON
+
+      - name: Update dashboard
+        run: |
+          cp /tmp/history.json docs/mutation-dashboard/history.json
+
+      - name: Commit & push metrics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add docs/mutation-dashboard/history.json
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(metrics): update mutation score [${{ needs.mutation-test.outputs.score }}%]
+
+            Score: ${{ needs.mutation-test.outputs.score }}%
+            Killed: ${{ needs.mutation-test.outputs.killed }}
+            Survived: ${{ needs.mutation-test.outputs.survived }}
+            Trend: ${{ steps.analyze.outputs.trend }} (${{ steps.analyze.outputs.trend_value }}%)"
+
+            # Pull with rebase to handle concurrent pushes
+            git pull --rebase origin main
+            git push
+          fi
+
+      - name: Generate trend summary
+        run: |
+          TREND="${{ steps.analyze.outputs.trend }}"
+          TREND_VAL="${{ steps.analyze.outputs.trend_value }}"
+          REGRESSION="${{ steps.analyze.outputs.regression }}"
+
+          echo "### Trend Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$TREND" = "improvement" ]; then
+            echo "#### :chart_with_upwards_trend: Improvement (+${TREND_VAL}%)" >> $GITHUB_STEP_SUMMARY
+          elif [ "$TREND" = "regression" ]; then
+            echo "#### :chart_with_downwards_trend: Regression (${TREND_VAL}%)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "#### :arrow_right: Stable" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$REGRESSION" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo ":warning: **Significant regression detected!** Review test quality." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 4: Decision & Actions
+  # ═══════════════════════════════════════════════════════════════════════════
+  decision:
+    name: "4. Decision"
+    runs-on: ubuntu-latest
+    needs: [mutation-test, update-metrics]
+    timeout-minutes: 5
+    if: always() && needs.mutation-test.result == 'success'
+
+    steps:
+      - name: Evaluate results
+        id: evaluate
+        run: |
+          SCORE="${{ needs.mutation-test.outputs.score }}"
+          TREND="${{ needs.update-metrics.outputs.trend }}"
+          REGRESSION="${{ needs.update-metrics.outputs.regression }}"
+
+          echo "### Decision Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Validate SCORE is numeric (default to 0 if invalid)
+          if ! [[ "$SCORE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            echo "Warning: Invalid score '$SCORE', defaulting to 0"
+            SCORE="0"
+          fi
+
+          # Check 1: Minimum score threshold
+          if (( $(echo "$SCORE >= 60" | bc -l) )); then
+            echo "| Score >= 60% | :white_check_mark: Pass |" >> $GITHUB_STEP_SUMMARY
+            SCORE_OK="true"
+          else
+            echo "| Score >= 60% | :x: Fail ($SCORE%) |" >> $GITHUB_STEP_SUMMARY
+            SCORE_OK="false"
+          fi
+
+          # Check 2: No significant regression
+          if [ "$REGRESSION" = "false" ]; then
+            echo "| No regression | :white_check_mark: Pass |" >> $GITHUB_STEP_SUMMARY
+            REGRESSION_OK="true"
+          else
+            echo "| No regression | :warning: Warning |" >> $GITHUB_STEP_SUMMARY
+            REGRESSION_OK="false"
+          fi
+
+          # Final decision
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$SCORE_OK" = "true" ] && [ "$REGRESSION_OK" = "true" ]; then
+            echo "#### :rocket: All checks passed!" >> $GITHUB_STEP_SUMMARY
+            echo "action=none" >> $GITHUB_OUTPUT
+          elif [ "$SCORE_OK" = "false" ]; then
+            echo "#### :x: Action required: Improve test quality" >> $GITHUB_STEP_SUMMARY
+            echo "action=improve_tests" >> $GITHUB_OUTPUT
+          else
+            echo "#### :warning: Review recommended: Regression detected" >> $GITHUB_STEP_SUMMARY
+            echo "action=review" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue on regression
+        if: needs.update-metrics.outputs.regression == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const score = '${{ needs.mutation-test.outputs.score }}';
+            const trendValue = '${{ needs.update-metrics.outputs.trend_value }}';
+            const commit = '${{ github.sha }}'.substring(0, 7);
+            const issueTitle = `Mutation score regression detected (${trendValue}%)`;
+
+            // Check if issue already exists (by label AND similar title/commit)
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'mutation-regression',
+              state: 'open'
+            });
+
+            // Check for duplicate by title pattern or commit hash
+            const isDuplicate = issues.data.some(issue => {
+              const titleMatch = issue.title.includes('regression detected');
+              const commitMatch = issue.body && issue.body.includes(commit);
+              return titleMatch || commitMatch;
+            });
+
+            if (isDuplicate) {
+              console.log('Similar regression issue already exists, skipping creation');
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: `## Mutation Testing Regression Alert
+
+            | Metric | Value |
+            |--------|-------|
+            | Current Score | ${score}% |
+            | Change | ${trendValue}% |
+            | Commit | ${commit} |
+
+            ### Recommended Actions
+            1. Review recent test changes
+            2. Check for removed assertions
+            3. Run mutation testing locally to identify weak tests
+            4. Add missing test cases for surviving mutants
+
+            [View Dashboard](https://${context.repo.owner}.github.io/${context.repo.repo}/mutation-dashboard/)
+            `,
+              labels: ['mutation-regression', 'testing', 'automated']
+            });
+            console.log('Created regression issue');
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request_review'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const score = '${{ needs.mutation-test.outputs.score }}';
+            const killed = '${{ needs.mutation-test.outputs.killed }}';
+            const survived = '${{ needs.mutation-test.outputs.survived }}';
+            const trend = '${{ needs.update-metrics.outputs.trend }}';
+            const trendValue = '${{ needs.update-metrics.outputs.trend_value }}';
+
+            const trendEmoji = trend === 'improvement' ? ':chart_with_upwards_trend:' :
+                              trend === 'regression' ? ':chart_with_downwards_trend:' : ':arrow_right:';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.review.pull_request.number,
+              body: `## Mutation Testing Results
+
+            | Metric | Value |
+            |--------|-------|
+            | **Score** | ${score}% |
+            | Killed | ${killed} |
+            | Survived | ${survived} |
+            | Trend | ${trendEmoji} ${trendValue}% |
+
+            [View Dashboard](https://${context.repo.owner}.github.io/${context.repo.repo}/mutation-dashboard/)
+            `
+            });
