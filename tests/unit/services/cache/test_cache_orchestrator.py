@@ -84,11 +84,13 @@ class TestCacheOrchestrator:
         """Test that initialization raises RuntimeError when a service fails."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=Exception("Album init failed")), \
-             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock), \
-             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock):
-            with pytest.raises(RuntimeError, match="Cache service initialization failed"):
-                await orchestrator.initialize()
+        with (
+            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=Exception("Album init failed")),
+            patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock),
+            patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock),
+            pytest.raises(RuntimeError, match="Cache service initialization failed"),
+        ):
+            await orchestrator.initialize()
 
     @allure.story("Initialization")
     @allure.title("Should skip iCloud cleanup when disabled")
