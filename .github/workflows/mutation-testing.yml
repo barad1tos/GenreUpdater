@@ -95,7 +95,7 @@ jobs:
           echo "=== Detecting changed files ==="
 
           # Check for force full or schedule trigger
-          if [ "${{ github.event.inputs.force_full }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "${{ github.event.inputs.force_full || 'false' }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             echo "Full src/ mutation test requested"
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "files=src/" >> $GITHUB_OUTPUT
@@ -166,28 +166,37 @@ jobs:
 
           echo "=== Configuring cosmic-ray (mode: $MODE) ==="
 
-          if [ "$MODE" = "full" ] || [ "$MODE" = "override" ]; then
-            # Single path mode
-            MODULE_PATH="\"$FILES\""
-          else
-            # Incremental: convert file list to TOML array
-            MODULE_PATH=$(echo "$FILES" | sed 's/^/"/;s/$/"/' | paste -sd, -)
-            MODULE_PATH="[$MODULE_PATH]"
-          fi
+          # Use Python for safe TOML generation
+          python3 << PYEOF
+          import json
 
-          cat > cosmic-ray-ci.toml << EOF
-          [cosmic-ray]
-          module-path = $MODULE_PATH
+          files = """$FILES""".strip()
+          mode = "$MODE"
+
+          if mode in ("full", "override"):
+              # Single path mode - cosmic-ray accepts string for directories
+              module_path = f'"{files}"'
+          else:
+              # Incremental: convert file list to JSON array (valid TOML)
+              file_list = [f.strip() for f in files.split('\n') if f.strip()]
+              module_path = json.dumps(file_list)
+
+          config = f'''[cosmic-ray]
+          module-path = {module_path}
           timeout = 30.0
           excluded-modules = []
           test-command = "uv run pytest tests/unit/ -x -q --no-cov --tb=no"
 
           [cosmic-ray.distributor]
           name = "local"
-          EOF
+          '''
 
-          echo "=== Config ==="
-          cat cosmic-ray-ci.toml
+          with open('cosmic-ray-ci.toml', 'w') as f:
+              f.write(config)
+
+          print("=== Config ===")
+          print(config)
+          PYEOF
 
       - name: Initialize & run baseline
         if: steps.changed.outputs.skip != 'true'
