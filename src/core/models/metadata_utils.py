@@ -244,8 +244,8 @@ def _get_earliest_track_across_albums(
         The earliest track across all albums, or None if no valid tracks
 
     """
-    earliest_album_track = None
-    earliest_date = None
+    earliest_album_track: TrackDict | None = None
+    earliest_date: datetime | None = None
 
     for track in album_earliest.values():
         date_str = track.get("date_added", "9999-12-31 00:00:00")
