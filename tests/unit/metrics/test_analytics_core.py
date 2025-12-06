@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -133,6 +134,7 @@ class TestTrackDecorator:
 
         @analytics.track("test_event")
         def my_func() -> str:
+            """Test helper function."""
             return "result"
 
         result = my_func()
@@ -145,6 +147,7 @@ class TestTrackDecorator:
 
         @analytics.track("async_event")
         async def my_async_func() -> str:
+            """Test helper async function."""
             await asyncio.sleep(0.01)
             return "async_result"
 
@@ -157,6 +160,7 @@ class TestTrackDecorator:
 
         @analytics.track("failing_event")
         def failing_func() -> None:
+            """Test helper that raises."""
             raise ValueError("Test error")
 
         with pytest.raises(ValueError, match="Test error"):
@@ -172,6 +176,7 @@ class TestTrackDecorator:
 
         @disabled_analytics.track("disabled_event")
         def my_func() -> str:
+            """Test helper function."""
             return "works"
 
         result = my_func()
@@ -185,11 +190,14 @@ class TestTrackInstanceMethod:
         """Test tracking instance method (requires self.analytics on class)."""
 
         class MyClass:
+            """Test helper class with analytics."""
+
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
 
             @Analytics.track_instance_method("method_event")
             def my_method(self, x: int) -> int:
+                """Test method that doubles input."""
                 return x * 2
 
         obj = MyClass(analytics)
@@ -202,11 +210,14 @@ class TestTrackInstanceMethod:
         """Test tracking async instance method."""
 
         class MyClass:
+            """Test helper class with async method."""
+
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
 
             @Analytics.track_instance_method("async_method_event")
             async def my_async_method(self, x: int) -> int:
+                """Test async method that triples input."""
                 await asyncio.sleep(0.01)
                 return x * 3
 
@@ -230,7 +241,7 @@ class TestGetStats:
 
         @analytics.track("fast_event")
         def fast_func() -> None:
-            pass
+            """Test helper function."""
 
         # Call multiple times
         for _ in range(5):
@@ -250,18 +261,18 @@ class TestLogSummary:
         analytics.log_summary()
         # Should complete without error
 
-    def test_log_summary_with_events(self, analytics: Analytics) -> None:
+    def test_log_summary_with_events(self, analytics: Analytics, loggers: LoggerContainer) -> None:
         """Test log_summary logs statistics."""
 
         @analytics.track("tracked_event")
         def tracked_func() -> None:
-            pass
+            """Test helper function."""
 
         tracked_func()
         analytics.log_summary()
 
-        # Console logger should have been called
-        analytics.console_logger.info.assert_called()
+        # Console logger should have been called (via fixture mock)
+        cast(MagicMock, loggers.console).info.assert_called()
 
 
 class TestClearOldEvents:
@@ -269,7 +280,7 @@ class TestClearOldEvents:
 
     def test_clear_old_events_empty(self, analytics: Analytics) -> None:
         """Test clear_old_events with empty events list."""
-        removed = analytics.clear_old_events(days=7)
+        removed = analytics.clear_old_events()
         assert removed == 0
 
     def test_clear_old_events_with_tracked_events_compact_mode(self, config: dict, loggers: LoggerContainer) -> None:
@@ -280,7 +291,7 @@ class TestClearOldEvents:
 
         @analytics.track("test_event")
         def test_func() -> None:
-            pass
+            """Test helper function."""
 
         # Generate many events to trigger count-based pruning
         for _ in range(2500):
@@ -290,7 +301,7 @@ class TestClearOldEvents:
         assert len(analytics.events) > 0
 
         # In compact_time mode, uses count-based pruning
-        removed = analytics.clear_old_events(days=7)
+        removed = analytics.clear_old_events()
 
         # Should return number removed
         assert isinstance(removed, int)
@@ -307,11 +318,11 @@ class TestMergeWith:
 
         @analytics1.track("event1")
         def func1() -> None:
-            pass
+            """Test helper function."""
 
         @analytics2.track("event2")
         def func2() -> None:
-            pass
+            """Test helper function."""
 
         func1()
         func2()
@@ -329,11 +340,11 @@ class TestMergeWith:
 
         @analytics1.track("shared_event")
         def func_a() -> None:
-            pass
+            """Test helper function."""
 
         @analytics2.track("shared_event")
         def func_b() -> None:
-            pass
+            """Test helper function."""
 
         func_a()
         func_a()  # Call twice
@@ -358,7 +369,7 @@ class TestGenerateReports:
 
         @analytics.track("report_event")
         def test_func() -> None:
-            pass
+            """Test helper function."""
 
         test_func()
 
@@ -411,7 +422,7 @@ class TestGcCollection:
 
         @analytics.track("gc_event")
         def simple_func() -> None:
-            pass
+            """Test helper function."""
 
         # Call enough times to trigger GC threshold
         with patch("gc.collect") as _mock_gc:
