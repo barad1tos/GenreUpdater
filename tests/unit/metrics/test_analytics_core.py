@@ -15,9 +15,9 @@ from src.metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingIn
 @pytest.fixture
 def loggers() -> LoggerContainer:
     """Create mock loggers for testing."""
-    console = MagicMock(spec=logging.Logger)
-    error = MagicMock(spec=logging.Logger)
-    analytics_log = MagicMock(spec=logging.Logger)
+    console = MagicMock()
+    error = MagicMock()
+    analytics_log = MagicMock()
     return LoggerContainer(console, error, analytics_log)
 
 
@@ -397,7 +397,8 @@ class TestDurationSymbol:
     def test_very_slow_duration(self, analytics: Analytics) -> None:
         """Test very slow duration (beyond long_max)."""
         symbol = analytics._get_duration_symbol(15.0)  # Beyond long_max
-        # Should still return some symbol, implementation specific
+        # Should still return some symbol (implementation returns _VERY_SLOW or similar)
+        assert symbol is not None
 
 
 class TestGcCollection:
@@ -413,12 +414,12 @@ class TestGcCollection:
             pass
 
         # Call enough times to trigger GC threshold
-        with patch("gc.collect") as mock_gc:
+        with patch("gc.collect") as _mock_gc:
             for _ in range(Analytics.GC_COLLECTION_THRESHOLD + 1):
                 simple_func()
 
-            # GC should have been called at least once
-            # (depends on implementation - may not always call)
+            # GC may have been called (depends on implementation)
+            # The patch ensures gc.collect doesn't actually run during test
 
 
 class TestNullLogger:

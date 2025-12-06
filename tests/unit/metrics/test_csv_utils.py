@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,15 +12,15 @@ from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
+def console_logger() -> MagicMock:
     """Create a mock console logger."""
-    return MagicMock(spec=logging.Logger)
+    return MagicMock()
 
 
 @pytest.fixture
-def error_logger() -> logging.Logger:
+def error_logger() -> MagicMock:
     """Create a mock error logger."""
-    return MagicMock(spec=logging.Logger)
+    return MagicMock()
 
 
 class TestTrackFieldnames:
@@ -50,8 +49,8 @@ class TestSaveCsv:
     def test_save_csv_creates_file(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv creates a CSV file with correct content."""
         file_path = tmp_path / "test.csv"
@@ -74,8 +73,8 @@ class TestSaveCsv:
     def test_save_csv_creates_directory(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv creates parent directory if not exists."""
         nested_path = tmp_path / "nested" / "dir" / "test.csv"
@@ -90,8 +89,8 @@ class TestSaveCsv:
     def test_save_csv_filters_extra_fields(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv only includes specified fieldnames."""
         file_path = tmp_path / "test.csv"
@@ -108,8 +107,8 @@ class TestSaveCsv:
     def test_save_csv_handles_missing_fields(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv handles rows with missing fields."""
         file_path = tmp_path / "test.csv"
@@ -127,8 +126,8 @@ class TestSaveCsv:
     def test_save_csv_handles_empty_data(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv handles empty data list."""
         file_path = tmp_path / "test.csv"
@@ -141,13 +140,13 @@ class TestSaveCsv:
         with file_path.open(encoding="utf-8") as f:
             reader = csv.DictReader(f)
             rows = list(reader)
-        assert len(rows) == 0
+        assert not rows
 
     def test_save_csv_logs_success(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv logs success messages."""
         file_path = tmp_path / "test.csv"
@@ -162,8 +161,8 @@ class TestSaveCsv:
     def test_save_csv_handles_unicode(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv handles unicode characters."""
         file_path = tmp_path / "test.csv"
@@ -181,8 +180,8 @@ class TestSaveCsv:
     def test_save_csv_atomic_write_cleans_temp_on_error(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv cleans up temp file on write error."""
         file_path = tmp_path / "test.csv"
@@ -202,8 +201,8 @@ class TestSaveCsv:
     def test_save_csv_logs_error_on_write_failure(
         self,
         tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
     ) -> None:
         """Test that save_csv logs errors on write failure."""
         file_path = tmp_path / "test.csv"
