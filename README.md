@@ -2,11 +2,13 @@
 
 ![image](images/logo.png)
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)
-![CI](https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml/badge.svg)
-[![codecov](https://codecov.io/gh/barad1tos/GenreUpdater/graph/badge.svg)](https://codecov.io/gh/barad1tos/GenreUpdater)
-![GitHub Issues](https://img.shields.io/github/issues/barad1tos/GenreUpdater)
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/python-3.13%2B-blue.svg" alt="Python">
+  <a href="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml"><img src="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/barad1tos/GenreUpdater"><img src="https://codecov.io/gh/barad1tos/GenreUpdater/graph/badge.svg" alt="codecov"></a>
+  <img src="https://img.shields.io/github/issues/barad1tos/GenreUpdater" alt="GitHub Issues">
+</p>
 
 Music Genre Updater is a Python-based tool that automatically updates the genres and release years of your music tracks
 in Apple Music.
@@ -109,14 +111,14 @@ graph TD
     TrackProcessor -. uses .-> Core
     TrackProcessor -. uses .-> Monitoring
     TrackProcessor -. uses .-> Data
-    classDef appLayer fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
-    classDef domainLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    classDef infraLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef sharedLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    class CLI,Orchestrator,Config,MusicUpdater,Features appLayer
-    class TrackProcessor,GenreManager,YearRetriever,ArtistRenamer,IncrementalFilter domainLayer
-    class AppleScript,APIs,Cache,DI infraLayer
-    class Core,Monitoring,Data sharedLayer
+    classDef appLayer fill: #e1f5ff, stroke: #0288d1, stroke-width: 2px
+    classDef domainLayer fill: #fff9c4, stroke: #f57f17, stroke-width: 2px
+    classDef infraLayer fill: #f3e5f5, stroke: #7b1fa2, stroke-width: 2px
+    classDef sharedLayer fill: #e8f5e9, stroke: #388e3c, stroke-width: 2px
+    class CLI, Orchestrator, Config, MusicUpdater, Features appLayer
+    class TrackProcessor, GenreManager, YearRetriever, ArtistRenamer, IncrementalFilter domainLayer
+    class AppleScript, APIs, Cache, DI infraLayer
+    class Core, Monitoring, Data sharedLayer
 ```
 
 ### Key Design Patterns
