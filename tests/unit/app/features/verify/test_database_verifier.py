@@ -372,36 +372,36 @@ class TestVerifyTrackExists:
     @pytest.mark.asyncio
     async def test_returns_true_when_exists(self, verifier: DatabaseVerifier) -> None:
         """Should return True when AppleScript returns 'exists'."""
-        verifier.ap_client.run_script_code = AsyncMock(return_value="exists")
-        result = await verifier._verify_track_exists("123")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="exists"):
+            result = await verifier._verify_track_exists("123")
         assert result is True
 
     @pytest.mark.asyncio
     async def test_returns_false_when_not_found(self, verifier: DatabaseVerifier) -> None:
         """Should return False when AppleScript returns 'not_found'."""
-        verifier.ap_client.run_script_code = AsyncMock(return_value="not_found")
-        result = await verifier._verify_track_exists("123")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="not_found"):
+            result = await verifier._verify_track_exists("123")
         assert result is False
 
     @pytest.mark.asyncio
     async def test_returns_true_on_error_assume_exists(self, verifier: DatabaseVerifier) -> None:
         """Should return True when AppleScript returns 'error_assume_exists'."""
-        verifier.ap_client.run_script_code = AsyncMock(return_value="error_assume_exists")
-        result = await verifier._verify_track_exists("123")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="error_assume_exists"):
+            result = await verifier._verify_track_exists("123")
         assert result is True
 
     @pytest.mark.asyncio
     async def test_returns_true_on_none_result(self, verifier: DatabaseVerifier) -> None:
         """Should return True when AppleScript returns None."""
-        verifier.ap_client.run_script_code = AsyncMock(return_value=None)
-        result = await verifier._verify_track_exists("123")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value=None):
+            result = await verifier._verify_track_exists("123")
         assert result is True
 
     @pytest.mark.asyncio
     async def test_returns_true_on_exception(self, verifier: DatabaseVerifier) -> None:
         """Should return True when AppleScript raises exception."""
-        verifier.ap_client.run_script_code = AsyncMock(side_effect=OSError("AppleScript failed"))
-        result = await verifier._verify_track_exists("123")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=OSError("AppleScript failed")):
+            result = await verifier._verify_track_exists("123")
         assert result is True
 
     @pytest.mark.asyncio
@@ -413,8 +413,8 @@ class TestVerifyTrackExists:
     @pytest.mark.asyncio
     async def test_converts_non_string_result_to_string(self, verifier: DatabaseVerifier) -> None:
         """Should handle non-string AppleScript result."""
-        verifier.ap_client.run_script_code = AsyncMock(return_value=123)
-        result = await verifier._verify_track_exists("456")
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value=123):
+            result = await verifier._verify_track_exists("456")
         # Non-"exists" and non-"not_found" returns True
         assert result is True
 
@@ -517,9 +517,9 @@ class TestVerifyTracksInBatches:
     async def test_returns_invalid_track_ids(self, verifier: DatabaseVerifier) -> None:
         """Should return list of invalid track IDs."""
         tracks = [_create_track("1"), _create_track("2"), _create_track("3")]
-        verifier.ap_client.run_script_code = AsyncMock(side_effect=["exists", "not_found", "exists"])
 
-        result = await verifier._verify_tracks_in_batches(tracks, {"batch_size": 10, "pause_seconds": 0})
+        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=["exists", "not_found", "exists"]):
+            result = await verifier._verify_tracks_in_batches(tracks, {"batch_size": 10, "pause_seconds": 0})
 
         assert result == ["2"]
 
@@ -527,9 +527,11 @@ class TestVerifyTracksInBatches:
     async def test_processes_in_batches(self, verifier: DatabaseVerifier) -> None:
         """Should process tracks in batches."""
         tracks = [_create_track(str(i)) for i in range(5)]
-        verifier.ap_client.run_script_code = AsyncMock(return_value="exists")
 
-        with patch.object(verifier, "_log_batch_progress") as mock_log:
+        with (
+            patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="exists"),
+            patch.object(verifier, "_log_batch_progress") as mock_log,
+        ):
             await verifier._verify_tracks_in_batches(tracks, {"batch_size": 2, "pause_seconds": 0})
 
         # 5 tracks / 2 batch_size = 3 batches
@@ -637,9 +639,9 @@ class TestVerifyAndCleanTrackDatabase:
         csv_file.write_text("")
 
         tracks = {"1": _create_track("1"), "2": _create_track("2")}
-        verifier.ap_client.run_script_code = AsyncMock(side_effect=["exists", "not_found"])
 
         with (
+            patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=["exists", "not_found"]),
             patch(
                 "src.app.features.verify.database_verifier.get_full_log_path",
                 return_value=str(csv_file),
