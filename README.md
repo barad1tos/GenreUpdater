@@ -210,19 +210,19 @@ Create `~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist`:
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.barad1tos.MusicGenreUpdater</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/.venv/bin/python</string>
-        <string>/path/to/GenreUpdater/main.py</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>1800</integer>
-    <key>WorkingDirectory</key>
-    <string>/path/to/GenreUpdater</string>
-</dict>
+    <dict>
+        <key>Label</key>
+        <string>com.barad1tos.MusicGenreUpdater</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/path/to/.venv/bin/python</string>
+            <string>/path/to/GenreUpdater/main.py</string>
+        </array>
+        <key>StartInterval</key>
+        <integer>1800</integer>
+        <key>WorkingDirectory</key>
+        <string>/path/to/GenreUpdater</string>
+    </dict>
 </plist>
 ```
 
@@ -236,27 +236,27 @@ launchctl load ~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist
 
 ### Global Flags
 
-| Flag | Description |
-|------|-------------|
-| `--force` | Bypass incremental checks and cache |
-| `--dry-run` | Preview changes without applying |
-| `--test-mode` | Run only on test_artists from config |
-| `--verbose`, `-v` | Enable verbose logging |
-| `--quiet`, `-q` | Suppress non-critical output |
-| `--config PATH` | Use custom config file |
+| Flag              | Description                          |
+|-------------------|--------------------------------------|
+| `--force`         | Bypass incremental checks and cache  |
+| `--dry-run`       | Preview changes without applying     |
+| `--test-mode`     | Run only on test_artists from config |
+| `--verbose`, `-v` | Enable verbose logging               |
+| `--quiet`, `-q`   | Suppress non-critical output         |
+| `--config PATH`   | Use custom config file               |
 
 ### Commands
 
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| _(default)_ | - | Full library genre and year update |
-| `clean_artist` | `clean` | Clean metadata for specific artist |
-| `update_years` | `years` | Fetch release years from APIs |
-| `revert_years` | `revert` | Rollback year changes |
-| `verify_database` | `verify-db` | Verify track database integrity |
-| `verify_pending` | `pending` | Check pending verification queue |
-| `batch` | - | Batch processing from file |
-| `rotate_keys` | `rotate-keys` | Rotate encryption keys |
+| Command           | Aliases       | Description                        |
+|-------------------|---------------|------------------------------------|
+| _(default)_       | -             | Full library genre and year update |
+| `clean_artist`    | `clean`       | Clean metadata for specific artist |
+| `update_years`    | `years`       | Fetch release years from APIs      |
+| `revert_years`    | `revert`      | Rollback year changes              |
+| `verify_database` | `verify-db`   | Verify track database integrity    |
+| `verify_pending`  | `pending`     | Check pending verification queue   |
+| `batch`           | -             | Batch processing from file         |
+| `rotate_keys`     | `rotate-keys` | Rotate encryption keys             |
 
 ### Examples
 
@@ -293,11 +293,11 @@ uv run python main.py rotate_keys
 
 ### Caching Strategy
 
-| Tier | Type | Latency | Persistence |
-|------|------|---------|-------------|
-| L1 | Memory | <1ms | Session only |
-| L2 | Disk (JSON) | 10-50ms | 20min TTL |
-| L3 | Snapshot | <1s for 30K tracks | Permanent |
+| Tier | Type        | Latency            | Persistence  |
+|------|-------------|--------------------|--------------|
+| L1   | Memory      | <1ms               | Session only |
+| L2   | Disk (JSON) | 10-50ms            | 20min TTL    |
+| L3   | Snapshot    | <1s for 30K tracks | Permanent    |
 
 ### Batch Processing
 
@@ -308,6 +308,7 @@ uv run python main.py batch --file artists.txt --operation full
 ```
 
 Features:
+
 - Processes artists from file (one per line)
 - Automatic parse failure tolerance (max 3 consecutive)
 - Memory-efficient streaming
@@ -332,13 +333,13 @@ Three specialized loggers:
 
 The application uses AppleScript files in the `applescripts/` directory:
 
-| Script | Purpose |
-|--------|---------|
-| `fetch_tracks.scpt` | Fetch all tracks from Music.app |
-| `fetch_tracks_by_ids.scpt` | Fetch specific tracks by ID list |
-| `update_property.applescript` | Update single track property |
-| `batch_update_tracks.applescript` | Batch updates (experimental) |
-| `fetch_track_ids.applescript` | Fetch track IDs only |
+| Script                            | Purpose                          |
+|-----------------------------------|----------------------------------|
+| `fetch_tracks.scpt`               | Fetch all tracks from Music.app  |
+| `fetch_tracks_by_ids.scpt`        | Fetch specific tracks by ID list |
+| `update_property.applescript`     | Update single track property     |
+| `batch_update_tracks.applescript` | Batch updates (experimental)     |
+| `fetch_track_ids.applescript`     | Fetch track IDs only             |
 
 **Output Format**: ASCII-separated fields (field: `\x1E`, line: `\x1D`)
 
@@ -389,15 +390,19 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 ### Common Issues
 
 **"Music app is not running"**
+
 - Launch Music.app before running (except `rotate_keys` command)
 
 **AppleScript timeout**
+
 - Increase timeout in `config.yaml` under `applescript_timeouts`
 
 **Cache corruption**
+
 - Delete `cache/` directory and re-run
 
 **Parse failures during batch**
+
 - Reduce `batch_processing.ids_batch_size` in config
 
 ### Verification
