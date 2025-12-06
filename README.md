@@ -330,50 +330,154 @@ The code is organized into four layers. You don't need to understand this to use
 <details>
 <summary>Architecture diagram and code structure</summary>
 
-### Overview
+### System Context (C4 Level 1)
+
+Shows how the system interacts with external actors and systems.
 
 ```mermaid
 graph LR
-    subgraph App["App Layer"]
-        A1[CLI + Orchestrator]
-        A2[Pipelines]
-        A3[Features]
+    User((User))
+
+    subgraph System["Music Genre Updater"]
+        MGU[Application]
     end
 
-    subgraph Core["Core Layer"]
-        C1[Track Processing]
-        C2[Models + Protocols]
-        C3[Utilities]
-    end
+    MusicApp[(Music.app)]
+    MB[(MusicBrainz API)]
+    DG[(Discogs API)]
+    LF[(Last.fm API)]
+    FS[(File System)]
 
-    subgraph Services["Services Layer"]
-        S1[AppleScript]
-        S2[Cache]
-        S3[External APIs]
-    end
+    User -->|commands| MGU
+    MGU -->|read tracks| MusicApp
+    MGU -->|write updates| MusicApp
+    MGU -->|query metadata| MB
+    MGU -->|query metadata| DG
+    MGU -->|query metadata| LF
+    MGU -->|cache/reports| FS
 
-    subgraph Metrics["Metrics Layer"]
-        M1[Analytics]
-        M2[Reports]
-    end
-
-    App --> Core --> Services
-    App -.-> Metrics
-    Core -.-> Metrics
-
-    classDef appLayer fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef coreLayer fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef servicesLayer fill:#D4BFFF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef metricsLayer fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class A1,A2,A3 appLayer
-    class C1,C2,C3 coreLayer
-    class S1,S2,S3 servicesLayer
-    class M1,M2 metricsLayer
+    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef system fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef user fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class MusicApp,MB,DG,LF,FS external
+    class MGU system
+    class User user
 ```
 
 ---
 
-### App Layer (`src/app/`)
+### Container Diagram (C4 Level 2)
+
+Shows the main containers inside the system and data flow between them.
+
+```mermaid
+graph TB
+    User((User))
+    MusicApp[(Music.app)]
+    ExtAPIs[(External APIs)]
+    FileSystem[(File System)]
+
+    subgraph System["Music Genre Updater"]
+        CLI[CLI Parser]
+        Orch[Orchestrator]
+        Pipes[Pipelines]
+        Core[Track Processor]
+        Apple[AppleScript Client]
+        Cache[Cache Service]
+        APIs[API Clients]
+        Metrics[Reports]
+    end
+
+    User -->|"--dry-run, --force"| CLI
+    CLI -->|parsed args| Orch
+    Orch -->|route command| Pipes
+    Pipes -->|process tracks| Core
+    Core -->|fetch/update| Apple
+    Core -->|get metadata| APIs
+    Core -->|read/write| Cache
+    Pipes -->|generate| Metrics
+
+    Apple <-->|AppleScript| MusicApp
+    APIs -->|HTTP| ExtAPIs
+    Cache <-->|JSON/pickle| FileSystem
+    Metrics -->|HTML/CSV| FileSystem
+
+    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef internal fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef user fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class MusicApp,ExtAPIs,FileSystem external
+    class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
+    class User user
+```
+
+---
+
+### Data Flow: Genre Update
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CLI as CLI
+    participant O as Orchestrator
+    participant P as Pipeline
+    participant A as AppleScript
+    participant M as Music.app
+    participant C as Cache
+
+    U->>CLI: uv run python main.py
+    CLI->>O: parsed arguments
+    O->>A: fetch all tracks
+    A->>M: AppleScript query
+    M-->>A: track data (30K+)
+    A-->>O: List[TrackDict]
+    O->>C: check snapshot
+    C-->>O: delta (changed tracks)
+    O->>P: process tracks
+    P->>P: calculate dominant genre per artist
+    P->>A: update genre
+    A->>M: AppleScript set
+    M-->>A: success
+    P-->>O: changes made
+    O-->>CLI: summary report
+```
+
+---
+
+### Data Flow: Year Update
+
+```mermaid
+sequenceDiagram
+    participant P as Pipeline
+    participant API as API Orchestrator
+    participant MB as MusicBrainz
+    participant DG as Discogs
+    participant LF as Last.fm
+    participant C as Cache
+    participant A as AppleScript
+
+    P->>C: check cached year
+    alt cache hit
+        C-->>P: cached year + confidence
+    else cache miss
+        P->>API: fetch year (artist, album)
+        par query all APIs
+            API->>MB: search release
+            API->>DG: search release
+            API->>LF: get album info
+        end
+        MB-->>API: year + score
+        DG-->>API: year + score
+        LF-->>API: year + score
+        API->>API: resolve best year (scoring)
+        API-->>P: year + confidence
+        P->>C: store in cache
+    end
+    P->>A: update year
+```
+
+---
+
+### Component: App Layer (`src/app/`)
 
 ```mermaid
 graph LR
@@ -383,12 +487,10 @@ graph LR
     end
 
     subgraph Pipelines["Processing Pipelines"]
-        MU[music_updater.py]
-        FS[full_sync.py]
-        YU[year_update.py]
-        TC[track_cleaning.py]
-        PS[pipeline_snapshot.py]
-        PH[pipeline_helpers.py]
+        MU[music_updater]
+        FS[full_sync]
+        YU[year_update]
+        TC[track_cleaning]
     end
 
     subgraph Features["Feature Modules"]
@@ -397,173 +499,161 @@ graph LR
         Verify[verify/database]
     end
 
-    CLI --> Orch
-    Orch --> MU
-    Orch --> FS
-    Orch --> YU
-    Orch --> TC
-    Orch --> Features
-    MU --> PS
-    MU --> PH
+    CLI -->|args| Orch
+    Orch -->|genre+year| MU
+    Orch -->|full library| FS
+    Orch -->|years only| YU
+    Orch -->|clean metadata| TC
+    Orch -->|batch/crypto/verify| Features
 
     classDef entry fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
     classDef pipeline fill:#5BC0EB,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef feature fill:#9DD9D2,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef feature fill:#95E6CB,stroke:#1F2430,stroke-width:2px,color:#1F2430
     class CLI,Orch entry
-    class MU,FS,YU,TC,PS,PH pipeline
+    class MU,FS,YU,TC pipeline
     class Batch,Crypto,Verify feature
 ```
 
 ---
 
-### Core Layer (`src/core/`)
+### Component: Core Layer (`src/core/`)
 
 ```mermaid
 graph TB
-    subgraph Tracks["tracks/ — Domain Logic"]
+    subgraph Input["Input"]
+        IN[TrackDict from AppleScript]
+    end
+
+    subgraph Processing["tracks/"]
         TP[track_processor]
         GM[genre_manager]
         YR[year_retriever]
-        YD[year_determination]
         AR[artist_renamer]
         IF[incremental_filter]
-        TD[track_delta]
         UE[update_executor]
-        BF[batch_fetcher]
-        CM[cache_manager]
     end
 
-    subgraph Models["models/ — Data Structures"]
-        TM[track_models]
-        PR[protocols]
-        TY[types]
-        VA[validators]
-        MU2[metadata_utils]
-        SD[script_detection]
+    subgraph Output["Output"]
+        OUT[Updated TrackDict]
     end
 
-    subgraph Utils["Utilities"]
-        LG[logger]
-        EX[exceptions]
-        RT[retry_handler]
-        DR[dry_run]
-        DT[datetime_utils]
-        IC[icloud_cleanup]
-    end
+    IN -->|raw tracks| IF
+    IF -->|filtered delta| TP
+    TP -->|artist tracks| GM
+    GM -->|dominant genre| TP
+    TP -->|album info| YR
+    YR -->|release year| TP
+    TP -->|dirty names| AR
+    AR -->|clean names| TP
+    TP -->|changes| UE
+    UE -->|execute| OUT
 
-    TP --> GM
-    TP --> YR
-    TP --> AR
-    TP --> UE
-    YR --> YD
-    TP --> IF
-    TP --> TD
-    TP --> BF
-    BF --> CM
-    TP --> Models
-    Tracks --> Utils
-
-    classDef tracks fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef models fill:#FFCC80,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef utils fill:#FFE0B2,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class TP,GM,YR,YD,AR,IF,TD,UE,BF,CM tracks
-    class TM,PR,TY,VA,MU2,SD models
-    class LG,EX,RT,DR,DT,IC utils
+    classDef io fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef proc fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class IN,OUT io
+    class TP,GM,YR,AR,IF,UE proc
 ```
 
 ---
 
-### Services Layer (`src/services/`)
+### Component: Services Layer (`src/services/`)
 
 ```mermaid
 graph TB
-    subgraph DI["Dependency Injection"]
-        DC[dependency_container]
-        PV[pending_verification]
+    subgraph Callers["From Core Layer"]
+        Core[Track Processor]
     end
 
-    subgraph Apple["apple/ — Music.app Integration"]
+    subgraph Apple["apple/"]
         AC[applescript_client]
-        AE[applescript_executor]
+        AE[executor]
         RL[rate_limiter]
-        SN[sanitizer]
-        FV[file_validator]
     end
 
-    subgraph Cache["cache/ — Multi-Tier Caching"]
+    subgraph Cache["cache/"]
         CO[orchestrator]
         SS[snapshot]
         ALB[album_cache]
         API_C[api_cache]
-        GC[generic_cache]
-        HS[hash_service]
     end
 
-    subgraph APIs["api/ — External Services"]
+    subgraph APIs["api/"]
         AO[orchestrator]
         MB[musicbrainz]
         DG[discogs]
         LF[lastfm]
-        AM[applemusic]
         YS[year_scoring]
-        YSC[year_search_coordinator]
     end
 
-    DC --> Apple
-    DC --> Cache
-    DC --> APIs
-    AC --> AE
-    AE --> RL
-    AC --> SN
-    CO --> SS
-    CO --> ALB
-    CO --> API_C
-    CO --> GC
-    AO --> MB
-    AO --> DG
-    AO --> LF
-    AO --> AM
-    AO --> YS
-    YS --> YSC
+    subgraph External["External Systems"]
+        MusicApp[(Music.app)]
+        ExtAPI[(HTTP APIs)]
+        Files[(File System)]
+    end
 
-    classDef di fill:#D4BFFF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef apple fill:#E1BEE7,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    Core -->|fetch/update tracks| AC
+    AC --> AE --> RL
+    RL -->|AppleScript| MusicApp
+
+    Core -->|get/set cache| CO
+    CO --> SS & ALB & API_C
+    SS & ALB & API_C -->|read/write| Files
+
+    Core -->|query metadata| AO
+    AO --> MB & DG & LF
+    AO --> YS
+    MB & DG & LF -->|HTTP| ExtAPI
+
+    classDef caller fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef apple fill:#D4BFFF,stroke:#1F2430,stroke-width:2px,color:#1F2430
     classDef cache fill:#CE93D8,stroke:#1F2430,stroke-width:2px,color:#1F2430
     classDef api fill:#BA68C8,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class DC,PV di
-    class AC,AE,RL,SN,FV apple
-    class CO,SS,ALB,API_C,GC,HS cache
-    class AO,MB,DG,LF,AM,YS,YSC api
+    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class Core caller
+    class AC,AE,RL apple
+    class CO,SS,ALB,API_C cache
+    class AO,MB,DG,LF,YS api
+    class MusicApp,ExtAPI,Files external
 ```
 
 ---
 
-### Metrics Layer (`src/metrics/`)
+### Component: Metrics Layer (`src/metrics/`)
 
 ```mermaid
 graph LR
-    subgraph Analytics["Performance Tracking"]
-        AN[analytics.py]
-        MO[monitoring.py]
+    subgraph Input["From Pipelines"]
+        Data[Processing Results]
     end
 
-    subgraph Reports["Report Generation"]
+    subgraph Analytics["Tracking"]
+        AN[analytics]
+        MO[monitoring]
+    end
+
+    subgraph Reports["Generation"]
         HR[html_reports]
         CR[change_reports]
         ER[error_reports]
-        CSV[csv_utils]
-        TS[track_sync]
     end
 
-    AN --> HR
-    AN --> CR
-    MO --> ER
-    CR --> CSV
+    subgraph Output["To File System"]
+        HTML[reports/*.html]
+        CSV[reports/*.csv]
+    end
 
-    classDef analytics fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef reports fill:#C5E1A5,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class AN,MO analytics
-    class HR,CR,ER,CSV,TS reports
+    Data --> AN & MO
+    AN --> HR & CR
+    MO --> ER
+    HR --> HTML
+    CR & ER --> CSV
+
+    classDef io fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef track fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef report fill:#C5E1A5,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class Data,HTML,CSV io
+    class AN,MO track
+    class HR,CR,ER report
 ```
 
 ---
@@ -572,10 +662,10 @@ graph LR
 
 | Layer | Path | What it does |
 |-------|------|--------------|
-| **App** | `src/app/` | CLI parsing, command routing, pipelines (sync, year update, cleaning), feature modules |
-| **Core** | `src/core/` | Domain logic: track processing, genre/year determination, artist renaming, filtering, models |
-| **Services** | `src/services/` | Infrastructure: AppleScript client, multi-tier cache, external API clients (MB/Discogs/Last.fm) |
-| **Metrics** | `src/metrics/` | Observability: analytics decorators, HTML/CSV reports, error tracking, monitoring |
+| **App** | `src/app/` | Entry point, command routing, pipeline selection |
+| **Core** | `src/core/` | Business logic: genre calculation, year determination, track filtering |
+| **Services** | `src/services/` | I/O adapters: AppleScript, cache, external API clients |
+| **Metrics** | `src/metrics/` | Observability: timing, reports, error tracking |
 
 ### Key Design Patterns
 
