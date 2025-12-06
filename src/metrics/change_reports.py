@@ -52,12 +52,20 @@ from src.metrics.track_sync import (
 )
 
 __all__ = [
+    # Public constants
+    "ChangeType",
+    "Color",
+    "Format",
+    "Key",
+    "Misc",
+    # Public functions
     "load_track_list",
     "save_changes_report",
     "save_detailed_dry_run_report",
     "save_html_report",
     "save_to_csv",
     "save_track_map_to_csv",
+    "save_unified_changes_report",
     "sync_track_list_with_current",
 ]
 
