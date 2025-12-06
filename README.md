@@ -25,12 +25,14 @@ release years from MusicBrainz, Discogs, and Last.fm.
 <summary>More features (v2.0)</summary>
 
 **Performance:**
+
 - Library snapshot caching (load 30K tracks in <1s)
 - Incremental updates (process only changed tracks)
 - Multi-tier caching: Memory → Disk → Snapshot
 - Fully async I/O operations
 
 **Security:**
+
 - Encrypted API key storage
 - Key rotation command
 - Database integrity verification
@@ -90,26 +92,26 @@ uv run python main.py verify_database
 
 **Global Flags:**
 
-| Flag | Description |
-|------|-------------|
-| `--force` | Bypass cache and incremental checks |
-| `--dry-run` | Preview without applying |
-| `--test-mode` | Use test_artists from config |
-| `--verbose` | Verbose logging |
-| `--config PATH` | Custom config file |
+| Flag            | Description                         |
+|-----------------|-------------------------------------|
+| `--force`       | Bypass cache and incremental checks |
+| `--dry-run`     | Preview without applying            |
+| `--test-mode`   | Use test_artists from config        |
+| `--verbose`     | Verbose logging                     |
+| `--config PATH` | Custom config file                  |
 
 **Commands:**
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| _(default)_ | - | Full library update |
-| `clean_artist` | `clean` | Clean artist metadata |
-| `update_years` | `years` | Fetch release years |
-| `revert_years` | `revert` | Rollback year changes |
-| `verify_database` | `verify-db` | Check database integrity |
-| `verify_pending` | `pending` | Retry failed verifications |
-| `batch` | - | Process artists from file |
-| `rotate_keys` | `rotate-keys` | Rotate encryption keys |
+| Command           | Alias         | Description                |
+|-------------------|---------------|----------------------------|
+| _(default)_       | -             | Full library update        |
+| `clean_artist`    | `clean`       | Clean artist metadata      |
+| `update_years`    | `years`       | Fetch release years        |
+| `revert_years`    | `revert`      | Rollback year changes      |
+| `verify_database` | `verify-db`   | Check database integrity   |
+| `verify_pending`  | `pending`     | Retry failed verifications |
+| `batch`           | -             | Process artists from file  |
+| `rotate_keys`     | `rotate-keys` | Rotate encryption keys     |
 
 **Examples:**
 
@@ -198,19 +200,19 @@ Create `~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist`:
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.barad1tos.MusicGenreUpdater</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/.venv/bin/python</string>
-        <string>/path/to/GenreUpdater/main.py</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>1800</integer>
-    <key>WorkingDirectory</key>
-    <string>/path/to/GenreUpdater</string>
-</dict>
+    <dict>
+        <key>Label</key>
+        <string>com.barad1tos.MusicGenreUpdater</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/path/to/.venv/bin/python</string>
+            <string>/path/to/GenreUpdater/main.py</string>
+        </array>
+        <key>StartInterval</key>
+        <integer>1800</integer>
+        <key>WorkingDirectory</key>
+        <string>/path/to/GenreUpdater</string>
+    </dict>
 </plist>
 ```
 
@@ -267,14 +269,15 @@ graph TD
 
 **Layers:**
 
-| Layer | Path | Purpose |
-|-------|------|---------|
-| App | `src/app/` | CLI, orchestration, features |
-| Core | `src/core/` | Business logic, models, tracks |
-| Services | `src/services/` | AppleScript, cache, APIs |
-| Metrics | `src/metrics/` | Analytics, monitoring, reports |
+| Layer    | Path            | Purpose                        |
+|----------|-----------------|--------------------------------|
+| App      | `src/app/`      | CLI, orchestration, features   |
+| Core     | `src/core/`     | Business logic, models, tracks |
+| Services | `src/services/` | AppleScript, cache, APIs       |
+| Metrics  | `src/metrics/`  | Analytics, monitoring, reports |
 
 **Key patterns:**
+
 - Dependency Injection via `DependencyContainer`
 - Protocol-based interfaces for testing
 - Multi-tier caching: Memory → Disk → Snapshot
@@ -282,22 +285,22 @@ graph TD
 
 **Caching performance:**
 
-| Tier | Type | Latency |
-|------|------|---------|
-| L1 | Memory | <1ms |
-| L2 | Disk (JSON) | 10-50ms |
-| L3 | Snapshot | <1s for 30K |
+| Tier | Type        | Latency     |
+|------|-------------|-------------|
+| L1   | Memory      | <1ms        |
+| L2   | Disk (JSON) | 10-50ms     |
+| L3   | Snapshot    | <1s for 30K |
 
 </details>
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| "Music app not running" | Launch Music.app first |
-| AppleScript timeout | Increase `applescript_timeouts` in config |
-| Cache corruption | Delete `cache/` directory |
-| Parse failures | Reduce `ids_batch_size` in config |
+| Problem                 | Solution                                  |
+|-------------------------|-------------------------------------------|
+| "Music app not running" | Launch Music.app first                    |
+| AppleScript timeout     | Increase `applescript_timeouts` in config |
+| Cache corruption        | Delete `cache/` directory                 |
+| Parse failures          | Reduce `ids_batch_size` in config         |
 
 <details>
 <summary>Verification commands</summary>
@@ -388,6 +391,7 @@ uv run mypy src/
 ## Contacts
 
 **Author:** Roman Borodavkin
+
 - Email: [roman.borodavkin@gmail.com](mailto:roman.borodavkin@gmail.com)
 - GitHub: [@barad1tos](https://github.com/barad1tos)
 
