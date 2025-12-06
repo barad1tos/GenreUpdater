@@ -68,9 +68,11 @@ class TestCacheOrchestrator:
         """Test that initialize() calls initialize on all services."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock) as mock_api, \
-             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock) as mock_generic:
+        with (
+            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock) as mock_api,
+            patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock) as mock_generic,
+        ):
             await orchestrator.initialize()
 
             mock_album.assert_called_once()
@@ -111,13 +113,17 @@ class TestCacheOrchestrator:
         temp_dir = tempfile.mkdtemp()
         Path(temp_dir).mkdir(parents=True, exist_ok=True)
 
-        orchestrator = self.create_orchestrator({
-            "cache": {"cleanup_icloud_conflicts": True},
-            "logging": {"base_dir": temp_dir},
-        })
+        orchestrator = self.create_orchestrator(
+            {
+                "cache": {"cleanup_icloud_conflicts": True},
+                "logging": {"base_dir": temp_dir},
+            }
+        )
 
-        with patch("src.services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup, \
-             patch("src.services.cache.orchestrator.get_full_log_path", return_value=str(Path(temp_dir) / "cache" / "test.json")):
+        with (
+            patch("src.services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup,
+            patch("src.services.cache.orchestrator.get_full_log_path", return_value=str(Path(temp_dir) / "cache" / "test.json")),
+        ):
             # Create the cache directory
             (Path(temp_dir) / "cache").mkdir(parents=True, exist_ok=True)
             orchestrator._cleanup_icloud_conflicts()
@@ -225,8 +231,7 @@ class TestCacheOrchestrator:
         """Test that get_async computes value when not cached."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.generic_service, "get", return_value=None), \
-             patch.object(orchestrator.generic_service, "set") as mock_set:
+        with patch.object(orchestrator.generic_service, "get", return_value=None), patch.object(orchestrator.generic_service, "set") as mock_set:
 
             async def _compute_value() -> CacheableValue:
                 """Compute the cached value."""
@@ -289,9 +294,11 @@ class TestCacheOrchestrator:
         orchestrator = self.create_orchestrator()
         orchestrator.api_service.event_manager = MagicMock()
 
-        with patch.object(orchestrator.generic_service, "invalidate") as mock_invalidate, \
-             patch.object(orchestrator.album_service, "invalidate_album", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "invalidate_for_album", new_callable=AsyncMock) as mock_api:
+        with (
+            patch.object(orchestrator.generic_service, "invalidate") as mock_invalidate,
+            patch.object(orchestrator.album_service, "invalidate_album", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "invalidate_for_album", new_callable=AsyncMock) as mock_api,
+        ):
             track = TrackDict(
                 id="123",
                 name="Test Track",
@@ -327,9 +334,11 @@ class TestCacheOrchestrator:
         """Test that invalidate_all clears all caches."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api, \
-             patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic:
+        with (
+            patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api,
+            patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic,
+        ):
             await orchestrator.invalidate_all()
 
             mock_album.assert_called_once()
@@ -343,9 +352,11 @@ class TestCacheOrchestrator:
         """Test that save_all_to_disk saves all services."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api, \
-             patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic:
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api,
+            patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic,
+        ):
             await orchestrator.save_all_to_disk()
 
             mock_album.assert_called_once()
@@ -361,9 +372,11 @@ class TestCacheOrchestrator:
         """Test that get_comprehensive_stats aggregates stats from all services."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 10}), \
-             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 20}), \
-             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 30}):
+        with (
+            patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 10}),
+            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 20}),
+            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 30}),
+        ):
             stats = orchestrator.get_comprehensive_stats()
 
             assert "album_cache" in stats
@@ -381,9 +394,11 @@ class TestCacheOrchestrator:
         """Test that get_cache_health returns health status for all services."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 5}), \
-             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}), \
-             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}):
+        with (
+            patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 5}),
+            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}),
+            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}),
+        ):
             health = orchestrator.get_cache_health()
 
             assert "album" in health
@@ -399,9 +414,11 @@ class TestCacheOrchestrator:
         """Test that get_cache_health reports errors correctly."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "get_stats", side_effect=Exception("Stats failed")), \
-             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}), \
-             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}):
+        with (
+            patch.object(orchestrator.album_service, "get_stats", side_effect=Exception("Stats failed")),
+            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}),
+            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}),
+        ):
             health = orchestrator.get_cache_health()
 
             assert health["album"]["status"] == "error"
@@ -459,9 +476,11 @@ class TestCacheOrchestrator:
         """Test that save_cache delegates to save_all_to_disk."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock), \
-             patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock):
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock),
+            patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock),
+        ):
             await orchestrator.save_cache()
 
             mock_album.assert_called_once()
@@ -517,9 +536,11 @@ class TestCacheOrchestrator:
         """Test that clear() clears all caches."""
         orchestrator = self.create_orchestrator()
 
-        with patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic, \
-             patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album, \
-             patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api:
+        with (
+            patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic,
+            patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album,
+            patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api,
+        ):
             await orchestrator.clear()
 
             mock_generic.assert_called_once()
