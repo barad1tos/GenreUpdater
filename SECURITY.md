@@ -3,7 +3,7 @@
 ## Supported Versions
 
 | Version | Supported          |
-| ------- | ------------------ |
+|---------|--------------------|
 | 2.x.x   | :white_check_mark: |
 | 1.x.x   | :x:                |
 
@@ -12,12 +12,12 @@
 If you discover a security vulnerability in this project, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue for security vulnerabilities
-2. Email the maintainer directly at: [barad1tos@gmail.com](mailto:barad1tos@gmail.com)
+2. Email the maintainer directly at: [roman.borodavkin@gmail.com](mailto:barad1tos@gmail.com)
 3. Include as much detail as possible:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if any)
+    - Description of the vulnerability
+    - Steps to reproduce
+    - Potential impact
+    - Suggested fix (if any)
 
 ### Response Timeline
 
@@ -33,7 +33,7 @@ This application handles API keys for external services (MusicBrainz, Discogs, L
 
 - API keys are stored encrypted using the `cryptography` library (Fernet symmetric encryption)
 - Keys can be rotated using the `rotate_keys` command
-- Never commit `my-config.yaml` or files containing plaintext API keys
+- Never commit `.env` or files containing plaintext API keys
 
 ### AppleScript Execution
 
@@ -59,4 +59,5 @@ The application executes AppleScript commands to interact with Music.app:
 
 ## Acknowledgments
 
-We appreciate responsible disclosure of security vulnerabilities. Contributors who report valid security issues will be acknowledged in this file (with their permission).
+We appreciate responsible disclosure of security vulnerabilities. Contributors who report valid security issues will be
+acknowledged in this file (with their permission).
