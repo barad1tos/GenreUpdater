@@ -333,36 +333,31 @@ The code is organized into four layers. You don't need to understand this to use
 ### Overview
 
 ```mermaid
-graph TB
+graph LR
     subgraph App["App Layer"]
-        direction LR
         A1[CLI + Orchestrator]
         A2[Pipelines]
         A3[Features]
     end
 
     subgraph Core["Core Layer"]
-        direction LR
         C1[Track Processing]
         C2[Models + Protocols]
         C3[Utilities]
     end
 
     subgraph Services["Services Layer"]
-        direction LR
         S1[AppleScript]
         S2[Cache]
         S3[External APIs]
     end
 
     subgraph Metrics["Metrics Layer"]
-        direction LR
         M1[Analytics]
         M2[Reports]
     end
 
-    App --> Core
-    Core --> Services
+    App --> Core --> Services
     App -.-> Metrics
     Core -.-> Metrics
 
