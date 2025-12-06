@@ -87,6 +87,8 @@ class TestMusicUpdaterAllure:
 
         # Library snapshot service mock (required for smart delta fetch)
         deps.library_snapshot_service = MagicMock()
+        deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
+        deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=None)
         deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=False)
         deps.library_snapshot_service.get_track_ids_from_snapshot = AsyncMock(return_value=set())
         deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=None)

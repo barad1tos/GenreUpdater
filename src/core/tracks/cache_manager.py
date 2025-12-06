@@ -179,19 +179,25 @@ class TrackCacheManager:
         self,
         tracks: list[TrackDict],
         processed_track_ids: Sequence[str] | None = None,
+        *,
+        library_mtime_override: datetime | None = None,
     ) -> None:
         """Persist the latest snapshot, metadata, and delta state.
 
         Args:
             tracks: Full list of tracks to save
             processed_track_ids: Optional list of track IDs that were processed in this delta
+            library_mtime_override: If provided, use this as the library modification time
+                instead of the current mtime. This should be captured BEFORE fetching tracks
+                to prevent race conditions where new tracks are added during the fetch.
         """
         if self.snapshot_service is None or not self.snapshot_service.is_enabled():
             return
 
         snapshot_hash = await self.snapshot_service.save_snapshot(tracks)
         current_time = self._current_time()
-        library_mtime = await self.snapshot_service.get_library_mtime()
+        # Use override if provided (captured before fetch), otherwise get current mtime
+        library_mtime = library_mtime_override or await self.snapshot_service.get_library_mtime()
 
         metadata = LibraryCacheMetadata(
             last_full_scan=current_time,

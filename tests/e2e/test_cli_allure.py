@@ -96,6 +96,11 @@ class TestCLIE2E:
         mock_deps.pending_verification.add_track = MagicMock()
         mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
 
+        # Library snapshot service mock
+        mock_deps.library_snapshot_service = MagicMock()
+        mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
+        mock_deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=None)
+
         return mock_deps
 
     @allure.story("Default Command")
