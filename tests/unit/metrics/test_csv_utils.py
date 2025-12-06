@@ -5,15 +5,11 @@ from __future__ import annotations
 import csv
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture

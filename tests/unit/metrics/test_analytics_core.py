@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import gc
 import logging
-import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture
