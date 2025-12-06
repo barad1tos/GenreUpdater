@@ -52,10 +52,12 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          check-name: 'Tests'
+          # Use regexp to match both Lint and Tests jobs
+          check-regexp: '^(Lint & Type Check|Tests)$'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
           allowed-conclusions: success
+          running-workflow-name: 'Mutation Testing Pipeline'
 
       - name: Set continue flag
         id: check
