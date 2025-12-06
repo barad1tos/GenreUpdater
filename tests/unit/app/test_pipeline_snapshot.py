@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -64,6 +65,10 @@ class TestPipelineSnapshotManagerInit:
         """Should initialize index as empty dict."""
         assert manager._tracks_index == {}
 
+    def test_initializes_library_mtime_as_none(self, manager: PipelineSnapshotManager) -> None:
+        """Should initialize library_mtime as None."""
+        assert manager._captured_library_mtime is None
+
 
 class TestReset:
     """Tests for reset method."""
@@ -79,6 +84,13 @@ class TestReset:
         manager.set_snapshot(sample_tracks)
         manager.reset()
         assert manager._tracks_index == {}
+
+    def test_clears_library_mtime(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
+        """Should clear captured library_mtime."""
+        mtime = datetime.now(UTC)
+        manager.set_snapshot(sample_tracks, library_mtime=mtime)
+        manager.reset()
+        assert manager._captured_library_mtime is None
 
 
 class TestSetSnapshot:
@@ -100,6 +112,17 @@ class TestSetSnapshot:
         manager._tracks_index = {"old": MagicMock()}
         manager.set_snapshot(sample_tracks)
         assert "old" not in manager._tracks_index
+
+    def test_stores_library_mtime(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
+        """Should store library_mtime when provided."""
+        mtime = datetime.now(UTC)
+        manager.set_snapshot(sample_tracks, library_mtime=mtime)
+        assert manager._captured_library_mtime == mtime
+
+    def test_library_mtime_defaults_to_none(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
+        """Should default library_mtime to None when not provided."""
+        manager.set_snapshot(sample_tracks)
+        assert manager._captured_library_mtime is None
 
 
 class TestUpdateTracks:
@@ -172,6 +195,13 @@ class TestClear:
         manager.clear()
         assert manager._tracks_index == {}
 
+    def test_clears_library_mtime(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
+        """Should clear captured library_mtime."""
+        mtime = datetime.now(UTC)
+        manager.set_snapshot(sample_tracks, library_mtime=mtime)
+        manager.clear()
+        assert manager._captured_library_mtime is None
+
 
 class TestPersistToDisk:
     """Tests for persist_to_disk method."""
@@ -217,6 +247,36 @@ class TestPersistToDisk:
         mock_track_processor.cache_manager.update_snapshot = AsyncMock(side_effect=RuntimeError("Disk error"))
         result = await manager.persist_to_disk()
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_passes_library_mtime_override(
+        self,
+        manager: PipelineSnapshotManager,
+        mock_track_processor: MagicMock,
+        sample_tracks: list[TrackDict],
+    ) -> None:
+        """Should pass captured library_mtime as library_mtime_override."""
+        mtime = datetime.now(UTC)
+        manager.set_snapshot(sample_tracks, library_mtime=mtime)
+        await manager.persist_to_disk()
+
+        mock_track_processor.cache_manager.update_snapshot.assert_called_once()
+        call_kwargs = mock_track_processor.cache_manager.update_snapshot.call_args.kwargs
+        assert call_kwargs.get("library_mtime_override") == mtime
+
+    @pytest.mark.asyncio
+    async def test_passes_none_when_no_library_mtime(
+        self,
+        manager: PipelineSnapshotManager,
+        mock_track_processor: MagicMock,
+        sample_tracks: list[TrackDict],
+    ) -> None:
+        """Should pass None as library_mtime_override when not captured."""
+        manager.set_snapshot(sample_tracks)  # No library_mtime
+        await manager.persist_to_disk()
+
+        call_kwargs = mock_track_processor.cache_manager.update_snapshot.call_args.kwargs
+        assert call_kwargs.get("library_mtime_override") is None
 
 
 class TestMergeSmartDelta:
