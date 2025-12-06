@@ -38,6 +38,15 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy src/ main.py
 
+      - name: Security scan with bandit
+        run: uv run bandit -r src/ -c pyproject.toml
+
+      - name: Dead code check with vulture
+        run: uv run vulture src/ vulture_whitelist.py --min-confidence 80
+
+      - name: Dependency vulnerability scan
+        run: uv run pip-audit
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -64,13 +73,13 @@ jobs:
             --cov-report=xml \
             -x
 
-      - name: Upload coverage
+      - name: Upload coverage to Codecov
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: codecov/codecov-action@v5
         with:
-          name: coverage-report
-          path: coverage.xml
-          if-no-files-found: warn
+          files: coverage.xml
+          fail_ci_if_error: false
+          verbose: true
 
   release:
     name: Release

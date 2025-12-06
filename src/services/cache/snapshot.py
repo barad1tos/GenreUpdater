@@ -585,14 +585,15 @@ class LibrarySnapshotService:
     def _write_bytes_atomic(self, target_path: Path, data: bytes) -> None:
         ensure_directory(str(target_path.parent), self.logger)
         temp_path: Path | None = None
+        success = False
         try:
             with tempfile.NamedTemporaryFile("wb", delete=False, dir=target_path.parent) as temp:
                 temp.write(data)
                 temp_path = Path(temp.name)
             temp_path.replace(target_path)
-            temp_path = None  # Clear so we don't try to delete the target file
+            success = True
         finally:
-            if temp_path is not None and temp_path.exists():
+            if not success and temp_path is not None and temp_path.exists():
                 temp_path.unlink(missing_ok=True)
 
     def _ensure_single_cache_format(self) -> None:

@@ -36,9 +36,11 @@ dependencies = [
 dev = [
   # Linting & formatting
   "ruff==0.14.8",
-  "mypy==1.19.0",
+  "mypy==1.13.0",
   "sourcery>=1.41.1; sys_platform == 'darwin'",  # macOS only
   "vulture>=2.14",
+  "bandit>=1.8.0",
+  "pip-audit>=2.7.0",
   # Testing
   "pytest==9.0.1",
   "pytest-asyncio==1.3.0",
@@ -183,6 +185,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
   "ARG005",  # Tests can have unused lambda arguments
   "TC003",   # Tests can have imports outside TYPE_CHECKING
   "PLC0415", # Tests can have imports inside functions
+  "PLC2701", # Tests can import private names (internal functions)
   "PT012",   # Tests can have complex pytest.raises blocks
   "TRY003",  # Tests can have long exception messages
   "EM101",   # Tests can use string literals in exceptions
@@ -288,6 +291,7 @@ addopts = [
   "--cov=src",
   "--cov-report=html:reports/html/coverage",
   "--cov-report=term-missing",
+  "--cov-fail-under=70",
   "--tb=short",
   "-v",
   # Allure reporting
@@ -393,4 +397,8 @@ disable = [
 # Bandit configuration - Security linting
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.bandit]
-skips = ["B404", "B101"] # B101: Allow assert for type narrowing
+skips = ["B101", "B311", "B404", "B603"]
+# B101: Allow assert for type narrowing
+# B311: random.uniform used for jitter, not security
+# B404: subprocess module is required for AppleScript
+# B603: shell=False is safe (we control the command)
