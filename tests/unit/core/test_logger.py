@@ -11,23 +11,33 @@ from pathlib import Path as PathLib
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.core.logger import (
     LEVEL_ABBREV,
     CompactFormatter,
     Loggable,
+    LogFormat,
     LoggerFilter,
     RunHandler,
+    RunTrackingHandler,
+    SafeQueueListener,
     _build_config_alias_map,
     _convert_path_value_to_string,
+    _create_console_logger,
+    _create_fallback_loggers,
     _get_log_file_paths,
     _get_log_levels_from_config,
     _get_path_from_config,
+    _setup_queue_logging,
     _try_config_alias_replacement,
     _try_home_directory_replacement,
     ensure_directory,
     get_full_log_path,
     get_html_report_path,
+    get_loggers,
     shorten_path,
+    spinner,
 )
 
 if TYPE_CHECKING:
@@ -490,3 +500,608 @@ class TestGetHtmlReportPath:
         get_html_report_path(config)
 
         assert (tmp_path / "analytics").exists()
+
+
+class TestSafeQueueListener:
+    """Tests for SafeQueueListener class."""
+
+    def test_stop_when_thread_exists(self) -> None:
+        """Should stop normally when thread exists."""
+        import queue
+
+        q: queue.Queue[logging.LogRecord] = queue.Queue()
+        handler = logging.NullHandler()
+        listener = SafeQueueListener(q, handler)
+        listener.start()
+
+        listener.stop()
+
+        assert not listener._thread or not listener._thread.is_alive()
+
+    def test_stop_when_thread_is_none(self) -> None:
+        """Should not crash when _thread is None."""
+        import queue
+
+        q: queue.Queue[logging.LogRecord] = queue.Queue()
+        handler = logging.NullHandler()
+        listener = SafeQueueListener(q, handler)
+        listener._thread = None
+
+        listener.stop()
+
+    def test_stop_when_no_thread_attribute(self) -> None:
+        """Should not crash when _thread attribute doesn't exist."""
+        import queue
+
+        q: queue.Queue[logging.LogRecord] = queue.Queue()
+        handler = logging.NullHandler()
+        listener = SafeQueueListener(q, handler)
+        if hasattr(listener, "_thread"):
+            delattr(listener, "_thread")
+
+        listener.stop()
+
+    def test_stop_handles_runtime_error(self) -> None:
+        """Should handle RuntimeError during stop."""
+        import queue
+
+        q: queue.Queue[logging.LogRecord] = queue.Queue()
+        handler = logging.NullHandler()
+        listener = SafeQueueListener(q, handler)
+        listener.start()
+
+        with patch.object(
+            SafeQueueListener.__bases__[0],
+            "stop",
+            side_effect=RuntimeError("Thread error"),
+        ):
+            listener.stop()
+
+
+class TestLogFormat:
+    """Tests for LogFormat class."""
+
+    def test_entity_formats_with_yellow(self) -> None:
+        """Should format entity with yellow markup."""
+        result = LogFormat.entity("CacheService")
+        assert result == "[yellow]CacheService[/yellow]"
+
+    def test_file_formats_with_cyan(self) -> None:
+        """Should format file with cyan markup."""
+        result = LogFormat.file("cache.json")
+        assert result == "[cyan]cache.json[/cyan]"
+
+    def test_number_formats_with_bright_white(self) -> None:
+        """Should format number with bright_white markup."""
+        result = LogFormat.number(100)
+        assert result == "[bright_white]100[/bright_white]"
+
+    def test_number_formats_float(self) -> None:
+        """Should format float number."""
+        result = LogFormat.number(3.14)
+        assert result == "[bright_white]3.14[/bright_white]"
+
+    def test_success_formats_with_green(self) -> None:
+        """Should format success with green markup."""
+        result = LogFormat.success("OK")
+        assert result == "[green]OK[/green]"
+
+    def test_error_formats_with_red(self) -> None:
+        """Should format error with red markup."""
+        result = LogFormat.error("FAILED")
+        assert result == "[red]FAILED[/red]"
+
+    def test_warning_formats_with_yellow(self) -> None:
+        """Should format warning with yellow markup."""
+        result = LogFormat.warning("WARN")
+        assert result == "[yellow]WARN[/yellow]"
+
+    def test_duration_formats_with_dim(self) -> None:
+        """Should format duration with dim markup and 1 decimal."""
+        result = LogFormat.duration(3.567)
+        assert result == "[dim]3.6s[/dim]"
+
+    def test_duration_formats_whole_number(self) -> None:
+        """Should format whole number duration."""
+        result = LogFormat.duration(10.0)
+        assert result == "[dim]10.0s[/dim]"
+
+    def test_label_formats_with_bold(self) -> None:
+        """Should format label with bold markup."""
+        result = LogFormat.label("Status")
+        assert result == "[bold]Status[/bold]"
+
+    def test_dim_formats_with_dim(self) -> None:
+        """Should format text with dim markup."""
+        result = LogFormat.dim("secondary info")
+        assert result == "[dim]secondary info[/dim]"
+
+
+class TestSpinner:
+    """Tests for spinner async context manager."""
+
+    @pytest.mark.asyncio
+    async def test_yields_status_object(self) -> None:
+        """Should yield a Status object."""
+        from rich.status import Status
+
+        async with spinner("Loading...") as status:
+            assert isinstance(status, Status)
+
+    @pytest.mark.asyncio
+    async def test_uses_provided_console(self) -> None:
+        """Should use provided console."""
+        from rich.console import Console
+
+        console = Console(force_terminal=True)
+
+        async with spinner("Loading...", console=console) as status:
+            assert status is not None
+
+    @pytest.mark.asyncio
+    async def test_creates_console_if_not_provided(self) -> None:
+        """Should create console if not provided."""
+        async with spinner("Loading...") as status:
+            assert status is not None
+
+    @pytest.mark.asyncio
+    async def test_message_is_displayed(self) -> None:
+        """Should display the provided message."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        output = StringIO()
+        console = Console(file=output, force_terminal=True)
+
+        async with spinner("Test message", console=console):
+            pass
+
+
+class TestRunTrackingHandler:
+    """Tests for RunTrackingHandler class."""
+
+    def test_init_creates_handler(self, tmp_path: Path) -> None:
+        """Should create handler with file."""
+        log_file = tmp_path / "test.log"
+        handler = RunTrackingHandler(str(log_file))
+        handler.close()
+
+        assert log_file.exists()
+
+    def test_init_stores_run_handler(self, tmp_path: Path) -> None:
+        """Should store run_handler reference."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=5)
+
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.close()
+
+        assert handler.run_handler is run_handler
+
+    def test_emit_writes_header_before_first_record(self, tmp_path: Path) -> None:
+        """Should write header before first log record."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        handler.close()
+
+        content = log_file.read_text()
+        assert "NEW RUN" in content
+        assert "Test message" in content
+
+    def test_emit_writes_header_only_once(self, tmp_path: Path) -> None:
+        """Should write header only before first record."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        for i in range(3):
+            record = logging.LogRecord(
+                name="test",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg=f"Message {i}",
+                args=(),
+                exc_info=None,
+            )
+            handler.emit(record)
+
+        handler.close()
+
+        content = log_file.read_text()
+        assert content.count("NEW RUN") == 1
+
+    def test_close_writes_footer(self, tmp_path: Path) -> None:
+        """Should write footer on close."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        handler.close()
+
+        content = log_file.read_text()
+        assert "END RUN" in content
+
+    def test_close_prevents_double_close(self, tmp_path: Path) -> None:
+        """Should not crash on double close."""
+        log_file = tmp_path / "test.log"
+        handler = RunTrackingHandler(str(log_file))
+
+        handler.close()
+        handler.close()
+
+    def test_emit_without_run_handler(self, tmp_path: Path) -> None:
+        """Should emit records without run handler."""
+        log_file = tmp_path / "test.log"
+        handler = RunTrackingHandler(str(log_file), run_handler=None)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        handler.close()
+
+        content = log_file.read_text()
+        assert "Test message" in content
+        assert "NEW RUN" not in content
+
+    def test_close_trims_log_file(self, tmp_path: Path) -> None:
+        """Should trim log file on close when max_runs > 0."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=2)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        handler.close()
+
+    def test_emit_handles_header_write_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Should handle OSError when writing header."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
+
+        with patch.object(handler.stream, "write", side_effect=OSError("Write failed")):
+            handler.emit(record)
+
+        assert handler._header_failed is True
+        captured = capsys.readouterr()
+        assert "Failed to write log header" in captured.err
+
+        handler.close()
+
+    def test_close_handles_footer_write_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Should handle error when writing footer."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+
+        with patch.object(handler.stream, "write", side_effect=OSError("Write failed")):
+            handler.close()
+
+        captured = capsys.readouterr()
+        assert "Failed to write log footer" in captured.err
+
+    def test_close_handles_close_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Should handle error when closing stream."""
+        log_file = tmp_path / "test.log"
+        handler = RunTrackingHandler(str(log_file))
+
+        with patch.object(
+            logging.FileHandler, "close", side_effect=OSError("Close failed")
+        ):
+            handler.close()
+
+        captured = capsys.readouterr()
+        assert "Error closing file stream" in captured.err
+
+    def test_close_handles_trim_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Should handle error when trimming log file."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=3)
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+
+        with patch.object(
+            run_handler, "trim_log_to_max_runs", side_effect=OSError("Trim failed")
+        ):
+            handler.close()
+
+        captured = capsys.readouterr()
+        assert "Error trimming log file" in captured.err
+
+
+class TestRunHandlerTrim:
+    """Additional tests for RunHandler trim functionality."""
+
+    def test_trim_log_to_max_runs_trims_old_runs(self, tmp_path: Path) -> None:
+        """Should trim log file to max runs."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=2)
+
+        separator = "=" * 80
+        content = (
+            f"{separator}\n"
+            "\ue05e NEW RUN: run1 - 2024-01-01\n"
+            f"{separator}\n"
+            "Log entry 1\n"
+            f"{separator}\n"
+            "\ue05e NEW RUN: run2 - 2024-01-02\n"
+            f"{separator}\n"
+            "Log entry 2\n"
+            f"{separator}\n"
+            "\ue05e NEW RUN: run3 - 2024-01-03\n"
+            f"{separator}\n"
+            "Log entry 3\n"
+        )
+        log_file.write_text(content)
+
+        run_handler.trim_log_to_max_runs(str(log_file))
+
+        trimmed_content = log_file.read_text()
+        assert "run1" not in trimmed_content
+        assert "run2" in trimmed_content
+        assert "run3" in trimmed_content
+
+    def test_trim_log_handles_oserror(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Should handle OSError during trimming."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler(max_runs=1)
+
+        separator = "=" * 80
+        content = (
+            f"{separator}\n"
+            "\ue05e NEW RUN: run1 - 2024-01-01\n"
+            f"{separator}\n"
+            "\ue05e NEW RUN: run2 - 2024-01-02\n"
+        )
+        log_file.write_text(content)
+
+        with patch("src.core.logger.Path.open", side_effect=OSError("Permission denied")):
+            run_handler.trim_log_to_max_runs(str(log_file))
+
+        captured = capsys.readouterr()
+        assert "Error trimming log file" in captured.err
+
+
+class TestCreateConsoleLogger:
+    """Tests for _create_console_logger function."""
+
+    def test_creates_logger_with_rich_handler(self) -> None:
+        """Should create logger with RichHandler."""
+        from rich.logging import RichHandler
+
+        levels = {"console": logging.INFO}
+
+        logger = _create_console_logger(levels)
+
+        assert logger.name == "console_logger"
+        assert any(isinstance(h, RichHandler) for h in logger.handlers)
+
+    def test_sets_correct_level(self) -> None:
+        """Should set correct log level."""
+        levels = {"console": logging.DEBUG}
+
+        logger_name = f"console_logger_{id(object())}"
+        with patch("src.core.logger.logging.getLogger") as mock_get_logger:
+            mock_logger = MagicMock()
+            mock_logger.handlers = []
+            mock_get_logger.return_value = mock_logger
+
+            _create_console_logger(levels)
+
+            mock_logger.setLevel.assert_called_with(logging.DEBUG)
+
+    def test_does_not_add_handler_twice(self) -> None:
+        """Should not add handler if already exists."""
+        from rich.logging import RichHandler
+
+        levels = {"console": logging.INFO}
+
+        logger = _create_console_logger(levels)
+        handler_count = len([h for h in logger.handlers if isinstance(h, RichHandler)])
+
+        _create_console_logger(levels)
+
+        new_handler_count = len([h for h in logger.handlers if isinstance(h, RichHandler)])
+        assert new_handler_count == handler_count
+
+
+class TestSetupQueueLogging:
+    """Tests for _setup_queue_logging function."""
+
+    def test_returns_all_loggers(self, tmp_path: Path) -> None:
+        """Should return all loggers and listener."""
+        config: dict[str, Any] = {
+            "logs_base_dir": str(tmp_path),
+            "logging": {"max_runs": 2},
+        }
+        levels = {
+            "console": logging.INFO,
+            "main_file": logging.DEBUG,
+            "analytics_file": logging.INFO,
+        }
+        log_files = {
+            "main": str(tmp_path / "main.log"),
+            "analytics": str(tmp_path / "analytics.log"),
+            "db_verify": str(tmp_path / "db_verify.log"),
+        }
+
+        result = _setup_queue_logging(config, levels, log_files)
+        main_logger, error_logger, analytics_logger, db_verify_logger, listener = result
+
+        assert main_logger is not None
+        assert error_logger is not None
+        assert analytics_logger is not None
+        assert db_verify_logger is not None
+        assert isinstance(listener, SafeQueueListener)
+
+        listener.stop()
+
+    def test_creates_log_files(self, tmp_path: Path) -> None:
+        """Should create log file directories."""
+        config: dict[str, Any] = {
+            "logs_base_dir": str(tmp_path),
+            "logging": {},
+        }
+        levels = {
+            "console": logging.INFO,
+            "main_file": logging.DEBUG,
+            "analytics_file": logging.INFO,
+        }
+        log_files = {
+            "main": str(tmp_path / "logs" / "main.log"),
+            "analytics": str(tmp_path / "logs" / "analytics.log"),
+            "db_verify": str(tmp_path / "logs" / "db_verify.log"),
+        }
+
+        _, _, _, _, listener = _setup_queue_logging(config, levels, log_files)
+        listener.stop()
+
+        assert (tmp_path / "logs").exists()
+
+
+class TestGetLoggers:
+    """Tests for get_loggers function."""
+
+    def test_returns_tuple_of_loggers(self, tmp_path: Path) -> None:
+        """Should return tuple of loggers."""
+        config: dict[str, Any] = {
+            "logs_base_dir": str(tmp_path),
+            "logging": {
+                "main_log": "main.log",
+                "analytics_log": "analytics.log",
+                "db_verify_log": "db_verify.log",
+            },
+        }
+
+        result = get_loggers(config)
+        console, error, analytics, db_verify, listener = result
+
+        assert console is not None
+        assert error is not None
+        assert analytics is not None
+        assert db_verify is not None
+
+        if listener:
+            listener.stop()
+
+    def test_returns_fallback_on_error(self) -> None:
+        """Should return fallback loggers on error."""
+        with patch(
+            "src.core.logger._get_log_levels_from_config",
+            side_effect=ValueError("Config error"),
+        ):
+            result = get_loggers({})
+
+        console, error, analytics, db_verify, listener = result
+        assert listener is None
+        assert console.name == "console_fallback"
+
+
+class TestCreateFallbackLoggers:
+    """Tests for _create_fallback_loggers function."""
+
+    def test_returns_four_loggers_and_none_listener(self) -> None:
+        """Should return four fallback loggers and None listener."""
+        result = _create_fallback_loggers(ValueError("Test error"))
+        console, error, analytics, db_verify, listener = result
+
+        assert console.name == "console_fallback"
+        assert error.name == "error_fallback"
+        assert analytics.name == "analytics_fallback"
+        assert db_verify.name == "db_verify_fallback"
+        assert listener is None
+
+    def test_adds_stream_handlers(self) -> None:
+        """Should add stream handlers to fallback loggers."""
+        console, error, analytics, db_verify, _ = _create_fallback_loggers(
+            RuntimeError("Setup failed")
+        )
+
+        assert len(console.handlers) > 0
+        assert len(error.handlers) > 0
+        assert len(analytics.handlers) > 0
+        assert len(db_verify.handlers) > 0
+
+    def test_logs_error_message(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should log error message to stderr."""
+        _create_fallback_loggers(TypeError("Type mismatch"))
+
+        captured = capsys.readouterr()
+        assert "FATAL ERROR" in captured.err
+        assert "Type mismatch" in captured.err
