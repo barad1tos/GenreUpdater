@@ -11,38 +11,40 @@
 </p>
 
 Automatically updates **genres** and **release years** for your Apple Music tracks.
-Analyzes your library, determines the dominant genre per artist, and fetches accurate
-release years from MusicBrainz, Discogs, and Last.fm.
 
-## Features
+## What It Does
 
-- **Auto Genre** - Sets the dominant genre for each artist
-- **Auto Year** - Fetches release years from 3 music databases
-- **Large Libraries** - Handles 30,000+ tracks efficiently
-- **Safe** - Dry-run mode to preview changes first
+1. **Fixes messy genres** — If an artist has 80 rock tracks and 5 pop tracks, the tool sets all their tracks to "Rock" (the dominant genre)
+
+2. **Fills in missing years** — Looks up actual release years from MusicBrainz, Discogs, and Last.fm, then writes them to your library
+
+3. **Cleans up metadata** — Removes "Remastered", "Deluxe Edition", and other clutter from track names
+
+4. **Previews before changing** — Run with `--dry-run` to see what would change without touching your library
 
 <details>
-<summary>More features (v2.0)</summary>
+<summary>Technical details: Performance & Security (v2.0)</summary>
 
-**Performance:**
+### Performance
 
-- Library snapshot caching (load 30K tracks in <1s)
-- Incremental updates (process only changed tracks)
-- Multi-tier caching: Memory → Disk → Snapshot
-- Fully async I/O operations
+- **Library Snapshot Caching** — Load 30,000+ tracks in under 1 second from disk cache
+- **Incremental Delta Updates** — Process only tracks changed since last run (based on `date_modified`)
+- **Multi-Tier Caching** — Three levels: Memory (L1, <1ms) → Disk JSON (L2, 10-50ms) → Snapshot (L3, <1s for 30K)
+- **Async/Await Architecture** — All I/O operations are non-blocking (aiohttp, aiofiles)
+- **Parse Failure Tolerance** — Automatically recovers from up to 3 consecutive AppleScript parse failures
 
-**Security:**
+### Security
 
-- Encrypted API key storage
-- Key rotation command
-- Database integrity verification
-- Input validation
+- **Encrypted Configuration** — API keys stored using Fernet symmetric encryption (cryptography library)
+- **Key Rotation** — Built-in `rotate_keys` command to rotate encryption keys
+- **Database Verification** — `verify_database` command checks track database integrity against Music.app
+- **Input Validation** — All AppleScript inputs sanitized to prevent injection attacks
 
 </details>
 
 ## Quick Start
 
-**Requirements:** macOS 10.15+, Python 3.13+, Apple Music
+**Requirements:** macOS 10.15+, Python 3.13+, Apple Music app
 
 ```bash
 # Install
@@ -60,16 +62,30 @@ uv run python main.py            # Apply changes
 ```
 
 <details>
-<summary>Alternative installation (pip/venv)</summary>
+<summary>Alternative: Traditional pip/venv installation</summary>
 
 ```bash
 git clone https://github.com/barad1tos/GenreUpdater.git
 cd GenreUpdater
+
+# Create and activate virtual environment
 python3.13 -m venv .venv
 source .venv/bin/activate
+
+# Install package in editable mode
 pip install -e .
+
+# Verify
 python main.py --help
 ```
+
+**Dependencies** (from pyproject.toml):
+- pydantic 2.x — Data validation
+- aiohttp — Async HTTP client
+- aiofiles — Async file I/O
+- cryptography — API key encryption
+- orjson — Fast JSON parsing
+- rich — Terminal formatting
 
 </details>
 
@@ -77,9 +93,9 @@ python main.py --help
 
 ```bash
 # Basic commands
-uv run python main.py                    # Full update
-uv run python main.py --dry-run          # Preview only
-uv run python main.py --force            # Bypass cache
+uv run python main.py                    # Full update (genres + years)
+uv run python main.py --dry-run          # Preview without changing
+uv run python main.py --force            # Bypass cache, process everything
 
 # Specific operations
 uv run python main.py clean_artist --artist "Pink Floyd"
@@ -88,42 +104,49 @@ uv run python main.py verify_database
 ```
 
 <details>
-<summary>All commands and flags</summary>
+<summary>All commands and flags reference</summary>
 
-**Global Flags:**
+### Global Flags
 
-| Flag            | Description                         |
-|-----------------|-------------------------------------|
-| `--force`       | Bypass cache and incremental checks |
-| `--dry-run`     | Preview without applying            |
-| `--test-mode`   | Use test_artists from config        |
-| `--verbose`     | Verbose logging                     |
-| `--config PATH` | Custom config file                  |
+| Flag | Description |
+|------|-------------|
+| `--force` | Bypass incremental checks and cache, process all tracks |
+| `--dry-run` | Preview changes without writing to Music.app |
+| `--test-mode` | Run only on artists listed in `development.test_artists` config |
+| `--verbose`, `-v` | Enable debug-level logging |
+| `--quiet`, `-q` | Suppress non-critical console output |
+| `--config PATH` | Use custom config file (default: `my-config.yaml` → `config.yaml`) |
 
-**Commands:**
+### Commands
 
-| Command           | Alias         | Description                |
-|-------------------|---------------|----------------------------|
-| _(default)_       | -             | Full library update        |
-| `clean_artist`    | `clean`       | Clean artist metadata      |
-| `update_years`    | `years`       | Fetch release years        |
-| `revert_years`    | `revert`      | Rollback year changes      |
-| `verify_database` | `verify-db`   | Check database integrity   |
-| `verify_pending`  | `pending`     | Retry failed verifications |
-| `batch`           | -             | Process artists from file  |
-| `rotate_keys`     | `rotate-keys` | Rotate encryption keys     |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| _(default)_ | — | Full library update: fetch all tracks, update genres and years |
+| `clean_artist` | `clean` | Remove "Remastered", "Deluxe" etc. from specific artist's tracks |
+| `update_years` | `years` | Fetch release years from APIs without updating genres |
+| `revert_years` | `revert` | Rollback year changes using `changes_report.csv` or custom backup |
+| `verify_database` | `verify-db` | Check that cached track IDs still exist in Music.app |
+| `verify_pending` | `pending` | Retry year lookups for albums that previously failed |
+| `batch` | — | Process multiple artists from a text file |
+| `rotate_keys` | `rotate-keys` | Generate new encryption key and re-encrypt all API tokens |
 
-**Examples:**
+### Command Examples
 
 ```bash
-# Revert year changes
+# Revert year changes for specific album
 uv run python main.py revert_years --artist "Otep" --album "The God Slayer"
 
-# Batch processing
+# Revert using backup CSV
+uv run python main.py revert_years --artist "Otep" --backup-csv /path/to/backup.csv
+
+# Batch process artists from file (one artist per line)
 uv run python main.py batch --file artists.txt --operation full
 
-# Rotate encryption keys
-uv run python main.py rotate_keys
+# Available operations: clean, years, full
+uv run python main.py batch --file artists.txt --operation years
+
+# Rotate encryption keys (doesn't require Music.app)
+uv run python main.py rotate_keys --new-password "optional-custom-password"
 ```
 
 </details>
@@ -142,57 +165,108 @@ logs_base_dir: /path/to/logs
 <summary>Full configuration reference</summary>
 
 ```yaml
-# Core Paths
+# ═══════════════════════════════════════════════════════════════
+# CORE PATHS (required)
+# ═══════════════════════════════════════════════════════════════
 music_library_path: /Users/username/Music/Music/Music Library.musiclibrary
-apple_scripts_dir: /path/to/applescripts
+apple_scripts_dir: /path/to/GenreUpdater/applescripts
 logs_base_dir: /path/to/logs
 
-# AppleScript Settings
-apple_script_concurrency: 2
+# ═══════════════════════════════════════════════════════════════
+# APPLESCRIPT SETTINGS
+# ═══════════════════════════════════════════════════════════════
+apple_script_concurrency: 2  # Max parallel AppleScript calls (2-3 safe, >5 causes race conditions)
+
 applescript_timeouts:
-  single_artist_fetch: 600   # 10 minutes
-  full_library_fetch: 3600   # 1 hour
-  batch_update: 60           # 1 minute
+  single_artist_fetch: 600   # 10 min — timeout for fetching one artist's tracks
+  full_library_fetch: 3600   # 1 hour — timeout for full library scan
+  batch_update: 60           # 1 min — timeout per batch update operation
 
-# Batch Processing
+# ═══════════════════════════════════════════════════════════════
+# BATCH PROCESSING
+# ═══════════════════════════════════════════════════════════════
 batch_processing:
-  ids_batch_size: 200
-  enabled: true
+  ids_batch_size: 200        # Tracks per batch when fetching by ID list
+  enabled: true              # Enable batch mode
 
-# Library Snapshot
+# ═══════════════════════════════════════════════════════════════
+# LIBRARY SNAPSHOT (for 30K+ libraries)
+# ═══════════════════════════════════════════════════════════════
 library_snapshot:
-  enabled: true
+  enabled: true              # Cache full library state to disk
   snapshot_dir: cache/snapshots
-  delta_enabled: true
+  delta_enabled: true        # Only fetch changed tracks on subsequent runs
+  hash_algorithm: sha256     # Integrity verification
 
-# Analytics
+# ═══════════════════════════════════════════════════════════════
+# INCREMENTAL UPDATES
+# ═══════════════════════════════════════════════════════════════
+incremental_interval_minutes: 15  # Skip tracks not modified in last N minutes
+
+# ═══════════════════════════════════════════════════════════════
+# RETRY CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+max_retries: 2               # Retry failed track updates
+retry_delay_seconds: 1       # Delay between retries
+
+# ═══════════════════════════════════════════════════════════════
+# ANALYTICS & LOGGING
+# ═══════════════════════════════════════════════════════════════
 analytics:
+  enabled: true
+  max_events: 1000
   duration_thresholds:
-    short_max: 2   # green
-    medium_max: 5  # gray
-    long_max: 10   # pink
+    short_max: 2             # <2s = green (fast)
+    medium_max: 5            # 2-5s = gray (normal)
+    long_max: 10             # 5-10s = pink (slow), >10s = needs optimization
 
-# Exceptions (skip these from cleaning)
-exceptions:
-  track_cleaning:
-    - artist: "Artist Name"
-      album: "Album Name"
+logging:
+  max_bytes: 5000000         # 5MB per log file
+  backup_count: 1            # Keep 1 backup
+  main_log_file: main/main.log
+  year_changes_log_file: main/year_changes.log
+  csv_output_file: csv/track_list.csv
+  changes_report_file: csv/changes_report.csv
+  analytics_log_file: analytics/analytics.log
 
-# Cleaning keywords
+# ═══════════════════════════════════════════════════════════════
+# METADATA CLEANING
+# ═══════════════════════════════════════════════════════════════
 cleaning:
   remaster_keywords:
     - remaster
     - remastered
-    - deluxe
+    - Re-recording
+    - Redux
+    - Expanded
+    - Special Edition
+    - Deluxe Edition
   album_suffixes_to_remove:
     - " - EP"
     - " - Single"
+
+# ═══════════════════════════════════════════════════════════════
+# EXCEPTIONS (skip these from processing)
+# ═══════════════════════════════════════════════════════════════
+exceptions:
+  track_cleaning:
+    - artist: "Example Artist"
+      album: "Example Album"
+
+# ═══════════════════════════════════════════════════════════════
+# DEVELOPMENT / TESTING
+# ═══════════════════════════════════════════════════════════════
+test_artists: []             # Artists to process in --test-mode
+
+experimental:
+  batch_updates_enabled: false  # Experimental: batch AppleScript updates (~10x faster)
+  max_batch_size: 5
 ```
 
 </details>
 
 <details>
-<summary>Automation with launchctl</summary>
+<summary>Automation with launchctl (run on schedule)</summary>
 
 Create `~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist`:
 
@@ -200,165 +274,259 @@ Create `~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist`:
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.barad1tos.MusicGenreUpdater</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/GenreUpdater/.venv/bin/python</string>
+        <string>/path/to/GenreUpdater/main.py</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>1800</integer>  <!-- Run every 30 minutes (1800 seconds) -->
+
+    <key>WorkingDirectory</key>
+    <string>/path/to/GenreUpdater</string>
+
+    <key>StandardOutPath</key>
+    <string>/path/to/logs/launchctl_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/path/to/logs/launchctl_stderr.log</string>
+
+    <key>EnvironmentVariables</key>
     <dict>
-        <key>Label</key>
-        <string>com.barad1tos.MusicGenreUpdater</string>
-        <key>ProgramArguments</key>
-        <array>
-            <string>/path/to/.venv/bin/python</string>
-            <string>/path/to/GenreUpdater/main.py</string>
-        </array>
-        <key>StartInterval</key>
-        <integer>1800</integer>
-        <key>WorkingDirectory</key>
-        <string>/path/to/GenreUpdater</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
     </dict>
+</dict>
 </plist>
 ```
 
+**Commands:**
+
 ```bash
-# Load agent (runs every 30 minutes)
+# Load (start running on schedule)
 launchctl load ~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist
 
-# Check status
+# Check if running
 launchctl list | grep com.barad1tos.MusicGenreUpdater
 
-# Unload
+# Unload (stop)
 launchctl unload ~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist
+
+# Run immediately (for testing)
+launchctl start com.barad1tos.MusicGenreUpdater
 ```
 
 </details>
 
 ## Architecture
 
-Four-layer clean architecture:
+The code is organized into four layers. You don't need to understand this to use the tool.
+
+<details>
+<summary>Architecture diagram and code structure</summary>
 
 ```mermaid
 graph TD
-    subgraph App["Application Layer"]
-        CLI[CLI] --> Orchestrator
-        Orchestrator --> MusicUpdater
+    subgraph App["Application Layer (src/app/)"]
+        CLI[CLI Parser]
+        Orchestrator[Orchestrator]
+        MusicUpdater[Music Updater]
+        Features[Features/<br/>batch, crypto, verify]
     end
 
-    subgraph Core["Core Layer"]
-        MusicUpdater --> TrackProcessor
+    subgraph Core["Core Layer (src/core/)"]
+        TrackProcessor[tracks/<br/>processor, genre, year]
+        Models[models/<br/>TrackDict, protocols]
+        Utils[utils/<br/>datetime, icloud]
+        Logger[logger, exceptions, retry]
     end
 
-    subgraph Services["Services Layer"]
-        TrackProcessor --> Apple[AppleScript]
-        TrackProcessor --> Cache
-        TrackProcessor --> APIs[External APIs]
+    subgraph Services["Services Layer (src/services/)"]
+        DI[DependencyContainer]
+        Apple[apple/<br/>AppleScript client]
+        Cache[cache/<br/>orchestrator, snapshot]
+        APIs[api/<br/>MusicBrainz, Discogs, Last.fm]
     end
 
-    subgraph Metrics["Metrics Layer"]
-        MusicUpdater -.-> Analytics
+    subgraph Metrics["Metrics Layer (src/metrics/)"]
+        Analytics[analytics]
+        Monitoring[monitoring]
+        Reports[change_reports, csv_utils]
     end
 
-    classDef appLayer fill:#e1f5ff,stroke:#0288d1
-    classDef coreLayer fill:#fff9c4,stroke:#f57f17
-    classDef servicesLayer fill:#f3e5f5,stroke:#7b1fa2
-    classDef metricsLayer fill:#e8f5e9,stroke:#388e3c
-    class CLI,Orchestrator,MusicUpdater appLayer
-    class TrackProcessor coreLayer
-    class Apple,Cache,APIs servicesLayer
-    class Analytics metricsLayer
+    CLI --> Orchestrator
+    Orchestrator --> MusicUpdater
+    Orchestrator --> Features
+    MusicUpdater --> TrackProcessor
+    TrackProcessor --> Apple
+    TrackProcessor --> Cache
+    TrackProcessor --> APIs
+    Orchestrator --> DI
+    MusicUpdater -.-> Analytics
+    MusicUpdater -.-> Reports
+    classDef appLayer fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef coreLayer fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef servicesLayer fill:#D4BFFF,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef metricsLayer fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    class CLI,Orchestrator,MusicUpdater,Features appLayer
+    class TrackProcessor,Models,Utils,Logger coreLayer
+    class DI,Apple,Cache,APIs servicesLayer
+    class Analytics,Monitoring,Reports metricsLayer
 ```
 
-<details>
-<summary>Detailed architecture</summary>
+### Layer Responsibilities
 
-**Layers:**
+| Layer | Path | What it does |
+|-------|------|--------------|
+| **App** | `src/app/` | CLI parsing, command routing, feature modules (batch, crypto, verify) |
+| **Core** | `src/core/` | Business logic: track processing, genre calculation, year determination, models |
+| **Services** | `src/services/` | External integrations: AppleScript client, cache (memory/disk/snapshot), API clients |
+| **Metrics** | `src/metrics/` | Observability: analytics decorators, monitoring, CSV/HTML report generation |
 
-| Layer    | Path            | Purpose                        |
-|----------|-----------------|--------------------------------|
-| App      | `src/app/`      | CLI, orchestration, features   |
-| Core     | `src/core/`     | Business logic, models, tracks |
-| Services | `src/services/` | AppleScript, cache, APIs       |
-| Metrics  | `src/metrics/`  | Analytics, monitoring, reports |
+### Key Design Patterns
 
-**Key patterns:**
+- **Dependency Injection** — `DependencyContainer` creates and wires all services at startup
+- **Protocol-Based Interfaces** — `AppleScriptClientProtocol`, `CacheServiceProtocol` enable testing with mocks
+- **Multi-Tier Caching** — Memory (L1) → Disk (L2) → Snapshot (L3) for optimal performance
+- **Contextual Logging** — Every log entry includes `artist | album | track` context for debugging
 
-- Dependency Injection via `DependencyContainer`
-- Protocol-based interfaces for testing
-- Multi-tier caching: Memory → Disk → Snapshot
-- Contextual logging: `artist | album | track`
+### Caching Performance
 
-**Caching performance:**
+| Tier | Storage | Latency | TTL | Use Case |
+|------|---------|---------|-----|----------|
+| L1 | Memory (dict) | <1ms | Session | Hot data, repeated access |
+| L2 | Disk (JSON) | 10-50ms | 20min | API responses |
+| L3 | Snapshot (pickle) | <1s for 30K | Permanent | Full library state |
 
-| Tier | Type        | Latency     |
-|------|-------------|-------------|
-| L1   | Memory      | <1ms        |
-| L2   | Disk (JSON) | 10-50ms     |
-| L3   | Snapshot    | <1s for 30K |
+### AppleScript Integration
+
+Scripts in `applescripts/` directory:
+
+| Script | Purpose | Output Format |
+|--------|---------|---------------|
+| `fetch_tracks.scpt` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
+| `fetch_tracks_by_ids.scpt` | Get specific tracks by ID list | Same format |
+| `update_property.applescript` | Set single track property | "Success: ..." or "No Change: ..." |
+| `batch_update_tracks.applescript` | Batch updates (experimental) | JSON status array |
 
 </details>
 
 ## Troubleshooting
 
-| Problem                 | Solution                                  |
-|-------------------------|-------------------------------------------|
-| "Music app not running" | Launch Music.app first                    |
-| AppleScript timeout     | Increase `applescript_timeouts` in config |
-| Cache corruption        | Delete `cache/` directory                 |
-| Parse failures          | Reduce `ids_batch_size` in config         |
+| Problem | Solution |
+|---------|----------|
+| "Music app is not running" | Launch Music.app before running (except `rotate_keys`) |
+| AppleScript timeout | Increase `applescript_timeouts` values in config |
+| Cache corruption | Delete `cache/` directory and re-run |
+| Parse failures in batch | Reduce `batch_processing.ids_batch_size` (try 100) |
 
 <details>
-<summary>Verification commands</summary>
+<summary>Diagnostic commands</summary>
 
 ```bash
-# Check Python version
-python3 --version  # Should be 3.13+
+# Check Python version (must be 3.13+)
+python3 --version
 
-# Test AppleScript
-osascript applescripts/fetch_tracks.scpt
+# Test AppleScript connection
+osascript applescripts/fetch_tracks.scpt "" 0 10  # Fetch first 10 tracks
 
-# Check launch agent
+# Check launch agent status
 launchctl list | grep com.barad1tos.MusicGenreUpdater
 
-# View logs
+# Watch logs in real-time
 tail -f /path/to/logs/main/main.log
+
+# Check for errors
+grep -i error /path/to/logs/main/main.log | tail -20
 ```
 
 </details>
 
 <details>
-<summary>Log files</summary>
+<summary>Log file locations</summary>
 
-- Main log: `<logs_base_dir>/main/main.log`
-- Year changes: `<logs_base_dir>/main/year_changes.log`
-- CSV reports: `<logs_base_dir>/csv/changes_report.csv`
-- Analytics: `<logs_base_dir>/analytics/reports/analytics.html`
+All paths relative to `logs_base_dir` in config:
+
+| File | Contents |
+|------|----------|
+| `main/main.log` | Main application log (INFO level) |
+| `main/year_changes.log` | Year update decisions and API responses |
+| `csv/track_list.csv` | Full track listing from last run |
+| `csv/changes_report.csv` | All changes made (for revert) |
+| `csv/dry_run_report.csv` | Changes that would be made (dry-run) |
+| `analytics/analytics.log` | Function timing and call counts |
+| `analytics/reports/analytics.html` | Visual performance dashboard |
 
 </details>
 
 ## FAQ
 
 <details>
-<summary>How do I adjust update frequency?</summary>
+<summary>How do I change update frequency?</summary>
 
-Modify `StartInterval` in the plist file (seconds) and `incremental_interval_minutes` in config.yaml.
+Two settings control this:
 
-</details>
+1. **launchctl interval** — `StartInterval` in plist (seconds between runs)
+2. **Incremental filter** — `incremental_interval_minutes` in config.yaml (skip tracks not modified recently)
 
-<details>
-<summary>How can I see what changes were made?</summary>
-
-Check `<logs_base_dir>/csv/changes_report.csv` for all modifications.
-
-</details>
-
-<details>
-<summary>Can I run multiple instances?</summary>
-
-Not recommended. Use a single instance to avoid race conditions.
+Example: Run every hour, but only process tracks modified in last 30 minutes:
+- plist: `<integer>3600</integer>` (1 hour)
+- config: `incremental_interval_minutes: 30`
 
 </details>
 
 <details>
-<summary>What happens if updates fail?</summary>
+<summary>How can I see what was changed?</summary>
 
-The script retries based on `max_retries` and `retry_delay_seconds` settings.
-Failed updates are logged and the track remains unchanged.
+Check `<logs_base_dir>/csv/changes_report.csv`. Contains:
+- Track ID, name, artist, album
+- Old and new values for genre/year
+- Timestamp of change
+
+Use this file with `revert_years` command to undo changes.
+
+</details>
+
+<details>
+<summary>Can I exclude specific artists or albums?</summary>
+
+Yes, add to `exceptions.track_cleaning` in config:
+
+```yaml
+exceptions:
+  track_cleaning:
+    - artist: "Weird Al Yankovic"  # Skip all albums
+    - artist: "Pink Floyd"
+      album: "The Wall"            # Skip specific album
+```
+
+</details>
+
+<details>
+<summary>Why are some years wrong?</summary>
+
+Year determination uses scoring from 3 APIs. Sometimes:
+- APIs disagree on release year
+- Remastered versions have different years
+- Regional releases vary
+
+Use `revert_years` to fix, then add to exceptions.
+
+</details>
+
+<details>
+<summary>Is it safe to run on my library?</summary>
+
+Yes, with caveats:
+1. **Always run `--dry-run` first** to preview changes
+2. **Changes sync to iCloud immediately** and cannot be undone via Time Machine
+3. **Use `revert_years`** with `changes_report.csv` to undo year changes
+4. Genre changes have no built-in revert (restore from backup if needed)
 
 </details>
 
@@ -367,31 +535,41 @@ Failed updates are logged and the track remains unchanged.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 <details>
-<summary>Quick dev setup</summary>
+<summary>Development setup</summary>
 
 ```bash
+# Clone and setup
 git clone https://github.com/yourusername/GenreUpdater.git
 cd GenreUpdater
 git checkout -b feature/your-feature
 uv sync
-uv run pytest
-uv run ruff check src/
+
+# Run tests
+uv run pytest tests/unit/ -v --cov=src
+
+# Linting
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+
+# Type checking
 uv run mypy src/
+
+# Security scan
+uv run bandit -r src/ -c pyproject.toml
 ```
 
 </details>
 
 ## Links
 
-- [Changelog](CHANGELOG.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
-- [License](LICENSE) (MIT)
+- [Changelog](CHANGELOG.md) — Version history
+- [Contributing](CONTRIBUTING.md) — Development guidelines
+- [Security](SECURITY.md) — Vulnerability reporting
+- [License](LICENSE) — MIT
 
-## Contacts
+## Contact
 
 **Author:** Roman Borodavkin
-
 - Email: [roman.borodavkin@gmail.com](mailto:roman.borodavkin@gmail.com)
 - GitHub: [@barad1tos](https://github.com/barad1tos)
 
