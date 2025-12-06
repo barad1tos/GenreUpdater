@@ -12,47 +12,48 @@ license = { text = "MIT" }
 authors = [{ name = "Roman Borodavkin" }]
 keywords = ["music", "apple-music", "genre", "automation"]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Intended Audience :: End Users/Desktop",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: macOS",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.13",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: macOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  # Runtime only
-  "pydantic==2.12.5",
-  "python-dotenv==1.2.1",
-  "pyyaml==6.0.3",
-  "aiohttp==3.13.2",
-  "certifi==2025.11.12",
-  "cryptography==46.0.3",
-  "aiofiles==25.1.0",
-  "orjson>=3.10.0",
-  "rich==14.2.0",
+    # Runtime only
+    "pydantic==2.12.5",
+    "python-dotenv==1.2.1",
+    "pyyaml==6.0.3",
+    "aiohttp==3.13.2",
+    "certifi==2025.11.12",
+    "cryptography==46.0.3",
+    "aiofiles==25.1.0",
+    "orjson==3.11.5",
+    "rich==14.2.0",
 ]
 
 [dependency-groups]
 dev = [
-  # Linting & formatting
-  "ruff==0.14.8",
-  "mypy==1.13.0",
-  "sourcery>=1.41.1; sys_platform == 'darwin'",  # macOS only
-  "vulture>=2.14",
-  "bandit>=1.8.0",
-  "pip-audit>=2.7.0",
-  # Testing
-  "pytest==9.0.1",
-  "pytest-asyncio==1.3.0",
-  "pytest-cov>=7.0.0",
-  "coverage==7.12.0",
-  "allure-pytest==2.15.2",
-  "pytest-html>=4.1.1",
-  "pytest-sugar>=1.1.1",
-  # Type stubs
-  "types-pyyaml==6.0.12.20250915",
-  "types-aiofiles==25.1.0.20251011",
-  "cst-lsp==0.1.3",
+    # Linting & formatting
+    "ruff==0.14.8",
+    "mypy==1.19.0",
+    "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
+    "vulture>=2.14",
+    "bandit>=1.8.0",
+    "pip-audit>=2.7.0",
+    # Testing
+    "pytest==9.0.1",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov>=7.0.0",
+    "coverage==7.12.0",
+    "allure-pytest==2.15.2",
+    "pytest-html>=4.1.1",
+    "pytest-sugar>=1.1.1",
+    # Type stubs
+    "types-pyyaml==6.0.12.20250915",
+    "types-aiofiles==25.1.0.20251011",
+    "cst-lsp==0.1.3",
+    "cosmic-ray>=8.4.3",
 ]
 
 [tool.uv]
@@ -65,17 +66,17 @@ index-url = "https://pypi.org/simple"
 line-length = 150
 indent-width = 4
 exclude = [
-  ".git",
-  ".hg",
-  ".mypy_cache",
-  ".tox",
-  ".venv",
-  "_build",
-  "buck-out",
-  "build",
-  "dist",
-  "__pycache__",
-  "*/__init__.py",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".tox",
+    ".venv",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "__pycache__",
+    "*/__init__.py",
 ]
 
 # Assume Python 3.13+
@@ -84,78 +85,78 @@ target-version = "py313"
 [tool.ruff.lint]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 select = [
-  "E",
-  "W",
-  "F",
-  "N",
-  "UP",
-  "YTT",
-  "ANN",
-  "S",
-  "BLE",
-  "B",
-  "A",
-  "COM",
-  "C4",
-  "DTZ",
-  "T10",
-  "EM",
-  "EXE",
-  "FA",
-  "ISC",
-  "ICN",
-  "G",
-  "INP",
-  "PIE",
-  "T20",
-  "PYI",
-  "PT",
-  "Q",
-  "RSE",
-  "RET",
-  "SLF",
-  "SIM",
-  "TID",
-  "TC",
-  "INT",
-  "ARG",
-  "PTH",
-  "ERA",
-  "PD",
-  "PGH",
-  "PL",
-  "TRY",
-  "FLY",
-  "NPY",
-  "PERF",
-  "RUF",
+    "E",
+    "W",
+    "F",
+    "N",
+    "UP",
+    "YTT",
+    "ANN",
+    "S",
+    "BLE",
+    "B",
+    "A",
+    "COM",
+    "C4",
+    "DTZ",
+    "T10",
+    "EM",
+    "EXE",
+    "FA",
+    "ISC",
+    "ICN",
+    "G",
+    "INP",
+    "PIE",
+    "T20",
+    "PYI",
+    "PT",
+    "Q",
+    "RSE",
+    "RET",
+    "SLF",
+    "SIM",
+    "TID",
+    "TC",
+    "INT",
+    "ARG",
+    "PTH",
+    "ERA",
+    "PD",
+    "PGH",
+    "PL",
+    "TRY",
+    "FLY",
+    "NPY",
+    "PERF",
+    "RUF",
 ]
 ignore = [
-  "F841",    # Allow unused variables when they start with an underscore
-  "N806",    # Allow non-lowercase variable names (for compatibility with existing code)
-  "N803",    # Allow non-snake-case function names (for compatibility with existing code)
-  "S101",    # Allow use of assert statements (common in data validation)
-  "T201",    # Allow print statements (for CLI output)
-  "FIX002",  # Allow TODO comments
-  "BLE001",  # Allow broad exception catching in some cases
-  "B006",    # Allow mutable default arguments (a common pattern in some cases)
-  "C901",    # Ignore complexity warnings for now (refactor later)
-  "PLR0912", # Allow too-many-branches (refactor later)
-  "PLR0913", # Allow too-many-arguments (refactor later)
-  "PLR0915", # Allow too-many-statements (refactor later)
-  "ISC001",  # Allow implicit string concatenation (conflicts with formatter)
-  "COM812",  # Allow trailing comma conflicts with formatter
-  "COM819",  # Allow multiline string in parentheses (conflicts with formatter)
-  "PLR2004", # Allow magic values in tests and configs
-  "TC006",   # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
-  "ANN401",  # Allow Any types in existing code (gradual migration)
-  "G004",    # Allow f-strings in logging (performance is fine for this use case)
-  "PTH110",  # Allow os.path usage alongside pathlib (gradual migration)
-  "TRY300",  # Allow TRY patterns for existing error handling
-  "TRY301",  # Allow TRY patterns for existing error handling
-  "TRY401",  # Allow datetime without timezone for internal timestamps
-  "DTZ006",  # Allow datetime without timezone for internal timestamps
-  "DTZ007",  # Allow datetime without timezone for internal timestamps
+    "F841", # Allow unused variables when they start with an underscore
+    "N806", # Allow non-lowercase variable names (for compatibility with existing code)
+    "N803", # Allow non-snake-case function names (for compatibility with existing code)
+    "S101", # Allow use of assert statements (common in data validation)
+    "T201", # Allow print statements (for CLI output)
+    "FIX002", # Allow TODO comments
+    "BLE001", # Allow broad exception catching in some cases
+    "B006", # Allow mutable default arguments (a common pattern in some cases)
+    "C901", # Ignore complexity warnings for now (refactor later)
+    "PLR0912", # Allow too-many-branches (refactor later)
+    "PLR0913", # Allow too-many-arguments (refactor later)
+    "PLR0915", # Allow too-many-statements (refactor later)
+    "ISC001", # Allow implicit string concatenation (conflicts with formatter)
+    "COM812", # Allow trailing comma conflicts with formatter
+    "COM819", # Allow multiline string in parentheses (conflicts with formatter)
+    "PLR2004", # Allow magic values in tests and configs
+    "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
+    "ANN401", # Allow Any types in existing code (gradual migration)
+    "G004", # Allow f-strings in logging (performance is fine for this use case)
+    "PTH110", # Allow os.path usage alongside pathlib (gradual migration)
+    "TRY300", # Allow TRY patterns for existing error handling
+    "TRY301", # Allow TRY patterns for existing error handling
+    "TRY401", # Allow datetime without timezone for internal timestamps
+    "DTZ006", # Allow datetime without timezone for internal timestamps
+    "DTZ007", # Allow datetime without timezone for internal timestamps
 ]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -175,36 +176,36 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-  "PLR2004", # Tests can use magic values
-  "S101",    # Tests can use assertions
-  "PLR0913", # Tests can have many arguments
-  "SLF001",  # Tests can access private members
-  "S108",    # Tests can use /tmp/ paths (mocked configs, fixtures)
-  "PT011",   # Tests can use explicit default argument values for clarity
-  "ARG001",  # Tests can have unused function arguments (mocks)
-  "ARG005",  # Tests can have unused lambda arguments
-  "TC002",   # Tests can have third-party imports outside TYPE_CHECKING
-  "TC003",   # Tests can have stdlib imports outside TYPE_CHECKING
-  "PLC0415", # Tests can have imports inside functions
-  "PLC2701", # Tests can import private names (internal functions)
-  "PT012",   # Tests can have complex pytest.raises blocks
-  "TRY003",  # Tests can have long exception messages
-  "EM101",   # Tests can use string literals in exceptions
-  "EM102",   # Tests can use f-strings in exceptions
-  "B007",    # Tests can have unused loop variables
-  "DTZ005",  # Tests can use datetime.now() without tz
-  "ANN001",  # Tests can skip argument annotations
-  "ANN202",  # Tests can skip return annotations for private funcs
-  "RUF059",  # Tests can have unused unpacked variables
-  "E501",    # Tests can have longer lines for readability
+    "PLR2004", # Tests can use magic values
+    "S101", # Tests can use assertions
+    "PLR0913", # Tests can have many arguments
+    "SLF001", # Tests can access private members
+    "S108", # Tests can use /tmp/ paths (mocked configs, fixtures)
+    "PT011", # Tests can use explicit default argument values for clarity
+    "ARG001", # Tests can have unused function arguments (mocks)
+    "ARG005", # Tests can have unused lambda arguments
+    "TC002", # Tests can have third-party imports outside TYPE_CHECKING
+    "TC003", # Tests can have stdlib imports outside TYPE_CHECKING
+    "PLC0415", # Tests can have imports inside functions
+    "PLC2701", # Tests can import private names (internal functions)
+    "PT012", # Tests can have complex pytest.raises blocks
+    "TRY003", # Tests can have long exception messages
+    "EM101", # Tests can use string literals in exceptions
+    "EM102", # Tests can use f-strings in exceptions
+    "B007", # Tests can have unused loop variables
+    "DTZ005", # Tests can use datetime.now() without tz
+    "ANN001", # Tests can skip argument annotations
+    "ANN202", # Tests can skip return annotations for private funcs
+    "RUF059", # Tests can have unused unpacked variables
+    "E501", # Tests can have longer lines for readability
 ]
 "src/services/api/orchestrator.py" = [
-  "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
+    "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
 ]
 "src/core/models/script_detection.py" = [
-  "RUF001", # Allow ambiguous Unicode (intentional for script detection examples)
-  "RUF002", # Allow ambiguous Unicode in docstrings
-  "RUF003", # Allow ambiguous Unicode in comments
+    "RUF001", # Allow ambiguous Unicode (intentional for script detection examples)
+    "RUF002", # Allow ambiguous Unicode in docstrings
+    "RUF003", # Allow ambiguous Unicode in comments
 ]
 
 [tool.mypy]
@@ -225,14 +226,14 @@ strict_equality = true
 # Module-specific configurations
 [[tool.mypy.overrides]]
 module = [
-  "allure",
-  "allure.*",
-  "pytest",
-  "pytest.*",
-  "pydantic",
-  "pydantic.*",
-  "aiohttp",
-  "aiohttp.*",
+    "allure",
+    "allure.*",
+    "pytest",
+    "pytest.*",
+    "pydantic",
+    "pydantic.*",
+    "aiohttp",
+    "aiohttp.*",
 ]
 ignore_missing_imports = true
 
@@ -281,30 +282,30 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
-  "-ra",
-  "--strict-markers",
-  "--ignore=venv",
-  "--ignore=.venv",
-  "--ignore=.trunk",
-  # Visual reporting options
-  "--html=reports/html/report.html",
-  "--self-contained-html",
-  "--cov=src",
-  "--cov-report=html:reports/html/coverage",
-  "--cov-report=term-missing",
-  "--cov-fail-under=70",
-  "--tb=short",
-  "-v",
-  # Allure reporting
-  "--alluredir=reports/allure-results",
-  "--clean-alluredir",
+    "-ra",
+    "--strict-markers",
+    "--ignore=venv",
+    "--ignore=.venv",
+    "--ignore=.trunk",
+    # Visual reporting options
+    "--html=reports/html/report.html",
+    "--self-contained-html",
+    "--cov=src",
+    "--cov-report=html:reports/html/coverage",
+    "--cov-report=term-missing",
+    "--cov-fail-under=70",
+    "--tb=short",
+    "-v",
+    # Allure reporting
+    "--alluredir=reports/allure-results",
+    "--clean-alluredir",
 ]
 asyncio_mode = "auto"
 markers = [
-  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-  "integration: marks tests as integration tests",
-  "unit: marks tests as unit tests",
-  "e2e: marks tests as end-to-end tests",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 # pydocstyle - google docstyle
@@ -312,17 +313,17 @@ markers = [
 [tool.pydocstyle]
 convention = "google"
 add_ignore = [
-  "D203",
-  "D213",
-  "D215",
-  "D400",
-  "D401",
-  "D404",
-  "D406",
-  "D407",
-  "D408",
-  "D409",
-  "D413",
+    "D203",
+    "D213",
+    "D215",
+    "D400",
+    "D401",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -331,25 +332,25 @@ add_ignore = [
 [tool.coverage.run]
 source = ["src"]
 omit = [
-  "**/tests/*",
-  "**/test_*.py",
-  "**/__pycache__/*",
-  "**/venv/*",
-  "**/.venv/*",
-  "**/site-packages/*",
+    "**/tests/*",
+    "**/test_*.py",
+    "**/__pycache__/*",
+    "**/venv/*",
+    "**/.venv/*",
+    "**/site-packages/*",
 ]
 
 [tool.coverage.report]
 exclude_lines = [
-  "pragma: no cover",
-  "def __repr__",
-  "if self.debug:",
-  "if settings.DEBUG",
-  "raise AssertionError",
-  "raise NotImplementedError",
-  "if 0:",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
 ]
 
 [tool.sourcery]
@@ -378,20 +379,21 @@ init-hook = "import sys; import os; sys.path.insert(0, os.getcwd())"
 
 [tool.pylint."messages control"]
 disable = [
-  "C0103", # invalid-name (allow short variable names)
-  "R0903", # too-few-public-methods
-  "W0613", # unused-argument (handled by ruff)
-  "C0301", # line-too-long (handled by format section)
-  "R0913", # too-many-arguments
-  "R0917", # too-many-positional-arguments
-  "W0718", # broad-exception-caught
-  "W2301", # unnecessary-ellipsis (valid in Protocol definitions)
-  "E0611", # no-name-in-module (UTC is available in Python 3.13+ datetime)
-  "R0914", # too-many-locals (complex reporting function)
-  "R0801", # duplicate-code (shared patterns in processing modules)
-  "R0401", # cyclic-import (resolved with exceptions module)
-  "R0902", # too-many-instance-attributes (orchestrator classes naturally need many components)
-  "C0302", # too-many-lines (complex processing modules)
+    "C0103", # invalid-name (allow short variable names)
+    "R0903", # too-few-public-methods
+    "W0613", # unused-argument (handled by ruff)
+    "C0301", # line-too-long (handled by format section)
+    "R0913", # too-many-arguments
+    "R0917", # too-many-positional-arguments
+    "W0718", # broad-exception-caught
+    "W2301", # unnecessary-ellipsis (valid in Protocol definitions)
+    "E0611", # no-name-in-module (UTC is available in Python 3.13+ datetime)
+    "R0914", # too-many-locals (complex reporting function)
+    "R0801", # duplicate-code (shared patterns in processing modules)
+    "R0401", # cyclic-import (resolved with exceptions module)
+    "R0902", # too-many-instance-attributes (orchestrator classes naturally need many components)
+    "C0302", # too-many-lines (complex processing modules)
+    "W0212", # protected-access (tests intentionally access private members)
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -403,3 +405,11 @@ skips = ["B101", "B311", "B404", "B603"]
 # B311: random.uniform used for jitter, not security
 # B404: subprocess module is required for AppleScript
 # B603: shell=False is safe (we control the command)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mutmut configuration - Mutation testing
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.mutmut]
+paths_to_mutate = ["src/metrics/track_sync.py"]
+also_copy = ["src/", "tests/"]
+pytest_add_cli_args_test_selection = ["-x", "-q", "--no-cov", "tests/unit/metrics/test_track_sync.py"]
