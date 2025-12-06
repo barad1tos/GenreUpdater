@@ -355,10 +355,10 @@ graph LR
     MGU -->|query metadata| DG
     MGU -->|query metadata| LF
     MGU -->|cache/reports| FS
-    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef system fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef user fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-class MusicApp, MB, DG, LF, FS external
+    classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef system fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef user fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
+class MusicApp,MB,DG,LF,FS external
 class MGU system
 class User user
 ```
@@ -399,11 +399,11 @@ graph TB
     APIs -->|HTTP| ExtAPIs
     Cache <-->|JSON/pickle| FileSystem
     Metrics -->|HTML/CSV| FileSystem
-    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef internal fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef user fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-class MusicApp, ExtAPIs, FileSystem external
-class CLI,Orch, Pipes, Core, Apple, Cache, APIs, Metrics internal
+    classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef internal fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef user fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
+class MusicApp,ExtAPIs,FileSystem external
+class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
 class User user
 ```
 
@@ -500,12 +500,12 @@ graph LR
     Orch -->|years only| YU
     Orch -->|clean metadata| TC
     Orch -->|batch/crypto/verify| Features
-    classDef entry fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef pipeline fill: #5BC0EB, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef feature fill: #95E6CB, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-class CLI, Orch entry
-class MU,FS, YU, TC pipeline
-class Batch,Crypto, Verify feature
+    classDef entry fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef pipeline fill:#5BC0EB, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef feature fill:#95E6CB, stroke:#1F2430, stroke-width:2px, color:#1F2430
+class CLI,Orch entry
+class MU,FS,YU,TC pipeline
+class Batch,Crypto,Verify feature
 ```
 
 ---
@@ -541,10 +541,10 @@ graph TB
     AR -->|clean names| TP
     TP -->|changes| UE
     UE -->|execute| OUT
-    classDef io fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef proc fill: #FFD580, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-class IN, OUT io
-class TP,GM, YR, AR, IF, UE proc
+    classDef io fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef proc fill:#FFD580, stroke:#1F2430, stroke-width:2px, color:#1F2430
+class IN,OUT io
+class TP,GM,YR,AR,IF,UE proc
 ```
 
 ---
@@ -594,16 +594,16 @@ graph TB
     AO --> MB & DG & LF
     AO --> YS
     MB & DG & LF -->|HTTP| ExtAPI
-    classDef caller fill: #FFD580, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef apple fill: #D4BFFF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef cache fill: #CE93D8, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef api fill: #BA68C8, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef caller fill:#FFD580, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef apple fill:#D4BFFF, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef cache fill:#CE93D8, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef api fill:#BA68C8, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     class Core caller
-class AC, AE, RL apple
-class CO,SS, ALB, API_C cache
-class AO,MB, DG, LF, YS api
-class MusicApp,ExtAPI, Files external
+class AC,AE,RL apple
+class CO,SS,ALB,API_C cache
+class AO,MB,DG,LF,YS api
+class MusicApp,ExtAPI,Files external
 ```
 
 ---
@@ -637,12 +637,12 @@ graph LR
     MO --> ER
     HR --> HTML
     CR & ER --> CSV
-    classDef io fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef track fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-    classDef report fill: #C5E1A5, stroke: #1F2430, stroke-width: 2px, color: #1F2430
-class Data, HTML, CSV io
+    classDef io fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef track fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
+    classDef report fill:#C5E1A5, stroke:#1F2430, stroke-width:2px, color:#1F2430
+class Data,HTML,CSV io
 class AN,MO track
-class HR,CR, ER report
+class HR,CR,ER report
 ```
 
 ---
