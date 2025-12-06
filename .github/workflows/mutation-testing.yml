@@ -20,9 +20,13 @@ on:
   workflow_dispatch:
     inputs:
       module:
-        description: 'Module to test (e.g., src/metrics/)'
+        description: 'Override: test specific module (leave empty for incremental)'
         required: false
-        default: 'src/metrics/'
+        default: ''
+      force_full:
+        description: 'Force full src/ test (ignores incremental)'
+        type: boolean
+        default: false
 
 concurrency:
   group: mutation-${{ github.ref }}
@@ -70,55 +74,143 @@ jobs:
     name: "2. Mutation Testing"
     runs-on: ubuntu-latest
     needs: wait-for-ci
-    timeout-minutes: 120
+    # 720 min (12h) for weekly full run, 120 min for incremental
+    timeout-minutes: ${{ github.event_name == 'schedule' && 720 || 120 }}
     outputs:
       score: ${{ steps.results.outputs.score }}
       killed: ${{ steps.results.outputs.killed }}
       survived: ${{ steps.results.outputs.survived }}
       total: ${{ steps.results.outputs.total }}
+      skipped: ${{ steps.changed.outputs.skip }}
+      mode: ${{ steps.changed.outputs.mode }}
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history for git diff
+
+      - name: Get changed Python files
+        id: changed
+        run: |
+          echo "=== Detecting changed files ==="
+
+          # Check for force full or schedule trigger
+          if [ "${{ github.event.inputs.force_full || 'false' }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Full src/ mutation test requested"
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "files=src/" >> $GITHUB_OUTPUT
+            echo "mode=full" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check for manual module override
+          if [ -n "${{ github.event.inputs.module }}" ]; then
+            echo "Manual module override: ${{ github.event.inputs.module }}"
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "files=${{ github.event.inputs.module }}" >> $GITHUB_OUTPUT
+            echo "mode=override" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Incremental: get changed Python files
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger without override: use HEAD~1
+            FILES=$(git diff --name-only --diff-filter=ACMRT HEAD~1 HEAD -- 'src/**/*.py' 2>/dev/null || echo "")
+          else
+            # Push trigger: compare before/after
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.event.after }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              FILES=$(git diff --name-only --diff-filter=ACMRT HEAD~1 HEAD -- 'src/**/*.py' 2>/dev/null || echo "")
+            else
+              FILES=$(git diff --name-only --diff-filter=ACMRT "$BEFORE" "$AFTER" -- 'src/**/*.py' 2>/dev/null || echo "")
+            fi
+          fi
+
+          if [ -z "$FILES" ]; then
+            echo "No Python source files changed in src/"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "mode=skipped" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files:"
+            echo "$FILES"
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "mode=incremental" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install uv
+        if: steps.changed.outputs.skip != 'true'
         uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
           enable-cache: true
 
       - name: Set up Python
+        if: steps.changed.outputs.skip != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
       - name: Install dependencies
+        if: steps.changed.outputs.skip != 'true'
         run: uv sync
 
       - name: Configure cosmic-ray
+        if: steps.changed.outputs.skip != 'true'
         run: |
-          MODULE="${{ github.event.inputs.module || 'src/metrics/' }}"
+          FILES="${{ steps.changed.outputs.files }}"
+          MODE="${{ steps.changed.outputs.mode }}"
 
-          cat > cosmic-ray-ci.toml << EOF
-          [cosmic-ray]
-          module-path = "${MODULE}"
+          echo "=== Configuring cosmic-ray (mode: $MODE) ==="
+
+          # Use Python for safe TOML generation
+          python3 << PYEOF
+          import json
+
+          files = """$FILES""".strip()
+          mode = "$MODE"
+
+          if mode in ("full", "override"):
+              # Single path mode - cosmic-ray accepts string for directories
+              module_path = f'"{files}"'
+          else:
+              # Incremental: convert file list to JSON array (valid TOML)
+              file_list = [f.strip() for f in files.split('\n') if f.strip()]
+              module_path = json.dumps(file_list)
+
+          config = f'''[cosmic-ray]
+          module-path = {module_path}
           timeout = 30.0
           excluded-modules = []
           test-command = "uv run pytest tests/unit/ -x -q --no-cov --tb=no"
 
           [cosmic-ray.distributor]
           name = "local"
-          EOF
+          '''
+
+          with open('cosmic-ray-ci.toml', 'w') as f:
+              f.write(config)
+
+          print("=== Config ===")
+          print(config)
+          PYEOF
 
       - name: Initialize & run baseline
+        if: steps.changed.outputs.skip != 'true'
         run: |
           uv run cosmic-ray init cosmic-ray-ci.toml session.sqlite
           uv run cosmic-ray baseline cosmic-ray-ci.toml
 
       - name: Execute mutation testing
+        if: steps.changed.outputs.skip != 'true'
         run: uv run cosmic-ray exec cosmic-ray-ci.toml session.sqlite 2>&1 || true
 
       - name: Extract results
         id: results
+        if: steps.changed.outputs.skip != 'true'
         run: |
           # Parse results using Python for reliability
           uv run cosmic-ray dump session.sqlite > /tmp/mutations.jsonl
@@ -174,6 +266,7 @@ jobs:
     name: "3. Update Metrics"
     runs-on: ubuntu-latest
     needs: mutation-test
+    if: needs.mutation-test.outputs.skipped != 'true'
     timeout-minutes: 10
     outputs:
       trend: ${{ steps.analyze.outputs.trend }}
@@ -205,7 +298,7 @@ jobs:
             "killed": ${{ needs.mutation-test.outputs.killed }},
             "survived": ${{ needs.mutation-test.outputs.survived }},
             "total": ${{ needs.mutation-test.outputs.total }},
-            "module": "${{ github.event.inputs.module || 'src/metrics/' }}"
+            "module": "${{ needs.mutation-test.outputs.mode || 'unknown' }}"
           }
           EOF
           )
@@ -330,7 +423,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [mutation-test, update-metrics]
     timeout-minutes: 5
-    if: always() && needs.mutation-test.result == 'success'
+    if: always() && needs.mutation-test.result == 'success' && needs.mutation-test.outputs.skipped != 'true'
 
     steps:
       - name: Evaluate results
