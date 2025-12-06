@@ -747,9 +747,7 @@ class TestSaveChangesReport:
                 "new_genre": "Metal",
             },
         ]
-        save_changes_report(
-            changes, str(base_path), console_logger, error_logger, add_timestamp=True
-        )
+        save_changes_report(changes, str(base_path), console_logger, error_logger, add_timestamp=True)
         # The original file should not exist, but a timestamped one should
         assert not base_path.exists()
         csv_files = list(tmp_path.glob("report_*.csv"))
