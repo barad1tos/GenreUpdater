@@ -130,6 +130,7 @@ class TestTrackDecorator:
 
     def test_track_sync_function(self, analytics: Analytics) -> None:
         """Test tracking a synchronous function."""
+
         @analytics.track("test_event")
         def my_func() -> str:
             return "result"
@@ -141,6 +142,7 @@ class TestTrackDecorator:
     @pytest.mark.asyncio
     async def test_track_async_function(self, analytics: Analytics) -> None:
         """Test tracking an async function."""
+
         @analytics.track("async_event")
         async def my_async_func() -> str:
             await asyncio.sleep(0.01)
@@ -152,6 +154,7 @@ class TestTrackDecorator:
 
     def test_track_function_with_exception(self, analytics: Analytics) -> None:
         """Test tracking function that raises exception."""
+
         @analytics.track("failing_event")
         def failing_func() -> None:
             raise ValueError("Test error")
@@ -166,6 +169,7 @@ class TestTrackDecorator:
 
     def test_track_disabled_analytics(self, disabled_analytics: Analytics) -> None:
         """Test that disabled analytics still allows function execution."""
+
         @disabled_analytics.track("disabled_event")
         def my_func() -> str:
             return "works"
@@ -179,6 +183,7 @@ class TestTrackInstanceMethod:
 
     def test_track_instance_method_basic(self, analytics: Analytics) -> None:
         """Test tracking instance method (requires self.analytics on class)."""
+
         class MyClass:
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
@@ -195,6 +200,7 @@ class TestTrackInstanceMethod:
     @pytest.mark.asyncio
     async def test_track_instance_method_async(self, analytics: Analytics) -> None:
         """Test tracking async instance method."""
+
         class MyClass:
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
@@ -221,6 +227,7 @@ class TestGetStats:
 
     def test_get_stats_with_events(self, analytics: Analytics) -> None:
         """Test get_stats returns correct statistics."""
+
         @analytics.track("fast_event")
         def fast_func() -> None:
             pass
@@ -245,6 +252,7 @@ class TestLogSummary:
 
     def test_log_summary_with_events(self, analytics: Analytics) -> None:
         """Test log_summary logs statistics."""
+
         @analytics.track("tracked_event")
         def tracked_func() -> None:
             pass
@@ -347,6 +355,7 @@ class TestGenerateReports:
 
     def test_generate_reports_creates_files(self, analytics: Analytics, tmp_path: Path) -> None:
         """Test that generate_reports creates report files."""
+
         @analytics.track("report_event")
         def test_func() -> None:
             pass
