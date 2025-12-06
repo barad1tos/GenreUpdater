@@ -65,33 +65,34 @@ Music Genre Updater v2.0 follows a **clean architecture pattern** with clear sep
 
 ```mermaid
 graph TD
-    subgraph Application["Application Layer (src/application/)"]
+    subgraph App["Application Layer (src/app/)"]
         CLI[CLI Parser<br/>7 subcommands]
         Orchestrator[Orchestrator<br/>Command router]
         Config[Config Manager<br/>YAML validation]
         MusicUpdater[Music Updater<br/>Business orchestrator]
-        Features[Features/<br/>Batch, Crypto, Verification]
+        Features[Features/<br/>Batch, Crypto, Verify]
     end
 
-    subgraph Domain["Domain Layer (src/domain/tracks/)"]
+    subgraph Core["Core Layer (src/core/)"]
         TrackProcessor[Track Processor<br/>CRUD + AppleScript]
         GenreManager[Genre Manager<br/>Dominant genre logic]
         YearRetriever[Year Retriever<br/>API scoring]
         ArtistRenamer[Artist Renamer<br/>Name normalization]
         IncrementalFilter[Incremental Filter<br/>Delta updates]
+        Models[Models/<br/>TrackDict, Protocols]
     end
 
-    subgraph Infrastructure["Infrastructure Layer (src/infrastructure/)"]
+    subgraph Services["Services Layer (src/services/)"]
         AppleScript[AppleScript Client<br/>Music.app integration]
         APIs[External APIs<br/>MusicBrainz, Discogs, Last.fm]
         Cache[Cache Services<br/>Memory, Disk, Snapshot]
         DI[Dependency Container<br/>Service injection]
     end
 
-    subgraph Shared["Shared Layer (src/shared/)"]
-        Core[Core/<br/>Config, Logging, Retry]
-        Monitoring[Monitoring/<br/>Analytics, Metrics]
-        Data[Data/<br/>Models, Validators, Parsers]
+    subgraph Metrics["Metrics Layer (src/metrics/)"]
+        Analytics[Analytics<br/>Performance tracking]
+        Monitoring[Monitoring<br/>Health checks]
+        Reports[Reports<br/>CSV, HTML, Changes]
     end
 
     CLI --> Orchestrator
@@ -108,17 +109,17 @@ graph TD
     TrackProcessor --> AppleScript
     Orchestrator --> DI
     MusicUpdater --> DI
-    TrackProcessor -. uses .-> Core
-    TrackProcessor -. uses .-> Monitoring
-    TrackProcessor -. uses .-> Data
+    TrackProcessor -. uses .-> Models
+    TrackProcessor -. uses .-> Analytics
+    MusicUpdater -. uses .-> Reports
     classDef appLayer fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
-    classDef domainLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    classDef infraLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef sharedLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef coreLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef servicesLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef metricsLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     class CLI,Orchestrator,Config,MusicUpdater,Features appLayer
-    class TrackProcessor,GenreManager,YearRetriever,ArtistRenamer,IncrementalFilter domainLayer
-    class AppleScript,APIs,Cache,DI infraLayer
-    class Core,Monitoring,Data sharedLayer
+    class TrackProcessor,GenreManager,YearRetriever,ArtistRenamer,IncrementalFilter,Models coreLayer
+    class AppleScript,APIs,Cache,DI servicesLayer
+    class Analytics,Monitoring,Reports metricsLayer
 ```
 
 ### Key Design Patterns
@@ -191,8 +192,8 @@ This is the recommended installation method.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone the repository
-git clone https://github.com/barad1tos/music-genre-updater.git
-cd music-genre-updater
+git clone https://github.com/barad1tos/GenreUpdater.git
+cd GenreUpdater
 
 # Install all dependencies (automatically creates virtual environment)
 uv sync
@@ -207,8 +208,8 @@ If you prefer traditional Python tooling:
 
 ```bash
 # Clone the repository
-git clone https://github.com/barad1tos/music-genre-updater.git
-cd music-genre-updater
+git clone https://github.com/barad1tos/GenreUpdater.git
+cd GenreUpdater
 
 # Create virtual environment
 python3.13 -m venv .venv
@@ -747,7 +748,7 @@ The application uses 4 AppleScript files located in the `applescripts/` director
 
 **Location**: All scripts are in the `applescripts/` directory (set via `apple_scripts_dir` in config).
 
-**Integration**: The `AppleScriptClient` (`src/infrastructure/applescript_client.py`) invokes these scripts with proper
+**Integration**: The `AppleScriptClient` (`src/services/apple/`) invokes these scripts with proper
 error handling, timeouts, and retry logic.
 
 ## Contributing
@@ -816,35 +817,9 @@ Note: This project is intended for personal use. Before using the scripts, ensur
 prevent unintended changes to
 your Apple Music library.
 
-## Recent Updates (2025-09-04)
+## Changelog
 
-### Critical Bug Fixes ✅
-
-- **Fixed Batch Processing Bug**: Now correctly processes the entire music library (31,415 tracks) instead of stopping
-  at the first filtered batch (
-  1,993 tracks)
-- **Enhanced Contextual Logging**: AppleScript operations now show `artist | album | track` information instead of just
-  track IDs
-- **Improved Error Handling**: Better handling of prerelease and read-only tracks
-- **Code Quality**: Fixed all linting issues and improved code maintainability
-
-### Technical Improvements
-
-- **Batch Processing**: Intelligent batch termination - only stops when reaching the actual end of library (0 tracks),
-  not filtered batches
-- **Smart Filtering**: Properly handles AppleScript's "modifiable cloud status" filtering without premature termination
-- **Contextual Logging**: Enhanced monitoring with detailed track information in logs
-- **Protocol Updates**: Updated all AppleScript client protocols to support contextual parameters
-- **Revert/Repair Module**: Added a generic revert facility (`revert_years`) with support for per‑album or full‑artist
-  rollback, using `changes_report.csv` or a user‑provided backup CSV.
-- **Safer Year Logic**: Dominant year application now requires a strong majority and includes safety checks for
-  suspicious album groupings.
-
-### Performance Benefits
-
-- **Full Library Processing**: 94% more tracks now processed correctly (from 1,993 to 31,415)
-- **Better Monitoring**: Contextual logs make debugging and monitoring much easier
-- **Reliability**: System now handles large libraries robustly without unexpected stops
+For a detailed list of changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Troubleshooting
 
@@ -888,7 +863,7 @@ launchctl load ~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist
 ```
 
 3. Python Version:
-    - Ensure you are using Python 3.8 or higher:
+    - Ensure you are using Python 3.13 or higher:
 
 ```bash
 python3 --version
