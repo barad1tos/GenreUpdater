@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
@@ -12,9 +13,6 @@ import pytest
 from src.app.features.verify.database_verifier import DatabaseVerifier
 from src.core.models.track_models import TrackDict
 from src.core.models.types import AppleScriptClientProtocol
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _create_track(track_id: str, name: str = "Track") -> TrackDict:
@@ -308,7 +306,7 @@ class TestShouldAutoVerify:
 
     @pytest.mark.asyncio
     async def test_returns_true_when_no_previous_verification(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return True when no previous verification file exists."""
         with patch(
@@ -321,7 +319,7 @@ class TestShouldAutoVerify:
 
     @pytest.mark.asyncio
     async def test_returns_true_when_enough_days_passed(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return True when enough days have passed."""
         csv_file = tmp_path / "track_list.csv"
@@ -340,7 +338,7 @@ class TestShouldAutoVerify:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_recently_verified(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return False when recently verified."""
         csv_file = tmp_path / "track_list.csv"
@@ -359,7 +357,7 @@ class TestShouldAutoVerify:
 
     @pytest.mark.asyncio
     async def test_handles_file_read_error(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return True when file read fails."""
         csv_file = tmp_path / "track_list.csv"
@@ -446,7 +444,7 @@ class TestShouldSkipVerification:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_no_last_verify_file(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return False when no last verify file exists."""
         csv_path = str(tmp_path / "tracks.csv")
@@ -457,7 +455,7 @@ class TestShouldSkipVerification:
 
     @pytest.mark.asyncio
     async def test_returns_true_when_recently_verified(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return True when recently verified."""
         csv_file = tmp_path / "tracks.csv"
@@ -473,7 +471,7 @@ class TestShouldSkipVerification:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_threshold_exceeded(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return False when verification threshold exceeded."""
         csv_file = tmp_path / "tracks.csv"
@@ -489,7 +487,7 @@ class TestShouldSkipVerification:
 
     @pytest.mark.asyncio
     async def test_returns_false_on_read_error(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return False when file read fails."""
         csv_file = tmp_path / "tracks.csv"
@@ -586,7 +584,7 @@ class TestUpdateVerificationTimestamp:
         db_verify_logger: logging.Logger,
         mock_analytics: Any,
         config: dict[str, Any],
-        tmp_path: "Path",
+        tmp_path: Path,
     ) -> None:
         """Should skip updating timestamp in dry run mode."""
         verifier = DatabaseVerifier(
@@ -607,7 +605,7 @@ class TestUpdateVerificationTimestamp:
         assert not last_verify_file.exists()
 
     @pytest.mark.asyncio
-    async def test_writes_timestamp(self, verifier: DatabaseVerifier, tmp_path: "Path") -> None:
+    async def test_writes_timestamp(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should write current timestamp to file."""
         csv_path = str(tmp_path / "tracks.csv")
         last_verify_file = tmp_path / "tracks_last_verify.txt"
@@ -626,7 +624,7 @@ class TestVerifyAndCleanTrackDatabase:
 
     @pytest.mark.asyncio
     async def test_returns_zero_when_no_tracks(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return 0 when no tracks to verify."""
         csv_path = str(tmp_path / "tracks.csv")
@@ -647,7 +645,7 @@ class TestVerifyAndCleanTrackDatabase:
 
     @pytest.mark.asyncio
     async def test_skips_when_recently_verified(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should skip when recently verified."""
         csv_file = tmp_path / "tracks.csv"
@@ -674,7 +672,7 @@ class TestVerifyAndCleanTrackDatabase:
 
     @pytest.mark.asyncio
     async def test_verifies_and_returns_invalid_count(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should verify tracks and return invalid count."""
         csv_file = tmp_path / "tracks.csv"
@@ -706,7 +704,7 @@ class TestCanRunIncrementalLegacyFormats:
 
     @pytest.mark.asyncio
     async def test_handles_legacy_datetime_format(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should handle legacy YYYY-MM-DD HH:MM:SS format."""
         last_run_file = tmp_path / "last_run.log"
@@ -723,7 +721,7 @@ class TestCanRunIncrementalLegacyFormats:
 
     @pytest.mark.asyncio
     async def test_handles_date_only_format(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should handle date-only YYYY-MM-DD format."""
         last_run_file = tmp_path / "last_run.log"
@@ -740,7 +738,7 @@ class TestCanRunIncrementalLegacyFormats:
 
     @pytest.mark.asyncio
     async def test_handles_invalid_format_gracefully(
-        self, verifier: DatabaseVerifier, tmp_path: "Path"
+        self, verifier: DatabaseVerifier, tmp_path: Path
     ) -> None:
         """Should return True on invalid datetime format."""
         last_run_file = tmp_path / "last_run.log"
