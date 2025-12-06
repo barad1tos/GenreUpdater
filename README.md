@@ -111,10 +111,10 @@ graph TD
     TrackProcessor -. uses .-> Core
     TrackProcessor -. uses .-> Monitoring
     TrackProcessor -. uses .-> Data
-    classDef appLayer fill: #e1f5ff, stroke: #0288d1, stroke-width: 2px
-    classDef domainLayer fill: #fff9c4, stroke: #f57f17, stroke-width: 2px
-    classDef infraLayer fill: #f3e5f5, stroke: #7b1fa2, stroke-width: 2px
-    classDef sharedLayer fill: #e8f5e9, stroke: #388e3c, stroke-width: 2px
+    classDef appLayer fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef domainLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef infraLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef sharedLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     class CLI, Orchestrator, Config, MusicUpdater, Features appLayer
     class TrackProcessor, GenreManager, YearRetriever, ArtistRenamer, IncrementalFilter domainLayer
     class AppleScript, APIs, Cache, DI infraLayer
