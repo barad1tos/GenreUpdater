@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple" alt="macOS">
   <a href="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml"><img src="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/barad1tos/GenreUpdater"><img src="https://codecov.io/gh/barad1tos/GenreUpdater/graph/badge.svg" alt="codecov"></a>
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/linter-ruff-blue?logo=ruff" alt="Ruff"></a>
 </p>
 
 Automatically updates **genres** and **release years** for your Apple Music tracks.
@@ -113,7 +113,7 @@ uv run python main.py verify_database
 |-------------------|--------------------------------------------------------------------|
 | `--force`         | Bypass incremental checks and cache, process all tracks            |
 | `--dry-run`       | Preview changes without writing to Music.app                       |
-| `--test-mode`     | Run only on artists listed in `development.test_artists` config    |
+| `--test-mode`     | Run only on artists listed in `test_artists` config                |
 | `--verbose`, `-v` | Enable debug-level logging                                         |
 | `--quiet`, `-q`   | Suppress non-critical console output                               |
 | `--config PATH`   | Use custom config file (default: `my-config.yaml` → `config.yaml`) |
@@ -811,7 +811,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/GenreUpdater.git
+git clone https://github.com/barad1tos/GenreUpdater.git
 cd GenreUpdater
 git checkout -b feature/your-feature
 uv sync
