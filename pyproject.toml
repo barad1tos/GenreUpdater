@@ -185,6 +185,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
   "ARG005",  # Tests can have unused lambda arguments
   "TC003",   # Tests can have imports outside TYPE_CHECKING
   "PLC0415", # Tests can have imports inside functions
+  "PLC2701", # Tests can import private names (internal functions)
   "PT012",   # Tests can have complex pytest.raises blocks
   "TRY003",  # Tests can have long exception messages
   "EM101",   # Tests can use string literals in exceptions
