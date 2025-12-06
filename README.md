@@ -15,8 +15,7 @@ Automatically updates **genres** and **release years** for your Apple Music trac
 
 ## What It Does
 
-1. **Fixes messy genres** — If an artist has 80 rock tracks and 5 pop tracks, the tool sets all their tracks to "Rock" (
-   the dominant genre)
+1. **Fixes messy genres** — Takes the genre from your **earliest added album** for each artist and applies it to all their tracks (so make sure your first album has the correct genre!)
 2. **Fills in missing years** — Looks up actual release years from MusicBrainz, Discogs, and Last.fm, then writes them
    to your library
 3. **Cleans up metadata** — Removes "Remastered", "Deluxe Edition", and other clutter from track names
@@ -429,7 +428,7 @@ sequenceDiagram
     O ->> C: check snapshot
     C -->> O: delta (changed tracks)
     O ->> P: process tracks
-    P ->> P: calculate dominant genre per artist
+    Note over P: Dominant genre = genre from<br/>earliest added album
     P ->> A: update genre
     A ->> M: AppleScript set
     M -->> A: success
