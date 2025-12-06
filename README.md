@@ -5,21 +5,21 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/python-3.13%2B-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple" alt="macOS">
   <a href="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml"><img src="https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/barad1tos/GenreUpdater"><img src="https://codecov.io/gh/barad1tos/GenreUpdater/graph/badge.svg" alt="codecov"></a>
-  <img src="https://img.shields.io/github/issues/barad1tos/GenreUpdater" alt="GitHub Issues">
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
 
 Automatically updates **genres** and **release years** for your Apple Music tracks.
 
 ## What It Does
 
-1. **Fixes messy genres** — If an artist has 80 rock tracks and 5 pop tracks, the tool sets all their tracks to "Rock" (the dominant genre)
-
-2. **Fills in missing years** — Looks up actual release years from MusicBrainz, Discogs, and Last.fm, then writes them to your library
-
+1. **Fixes messy genres** — If an artist has 80 rock tracks and 5 pop tracks, the tool sets all their tracks to "Rock" (
+   the dominant genre)
+2. **Fills in missing years** — Looks up actual release years from MusicBrainz, Discogs, and Last.fm, then writes them
+   to your library
 3. **Cleans up metadata** — Removes "Remastered", "Deluxe Edition", and other clutter from track names
-
 4. **Previews before changing** — Run with `--dry-run` to see what would change without touching your library
 
 <details>
@@ -80,6 +80,7 @@ python main.py --help
 ```
 
 **Dependencies** (from pyproject.toml):
+
 - pydantic 2.x — Data validation
 - aiohttp — Async HTTP client
 - aiofiles — Async file I/O
@@ -108,27 +109,27 @@ uv run python main.py verify_database
 
 ### Global Flags
 
-| Flag | Description |
-|------|-------------|
-| `--force` | Bypass incremental checks and cache, process all tracks |
-| `--dry-run` | Preview changes without writing to Music.app |
-| `--test-mode` | Run only on artists listed in `development.test_artists` config |
-| `--verbose`, `-v` | Enable debug-level logging |
-| `--quiet`, `-q` | Suppress non-critical console output |
-| `--config PATH` | Use custom config file (default: `my-config.yaml` → `config.yaml`) |
+| Flag              | Description                                                        |
+|-------------------|--------------------------------------------------------------------|
+| `--force`         | Bypass incremental checks and cache, process all tracks            |
+| `--dry-run`       | Preview changes without writing to Music.app                       |
+| `--test-mode`     | Run only on artists listed in `development.test_artists` config    |
+| `--verbose`, `-v` | Enable debug-level logging                                         |
+| `--quiet`, `-q`   | Suppress non-critical console output                               |
+| `--config PATH`   | Use custom config file (default: `my-config.yaml` → `config.yaml`) |
 
 ### Commands
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| _(default)_ | — | Full library update: fetch all tracks, update genres and years |
-| `clean_artist` | `clean` | Remove "Remastered", "Deluxe" etc. from specific artist's tracks |
-| `update_years` | `years` | Fetch release years from APIs without updating genres |
-| `revert_years` | `revert` | Rollback year changes using `changes_report.csv` or custom backup |
-| `verify_database` | `verify-db` | Check that cached track IDs still exist in Music.app |
-| `verify_pending` | `pending` | Retry year lookups for albums that previously failed |
-| `batch` | — | Process multiple artists from a text file |
-| `rotate_keys` | `rotate-keys` | Generate new encryption key and re-encrypt all API tokens |
+| Command           | Alias         | Description                                                       |
+|-------------------|---------------|-------------------------------------------------------------------|
+| _(default)_       | —             | Full library update: fetch all tracks, update genres and years    |
+| `clean_artist`    | `clean`       | Remove "Remastered", "Deluxe" etc. from specific artist's tracks  |
+| `update_years`    | `years`       | Fetch release years from APIs without updating genres             |
+| `revert_years`    | `revert`      | Rollback year changes using `changes_report.csv` or custom backup |
+| `verify_database` | `verify-db`   | Check that cached track IDs still exist in Music.app              |
+| `verify_pending`  | `pending`     | Retry year lookups for albums that previously failed              |
+| `batch`           | —             | Process multiple artists from a text file                         |
+| `rotate_keys`     | `rotate-keys` | Generate new encryption key and re-encrypt all API tokens         |
 
 ### Command Examples
 
@@ -256,7 +257,7 @@ exceptions:
 # ═══════════════════════════════════════════════════════════════
 # DEVELOPMENT / TESTING
 # ═══════════════════════════════════════════════════════════════
-test_artists: []             # Artists to process in --test-mode
+test_artists: [ ]             # Artists to process in --test-mode
 
 experimental:
   batch_updates_enabled: false  # Experimental: batch AppleScript updates (~10x faster)
@@ -274,34 +275,34 @@ Create `~/Library/LaunchAgents/com.barad1tos.MusicGenreUpdater.plist`:
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.barad1tos.MusicGenreUpdater</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/GenreUpdater/.venv/bin/python</string>
-        <string>/path/to/GenreUpdater/main.py</string>
-    </array>
-
-    <key>StartInterval</key>
-    <integer>1800</integer>  <!-- Run every 30 minutes (1800 seconds) -->
-
-    <key>WorkingDirectory</key>
-    <string>/path/to/GenreUpdater</string>
-
-    <key>StandardOutPath</key>
-    <string>/path/to/logs/launchctl_stdout.log</string>
-
-    <key>StandardErrorPath</key>
-    <string>/path/to/logs/launchctl_stderr.log</string>
-
-    <key>EnvironmentVariables</key>
     <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>Label</key>
+        <string>com.barad1tos.MusicGenreUpdater</string>
+
+        <key>ProgramArguments</key>
+        <array>
+            <string>/path/to/GenreUpdater/.venv/bin/python</string>
+            <string>/path/to/GenreUpdater/main.py</string>
+        </array>
+
+        <key>StartInterval</key>
+        <integer>1800</integer>  <!-- Run every 30 minutes (1800 seconds) -->
+
+        <key>WorkingDirectory</key>
+        <string>/path/to/GenreUpdater</string>
+
+        <key>StandardOutPath</key>
+        <string>/path/to/logs/launchctl_stdout.log</string>
+
+        <key>StandardErrorPath</key>
+        <string>/path/to/logs/launchctl_stderr.log</string>
+
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>PATH</key>
+            <string>/usr/local/bin:/usr/bin:/bin</string>
+        </dict>
     </dict>
-</dict>
 </plist>
 ```
 
@@ -347,7 +348,6 @@ graph LR
     DG[(Discogs API)]
     LF[(Last.fm API)]
     FS[(File System)]
-
     User -->|commands| MGU
     MGU -->|read tracks| MusicApp
     MGU -->|write updates| MusicApp
@@ -355,13 +355,12 @@ graph LR
     MGU -->|query metadata| DG
     MGU -->|query metadata| LF
     MGU -->|cache/reports| FS
-
-    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef system fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef user fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class MusicApp,MB,DG,LF,FS external
-    class MGU system
-    class User user
+    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef system fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef user fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+class MusicApp, MB, DG, LF, FS external
+class MGU system
+class User user
 ```
 
 ---
@@ -388,7 +387,7 @@ graph TB
         Metrics[Reports]
     end
 
-    User -->|"--dry-run, --force"| CLI
+    User -->|" --dry-run, --force "| CLI
     CLI -->|parsed args| Orch
     Orch -->|route command| Pipes
     Pipes -->|process tracks| Core
@@ -396,18 +395,16 @@ graph TB
     Core -->|get metadata| APIs
     Core -->|read/write| Cache
     Pipes -->|generate| Metrics
-
     Apple <-->|AppleScript| MusicApp
     APIs -->|HTTP| ExtAPIs
     Cache <-->|JSON/pickle| FileSystem
     Metrics -->|HTML/CSV| FileSystem
-
-    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef internal fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef user fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class MusicApp,ExtAPIs,FileSystem external
-    class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
-    class User user
+    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef internal fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef user fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+class MusicApp, ExtAPIs, FileSystem external
+class CLI,Orch, Pipes, Core, Apple, Cache, APIs, Metrics internal
+class User user
 ```
 
 ---
@@ -423,22 +420,21 @@ sequenceDiagram
     participant A as AppleScript
     participant M as Music.app
     participant C as Cache
-
-    U->>CLI: uv run python main.py
-    CLI->>O: parsed arguments
-    O->>A: fetch all tracks
-    A->>M: AppleScript query
-    M-->>A: track data (30K+)
-    A-->>O: List[TrackDict]
-    O->>C: check snapshot
-    C-->>O: delta (changed tracks)
-    O->>P: process tracks
-    P->>P: calculate dominant genre per artist
-    P->>A: update genre
-    A->>M: AppleScript set
-    M-->>A: success
-    P-->>O: changes made
-    O-->>CLI: summary report
+    U ->> CLI: uv run python main.py
+    CLI ->> O: parsed arguments
+    O ->> A: fetch all tracks
+    A ->> M: AppleScript query
+    M -->> A: track data (30K+)
+    A -->> O: List[TrackDict]
+    O ->> C: check snapshot
+    C -->> O: delta (changed tracks)
+    O ->> P: process tracks
+    P ->> P: calculate dominant genre per artist
+    P ->> A: update genre
+    A ->> M: AppleScript set
+    M -->> A: success
+    P -->> O: changes made
+    O -->> CLI: summary report
 ```
 
 ---
@@ -454,25 +450,24 @@ sequenceDiagram
     participant LF as Last.fm
     participant C as Cache
     participant A as AppleScript
-
-    P->>C: check cached year
+    P ->> C: check cached year
     alt cache hit
-        C-->>P: cached year + confidence
+        C -->> P: cached year + confidence
     else cache miss
-        P->>API: fetch year (artist, album)
+        P ->> API: fetch year (artist, album)
         par query all APIs
-            API->>MB: search release
-            API->>DG: search release
-            API->>LF: get album info
+            API ->> MB: search release
+            API ->> DG: search release
+            API ->> LF: get album info
         end
-        MB-->>API: year + score
-        DG-->>API: year + score
-        LF-->>API: year + score
-        API->>API: resolve best year (scoring)
-        API-->>P: year + confidence
-        P->>C: store in cache
+        MB -->> API: year + score
+        DG -->> API: year + score
+        LF -->> API: year + score
+        API ->> API: resolve best year (scoring)
+        API -->> P: year + confidence
+        P ->> C: store in cache
     end
-    P->>A: update year
+    P ->> A: update year
 ```
 
 ---
@@ -505,13 +500,12 @@ graph LR
     Orch -->|years only| YU
     Orch -->|clean metadata| TC
     Orch -->|batch/crypto/verify| Features
-
-    classDef entry fill:#73D0FF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef pipeline fill:#5BC0EB,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef feature fill:#95E6CB,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class CLI,Orch entry
-    class MU,FS,YU,TC pipeline
-    class Batch,Crypto,Verify feature
+    classDef entry fill: #73D0FF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef pipeline fill: #5BC0EB, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef feature fill: #95E6CB, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+class CLI, Orch entry
+class MU,FS, YU, TC pipeline
+class Batch,Crypto, Verify feature
 ```
 
 ---
@@ -547,11 +541,10 @@ graph TB
     AR -->|clean names| TP
     TP -->|changes| UE
     UE -->|execute| OUT
-
-    classDef io fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef proc fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class IN,OUT io
-    class TP,GM,YR,AR,IF,UE proc
+    classDef io fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef proc fill: #FFD580, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+class IN, OUT io
+class TP,GM, YR, AR, IF, UE proc
 ```
 
 ---
@@ -594,26 +587,23 @@ graph TB
     Core -->|fetch/update tracks| AC
     AC --> AE --> RL
     RL -->|AppleScript| MusicApp
-
     Core -->|get/set cache| CO
     CO --> SS & ALB & API_C
     SS & ALB & API_C -->|read/write| Files
-
     Core -->|query metadata| AO
     AO --> MB & DG & LF
     AO --> YS
     MB & DG & LF -->|HTTP| ExtAPI
-
-    classDef caller fill:#FFD580,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef apple fill:#D4BFFF,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef cache fill:#CE93D8,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef api fill:#BA68C8,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef external fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
+    classDef caller fill: #FFD580, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef apple fill: #D4BFFF, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef cache fill: #CE93D8, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef api fill: #BA68C8, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef external fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
     class Core caller
-    class AC,AE,RL apple
-    class CO,SS,ALB,API_C cache
-    class AO,MB,DG,LF,YS api
-    class MusicApp,ExtAPI,Files external
+class AC, AE, RL apple
+class CO,SS, ALB, API_C cache
+class AO,MB, DG, LF, YS api
+class MusicApp,ExtAPI, Files external
 ```
 
 ---
@@ -647,25 +637,24 @@ graph LR
     MO --> ER
     HR --> HTML
     CR & ER --> CSV
-
-    classDef io fill:#F28779,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef track fill:#BAE67E,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    classDef report fill:#C5E1A5,stroke:#1F2430,stroke-width:2px,color:#1F2430
-    class Data,HTML,CSV io
-    class AN,MO track
-    class HR,CR,ER report
+    classDef io fill: #F28779, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef track fill: #BAE67E, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+    classDef report fill: #C5E1A5, stroke: #1F2430, stroke-width: 2px, color: #1F2430
+class Data, HTML, CSV io
+class AN,MO track
+class HR,CR, ER report
 ```
 
 ---
 
 ### Layer Responsibilities
 
-| Layer | Path | What it does |
-|-------|------|--------------|
-| **App** | `src/app/` | Entry point, command routing, pipeline selection |
-| **Core** | `src/core/` | Business logic: genre calculation, year determination, track filtering |
-| **Services** | `src/services/` | I/O adapters: AppleScript, cache, external API clients |
-| **Metrics** | `src/metrics/` | Observability: timing, reports, error tracking |
+| Layer        | Path            | What it does                                                           |
+|--------------|-----------------|------------------------------------------------------------------------|
+| **App**      | `src/app/`      | Entry point, command routing, pipeline selection                       |
+| **Core**     | `src/core/`     | Business logic: genre calculation, year determination, track filtering |
+| **Services** | `src/services/` | I/O adapters: AppleScript, cache, external API clients                 |
+| **Metrics**  | `src/metrics/`  | Observability: timing, reports, error tracking                         |
 
 ### Key Design Patterns
 
@@ -676,33 +665,33 @@ graph LR
 
 ### Caching Performance
 
-| Tier | Storage | Latency | TTL | Use Case |
-|------|---------|---------|-----|----------|
-| L1 | Memory (dict) | <1ms | Session | Hot data, repeated access |
-| L2 | Disk (JSON) | 10-50ms | 20min | API responses |
-| L3 | Snapshot (pickle) | <1s for 30K | Permanent | Full library state |
+| Tier | Storage           | Latency     | TTL       | Use Case                  |
+|------|-------------------|-------------|-----------|---------------------------|
+| L1   | Memory (dict)     | <1ms        | Session   | Hot data, repeated access |
+| L2   | Disk (JSON)       | 10-50ms     | 20min     | API responses             |
+| L3   | Snapshot (pickle) | <1s for 30K | Permanent | Full library state        |
 
 ### AppleScript Integration
 
 Scripts in `applescripts/` directory:
 
-| Script | Purpose | Output Format |
-|--------|---------|---------------|
-| `fetch_tracks.scpt` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
-| `fetch_tracks_by_ids.scpt` | Get specific tracks by ID list | Same format |
-| `update_property.applescript` | Set single track property | "Success: ..." or "No Change: ..." |
-| `batch_update_tracks.applescript` | Batch updates (experimental) | JSON status array |
+| Script                            | Purpose                              | Output Format                                    |
+|-----------------------------------|--------------------------------------|--------------------------------------------------|
+| `fetch_tracks.scpt`               | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
+| `fetch_tracks_by_ids.scpt`        | Get specific tracks by ID list       | Same format                                      |
+| `update_property.applescript`     | Set single track property            | "Success: ..." or "No Change: ..."               |
+| `batch_update_tracks.applescript` | Batch updates (experimental)         | JSON status array                                |
 
 </details>
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
+| Problem                    | Solution                                               |
+|----------------------------|--------------------------------------------------------|
 | "Music app is not running" | Launch Music.app before running (except `rotate_keys`) |
-| AppleScript timeout | Increase `applescript_timeouts` values in config |
-| Cache corruption | Delete `cache/` directory and re-run |
-| Parse failures in batch | Reduce `batch_processing.ids_batch_size` (try 100) |
+| AppleScript timeout        | Increase `applescript_timeouts` values in config       |
+| Cache corruption           | Delete `cache/` directory and re-run                   |
+| Parse failures in batch    | Reduce `batch_processing.ids_batch_size` (try 100)     |
 
 <details>
 <summary>Diagnostic commands</summary>
@@ -731,15 +720,15 @@ grep -i error /path/to/logs/main/main.log | tail -20
 
 All paths relative to `logs_base_dir` in config:
 
-| File | Contents |
-|------|----------|
-| `main/main.log` | Main application log (INFO level) |
-| `main/year_changes.log` | Year update decisions and API responses |
-| `csv/track_list.csv` | Full track listing from last run |
-| `csv/changes_report.csv` | All changes made (for revert) |
-| `csv/dry_run_report.csv` | Changes that would be made (dry-run) |
-| `analytics/analytics.log` | Function timing and call counts |
-| `analytics/reports/analytics.html` | Visual performance dashboard |
+| File                               | Contents                                |
+|------------------------------------|-----------------------------------------|
+| `main/main.log`                    | Main application log (INFO level)       |
+| `main/year_changes.log`            | Year update decisions and API responses |
+| `csv/track_list.csv`               | Full track listing from last run        |
+| `csv/changes_report.csv`           | All changes made (for revert)           |
+| `csv/dry_run_report.csv`           | Changes that would be made (dry-run)    |
+| `analytics/analytics.log`          | Function timing and call counts         |
+| `analytics/reports/analytics.html` | Visual performance dashboard            |
 
 </details>
 
@@ -754,6 +743,7 @@ Two settings control this:
 2. **Incremental filter** — `incremental_interval_minutes` in config.yaml (skip tracks not modified recently)
 
 Example: Run every hour, but only process tracks modified in last 30 minutes:
+
 - plist: `<integer>3600</integer>` (1 hour)
 - config: `incremental_interval_minutes: 30`
 
@@ -763,6 +753,7 @@ Example: Run every hour, but only process tracks modified in last 30 minutes:
 <summary>How can I see what was changed?</summary>
 
 Check `<logs_base_dir>/csv/changes_report.csv`. Contains:
+
 - Track ID, name, artist, album
 - Old and new values for genre/year
 - Timestamp of change
@@ -790,6 +781,7 @@ exceptions:
 <summary>Why are some years wrong?</summary>
 
 Year determination uses scoring from 3 APIs. Sometimes:
+
 - APIs disagree on release year
 - Remastered versions have different years
 - Regional releases vary
@@ -802,6 +794,7 @@ Use `revert_years` to fix, then add to exceptions.
 <summary>Is it safe to run on my library?</summary>
 
 Yes, with caveats:
+
 1. **Always run `--dry-run` first** to preview changes
 2. **Changes sync to iCloud immediately** and cannot be undone via Time Machine
 3. **Use `revert_years`** with `changes_report.csv` to undo year changes
@@ -849,6 +842,7 @@ uv run bandit -r src/ -c pyproject.toml
 ## Contact
 
 **Author:** Roman Borodavkin
+
 - Email: [roman.borodavkin@gmail.com](mailto:roman.borodavkin@gmail.com)
 - GitHub: [@barad1tos](https://github.com/barad1tos)
 
