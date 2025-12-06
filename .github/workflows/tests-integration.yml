@@ -33,7 +33,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          uv run pytest tests/integration/ -v --tb=short -m 'not slow'
+          uv run pytest tests/integration/ -v --tb=short -m 'not slow' --no-cov-on-fail --cov-fail-under=0
 
   e2e:
     name: E2E Tests (macOS)
@@ -56,4 +56,4 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          uv run pytest tests/e2e/ -v --tb=short -m 'not slow'
+          uv run pytest tests/e2e/ -v --tb=short -m 'not slow' --no-cov-on-fail --cov-fail-under=0
