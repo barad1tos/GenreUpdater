@@ -183,7 +183,8 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
   "PT011",   # Tests can use explicit default argument values for clarity
   "ARG001",  # Tests can have unused function arguments (mocks)
   "ARG005",  # Tests can have unused lambda arguments
-  "TC003",   # Tests can have imports outside TYPE_CHECKING
+  "TC002",   # Tests can have third-party imports outside TYPE_CHECKING
+  "TC003",   # Tests can have stdlib imports outside TYPE_CHECKING
   "PLC0415", # Tests can have imports inside functions
   "PLC2701", # Tests can import private names (internal functions)
   "PT012",   # Tests can have complex pytest.raises blocks
