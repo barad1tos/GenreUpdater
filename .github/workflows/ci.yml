@@ -73,13 +73,12 @@ jobs:
             --cov-report=xml \
             -x
 
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v5
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          name: coverage-report
-          path: coverage.xml
-          if-no-files-found: warn
+          files: coverage.xml
+          fail_ci_if_error: false
+          verbose: true
 
   release:
     name: Release

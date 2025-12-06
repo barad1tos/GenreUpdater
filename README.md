@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)
 ![CI](https://github.com/barad1tos/GenreUpdater/actions/workflows/ci.yml/badge.svg)
-![Coverage](https://img.shields.io/badge/coverage-70%25%2B-brightgreen.svg)
+[![codecov](https://codecov.io/gh/barad1tos/GenreUpdater/graph/badge.svg)](https://codecov.io/gh/barad1tos/GenreUpdater)
 ![GitHub Issues](https://img.shields.io/github/issues/barad1tos/GenreUpdater)
 
 Music Genre Updater is a Python-based tool that automatically updates the genres and release years of your music tracks
