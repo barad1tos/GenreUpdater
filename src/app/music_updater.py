@@ -3,7 +3,6 @@
 This is a streamlined version that uses the new modular components.
 """
 
-
 import contextlib
 import time
 from datetime import UTC, datetime
