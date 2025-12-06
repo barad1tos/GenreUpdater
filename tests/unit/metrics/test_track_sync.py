@@ -664,9 +664,7 @@ class TestBuildCurrentMap:
         tracks = [_create_test_track("11", artist="Test Artist", album="Test Album")]
         processed_albums: dict[str, str] = {}
 
-        result = await _build_current_map(
-            tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger
-        )
+        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
 
         assert "11" in result
         assert result["11"].artist == "Test Artist"
@@ -684,9 +682,7 @@ class TestBuildCurrentMap:
         tracks = [track]
         processed_albums: dict[str, str] = {}
 
-        result = await _build_current_map(
-            tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger
-        )
+        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
 
         assert len(result) == 0
 
@@ -702,9 +698,7 @@ class TestBuildCurrentMap:
         tracks = [_create_test_track("12", artist="Test", album="Album2", new_year=None)]
         processed_albums = {"Test|Album2": "2023"}
 
-        result = await _build_current_map(
-            tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger
-        )
+        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger)
 
         assert "12" in result
         assert result["12"].new_year == "2023"
@@ -725,9 +719,7 @@ class TestHandlePartialSyncCache:
         track = _create_test_track("13", new_year=None)
         processed_albums: dict[str, str] = {}
 
-        await _handle_partial_sync_cache(
-            track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger
-        )
+        await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
         assert track.new_year is None
 
@@ -744,9 +736,7 @@ class TestHandlePartialSyncCache:
         processed_albums = {"Artist|Album": "2023"}
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
-        await _handle_partial_sync_cache(
-            track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger
-        )
+        await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
         assert track.new_year == "2023"
         mock_cache_service.store_album_year_in_cache.assert_called_once()
@@ -766,9 +756,7 @@ class TestHandlePartialSyncCache:
         mock_cache_service.get_album_year_from_cache = AsyncMock(side_effect=OSError("Cache error"))
 
         with caplog.at_level(logging.ERROR):
-            await _handle_partial_sync_cache(
-                track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger
-            )
+            await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
         assert track.new_year == "2023"
 
@@ -878,9 +866,7 @@ class TestSyncTrackListWithCurrent:
         csv_path = str(tmp_path / "sync_test.csv")
 
         with patch("src.metrics.track_sync.save_csv"):
-            await sync_track_list_with_current(
-                tracks, csv_path, mock_cache_service, console_logger, error_logger
-            )
+            await sync_track_list_with_current(tracks, csv_path, mock_cache_service, console_logger, error_logger)
 
     @pytest.mark.asyncio
     async def test_removes_deleted_tracks(
@@ -901,6 +887,4 @@ class TestSyncTrackListWithCurrent:
         tracks = [_create_test_track("19", artist="New Artist")]
 
         with patch("src.metrics.track_sync.save_csv"):
-            await sync_track_list_with_current(
-                tracks, str(csv_file), mock_cache_service, console_logger, error_logger
-            )
+            await sync_track_list_with_current(tracks, str(csv_file), mock_cache_service, console_logger, error_logger)

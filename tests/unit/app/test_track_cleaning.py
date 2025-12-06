@@ -107,27 +107,19 @@ def sample_track() -> TrackDict:
 class TestTrackCleaningServiceInit:
     """Tests for TrackCleaningService initialization."""
 
-    def test_stores_track_processor(
-        self, service: TrackCleaningService, mock_track_processor: MagicMock
-    ) -> None:
+    def test_stores_track_processor(self, service: TrackCleaningService, mock_track_processor: MagicMock) -> None:
         """Should store track processor."""
         assert service._track_processor is mock_track_processor
 
-    def test_stores_config(
-        self, service: TrackCleaningService, mock_config: dict[str, Any]
-    ) -> None:
+    def test_stores_config(self, service: TrackCleaningService, mock_config: dict[str, Any]) -> None:
         """Should store config."""
         assert service._config is mock_config
 
-    def test_stores_console_logger(
-        self, service: TrackCleaningService, console_logger: logging.Logger
-    ) -> None:
+    def test_stores_console_logger(self, service: TrackCleaningService, console_logger: logging.Logger) -> None:
         """Should store console logger."""
         assert service._console_logger is console_logger
 
-    def test_stores_error_logger(
-        self, service: TrackCleaningService, error_logger: logging.Logger
-    ) -> None:
+    def test_stores_error_logger(self, service: TrackCleaningService, error_logger: logging.Logger) -> None:
         """Should store error logger."""
         assert service._error_logger is error_logger
 
@@ -138,9 +130,7 @@ class TestTrackCleaningServiceInit:
 class TestExtractAndCleanMetadata:
     """Tests for extract_and_clean_metadata method."""
 
-    def test_extracts_track_fields(
-        self, service: TrackCleaningService, sample_track: TrackDict
-    ) -> None:
+    def test_extracts_track_fields(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should extract track fields."""
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Clean Track", "Clean Album")
@@ -168,9 +158,7 @@ class TestExtractAndCleanMetadata:
         assert track_name == ""
         assert album_name == ""
 
-    def test_calls_clean_names_with_correct_args(
-        self, service: TrackCleaningService, sample_track: TrackDict
-    ) -> None:
+    def test_calls_clean_names_with_correct_args(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should call clean_names with correct arguments."""
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Track", "Album")
@@ -231,9 +219,7 @@ class TestProcessSingleTrack:
     """Tests for process_single_track method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_track_id(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_returns_none_when_no_track_id(self, service: TrackCleaningService) -> None:
         """Should return (None, None) when track has no ID."""
         track = TrackDict(id="", name="Track", artist="Artist", album="Album")
 
@@ -244,9 +230,7 @@ class TestProcessSingleTrack:
         assert result == (None, None)
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_changes_needed(
-        self, service: TrackCleaningService, sample_track: TrackDict
-    ) -> None:
+    async def test_returns_none_when_no_changes_needed(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should return (None, None) when no changes needed."""
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             # Return same values as original (normalized)
@@ -290,15 +274,11 @@ class TestProcessSingleTrack:
         assert result == (None, None)
 
     @pytest.mark.asyncio
-    async def test_uses_artist_override(
-        self, service: TrackCleaningService, sample_track: TrackDict
-    ) -> None:
+    async def test_uses_artist_override(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should use artist override for change entry."""
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            _, change_entry = await service.process_single_track(
-                sample_track, artist_override="Override Artist"
-            )
+            _, change_entry = await service.process_single_track(sample_track, artist_override="Override Artist")
 
         assert change_entry is not None
         assert change_entry.artist == "Override Artist"
@@ -328,9 +308,7 @@ class TestProcessTrackForPipeline:
     """Tests for process_track_for_pipeline method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_changes(
-        self, service: TrackCleaningService, sample_track: TrackDict
-    ) -> None:
+    async def test_returns_none_when_no_changes(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should return None when no changes needed."""
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Track Name", "Album Name")
@@ -339,9 +317,7 @@ class TestProcessTrackForPipeline:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_track_id(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_returns_none_when_no_track_id(self, service: TrackCleaningService) -> None:
         """Should return None when track has no ID."""
         track = TrackDict(id="", name="Track", artist="Artist", album="Album")
 
@@ -392,9 +368,7 @@ class TestProcessAllTracks:
     """Tests for process_all_tracks method."""
 
     @pytest.mark.asyncio
-    async def test_processes_multiple_tracks(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_processes_multiple_tracks(self, service: TrackCleaningService) -> None:
         """Should process multiple tracks."""
         tracks = [
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
@@ -403,9 +377,7 @@ class TestProcessAllTracks:
 
         with patch("src.app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            updated_tracks, changes_log = await service.process_all_tracks(
-                tracks, artist="Artist"
-            )
+            updated_tracks, changes_log = await service.process_all_tracks(tracks, artist="Artist")
 
         assert len(updated_tracks) == 2
         assert len(changes_log) == 2
@@ -419,9 +391,7 @@ class TestProcessAllTracks:
         assert changes_log == []
 
     @pytest.mark.asyncio
-    async def test_filters_unchanged_tracks(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_filters_unchanged_tracks(self, service: TrackCleaningService) -> None:
         """Should not include unchanged tracks in result."""
         tracks = [
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
@@ -434,9 +404,7 @@ class TestProcessAllTracks:
                 ("Cleaned Track", "Cleaned Album"),
                 ("Track 2", "Album 2"),
             ]
-            updated_tracks, changes_log = await service.process_all_tracks(
-                tracks, artist="Artist"
-            )
+            updated_tracks, changes_log = await service.process_all_tracks(tracks, artist="Artist")
 
         assert len(updated_tracks) == 1
         assert len(changes_log) == 1
@@ -449,9 +417,7 @@ class TestCleanAllMetadata:
     """Tests for clean_all_metadata method."""
 
     @pytest.mark.asyncio
-    async def test_returns_cleaned_tracks(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_returns_cleaned_tracks(self, service: TrackCleaningService) -> None:
         """Should return list of cleaned tracks."""
         tracks = [
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
@@ -498,9 +464,7 @@ class TestCleanAllMetadataWithLogs:
     """Tests for clean_all_metadata_with_logs method."""
 
     @pytest.mark.asyncio
-    async def test_returns_change_log_entries(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_returns_change_log_entries(self, service: TrackCleaningService) -> None:
         """Should return change log entries."""
         tracks = [
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
@@ -541,9 +505,7 @@ class TestCleanAllMetadataWithLogs:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_filters_unchanged_tracks(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_filters_unchanged_tracks(self, service: TrackCleaningService) -> None:
         """Should not include unchanged tracks in result."""
         tracks = [
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
@@ -567,9 +529,7 @@ class TestWhitespaceNormalizationInProcessing:
     """Tests for whitespace normalization during track processing."""
 
     @pytest.mark.asyncio
-    async def test_ignores_whitespace_only_differences(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_ignores_whitespace_only_differences(self, service: TrackCleaningService) -> None:
         """Should ignore whitespace-only differences."""
         track = TrackDict(
             id="1",
@@ -587,9 +547,7 @@ class TestWhitespaceNormalizationInProcessing:
         assert result == (None, None)
 
     @pytest.mark.asyncio
-    async def test_detects_real_changes_with_whitespace(
-        self, service: TrackCleaningService
-    ) -> None:
+    async def test_detects_real_changes_with_whitespace(self, service: TrackCleaningService) -> None:
         """Should detect real changes even with whitespace normalization."""
         track = TrackDict(
             id="1",

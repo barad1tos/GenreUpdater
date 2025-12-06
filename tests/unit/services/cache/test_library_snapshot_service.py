@@ -290,9 +290,7 @@ class TestLoadSnapshotEdgeCases:
     """Tests for load_snapshot edge cases."""
 
     @pytest.mark.asyncio
-    async def test_load_snapshot_returns_none_when_file_not_exists(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_load_snapshot_returns_none_when_file_not_exists(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when snapshot file doesn't exist."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -302,9 +300,7 @@ class TestLoadSnapshotEdgeCases:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_load_snapshot_raises_on_invalid_payload_type(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_load_snapshot_raises_on_invalid_payload_type(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise TypeError when payload is not a list."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -318,9 +314,7 @@ class TestLoadSnapshotEdgeCases:
             await service.load_snapshot()
 
     @pytest.mark.asyncio
-    async def test_load_snapshot_raises_on_invalid_track_entry(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_load_snapshot_raises_on_invalid_track_entry(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise TypeError when track entry is invalid type."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -341,9 +335,7 @@ class TestIsSnapshotValid:
     """Tests for is_snapshot_valid method."""
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_no_metadata(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_when_no_metadata(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when metadata doesn't exist."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -353,9 +345,7 @@ class TestIsSnapshotValid:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_on_version_mismatch(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_on_version_mismatch(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when version doesn't match."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -375,9 +365,7 @@ class TestIsSnapshotValid:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_library_not_found(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_when_library_not_found(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when music library path doesn't exist."""
         config = _make_config(tmp_path_factory)
         config["music_library_path"] = "/nonexistent/path/library.musiclibrary"
@@ -397,9 +385,7 @@ class TestIsSnapshotValid:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_library_unchanged(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_true_when_library_unchanged(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return True when library hasn't changed."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -422,9 +408,7 @@ class TestIsSnapshotValid:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_expired_and_library_changed(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_when_expired_and_library_changed(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when snapshot expired and library changed."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -450,9 +434,7 @@ class TestIsSnapshotValid:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_snapshot_file_missing(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_when_snapshot_file_missing(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when snapshot file is missing but metadata exists."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -479,9 +461,7 @@ class TestGetSnapshotMetadata:
     """Tests for get_snapshot_metadata method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_file_not_exists(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_file_not_exists(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when metadata file doesn't exist."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -491,9 +471,7 @@ class TestGetSnapshotMetadata:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_parse_error(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_on_parse_error(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when metadata file is corrupted."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -506,9 +484,7 @@ class TestGetSnapshotMetadata:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_missing_key(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_on_missing_key(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when required key is missing."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -528,9 +504,7 @@ class TestLoadDeltaEdgeCases:
     """Tests for load_delta edge cases."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_delta_disabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_delta_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when delta is disabled."""
         config = _make_config(tmp_path_factory)
         config["caching"]["library_snapshot"]["delta_enabled"] = False
@@ -541,9 +515,7 @@ class TestLoadDeltaEdgeCases:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_delta_file_not_exists(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_delta_file_not_exists(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when delta file doesn't exist."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -553,9 +525,7 @@ class TestLoadDeltaEdgeCases:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_parse_error(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_on_parse_error(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when delta file is corrupted."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -568,9 +538,7 @@ class TestLoadDeltaEdgeCases:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_delta_should_reset(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_delta_should_reset(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when delta exceeds limits."""
         import json
 
@@ -600,9 +568,7 @@ class TestSaveDeltaEdgeCases:
     """Tests for save_delta edge cases."""
 
     @pytest.mark.asyncio
-    async def test_does_nothing_when_delta_disabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_does_nothing_when_delta_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return early when delta is disabled."""
         config = _make_config(tmp_path_factory)
         config["caching"]["library_snapshot"]["delta_enabled"] = False
@@ -619,9 +585,7 @@ class TestSaveDeltaEdgeCases:
         assert not service._delta_path.exists()
 
     @pytest.mark.asyncio
-    async def test_resets_delta_when_should_reset(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_resets_delta_when_should_reset(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should reset delta when it exceeds limits."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -646,9 +610,7 @@ class TestGetLibraryMtime:
     """Tests for get_library_mtime method."""
 
     @pytest.mark.asyncio
-    async def test_raises_when_path_not_configured(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_raises_when_path_not_configured(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise FileNotFoundError when path is not configured."""
         config = _make_config(tmp_path_factory)
         del config["music_library_path"]
@@ -659,9 +621,7 @@ class TestGetLibraryMtime:
             await service.get_library_mtime()
 
     @pytest.mark.asyncio
-    async def test_raises_when_file_not_exists(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_raises_when_file_not_exists(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise FileNotFoundError when file doesn't exist."""
         config = _make_config(tmp_path_factory)
         config["music_library_path"] = "/nonexistent/path.musiclibrary"
@@ -672,9 +632,7 @@ class TestGetLibraryMtime:
             await service.get_library_mtime()
 
     @pytest.mark.asyncio
-    async def test_returns_mtime_for_existing_file(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_mtime_for_existing_file(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return mtime for existing file."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -720,9 +678,7 @@ class TestParseFetchTracksOutput:
         result = service._parse_fetch_tracks_output(raw_output)
         assert result == []
 
-    def test_skips_lines_with_insufficient_fields(
-        self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_skips_lines_with_insufficient_fields(self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture) -> None:
         """Should skip lines with insufficient fields and log warning."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -735,18 +691,12 @@ class TestParseFetchTracksOutput:
         assert result == []
         assert "insufficient fields" in caplog.text
 
-    def test_parses_mixed_valid_and_invalid_lines(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_parses_mixed_valid_and_invalid_lines(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should parse valid lines and skip invalid ones."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
 
-        raw_output = (
-            "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e"
-            "2024-01-01\x1eplayed\x1e2020\x1e2020\x1e\x1d"
-            "invalid\x1eline\x1d"
-        )
+        raw_output = "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e2024-01-01\x1eplayed\x1e2020\x1e2020\x1e\x1dinvalid\x1eline\x1d"
 
         result = service._parse_fetch_tracks_output(raw_output)
         assert len(result) == 1
@@ -760,9 +710,7 @@ class TestComputeSmartDelta:
     """Tests for compute_smart_delta method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_snapshot(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_no_snapshot(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when no snapshot exists."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -773,9 +721,7 @@ class TestComputeSmartDelta:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_fetch_ids_returns_empty(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_none_when_fetch_ids_returns_empty(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when fetching IDs returns empty list."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -791,9 +737,7 @@ class TestComputeSmartDelta:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_detects_new_tracks(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_detects_new_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should detect new track IDs."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -810,9 +754,7 @@ class TestComputeSmartDelta:
         assert "3" in result.new_ids
 
     @pytest.mark.asyncio
-    async def test_detects_removed_tracks(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_detects_removed_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should detect removed track IDs."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -829,9 +771,7 @@ class TestComputeSmartDelta:
         assert "2" in result.removed_ids
 
     @pytest.mark.asyncio
-    async def test_skips_updated_detection_by_default(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_skips_updated_detection_by_default(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should skip updated detection when not using force mode."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -848,9 +788,7 @@ class TestComputeSmartDelta:
         assert result.updated_ids == []
 
     @pytest.mark.asyncio
-    async def test_force_mode_detects_updated_tracks(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_force_mode_detects_updated_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should detect updated tracks in force mode."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -892,9 +830,7 @@ class TestDetectUpdatedTracks:
     """Tests for _detect_updated_tracks method."""
 
     @pytest.mark.asyncio
-    async def test_returns_empty_when_no_raw_tracks(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_empty_when_no_raw_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return empty list when no raw tracks."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -927,9 +863,7 @@ class TestDetectUpdatedTracks:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_logs_warning_on_parse_failure(
-        self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_logs_warning_on_parse_failure(self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture) -> None:
         """Should log warning when track parsing fails."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -982,26 +916,20 @@ class TestIsEnabled:
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_enabled() is False
 
-    def test_is_delta_enabled_returns_true(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_is_delta_enabled_returns_true(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return True when both enabled."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_delta_enabled() is True
 
-    def test_is_delta_enabled_returns_false_when_disabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_is_delta_enabled_returns_false_when_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when delta disabled."""
         config = _make_config(tmp_path_factory)
         config["caching"]["library_snapshot"]["delta_enabled"] = False
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_delta_enabled() is False
 
-    def test_is_delta_enabled_returns_false_when_main_disabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_is_delta_enabled_returns_false_when_main_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when main snapshot disabled."""
         config = _make_config(tmp_path_factory)
         config["caching"]["library_snapshot"]["enabled"] = False
@@ -1064,9 +992,7 @@ class TestWriteBytesAtomic:
         assert target_path.exists()
         assert target_path.read_bytes() == data
 
-    def test_cleans_up_temp_file_on_failure(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_cleans_up_temp_file_on_failure(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should clean up temp file on write failure."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1088,9 +1014,7 @@ class TestWriteBytesAtomic:
 class TestEnsureSingleCacheFormat:
     """Tests for _ensure_single_cache_format method."""
 
-    def test_removes_plain_file_when_compress_enabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_removes_plain_file_when_compress_enabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should remove plain file when compression is enabled."""
         config = _make_config(tmp_path_factory, compress=True)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1103,9 +1027,7 @@ class TestEnsureSingleCacheFormat:
 
         assert not plain_path.exists()
 
-    def test_removes_compressed_file_when_compress_disabled(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_removes_compressed_file_when_compress_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should remove compressed file when compression is disabled."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1118,9 +1040,7 @@ class TestEnsureSingleCacheFormat:
 
         assert not compressed_path.exists()
 
-    def test_handles_removal_error_gracefully(
-        self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_handles_removal_error_gracefully(self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture) -> None:
         """Should handle removal errors gracefully."""
         config = _make_config(tmp_path_factory, compress=True)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1162,9 +1082,7 @@ class TestResolveCacheFilePath:
         result = LibrarySnapshotService._resolve_cache_file_path(config, options)
         assert result.suffix == JSON_SUFFIX
 
-    def test_adds_json_suffix_if_missing(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_adds_json_suffix_if_missing(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should add .json suffix if missing."""
         config = _make_config(tmp_path_factory)
         options = {"cache_file": "cache/snapshot", "logs_base_dir": config["logs_base_dir"]}
@@ -1225,9 +1143,7 @@ class TestShouldForceScan:
     """Tests for should_force_scan method."""
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_force_flag(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_true_when_force_flag(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return True when force flag is set."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1238,9 +1154,7 @@ class TestShouldForceScan:
         assert "CLI --force flag" in reason
 
     @pytest.mark.asyncio
-    async def test_returns_false_for_first_run(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_for_first_run(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False for first run."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1251,9 +1165,7 @@ class TestShouldForceScan:
         assert "first run" in reason
 
     @pytest.mark.asyncio
-    async def test_returns_true_for_weekly_scan(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_true_for_weekly_scan(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return True when 7+ days since last force scan."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -1274,9 +1186,7 @@ class TestShouldForceScan:
         assert "weekly scan" in reason
 
     @pytest.mark.asyncio
-    async def test_returns_false_for_recent_force_scan(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    async def test_returns_false_for_recent_force_scan(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when force scan was recent."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))

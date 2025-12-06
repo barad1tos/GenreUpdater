@@ -120,9 +120,7 @@ class TestGetDurationCategory:
 class TestDetermineEventRowClass:
     """Tests for _determine_event_row_class function."""
 
-    def test_returns_error_for_failed_event(
-        self, duration_thresholds: dict[str, float]
-    ) -> None:
+    def test_returns_error_for_failed_event(self, duration_thresholds: dict[str, float]) -> None:
         """Should return 'error' class for failed events."""
         event = _create_simple_event(1.0, success=False)
         result = _determine_event_row_class(event, duration_thresholds)
@@ -147,9 +145,7 @@ class TestDetermineEventRowClass:
         result = _determine_event_row_class(event, duration_thresholds)
         assert result == expected_class
 
-    def test_handles_missing_success_key(
-        self, duration_thresholds: dict[str, float]
-    ) -> None:
+    def test_handles_missing_success_key(self, duration_thresholds: dict[str, float]) -> None:
         """Should default to error when Success key is missing."""
         event: dict[str, Any] = {DURATION_FIELD: 1.0}
         result = _determine_event_row_class(event, duration_thresholds)
@@ -334,9 +330,7 @@ class TestGenerateGroupedSuccessTable:
             ("func_b", "type_2"): {"count": 3, "total_duration": 1.2},
         }
 
-        result = _generate_grouped_success_table(
-            grouped, group_successful_short_calls=True
-        )
+        result = _generate_grouped_success_table(grouped, group_successful_short_calls=True)
 
         assert "<h3>Grouped Short & Successful Calls</h3>" in result
         assert "<td>func_a</td>" in result
@@ -354,9 +348,7 @@ class TestGenerateSummaryTableHtml:
         success_counts = {"func_a": 9, "func_b": 5}
         decorator_overhead = {"func_a": 0.01, "func_b": 0.005}
 
-        result = _generate_summary_table_html(
-            call_counts, success_counts, decorator_overhead
-        )
+        result = _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
         assert "<h3>Summary</h3>" in result
         assert "<td>func_a</td>" in result
@@ -376,9 +368,7 @@ class TestGenerateSummaryTableHtml:
         success_counts = {"func_a": 0}
         decorator_overhead = {"func_a": 0.0}
 
-        result = _generate_summary_table_html(
-            call_counts, success_counts, decorator_overhead
-        )
+        result = _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
         assert "0.00" in result
 
@@ -395,9 +385,7 @@ class TestGenerateEmptyHtmlTemplate:
         """Should create empty HTML template file."""
         report_file = tmp_path / "empty_report.html"
 
-        _generate_empty_html_template(
-            "2024-01-15", str(report_file), console_logger, error_logger
-        )
+        _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
         content = report_file.read_text()
@@ -413,9 +401,7 @@ class TestGenerateEmptyHtmlTemplate:
         """Should create parent directories if needed."""
         report_file = tmp_path / "nested" / "dir" / "report.html"
 
-        _generate_empty_html_template(
-            "2024-01-15", str(report_file), console_logger, error_logger
-        )
+        _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
 
@@ -429,9 +415,7 @@ class TestGenerateEmptyHtmlTemplate:
         report_file = tmp_path / "report.html"
 
         with patch("src.metrics.html_reports.Path.open", side_effect=OSError("Write error")):
-            _generate_empty_html_template(
-                "2024-01-15", str(report_file), console_logger, error_logger
-            )
+            _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
 
 class TestSaveHtmlReport:
@@ -591,9 +575,7 @@ class TestSaveDetailedDryRunReport:
         ]
         report_file = tmp_path / "dry_run.html"
 
-        save_detailed_dry_run_report(
-            changes, str(report_file), console_logger, error_logger
-        )
+        save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
         content = report_file.read_text()
@@ -629,9 +611,7 @@ class TestSaveDetailedDryRunReport:
         ]
         report_file = tmp_path / "dry_run.html"
 
-        save_detailed_dry_run_report(
-            changes, str(report_file), console_logger, error_logger
-        )
+        save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)
 
         content = report_file.read_text()
         assert "Cleaning (2 potential changes)" in content
@@ -653,9 +633,7 @@ class TestSaveDetailedDryRunReport:
         ]
         report_file = tmp_path / "dry_run.html"
 
-        save_detailed_dry_run_report(
-            changes, str(report_file), console_logger, error_logger
-        )
+        save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
         content = report_file.read_text()
@@ -671,9 +649,7 @@ class TestSaveDetailedDryRunReport:
         changes = [{"change_type": "test", "data": "value"}]
         report_file = tmp_path / "nested" / "path" / "report.html"
 
-        save_detailed_dry_run_report(
-            changes, str(report_file), console_logger, error_logger
-        )
+        save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
 
@@ -688,6 +664,4 @@ class TestSaveDetailedDryRunReport:
         report_file = tmp_path / "report.html"
 
         with patch("src.metrics.html_reports.Path.open", side_effect=OSError("Write error")):
-            save_detailed_dry_run_report(
-                changes, str(report_file), console_logger, error_logger
-            )
+            save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)

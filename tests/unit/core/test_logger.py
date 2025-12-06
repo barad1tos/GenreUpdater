@@ -797,9 +797,7 @@ class TestRunTrackingHandler:
         handler.emit(record)
         handler.close()
 
-    def test_emit_handles_header_write_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_emit_handles_header_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle OSError when writing header."""
         log_file = tmp_path / "test.log"
         run_handler = RunHandler(max_runs=3)
@@ -825,9 +823,7 @@ class TestRunTrackingHandler:
 
         handler.close()
 
-    def test_close_handles_footer_write_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_close_handles_footer_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when writing footer."""
         log_file = tmp_path / "test.log"
         run_handler = RunHandler(max_runs=3)
@@ -851,32 +847,24 @@ class TestRunTrackingHandler:
         captured = capsys.readouterr()
         assert "Failed to write log footer" in captured.err
 
-    def test_close_handles_close_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_close_handles_close_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when closing stream."""
         log_file = tmp_path / "test.log"
         handler = RunTrackingHandler(str(log_file))
 
-        with patch.object(
-            logging.FileHandler, "close", side_effect=OSError("Close failed")
-        ):
+        with patch.object(logging.FileHandler, "close", side_effect=OSError("Close failed")):
             handler.close()
 
         captured = capsys.readouterr()
         assert "Error closing file stream" in captured.err
 
-    def test_close_handles_trim_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_close_handles_trim_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when trimming log file."""
         log_file = tmp_path / "test.log"
         run_handler = RunHandler(max_runs=3)
         handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
 
-        with patch.object(
-            run_handler, "trim_log_to_max_runs", side_effect=OSError("Trim failed")
-        ):
+        with patch.object(run_handler, "trim_log_to_max_runs", side_effect=OSError("Trim failed")):
             handler.close()
 
         captured = capsys.readouterr()
@@ -915,20 +903,13 @@ class TestRunHandlerTrim:
         assert "run2" in trimmed_content
         assert "run3" in trimmed_content
 
-    def test_trim_log_handles_oserror(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_trim_log_handles_oserror(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle OSError during trimming."""
         log_file = tmp_path / "test.log"
         run_handler = RunHandler(max_runs=1)
 
         separator = "=" * 80
-        content = (
-            f"{separator}\n"
-            "\ue05e NEW RUN: run1 - 2024-01-01\n"
-            f"{separator}\n"
-            "\ue05e NEW RUN: run2 - 2024-01-02\n"
-        )
+        content = f"{separator}\n\ue05e NEW RUN: run1 - 2024-01-01\n{separator}\n\ue05e NEW RUN: run2 - 2024-01-02\n"
         log_file.write_text(content)
 
         with patch("src.core.logger.Path.open", side_effect=OSError("Permission denied")):
@@ -1089,9 +1070,7 @@ class TestCreateFallbackLoggers:
 
     def test_adds_stream_handlers(self) -> None:
         """Should add stream handlers to fallback loggers."""
-        console, error, analytics, db_verify, _ = _create_fallback_loggers(
-            RuntimeError("Setup failed")
-        )
+        console, error, analytics, db_verify, _ = _create_fallback_loggers(RuntimeError("Setup failed"))
 
         assert len(console.handlers) > 0
         assert len(error.handlers) > 0
