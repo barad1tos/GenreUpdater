@@ -7,7 +7,7 @@ import logging
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import allure
@@ -15,6 +15,9 @@ import pytest
 
 from src.core.models.track_models import TrackDict
 from src.services.cache.orchestrator import CacheOrchestrator
+
+if TYPE_CHECKING:
+    from src.core.models.protocols import CacheableValue
 
 
 @allure.epic("Music Genre Updater")
@@ -65,16 +68,14 @@ class TestCacheOrchestrator:
         """Test that initialize() calls initialize on all services."""
         orchestrator = self.create_orchestrator()
 
-        # Mock the service initializers
-        orchestrator.album_service.initialize = AsyncMock()
-        orchestrator.api_service.initialize = AsyncMock()
-        orchestrator.generic_service.initialize = AsyncMock()
+        with patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock) as mock_api, \
+             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock) as mock_generic:
+            await orchestrator.initialize()
 
-        await orchestrator.initialize()
-
-        orchestrator.album_service.initialize.assert_called_once()
-        orchestrator.api_service.initialize.assert_called_once()
-        orchestrator.generic_service.initialize.assert_called_once()
+            mock_album.assert_called_once()
+            mock_api.assert_called_once()
+            mock_generic.assert_called_once()
 
     @allure.story("Initialization")
     @allure.title("Should raise error when service initialization fails")
@@ -83,13 +84,11 @@ class TestCacheOrchestrator:
         """Test that initialization raises RuntimeError when a service fails."""
         orchestrator = self.create_orchestrator()
 
-        # Mock one service to fail
-        orchestrator.album_service.initialize = AsyncMock(side_effect=Exception("Album init failed"))
-        orchestrator.api_service.initialize = AsyncMock()
-        orchestrator.generic_service.initialize = AsyncMock()
-
-        with pytest.raises(RuntimeError, match="Cache service initialization failed"):
-            await orchestrator.initialize()
+        with patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=Exception("Album init failed")), \
+             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock), \
+             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="Cache service initialization failed"):
+                await orchestrator.initialize()
 
     @allure.story("Initialization")
     @allure.title("Should skip iCloud cleanup when disabled")
@@ -130,12 +129,12 @@ class TestCacheOrchestrator:
     async def test_get_album_year_delegates(self) -> None:
         """Test that get_album_year delegates to album service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.get_album_year = AsyncMock(return_value="1999")
 
-        result = await orchestrator.get_album_year("Artist", "Album")
+        with patch.object(orchestrator.album_service, "get_album_year", new_callable=AsyncMock, return_value="1999") as mock_get:
+            result = await orchestrator.get_album_year("Artist", "Album")
 
-        assert result == "1999"
-        orchestrator.album_service.get_album_year.assert_called_once_with("Artist", "Album")
+            assert result == "1999"
+            mock_get.assert_called_once_with("Artist", "Album")
 
     @allure.story("Album Cache Operations")
     @allure.title("Should delegate store_album_year to album service")
@@ -143,11 +142,11 @@ class TestCacheOrchestrator:
     async def test_store_album_year_delegates(self) -> None:
         """Test that store_album_year delegates to album service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.store_album_year = AsyncMock()
 
-        await orchestrator.store_album_year("Artist", "Album", "1999")
+        with patch.object(orchestrator.album_service, "store_album_year", new_callable=AsyncMock) as mock_store:
+            await orchestrator.store_album_year("Artist", "Album", "1999")
 
-        orchestrator.album_service.store_album_year.assert_called_once_with("Artist", "Album", "1999")
+            mock_store.assert_called_once_with("Artist", "Album", "1999")
 
     # =========================== API CACHE TESTS ===========================
 
@@ -159,12 +158,12 @@ class TestCacheOrchestrator:
         orchestrator = self.create_orchestrator()
         mock_result = MagicMock()
         mock_result.api_response = {"year": "2020"}
-        orchestrator.api_service.get_cached_result = AsyncMock(return_value=mock_result)
 
-        result = await orchestrator.get_api_result("Artist", "Album", "musicbrainz")
+        with patch.object(orchestrator.api_service, "get_cached_result", new_callable=AsyncMock, return_value=mock_result) as mock_get:
+            result = await orchestrator.get_api_result("Artist", "Album", "musicbrainz")
 
-        assert result == {"year": "2020"}
-        orchestrator.api_service.get_cached_result.assert_called_once_with("Artist", "Album", "musicbrainz")
+            assert result == {"year": "2020"}
+            mock_get.assert_called_once_with("Artist", "Album", "musicbrainz")
 
     @allure.story("API Cache Operations")
     @allure.title("Should return None when no cached API result")
@@ -172,11 +171,11 @@ class TestCacheOrchestrator:
     async def test_get_api_result_returns_none(self) -> None:
         """Test that get_api_result returns None when not cached."""
         orchestrator = self.create_orchestrator()
-        orchestrator.api_service.get_cached_result = AsyncMock(return_value=None)
 
-        result = await orchestrator.get_api_result("Artist", "Album", "discogs")
+        with patch.object(orchestrator.api_service, "get_cached_result", new_callable=AsyncMock, return_value=None):
+            result = await orchestrator.get_api_result("Artist", "Album", "discogs")
 
-        assert result is None
+            assert result is None
 
     @allure.story("API Cache Operations")
     @allure.title("Should delegate store_api_result to api service")
@@ -184,11 +183,11 @@ class TestCacheOrchestrator:
     async def test_store_api_result_delegates(self) -> None:
         """Test that store_api_result delegates to api service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.api_service.set_cached_result = AsyncMock()
 
-        await orchestrator.store_api_result("Artist", "Album", "lastfm", {"data": "value"})
+        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
+            await orchestrator.store_api_result("Artist", "Album", "lastfm", {"data": "value"})
 
-        orchestrator.api_service.set_cached_result.assert_called_once()
+            mock_set.assert_called_once()
 
     # =========================== GENERIC CACHE TESTS ===========================
 
@@ -198,12 +197,12 @@ class TestCacheOrchestrator:
     async def test_get_returns_cached_value(self) -> None:
         """Test that get() returns cached value."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.get = MagicMock(return_value="cached_value")
 
-        result = orchestrator.get("test_key")
+        with patch.object(orchestrator.generic_service, "get", return_value="cached_value") as mock_get:
+            result = orchestrator.get("test_key")
 
-        assert result == "cached_value"
-        orchestrator.generic_service.get.assert_called_once_with("test_key")
+            assert result == "cached_value"
+            mock_get.assert_called_once_with("test_key")
 
     @allure.story("Generic Cache Operations")
     @allure.title("Should set value in generic cache")
@@ -211,11 +210,11 @@ class TestCacheOrchestrator:
     async def test_set_delegates_to_generic_service(self) -> None:
         """Test that set() delegates to generic service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.set = MagicMock()
 
-        orchestrator.set("test_key", "test_value", ttl=60)
+        with patch.object(orchestrator.generic_service, "set") as mock_set:
+            orchestrator.set("test_key", "test_value", ttl=60)
 
-        orchestrator.generic_service.set.assert_called_once_with("test_key", "test_value", 60)
+            mock_set.assert_called_once_with("test_key", "test_value", 60)
 
     @allure.story("Generic Cache Operations")
     @allure.title("Should get async with compute function on miss")
@@ -223,19 +222,22 @@ class TestCacheOrchestrator:
     async def test_get_async_computes_on_miss(self) -> None:
         """Test that get_async computes value when not cached."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.get = MagicMock(return_value=None)
-        orchestrator.generic_service.set = MagicMock()
 
-        async def compute_value() -> str:
-            return "computed"
+        with patch.object(orchestrator.generic_service, "get", return_value=None), \
+             patch.object(orchestrator.generic_service, "set") as mock_set:
 
-        def compute_func() -> asyncio.Future[str]:
-            return asyncio.create_task(compute_value())
+            async def _compute_value() -> CacheableValue:
+                """Compute the cached value."""
+                return "computed"
 
-        result = await orchestrator.get_async("missing_key", compute_func)
+            def compute_func() -> asyncio.Future[CacheableValue]:
+                """Create compute future."""
+                return asyncio.create_task(_compute_value())
 
-        assert result == "computed"
-        orchestrator.generic_service.set.assert_called_once()
+            result = await orchestrator.get_async("missing_key", compute_func)
+
+            assert result == "computed"
+            mock_set.assert_called_once()
 
     @allure.story("Generic Cache Operations")
     @allure.title("Should return cached value without computing")
@@ -243,22 +245,25 @@ class TestCacheOrchestrator:
     async def test_get_async_returns_cached_without_computing(self) -> None:
         """Test that get_async returns cached value without calling compute."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.get = MagicMock(return_value="cached")
 
         compute_called = False
 
-        async def compute_value() -> str:
-            nonlocal compute_called
-            compute_called = True
-            return "computed"
+        with patch.object(orchestrator.generic_service, "get", return_value="cached"):
 
-        def compute_func() -> asyncio.Future[str]:
-            return asyncio.create_task(compute_value())
+            async def _compute_value() -> CacheableValue:
+                """Compute the cached value."""
+                nonlocal compute_called
+                compute_called = True
+                return "computed"
 
-        result = await orchestrator.get_async("existing_key", compute_func)
+            def compute_func() -> asyncio.Future[CacheableValue]:
+                """Create compute future."""
+                return asyncio.create_task(_compute_value())
 
-        assert result == "cached"
-        assert not compute_called
+            result = await orchestrator.get_async("existing_key", compute_func)
+
+            assert result == "cached"
+            assert not compute_called
 
     @allure.story("Generic Cache Operations")
     @allure.title("Should set async delegates to generic service")
@@ -266,11 +271,11 @@ class TestCacheOrchestrator:
     async def test_set_async_delegates(self) -> None:
         """Test that set_async delegates to generic service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.set = MagicMock()
 
-        await orchestrator.set_async("key", "value", ttl=30)
+        with patch.object(orchestrator.generic_service, "set") as mock_set:
+            await orchestrator.set_async("key", "value", ttl=30)
 
-        orchestrator.generic_service.set.assert_called_once_with("key", "value", 30)
+            mock_set.assert_called_once_with("key", "value", 30)
 
     # =========================== INVALIDATION TESTS ===========================
 
@@ -280,26 +285,26 @@ class TestCacheOrchestrator:
     async def test_invalidate_for_track(self) -> None:
         """Test that invalidate_for_track invalidates all related caches."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.invalidate = MagicMock()
-        orchestrator.album_service.invalidate_album = AsyncMock()
-        orchestrator.api_service.invalidate_for_album = AsyncMock()
         orchestrator.api_service.event_manager = MagicMock()
 
-        track = TrackDict(
-            id="123",
-            name="Test Track",
-            artist="Test Artist",
-            album="Test Album",
-            genre="Rock",
-        )
+        with patch.object(orchestrator.generic_service, "invalidate") as mock_invalidate, \
+             patch.object(orchestrator.album_service, "invalidate_album", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "invalidate_for_album", new_callable=AsyncMock) as mock_api:
+            track = TrackDict(
+                id="123",
+                name="Test Track",
+                artist="Test Artist",
+                album="Test Album",
+                genre="Rock",
+            )
 
-        await orchestrator.invalidate_for_track(track)
+            await orchestrator.invalidate_for_track(track)
 
-        # Should invalidate generic caches
-        orchestrator.generic_service.invalidate.assert_any_call("tracks_all")
-        # Should invalidate album and API caches
-        orchestrator.album_service.invalidate_album.assert_called_once_with("Test Artist", "Test Album")
-        orchestrator.api_service.invalidate_for_album.assert_called_once_with("Test Artist", "Test Album")
+            # Should invalidate generic caches
+            mock_invalidate.assert_any_call("tracks_all")
+            # Should invalidate album and API caches
+            mock_album.assert_called_once_with("Test Artist", "Test Album")
+            mock_api.assert_called_once_with("Test Artist", "Test Album")
 
     @allure.story("Invalidation Operations")
     @allure.title("Should invalidate single key")
@@ -307,11 +312,11 @@ class TestCacheOrchestrator:
     async def test_invalidate_single_key(self) -> None:
         """Test that invalidate() invalidates a single key."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.invalidate = MagicMock()
 
-        orchestrator.invalidate("test_key")
+        with patch.object(orchestrator.generic_service, "invalidate") as mock_invalidate:
+            orchestrator.invalidate("test_key")
 
-        orchestrator.generic_service.invalidate.assert_called_once_with("test_key")
+            mock_invalidate.assert_called_once_with("test_key")
 
     @allure.story("Invalidation Operations")
     @allure.title("Should invalidate all caches")
@@ -319,15 +324,15 @@ class TestCacheOrchestrator:
     async def test_invalidate_all(self) -> None:
         """Test that invalidate_all clears all caches."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.invalidate_all = AsyncMock()
-        orchestrator.api_service.invalidate_all = AsyncMock()
-        orchestrator.generic_service.invalidate_all = MagicMock()
 
-        await orchestrator.invalidate_all()
+        with patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api, \
+             patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic:
+            await orchestrator.invalidate_all()
 
-        orchestrator.album_service.invalidate_all.assert_called_once()
-        orchestrator.api_service.invalidate_all.assert_called_once()
-        orchestrator.generic_service.invalidate_all.assert_called_once()
+            mock_album.assert_called_once()
+            mock_api.assert_called_once()
+            mock_generic.assert_called_once()
 
     @allure.story("Invalidation Operations")
     @allure.title("Should save all caches to disk")
@@ -335,15 +340,15 @@ class TestCacheOrchestrator:
     async def test_save_all_to_disk(self) -> None:
         """Test that save_all_to_disk saves all services."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.save_to_disk = AsyncMock()
-        orchestrator.api_service.save_to_disk = AsyncMock()
-        orchestrator.generic_service.save_to_disk = AsyncMock()
 
-        await orchestrator.save_all_to_disk()
+        with patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api, \
+             patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic:
+            await orchestrator.save_all_to_disk()
 
-        orchestrator.album_service.save_to_disk.assert_called_once()
-        orchestrator.api_service.save_to_disk.assert_called_once()
-        orchestrator.generic_service.save_to_disk.assert_called_once()
+            mock_album.assert_called_once()
+            mock_api.assert_called_once()
+            mock_generic.assert_called_once()
 
     # =========================== STATISTICS TESTS ===========================
 
@@ -353,19 +358,19 @@ class TestCacheOrchestrator:
     async def test_get_comprehensive_stats(self) -> None:
         """Test that get_comprehensive_stats aggregates stats from all services."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.get_stats = MagicMock(return_value={"total_albums": 10})
-        orchestrator.api_service.get_stats = MagicMock(return_value={"total_entries": 20})
-        orchestrator.generic_service.get_stats = MagicMock(return_value={"total_entries": 30})
 
-        stats = orchestrator.get_comprehensive_stats()
+        with patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 10}), \
+             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 20}), \
+             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 30}):
+            stats = orchestrator.get_comprehensive_stats()
 
-        assert "album_cache" in stats
-        assert "api_cache" in stats
-        assert "generic_cache" in stats
-        assert "orchestrator" in stats
-        assert stats["album_cache"]["total_albums"] == 10
-        assert stats["api_cache"]["total_entries"] == 20
-        assert stats["generic_cache"]["total_entries"] == 30
+            assert "album_cache" in stats
+            assert "api_cache" in stats
+            assert "generic_cache" in stats
+            assert "orchestrator" in stats
+            assert stats["album_cache"]["total_albums"] == 10
+            assert stats["api_cache"]["total_entries"] == 20
+            assert stats["generic_cache"]["total_entries"] == 30
 
     @allure.story("Statistics")
     @allure.title("Should get cache health status")
@@ -373,17 +378,17 @@ class TestCacheOrchestrator:
     async def test_get_cache_health(self) -> None:
         """Test that get_cache_health returns health status for all services."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.get_stats = MagicMock(return_value={"total_albums": 5})
-        orchestrator.api_service.get_stats = MagicMock(return_value={"total_entries": 10})
-        orchestrator.generic_service.get_stats = MagicMock(return_value={"total_entries": 15})
 
-        health = orchestrator.get_cache_health()
+        with patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 5}), \
+             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}), \
+             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}):
+            health = orchestrator.get_cache_health()
 
-        assert "album" in health
-        assert "api" in health
-        assert "generic" in health
-        for service_health in health.values():
-            assert service_health["status"] == "healthy"
+            assert "album" in health
+            assert "api" in health
+            assert "generic" in health
+            for service_health in health.values():
+                assert service_health["status"] == "healthy"
 
     @allure.story("Statistics")
     @allure.title("Should report error status when service fails")
@@ -391,15 +396,15 @@ class TestCacheOrchestrator:
     async def test_get_cache_health_handles_errors(self) -> None:
         """Test that get_cache_health reports errors correctly."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.get_stats = MagicMock(side_effect=Exception("Stats failed"))
-        orchestrator.api_service.get_stats = MagicMock(return_value={"total_entries": 10})
-        orchestrator.generic_service.get_stats = MagicMock(return_value={"total_entries": 15})
 
-        health = orchestrator.get_cache_health()
+        with patch.object(orchestrator.album_service, "get_stats", side_effect=Exception("Stats failed")), \
+             patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}), \
+             patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}):
+            health = orchestrator.get_cache_health()
 
-        assert health["album"]["status"] == "error"
-        assert "Stats failed" in health["album"]["error"]
-        assert health["api"]["status"] == "healthy"
+            assert health["album"]["status"] == "error"
+            assert "Stats failed" in health["album"]["error"]
+            assert health["api"]["status"] == "healthy"
 
     # =========================== BACKWARD COMPATIBILITY TESTS ===========================
 
@@ -409,9 +414,12 @@ class TestCacheOrchestrator:
     async def test_cache_property(self) -> None:
         """Test that cache property returns generic service cache."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.cache = {"key": "value"}
+        # Configure mock's cache attribute to return expected value
+        orchestrator.generic_service.cache = {"key": ("value", 0.0)}
 
-        assert orchestrator.cache == {"key": "value"}
+        # Access through property - the cache property delegates to generic_service.cache
+        assert "key" in orchestrator.cache
+        assert orchestrator.cache["key"] == ("value", 0.0)
 
     @allure.story("Backward Compatibility")
     @allure.title("Should expose album_years_cache property")
@@ -448,13 +456,13 @@ class TestCacheOrchestrator:
     async def test_save_cache_delegates(self) -> None:
         """Test that save_cache delegates to save_all_to_disk."""
         orchestrator = self.create_orchestrator()
-        orchestrator.album_service.save_to_disk = AsyncMock()
-        orchestrator.api_service.save_to_disk = AsyncMock()
-        orchestrator.generic_service.save_to_disk = AsyncMock()
 
-        await orchestrator.save_cache()
+        with patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock), \
+             patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock):
+            await orchestrator.save_cache()
 
-        orchestrator.album_service.save_to_disk.assert_called_once()
+            mock_album.assert_called_once()
 
     @allure.story("Protocol Methods")
     @allure.title("Should get last run timestamp")
@@ -506,15 +514,15 @@ class TestCacheOrchestrator:
     async def test_clear(self) -> None:
         """Test that clear() clears all caches."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.invalidate_all = MagicMock()
-        orchestrator.album_service.invalidate_all = AsyncMock()
-        orchestrator.api_service.invalidate_all = AsyncMock()
 
-        await orchestrator.clear()
+        with patch.object(orchestrator.generic_service, "invalidate_all") as mock_generic, \
+             patch.object(orchestrator.album_service, "invalidate_all", new_callable=AsyncMock) as mock_album, \
+             patch.object(orchestrator.api_service, "invalidate_all", new_callable=AsyncMock) as mock_api:
+            await orchestrator.clear()
 
-        orchestrator.generic_service.invalidate_all.assert_called_once()
-        orchestrator.album_service.invalidate_all.assert_called_once()
-        orchestrator.api_service.invalidate_all.assert_called_once()
+            mock_generic.assert_called_once()
+            mock_album.assert_called_once()
+            mock_api.assert_called_once()
 
     @allure.story("Protocol Methods")
     @allure.title("Should shutdown gracefully")
@@ -522,11 +530,11 @@ class TestCacheOrchestrator:
     async def test_shutdown(self) -> None:
         """Test that shutdown stops cleanup tasks."""
         orchestrator = self.create_orchestrator()
-        orchestrator.generic_service.stop_cleanup_task = AsyncMock()
 
-        await orchestrator.shutdown()
+        with patch.object(orchestrator.generic_service, "stop_cleanup_task", new_callable=AsyncMock) as mock_stop:
+            await orchestrator.shutdown()
 
-        orchestrator.generic_service.stop_cleanup_task.assert_called_once()
+            mock_stop.assert_called_once()
 
     @allure.story("Protocol Methods")
     @allure.title("Should delegate get_cached_api_result")
@@ -535,12 +543,12 @@ class TestCacheOrchestrator:
         """Test that get_cached_api_result delegates to api service."""
         orchestrator = self.create_orchestrator()
         mock_result = MagicMock()
-        orchestrator.api_service.get_cached_result = AsyncMock(return_value=mock_result)
 
-        result = await orchestrator.get_cached_api_result("Artist", "Album", "source")
+        with patch.object(orchestrator.api_service, "get_cached_result", new_callable=AsyncMock, return_value=mock_result) as mock_get:
+            result = await orchestrator.get_cached_api_result("Artist", "Album", "source")
 
-        assert result == mock_result
-        orchestrator.api_service.get_cached_result.assert_called_once_with("Artist", "Album", "source")
+            assert result == mock_result
+            mock_get.assert_called_once_with("Artist", "Album", "source")
 
     @allure.story("Protocol Methods")
     @allure.title("Should delegate set_cached_api_result")
@@ -548,15 +556,15 @@ class TestCacheOrchestrator:
     async def test_set_cached_api_result(self) -> None:
         """Test that set_cached_api_result delegates to api service."""
         orchestrator = self.create_orchestrator()
-        orchestrator.api_service.set_cached_result = AsyncMock()
 
-        await orchestrator.set_cached_api_result("Artist", "Album", "source", "2020", metadata={"extra": "data"})
+        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
+            await orchestrator.set_cached_api_result("Artist", "Album", "source", "2020", metadata={"extra": "data"})
 
-        orchestrator.api_service.set_cached_result.assert_called_once()
-        call_args = orchestrator.api_service.set_cached_result.call_args
-        assert call_args[0][0] == "Artist"
-        assert call_args[0][1] == "Album"
-        assert call_args[0][2] == "source"
+            mock_set.assert_called_once()
+            call_args = mock_set.call_args
+            assert call_args[0][0] == "Artist"
+            assert call_args[0][1] == "Album"
+            assert call_args[0][2] == "source"
 
     @allure.story("Protocol Methods")
     @allure.title("Should handle negative cache result")
@@ -564,11 +572,11 @@ class TestCacheOrchestrator:
     async def test_set_cached_api_result_negative(self) -> None:
         """Test that set_cached_api_result handles negative results."""
         orchestrator = self.create_orchestrator()
-        orchestrator.api_service.set_cached_result = AsyncMock()
 
-        await orchestrator.set_cached_api_result("Artist", "Album", "source", None, is_negative=True)
+        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
+            await orchestrator.set_cached_api_result("Artist", "Album", "source", None, is_negative=True)
 
-        orchestrator.api_service.set_cached_result.assert_called_once()
-        # success should be False for negative/None results
-        call_args = orchestrator.api_service.set_cached_result.call_args
-        assert call_args[0][3] is False  # success parameter
+            mock_set.assert_called_once()
+            # success should be False for negative/None results
+            call_args = mock_set.call_args
+            assert call_args[0][3] is False  # success parameter
