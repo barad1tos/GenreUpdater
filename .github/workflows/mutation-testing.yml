@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       module:
-        description: 'Override: test specific module (leave empty for incremental)'
+        description: 'Override: test specific module pattern (e.g., "core.config*")'
         required: false
         default: ''
       force_full:
@@ -56,7 +56,6 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          # Use regexp to match both Lint and Tests jobs
           check-regexp: '^(Lint & Type Check|Tests)$'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
@@ -68,14 +67,14 @@ jobs:
         run: echo "continue=true" >> $GITHUB_OUTPUT
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Stage 2: Run Mutation Testing
+  # Stage 2: Run Mutation Testing with mutmut
   # ═══════════════════════════════════════════════════════════════════════════
   mutation-test:
     name: "2. Mutation Testing"
     runs-on: ubuntu-latest
     needs: wait-for-ci
-    # 720 min (12h) for weekly full run, 120 min for incremental
-    timeout-minutes: ${{ github.event_name == 'schedule' && 720 || 120 }}
+    # 20 min for incremental, 60 min for full (weekly)
+    timeout-minutes: ${{ github.event_name == 'schedule' && 60 || 20 }}
     outputs:
       score: ${{ steps.results.outputs.score }}
       killed: ${{ steps.results.outputs.killed }}
@@ -87,7 +86,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # Need full history for git diff
+          fetch-depth: 0
 
       - name: Get changed Python files
         id: changed
@@ -98,7 +97,7 @@ jobs:
           if [ "${{ github.event.inputs.force_full || 'false' }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             echo "Full src/ mutation test requested"
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "files=src/" >> $GITHUB_OUTPUT
+            echo "modules=" >> $GITHUB_OUTPUT  # Empty = all modules
             echo "mode=full" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -107,17 +106,15 @@ jobs:
           if [ -n "${{ github.event.inputs.module }}" ]; then
             echo "Manual module override: ${{ github.event.inputs.module }}"
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "files=${{ github.event.inputs.module }}" >> $GITHUB_OUTPUT
+            echo "modules=${{ github.event.inputs.module }}" >> $GITHUB_OUTPUT
             echo "mode=override" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Incremental: get changed Python files
+          # Incremental: get changed Python files and convert to module patterns
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger without override: use HEAD~1
             FILES=$(git diff --name-only --diff-filter=ACMRT HEAD~1 HEAD -- 'src/**/*.py' 2>/dev/null || echo "")
           else
-            # Push trigger: compare before/after
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.event.after }}"
             if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
@@ -134,10 +131,17 @@ jobs:
           else
             echo "Changed files:"
             echo "$FILES"
+
+            # Convert file paths to mutmut module patterns
+            # src/core/config.py -> core.config*
+            MODULES=$(echo "$FILES" | while read -r f; do
+              # Remove src/ prefix and .py suffix, replace / with .
+              echo "$f" | sed 's|^src/||' | sed 's|\.py$|*|' | sed 's|/|.|g'
+            done | sort -u | tr '\n' ' ')
+
+            echo "Module patterns: $MODULES"
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "files<<EOF" >> $GITHUB_OUTPUT
-            echo "$FILES" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "modules=$MODULES" >> $GITHUB_OUTPUT
             echo "mode=incremental" >> $GITHUB_OUTPUT
           fi
 
@@ -158,106 +162,87 @@ jobs:
         if: steps.changed.outputs.skip != 'true'
         run: uv sync
 
-      - name: Configure cosmic-ray
+      - name: Run mutation testing
         if: steps.changed.outputs.skip != 'true'
+        id: mutmut
         run: |
-          FILES="${{ steps.changed.outputs.files }}"
+          MODULES="${{ steps.changed.outputs.modules }}"
           MODE="${{ steps.changed.outputs.mode }}"
 
-          echo "=== Configuring cosmic-ray (mode: $MODE) ==="
+          echo "=== Running mutmut (mode: $MODE) ==="
 
-          # Use Python for safe TOML generation
-          python3 << PYEOF
-          import json
+          # Clean previous results
+          rm -rf mutants/
 
-          files = """$FILES""".strip()
-          mode = "$MODE"
-
-          if mode in ("full", "override"):
-              # Single path mode - cosmic-ray accepts string for directories
-              module_path = f'"{files}"'
-          else:
-              # Incremental: convert file list to JSON array (valid TOML)
-              file_list = [f.strip() for f in files.split('\n') if f.strip()]
-              module_path = json.dumps(file_list)
-
-          config = f'''[cosmic-ray]
-          module-path = {module_path}
-          timeout = 30.0
-          excluded-modules = []
-          test-command = "uv run pytest tests/unit/ -x -q --no-cov --tb=no"
-
-          [cosmic-ray.distributor]
-          name = "local"
-          '''
-
-          with open('cosmic-ray-ci.toml', 'w') as f:
-              f.write(config)
-
-          print("=== Config ===")
-          print(config)
-          PYEOF
-
-      - name: Initialize & run baseline
-        if: steps.changed.outputs.skip != 'true'
-        run: |
-          uv run cosmic-ray init cosmic-ray-ci.toml session.sqlite
-          uv run cosmic-ray baseline cosmic-ray-ci.toml
-
-      - name: Execute mutation testing
-        if: steps.changed.outputs.skip != 'true'
-        run: uv run cosmic-ray exec cosmic-ray-ci.toml session.sqlite 2>&1 || true
+          if [ -z "$MODULES" ]; then
+            # Full run - test all src/
+            echo "Running full mutation test on src/"
+            uv run mutmut run || true
+          else
+            # Incremental - test specific modules
+            echo "Running mutation test on: $MODULES"
+            for module in $MODULES; do
+              echo "Testing module pattern: $module"
+              uv run mutmut run "$module" || true
+            done
+          fi
 
       - name: Extract results
         id: results
         if: steps.changed.outputs.skip != 'true'
         run: |
-          # Parse results using Python for reliability
-          uv run cosmic-ray dump session.sqlite > /tmp/mutations.jsonl
+          echo "=== Extracting mutation results ==="
 
-          python3 << 'PYTHON'
-          import json
-          import os
+          # Get all results and count by status
+          RESULTS=$(uv run mutmut results --all true 2>/dev/null || echo "")
 
-          killed = 0
-          survived = 0
-          total = 0
+          if [ -z "$RESULTS" ]; then
+            echo "No mutation results found"
+            echo "score=0" >> $GITHUB_OUTPUT
+            echo "killed=0" >> $GITHUB_OUTPUT
+            echo "survived=0" >> $GITHUB_OUTPUT
+            echo "total=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
-          with open('/tmp/mutations.jsonl', 'r') as f:
-              for line in f:
-                  line = line.strip()
-                  if not line:
-                      continue
-                  try:
-                      entry = json.loads(line)
-                      total += 1
-                      outcome = entry.get('worker_outcome', {})
-                      if outcome.get('killed', False):
-                          killed += 1
-                      else:
-                          survived += 1
-                  except json.JSONDecodeError:
-                      continue
+          # Count by status
+          KILLED=$(echo "$RESULTS" | grep -c ": killed" || echo "0")
+          SURVIVED=$(echo "$RESULTS" | grep -c ": survived" || echo "0")
+          TIMEOUT=$(echo "$RESULTS" | grep -c ": timeout" || echo "0")
+          SUSPICIOUS=$(echo "$RESULTS" | grep -c ": suspicious" || echo "0")
+          NOT_CHECKED=$(echo "$RESULTS" | grep -c ": not checked" || echo "0")
 
-          score = round(killed * 100 / total, 2) if total > 0 else 0.0
+          # Total tested = killed + survived + timeout + suspicious
+          TOTAL=$((KILLED + SURVIVED + TIMEOUT + SUSPICIOUS))
 
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"score={score}\n")
-              f.write(f"killed={killed}\n")
-              f.write(f"survived={survived}\n")
-              f.write(f"total={total}\n")
+          # Calculate score (killed / total * 100)
+          if [ "$TOTAL" -gt 0 ]; then
+            SCORE=$(echo "scale=2; $KILLED * 100 / $TOTAL" | bc)
+          else
+            SCORE="0"
+          fi
 
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-              f.write("### Mutation Results\n")
-              f.write("| Metric | Value |\n")
-              f.write("|--------|-------|\n")
-              f.write(f"| Score | **{score}%** |\n")
-              f.write(f"| Killed | {killed} |\n")
-              f.write(f"| Survived | {survived} |\n")
-              f.write(f"| Total | {total} |\n")
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "killed=$KILLED" >> $GITHUB_OUTPUT
+          echo "survived=$SURVIVED" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
 
-          print(f"Score: {score}%, Killed: {killed}, Survived: {survived}, Total: {total}")
-          PYTHON
+          # Write summary
+          echo "### Mutation Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Score | **${SCORE}%** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Killed | $KILLED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Survived | $SURVIVED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timeout | $TIMEOUT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$NOT_CHECKED" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> **Note:** $NOT_CHECKED mutants were not checked (timeout or skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "Score: ${SCORE}%, Killed: $KILLED, Survived: $SURVIVED, Total: $TOTAL"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Stage 3: Update Metrics & Detect Trends
@@ -303,7 +288,6 @@ jobs:
           EOF
           )
 
-          # Append to history (keep last 100 entries)
           python3 << PYTHON
           import json
 
@@ -351,9 +335,9 @@ jobs:
               # Check for significant regression (>5% drop)
               regression = "true" if diff < -5 else "false"
 
-              # Also check against 5-run average (need at least 6 entries)
+              # Also check against 5-run average
               if len(history) >= 6:
-                  prev_5 = history[-6:-1]  # 5 entries before current
+                  prev_5 = history[-6:-1]
                   avg_5 = sum(h['score'] for h in prev_5) / len(prev_5)
                   if current < avg_5 - 5:
                       regression = "true"
@@ -388,7 +372,6 @@ jobs:
             Survived: ${{ needs.mutation-test.outputs.survived }}
             Trend: ${{ steps.analyze.outputs.trend }} (${{ steps.analyze.outputs.trend_value }}%)"
 
-            # Pull with rebase to handle concurrent pushes
             git pull --rebase origin main
             git push
           fi
@@ -438,7 +421,7 @@ jobs:
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # Validate SCORE is numeric (default to 0 if invalid)
+          # Validate SCORE is numeric
           if ! [[ "$SCORE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
             echo "Warning: Invalid score '$SCORE', defaulting to 0"
             SCORE="0"
@@ -485,7 +468,6 @@ jobs:
             const commit = '${{ github.sha }}'.substring(0, 7);
             const issueTitle = `Mutation score regression detected (${trendValue}%)`;
 
-            // Check if issue already exists (by label AND similar title/commit)
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -493,7 +475,6 @@ jobs:
               state: 'open'
             });
 
-            // Check for duplicate by title pattern or commit hash
             const isDuplicate = issues.data.some(issue => {
               const titleMatch = issue.title.includes('regression detected');
               const commitMatch = issue.body && issue.body.includes(commit);
