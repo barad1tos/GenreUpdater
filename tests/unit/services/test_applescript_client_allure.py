@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,6 +20,16 @@ from services.apple import (
     EnhancedRateLimiter,
 )
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+
+
+@pytest.fixture
+def applescript_test_dir(tmp_path: Path) -> Path:
+    """Create temporary applescripts directory with required scripts."""
+    scripts_dir = tmp_path / "applescripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "update_property.applescript").write_text("-- test script")
+    (scripts_dir / "fetch_tracks.scpt").write_bytes(b"-- test script")
+    return scripts_dir
 
 
 @allure.epic("Music Genre Updater")
@@ -204,14 +216,33 @@ class TestAppleScriptSanitizerAllure:
 class TestAppleScriptClientAllure:
     """Enhanced tests for AppleScript client with Allure reporting."""
 
+    # Class variable to store temp scripts directory path
+    _temp_scripts_dir: str | None = None
+
+    @pytest.fixture(autouse=True)
+    def setup_temp_scripts_dir(self, applescript_test_dir: Path) -> Generator[None, None, None]:
+        """Create temporary scripts directory for all tests."""
+        TestAppleScriptClientAllure._temp_scripts_dir = str(applescript_test_dir)
+        yield
+        TestAppleScriptClientAllure._temp_scripts_dir = None
+
     @staticmethod
     def create_client(
         config: dict[str, Any] | None = None,
         analytics: Any = None,
     ) -> AppleScriptClient:
         """Create an AppleScriptClient instance for testing."""
+        # Use temp scripts dir if available, otherwise fall back to default
+        scripts_dir = TestAppleScriptClientAllure._temp_scripts_dir or "applescripts/"
 
-        test_config = config or {"apple_script": {"timeout": 30, "concurrency": 5}, "apple_scripts_dir": "applescripts/"}
+        test_config = config or {"apple_script": {"timeout": 30, "concurrency": 5}, "apple_scripts_dir": scripts_dir}
+
+        # If config doesn't have apple_scripts_dir or uses placeholder paths, use temp dir
+        if TestAppleScriptClientAllure._temp_scripts_dir and (
+            "apple_scripts_dir" not in test_config
+            or test_config.get("apple_scripts_dir") in ("applescripts/", "custom_scripts/")
+        ):
+            test_config["apple_scripts_dir"] = TestAppleScriptClientAllure._temp_scripts_dir
 
         console_logger = MockLogger()
         error_logger = MockLogger()
