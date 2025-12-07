@@ -193,10 +193,11 @@ jobs:
         run: |
           echo "=== Extracting mutation results ==="
 
-          # Get all results and count by status
-          RESULTS=$(uv run mutmut results --all true 2>/dev/null || echo "")
+          # Get results using mutmut show (more reliable output)
+          # mutmut show all returns: "1-10" format for killed, etc.
+          RESULTS=$(uv run mutmut results 2>/dev/null || echo "")
 
-          if [ -z "$RESULTS" ]; then
+          if [ -z "$RESULTS" ] || echo "$RESULTS" | grep -q "No mutants"; then
             echo "No mutation results found"
             echo "score=0" >> $GITHUB_OUTPUT
             echo "killed=0" >> $GITHUB_OUTPUT
@@ -205,12 +206,39 @@ jobs:
             exit 0
           fi
 
-          # Count by status
-          KILLED=$(echo "$RESULTS" | grep -c ": killed" || echo "0")
-          SURVIVED=$(echo "$RESULTS" | grep -c ": survived" || echo "0")
-          TIMEOUT=$(echo "$RESULTS" | grep -c ": timeout" || echo "0")
-          SUSPICIOUS=$(echo "$RESULTS" | grep -c ": suspicious" || echo "0")
-          NOT_CHECKED=$(echo "$RESULTS" | grep -c ": not checked" || echo "0")
+          echo "Raw results:"
+          echo "$RESULTS"
+          echo "---"
+
+          # Count by status - ensure single integer output
+          KILLED=$(echo "$RESULTS" | grep -c "killed" 2>/dev/null || true)
+          KILLED=${KILLED:-0}
+          KILLED=$(echo "$KILLED" | tr -d '[:space:]')
+
+          SURVIVED=$(echo "$RESULTS" | grep -c "survived" 2>/dev/null || true)
+          SURVIVED=${SURVIVED:-0}
+          SURVIVED=$(echo "$SURVIVED" | tr -d '[:space:]')
+
+          TIMEOUT=$(echo "$RESULTS" | grep -c "timeout" 2>/dev/null || true)
+          TIMEOUT=${TIMEOUT:-0}
+          TIMEOUT=$(echo "$TIMEOUT" | tr -d '[:space:]')
+
+          SUSPICIOUS=$(echo "$RESULTS" | grep -c "suspicious" 2>/dev/null || true)
+          SUSPICIOUS=${SUSPICIOUS:-0}
+          SUSPICIOUS=$(echo "$SUSPICIOUS" | tr -d '[:space:]')
+
+          NOT_CHECKED=$(echo "$RESULTS" | grep -c "not checked" 2>/dev/null || true)
+          NOT_CHECKED=${NOT_CHECKED:-0}
+          NOT_CHECKED=$(echo "$NOT_CHECKED" | tr -d '[:space:]')
+
+          # Ensure all values are valid integers
+          [ -z "$KILLED" ] && KILLED=0
+          [ -z "$SURVIVED" ] && SURVIVED=0
+          [ -z "$TIMEOUT" ] && TIMEOUT=0
+          [ -z "$SUSPICIOUS" ] && SUSPICIOUS=0
+          [ -z "$NOT_CHECKED" ] && NOT_CHECKED=0
+
+          echo "Parsed: killed=$KILLED, survived=$SURVIVED, timeout=$TIMEOUT"
 
           # Total tested = killed + survived + timeout + suspicious
           TOTAL=$((KILLED + SURVIVED + TIMEOUT + SUSPICIOUS))
