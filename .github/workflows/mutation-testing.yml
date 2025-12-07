@@ -165,6 +165,9 @@ jobs:
       - name: Run mutation testing
         if: steps.changed.outputs.skip != 'true'
         id: mutmut
+        # KNOWN LIMITATION: mutmut 3.x trampoline incompatible with src.xxx imports
+        # Mutation testing is informational until imports are refactored (see #49)
+        continue-on-error: true
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
@@ -173,6 +176,10 @@ jobs:
 
           echo "=== Running mutmut (mode: $MODE) ==="
           echo "PYTHONPATH: $PYTHONPATH"
+          echo ""
+          echo "NOTE: mutmut 3.x trampoline is incompatible with src.xxx imports"
+          echo "See issue #49 for import refactoring plan"
+          echo ""
 
           # Clean previous results
           rm -rf mutants/
@@ -180,13 +187,13 @@ jobs:
           if [ -z "$MODULES" ]; then
             # Full run - test all src/
             echo "Running full mutation test on src/"
-            uv run mutmut run --no-progress || true
+            uv run mutmut run || true
           else
             # Incremental - test specific modules
             echo "Running mutation test on: $MODULES"
             for module in $MODULES; do
               echo "Testing module pattern: $module"
-              uv run mutmut run "$module" --no-progress || true
+              uv run mutmut run "$module" || true
             done
           fi
 

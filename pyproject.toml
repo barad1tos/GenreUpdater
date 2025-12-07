@@ -412,6 +412,8 @@ skips = ["B101", "B311", "B404", "B603"]
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.mutmut]
 paths_to_mutate = ["src/"]
-also_copy = ["tests/"]
-max_stack_depth = 8  # Performance: limit call stack depth for test relevance
-pytest_add_cli_args_test_selection = ["-x", "-q", "--no-cov", "--tb=no"]
+tests_dir = ["tests/unit"]  # Only unit tests - mutmut 3.x trampoline incompatible with src.xxx imports
+max_stack_depth = 8
+# TODO: Refactor imports from src.xxx to xxx to enable full mutation testing (see #49)
+# Currently excluding integration/e2e tests due to trampoline module resolution issues
+pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--no-cov", "--ignore=tests/e2e", "--ignore=tests/integration"]
