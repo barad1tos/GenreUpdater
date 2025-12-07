@@ -43,7 +43,7 @@ from src.services.api.year_score_resolver import YearScoreResolver
 from src.services.api.year_search_coordinator import YearSearchCoordinator
 from src.services.cache.orchestrator import CacheOrchestrator
 from src.services.pending_verification import PendingVerificationService
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from src.stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
 def normalize_name(name: str) -> str:

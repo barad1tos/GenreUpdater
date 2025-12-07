@@ -14,7 +14,7 @@ import yaml
 from src.app.features.batch.batch_processor import BatchProcessor
 from src.app.music_updater import MusicUpdater
 from src.core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from src.stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 if TYPE_CHECKING:
     from src.services.dependency_container import DependencyContainer
