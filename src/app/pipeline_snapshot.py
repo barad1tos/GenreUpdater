@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import logging
     from collections.abc import Iterable
+    from datetime import datetime
 
     from src.core.models.track_models import TrackDict
     from src.core.tracks.track_delta import TrackDelta
@@ -38,16 +39,42 @@ class PipelineSnapshotManager:
         self._console_logger = console_logger
         self._tracks_snapshot: list[TrackDict] | None = None
         self._tracks_index: dict[str, TrackDict] = {}
+        self._captured_library_mtime: datetime | None = None
+
+    def _reset_state(
+        self,
+        tracks: list[TrackDict] | None,
+        library_mtime: datetime | None,
+    ) -> None:
+        """Reset internal state with new values.
+
+        Args:
+            tracks: New tracks snapshot or None to clear.
+            library_mtime: Library modification time or None to clear.
+        """
+        self._tracks_snapshot = tracks
+        self._tracks_index = {}
+        self._captured_library_mtime = library_mtime
 
     def reset(self) -> None:
         """Reset cached pipeline tracks before a fresh run."""
-        self._tracks_snapshot = None
-        self._tracks_index = {}
+        self._reset_state(None, None)
 
-    def set_snapshot(self, tracks: list[TrackDict]) -> None:
-        """Store the current pipeline track snapshot for downstream reuse."""
-        self._tracks_snapshot = tracks
-        self._tracks_index = {}
+    def set_snapshot(
+        self,
+        tracks: list[TrackDict],
+        *,
+        library_mtime: datetime | None = None,
+    ) -> None:
+        """Store the current pipeline track snapshot for downstream reuse.
+
+        Args:
+            tracks: List of tracks to cache.
+            library_mtime: Library modification time captured BEFORE fetching tracks.
+                This prevents race conditions where new tracks added during fetch
+                would be missed but metadata would incorrectly show library as unchanged.
+        """
+        self._reset_state(tracks, library_mtime)
         for track in tracks:
             if track_id := str(track.get("id", "")):
                 self._tracks_index[track_id] = track
@@ -78,8 +105,7 @@ class PipelineSnapshotManager:
 
     def clear(self) -> None:
         """Release cached pipeline track data after finishing the run."""
-        self._tracks_snapshot = None
-        self._tracks_index = {}
+        self._reset_state(None, None)
 
     async def persist_to_disk(self) -> bool:
         """Persist the current in-memory snapshot to disk.
@@ -98,6 +124,7 @@ class PipelineSnapshotManager:
             await self._track_processor.cache_manager.update_snapshot(
                 self._tracks_snapshot,
                 processed_track_ids=[str(t.id) for t in self._tracks_snapshot if t.id],
+                library_mtime_override=self._captured_library_mtime,
             )
             self._console_logger.info(
                 "Persisted pipeline snapshot to disk (%d tracks)",

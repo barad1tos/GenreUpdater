@@ -403,6 +403,45 @@ class TestUpdateSnapshot:
 
         mock_snapshot_service.save_delta.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_uses_library_mtime_override_when_provided(
+        self,
+        cache_manager: TrackCacheManager,
+        mock_snapshot_service: AsyncMock,
+        sample_tracks: list[TrackDict],
+    ) -> None:
+        """Test uses library_mtime_override when provided instead of fetching current mtime."""
+        override_mtime = datetime(2025, 6, 15, 10, 30, tzinfo=UTC)
+
+        await cache_manager.update_snapshot(sample_tracks, library_mtime_override=override_mtime)
+
+        # Check that metadata was created with the override mtime
+        call_args = mock_snapshot_service.update_snapshot_metadata.call_args
+        metadata = call_args[0][0]
+        assert metadata.library_mtime == override_mtime
+        # get_library_mtime should NOT be called when override is provided
+        mock_snapshot_service.get_library_mtime.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fetches_current_mtime_when_no_override(
+        self,
+        cache_manager: TrackCacheManager,
+        mock_snapshot_service: AsyncMock,
+        sample_tracks: list[TrackDict],
+    ) -> None:
+        """Test fetches current library mtime when no override provided."""
+        current_mtime = datetime(2025, 12, 1, 15, tzinfo=UTC)
+        mock_snapshot_service.get_library_mtime.return_value = current_mtime
+
+        await cache_manager.update_snapshot(sample_tracks)  # No library_mtime_override
+
+        # Check that get_library_mtime was called
+        mock_snapshot_service.get_library_mtime.assert_called_once()
+        # Check that metadata uses the fetched mtime
+        call_args = mock_snapshot_service.update_snapshot_metadata.call_args
+        metadata = call_args[0][0]
+        assert metadata.library_mtime == current_mtime
+
 
 class TestCanUseSnapshot:
     """Tests for can_use_snapshot method."""

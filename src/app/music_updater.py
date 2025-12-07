@@ -3,6 +3,7 @@
 This is a streamlined version that uses the new modular components.
 """
 
+import contextlib
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -544,12 +545,24 @@ class MusicUpdater:
             List of tracks to process
 
         """
+        # Capture library_mtime BEFORE any fetch operations to prevent race conditions.
+        # If tracks are added to the library during fetch, they won't be in our snapshot,
+        # but without this fix the metadata would show library_mtime as including those
+        # changes, causing the next run to incorrectly skip them.
+        pre_fetch_library_mtime: datetime | None = None
+        snapshot_service = self.deps.library_snapshot_service
+        if snapshot_service and snapshot_service.is_enabled():
+            with contextlib.suppress(FileNotFoundError):
+                pre_fetch_library_mtime = await snapshot_service.get_library_mtime()
         # Fetch all tracks if not in test mode
         if not self.dry_run_test_artists:
             # Try Smart Delta first
             smart_delta_tracks = await self._try_smart_delta_fetch(force=force)
             if smart_delta_tracks is not None:
-                self.snapshot_manager.set_snapshot(smart_delta_tracks)
+                self.snapshot_manager.set_snapshot(
+                    smart_delta_tracks,
+                    library_mtime=pre_fetch_library_mtime,
+                )
                 return smart_delta_tracks
 
             # Fall back to batch processing for full library
@@ -560,7 +573,7 @@ class MusicUpdater:
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Already validated in Smart Delta
             )
-            self.snapshot_manager.set_snapshot(tracks)
+            self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)
             return tracks
 
         # In test artist mode, fetch tracks only for test artists
@@ -576,7 +589,7 @@ class MusicUpdater:
                 if track_id := track.get("id"):
                     unique_tracks[str(track_id)] = track
         collected_tracks = list(unique_tracks.values())
-        self.snapshot_manager.set_snapshot(collected_tracks)
+        self.snapshot_manager.set_snapshot(collected_tracks, library_mtime=pre_fetch_library_mtime)
         return collected_tracks
 
     async def _get_last_run_time(self, force: bool) -> datetime | None:
