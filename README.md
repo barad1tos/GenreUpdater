@@ -334,6 +334,10 @@ The code is organized into four layers. You don't need to understand this to use
 
 Shows how the system interacts with external actors and systems.
 
+![System Context](images/diagrams/c4-system-context.svg)
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 graph LR
     User((User))
@@ -361,12 +365,17 @@ graph LR
     class MGU system
     class User user
 ```
+</details>
 
 ---
 
 ### Container Diagram (C4 Level 2)
 
 Shows the main containers inside the system and data flow between them.
+
+![Container Diagram](images/diagrams/c4-container.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 graph TB
@@ -405,10 +414,15 @@ graph TB
     class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
     class User user
 ```
+</details>
 
 ---
 
 ### Data Flow: Genre Update
+
+![Genre Update Flow](images/diagrams/flow-genre-update.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -435,10 +449,15 @@ sequenceDiagram
     P -->> O: changes made
     O -->> CLI: summary report
 ```
+</details>
 
 ---
 
 ### Data Flow: Year Update
+
+![Year Update Flow](images/diagrams/flow-year-update.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -468,10 +487,15 @@ sequenceDiagram
     end
     P ->> A: update year
 ```
+</details>
 
 ---
 
 ### Component: App Layer (`src/app/`)
+
+![App Layer](images/diagrams/component-app.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 graph LR
@@ -506,10 +530,15 @@ graph LR
     class MU,FS,YU,TC pipeline
     class Batch,Crypto,Verify feature
 ```
+</details>
 
 ---
 
 ### Component: Core Layer (`src/core/`)
+
+![Core Layer](images/diagrams/component-core.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 graph TB
@@ -545,10 +574,15 @@ graph TB
     class IN,OUT io
     class TP,GM,YR,AR,IF,UE proc
 ```
+</details>
 
 ---
 
 ### Component: Services Layer (`src/services/`)
+
+![Services Layer](images/diagrams/component-services.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 graph TB
@@ -604,10 +638,15 @@ graph TB
     class AO,MB,DG,LF,YS api
     class MusicApp,ExtAPI,Files external
 ```
+</details>
 
 ---
 
 ### Component: Metrics Layer (`src/metrics/`)
+
+![Component: Metrics Layer](images/diagrams/component-metrics.svg)
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 graph LR
@@ -643,6 +682,7 @@ graph LR
     class AN,MO track
     class HR,CR,ER report
 ```
+</details>
 
 ---
 
