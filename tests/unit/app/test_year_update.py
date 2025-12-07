@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.app.year_update import YearUpdateService
-from src.core.models.track_models import ChangeLogEntry, TrackDict
+from app.year_update import YearUpdateService
+from core.models.track_models import ChangeLogEntry, TrackDict
 
 
 @pytest.fixture
@@ -245,7 +245,7 @@ class TestRunRevertYears:
     ) -> None:
         """Should return early when no revert targets found."""
         with (
-            patch("src.app.year_update.repair_utils.build_revert_targets", return_value=[]),
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[]),
             caplog.at_level(logging.WARNING),
         ):
             await service.run_revert_years(artist="Artist", album=None)
@@ -262,8 +262,8 @@ class TestRunRevertYears:
         targets = [{"track_id": "1", "year": 2019}]
 
         with (
-            patch("src.app.year_update.repair_utils.build_revert_targets", return_value=targets),
-            patch("src.app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=targets),
+            patch("app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
         ):
             mock_apply.return_value = (1, 0, [])
 
@@ -285,10 +285,10 @@ class TestRunRevertYears:
         changes = [MagicMock()]
 
         with (
-            patch("src.app.year_update.repair_utils.build_revert_targets", return_value=targets),
-            patch("src.app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
-            patch("src.app.year_update.save_changes_report") as mock_save,
-            patch("src.app.year_update.get_full_log_path", return_value="/tmp/revert.csv"),
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=targets),
+            patch("app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
+            patch("app.year_update.save_changes_report") as mock_save,
+            patch("app.year_update.get_full_log_path", return_value="/tmp/revert.csv"),
         ):
             mock_apply.return_value = (1, 0, changes)
 
@@ -306,8 +306,8 @@ class TestRunRevertYears:
         targets = [{"track_id": "1", "year": 2019}]
 
         with (
-            patch("src.app.year_update.repair_utils.build_revert_targets", return_value=targets),
-            patch("src.app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=targets),
+            patch("app.year_update.repair_utils.apply_year_reverts", new_callable=AsyncMock) as mock_apply,
             caplog.at_level(logging.INFO),
         ):
             mock_apply.return_value = (5, 2, [])

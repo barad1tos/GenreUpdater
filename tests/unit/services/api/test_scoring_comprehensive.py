@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.services.api.year_scoring import (
+from services.api.year_scoring import (
     ArtistPeriodContext,
     ReleaseScorer,
     ScoringConfig,

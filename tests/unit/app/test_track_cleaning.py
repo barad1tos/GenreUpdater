@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.app.track_cleaning import TrackCleaningService, _normalize_whitespace
-from src.core.models.track_models import ChangeLogEntry, TrackDict
+from app.track_cleaning import TrackCleaningService, _normalize_whitespace
+from core.models.track_models import ChangeLogEntry, TrackDict
 
 
 # ========================= Normalize Whitespace Tests =========================
@@ -132,7 +132,7 @@ class TestExtractAndCleanMetadata:
 
     def test_extracts_track_fields(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should extract track fields."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Clean Track", "Clean Album")
             result = service.extract_and_clean_metadata(sample_track)
 
@@ -148,7 +148,7 @@ class TestExtractAndCleanMetadata:
         """Should handle missing fields."""
         track = TrackDict(id="1", name="", artist="", album="")
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("", "")
             result = service.extract_and_clean_metadata(track)
 
@@ -160,7 +160,7 @@ class TestExtractAndCleanMetadata:
 
     def test_calls_clean_names_with_correct_args(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should call clean_names with correct arguments."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Track", "Album")
             service.extract_and_clean_metadata(sample_track)
 
@@ -223,7 +223,7 @@ class TestProcessSingleTrack:
         """Should return (None, None) when track has no ID."""
         track = TrackDict(id="", name="Track", artist="Artist", album="Album")
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Clean Track", "Clean Album")
             result = await service.process_single_track(track)
 
@@ -232,7 +232,7 @@ class TestProcessSingleTrack:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_changes_needed(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should return (None, None) when no changes needed."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             # Return same values as original (normalized)
             mock_clean.return_value = ("Track Name", "Album Name")
             result = await service.process_single_track(sample_track)
@@ -247,7 +247,7 @@ class TestProcessSingleTrack:
         sample_track: TrackDict,
     ) -> None:
         """Should update track when changes needed."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             updated_track, change_entry = await service.process_single_track(sample_track)
 
@@ -267,7 +267,7 @@ class TestProcessSingleTrack:
         """Should return (None, None) when update fails."""
         mock_track_processor.update_track_async = AsyncMock(return_value=False)
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             result = await service.process_single_track(sample_track)
 
@@ -276,7 +276,7 @@ class TestProcessSingleTrack:
     @pytest.mark.asyncio
     async def test_uses_artist_override(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should use artist override for change entry."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             _, change_entry = await service.process_single_track(sample_track, artist_override="Override Artist")
 
@@ -291,7 +291,7 @@ class TestProcessSingleTrack:
         sample_track: TrackDict,
     ) -> None:
         """Should only update fields that changed."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             # Only album changed
             mock_clean.return_value = ("Track Name", "Cleaned Album")
             await service.process_single_track(sample_track)
@@ -310,7 +310,7 @@ class TestProcessTrackForPipeline:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_changes(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
         """Should return None when no changes needed."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Track Name", "Album Name")
             result = await service.process_track_for_pipeline(sample_track)
 
@@ -321,7 +321,7 @@ class TestProcessTrackForPipeline:
         """Should return None when track has no ID."""
         track = TrackDict(id="", name="Track", artist="Artist", album="Album")
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Clean Track", "Clean Album")
             result = await service.process_track_for_pipeline(track)
 
@@ -335,7 +335,7 @@ class TestProcessTrackForPipeline:
         sample_track: TrackDict,
     ) -> None:
         """Should return updated track when changes needed."""
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             result = await service.process_track_for_pipeline(sample_track)
 
@@ -354,7 +354,7 @@ class TestProcessTrackForPipeline:
         """Should return None when update fails."""
         mock_track_processor.update_track_async = AsyncMock(return_value=False)
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             result = await service.process_track_for_pipeline(sample_track)
 
@@ -375,7 +375,7 @@ class TestProcessAllTracks:
             TrackDict(id="2", name="Track 2", artist="Artist", album="Album 2"),
         ]
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             updated_tracks, changes_log = await service.process_all_tracks(tracks, artist="Artist")
 
@@ -398,7 +398,7 @@ class TestProcessAllTracks:
             TrackDict(id="2", name="Track 2", artist="Artist", album="Album 2"),
         ]
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             # First track changes, second doesn't
             mock_clean.side_effect = [
                 ("Cleaned Track", "Cleaned Album"),
@@ -423,7 +423,7 @@ class TestCleanAllMetadata:
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
         ]
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             result = await service.clean_all_metadata(tracks)
 
@@ -442,7 +442,7 @@ class TestCleanAllMetadata:
         ]
 
         with (
-            patch("src.app.track_cleaning.clean_names") as mock_clean,
+            patch("app.track_cleaning.clean_names") as mock_clean,
             caplog.at_level(logging.INFO),
         ):
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
@@ -470,7 +470,7 @@ class TestCleanAllMetadataWithLogs:
             TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
         ]
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
             result = await service.clean_all_metadata_with_logs(tracks)
 
@@ -490,7 +490,7 @@ class TestCleanAllMetadataWithLogs:
         ]
 
         with (
-            patch("src.app.track_cleaning.clean_names") as mock_clean,
+            patch("app.track_cleaning.clean_names") as mock_clean,
             caplog.at_level(logging.INFO),
         ):
             mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
@@ -512,7 +512,7 @@ class TestCleanAllMetadataWithLogs:
             TrackDict(id="2", name="Track 2", artist="Artist", album="Album 2"),
         ]
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             mock_clean.side_effect = [
                 ("Cleaned Track", "Cleaned Album"),
                 ("Track 2", "Album 2"),  # No change
@@ -538,7 +538,7 @@ class TestWhitespaceNormalizationInProcessing:
             album="Album  Name",  # Double space
         )
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             # clean_names normalizes whitespace
             mock_clean.return_value = ("Track Name", "Album Name")
             result = await service.process_single_track(track)
@@ -556,7 +556,7 @@ class TestWhitespaceNormalizationInProcessing:
             album="Album Name",
         )
 
-        with patch("src.app.track_cleaning.clean_names") as mock_clean:
+        with patch("app.track_cleaning.clean_names") as mock_clean:
             # Promo text removed
             mock_clean.return_value = ("Track Name", "Album Name")
             updated, _ = await service.process_single_track(track)

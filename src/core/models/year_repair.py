@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.core.logger import get_full_log_path
+from core.logger import get_full_log_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

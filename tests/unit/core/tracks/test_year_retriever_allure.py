@@ -10,18 +10,18 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.models.validators import is_empty_year
-from src.core.tracks import year_consistency as year_consistency_module
-from src.core.tracks.year_retriever import YearRetriever
+from core.models.track_models import TrackDict
+from core.models.validators import is_empty_year
+from core.tracks import year_consistency as year_consistency_module
+from core.tracks.year_retriever import YearRetriever
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import (
+    from core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    from src.metrics.analytics import Analytics
+    from metrics.analytics import Analytics
 
 
 class _MockLogger:

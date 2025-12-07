@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.services.cache.snapshot import (
+from services.cache.snapshot import (
     DELTA_MAX_AGE,
     DELTA_MAX_TRACKED_IDS,
     GZIP_SUFFIX,
@@ -20,7 +20,7 @@ from src.services.cache.snapshot import (
     LibraryDeltaCache,
     LibrarySnapshotService,
 )
-from src.core.models.track_models import TrackDict
+from core.models.track_models import TrackDict
 
 
 class MockAppleScriptClient:
@@ -852,7 +852,7 @@ class TestDetectUpdatedTracks:
         )
         await service.update_snapshot_metadata(metadata)
 
-        with patch("src.services.cache.snapshot.spinner"):
+        with patch("services.cache.snapshot.spinner"):
             result = await service._detect_updated_tracks(
                 mock_client,
                 {"1", "2"},
@@ -886,7 +886,7 @@ class TestDetectUpdatedTracks:
         )
         await service.update_snapshot_metadata(metadata)
 
-        with patch("src.services.cache.snapshot.spinner"), caplog.at_level(logging.WARNING):
+        with patch("services.cache.snapshot.spinner"), caplog.at_level(logging.WARNING):
             result = await service._detect_updated_tracks(
                 mock_client,
                 {"1", "2"},

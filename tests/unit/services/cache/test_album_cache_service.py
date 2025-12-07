@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
-from src.services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
-from src.services.cache.cache_config import CacheContentType
-from src.services.cache.hash_service import UnifiedHashService
+from services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
+from services.cache.cache_config import CacheContentType
+from services.cache.hash_service import UnifiedHashService
 
 
 @allure.epic("Music Genre Updater")
@@ -122,10 +122,10 @@ class TestAlbumCacheService:
         base_time = 1000.0
         ttl_seconds = service.policy.ttl_seconds
 
-        with allure.step("Store album at base time"), patch("src.services.cache.album_cache.time.time", return_value=base_time):
+        with allure.step("Store album at base time"), patch("services.cache.album_cache.time.time", return_value=base_time):
             await service.store_album_year("Artist", "Album", "2000")
 
-        with allure.step("Advance time beyond TTL"), patch("src.services.cache.album_cache.time.time", return_value=base_time + ttl_seconds + 5):
+        with allure.step("Advance time beyond TTL"), patch("services.cache.album_cache.time.time", return_value=base_time + ttl_seconds + 5):
             result = await service.get_album_year("Artist", "Album")
             assert result is None
 
@@ -227,7 +227,7 @@ class TestAlbumCacheService:
         with (
             allure.step("Mock file operations"),
             patch("pathlib.Path.open", MagicMock()),
-            patch("src.core.logger.ensure_directory"),
+            patch("core.logger.ensure_directory"),
             patch.object(AlbumCacheService, "_write_csv_data") as mock_write,
         ):
             await service.save_to_disk()
@@ -424,7 +424,7 @@ class TestAlbumCacheService:
         with (
             allure.step("Mock save failure"),
             patch("tempfile.mkstemp", side_effect=OSError("Disk full")),
-            patch("src.core.logger.ensure_directory"),
+            patch("core.logger.ensure_directory"),
             pytest.raises(OSError, match="Disk full"),
         ):
             await service.save_to_disk()
@@ -460,7 +460,7 @@ class TestAlbumCacheService:
             with (
                 patch("tempfile.mkstemp", side_effect=tracking_mkstemp),
                 patch.object(Path, "replace", side_effect=OSError("Replace failed")),
-                patch("src.core.logger.ensure_directory"),
+                patch("core.logger.ensure_directory"),
                 pytest.raises(OSError, match="Replace failed"),
             ):
                 await service.save_to_disk()

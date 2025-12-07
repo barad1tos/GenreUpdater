@@ -9,11 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheServiceProtocol
-    from src.core.models.types import AppleScriptClientProtocol
+    from core.models.protocols import CacheServiceProtocol
+    from core.models.types import AppleScriptClientProtocol
 
-from src.core.tracks.batch_fetcher import BatchTrackFetcher
-from src.metrics.analytics import Analytics, LoggerContainer
+from core.tracks.batch_fetcher import BatchTrackFetcher
+from metrics.analytics import Analytics, LoggerContainer
 
 
 @pytest.fixture
@@ -252,7 +252,7 @@ class TestFetchTracksRawFallback:
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
-        with patch("src.core.tracks.batch_fetcher.Console") as mock_console_class:
+        with patch("core.tracks.batch_fetcher.Console") as mock_console_class:
             mock_console = MagicMock()
             mock_status = MagicMock()
             mock_status.__enter__ = MagicMock(return_value=mock_status)

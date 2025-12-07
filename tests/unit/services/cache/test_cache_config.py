@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.services.cache.cache_config import (
+from services.cache.cache_config import (
     CacheContentType,
     CacheEvent,
     CacheEventType,

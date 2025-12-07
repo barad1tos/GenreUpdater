@@ -17,11 +17,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
 
 import yaml
 
-from src.core.core_config import load_config
-from src.core.dry_run import DryRunAppleScriptClient
-from src.core.logger import LogFormat, shorten_path
-from src.core.models.album_type import configure_patterns as configure_album_patterns
-from src.metrics.analytics import Analytics, LoggerContainer
+from core.core_config import load_config
+from core.dry_run import DryRunAppleScriptClient
+from core.logger import LogFormat, shorten_path
+from core.models.album_type import configure_patterns as configure_album_patterns
+from metrics.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
 from .apple import AppleScriptClient
@@ -33,8 +33,8 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable
 
-    from src.core.logger import SafeQueueListener
-    from src.core.models.protocols import AppleScriptClientProtocol
+    from core.logger import SafeQueueListener
+    from core.models.protocols import AppleScriptClientProtocol
 
 T = TypeVar("T")
 

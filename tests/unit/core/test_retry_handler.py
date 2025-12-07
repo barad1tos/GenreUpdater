@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.exceptions import ConfigurationError
-from src.core.retry_handler import (
+from core.exceptions import ConfigurationError
+from core.retry_handler import (
     ConfigurationRetryHandler,
     DatabaseRetryHandler,
     RetryOperationContext,
@@ -281,7 +281,7 @@ class TestConfigurationRetryHandler:
 
     def test_load_config_success(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test successful config load."""
-        with patch("src.core.core_config.load_config") as mock_load:
+        with patch("core.core_config.load_config") as mock_load:
             mock_load.return_value = {"key": "value"}
 
             result = config_retry_handler.load_config_with_fallback("config.yaml")
@@ -291,7 +291,7 @@ class TestConfigurationRetryHandler:
 
     def test_load_config_fallback(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test fallback when primary fails."""
-        with patch("src.core.core_config.load_config") as mock_load:
+        with patch("core.core_config.load_config") as mock_load:
             # First call fails, second succeeds
             mock_load.side_effect = [
                 OSError("File not found"),
@@ -308,7 +308,7 @@ class TestConfigurationRetryHandler:
 
     def test_load_config_all_fail(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test ConfigurationError when all configs fail."""
-        with patch("src.core.core_config.load_config") as mock_load:
+        with patch("core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
 
             with pytest.raises(ConfigurationError, match="All configuration sources failed"):
@@ -319,7 +319,7 @@ class TestConfigurationRetryHandler:
 
     def test_load_config_no_fallback_paths(self, config_retry_handler: ConfigurationRetryHandler) -> None:
         """Test failure with no fallback paths."""
-        with patch("src.core.core_config.load_config") as mock_load:
+        with patch("core.core_config.load_config") as mock_load:
             mock_load.side_effect = OSError("File not found")
 
             with pytest.raises(ConfigurationError):

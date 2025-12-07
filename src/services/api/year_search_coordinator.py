@@ -9,19 +9,19 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from src.core.debug_utils import debug
-from src.core.models.script_detection import ScriptType, detect_primary_script
+from core.debug_utils import debug
+from core.models.script_detection import ScriptType, detect_primary_script
 
 if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
-    from src.services.api.applemusic import AppleMusicClient
-    from src.services.api.api_base import ScoredRelease
-    from src.services.api.discogs import DiscogsClient
-    from src.services.api.lastfm import LastFmClient
-    from src.services.api.musicbrainz import MusicBrainzClient
-    from src.services.api.year_scoring import ReleaseScorer
+    from services.api.applemusic import AppleMusicClient
+    from services.api.api_base import ScoredRelease
+    from services.api.discogs import DiscogsClient
+    from services.api.lastfm import LastFmClient
+    from services.api.musicbrainz import MusicBrainzClient
+    from services.api.year_scoring import ReleaseScorer
 
 
 class _RegionAwareApi(Protocol):

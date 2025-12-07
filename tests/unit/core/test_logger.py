@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.core.logger import (
+from core.logger import (
     LEVEL_ABBREV,
     CompactFormatter,
     Loggable,
@@ -77,7 +77,7 @@ class TestEnsureDirectory:
         """Should log error when directory creation fails."""
         error_logger = MagicMock(spec=logging.Logger)
 
-        with patch("src.core.logger.Path.mkdir", side_effect=OSError("Permission denied")):
+        with patch("core.logger.Path.mkdir", side_effect=OSError("Permission denied")):
             ensure_directory(str(tmp_path / "test"), error_logger)
 
         error_logger.exception.assert_called_once()
@@ -912,7 +912,7 @@ class TestRunHandlerTrim:
         content = f"{separator}\n\ue05e NEW RUN: run1 - 2024-01-01\n{separator}\n\ue05e NEW RUN: run2 - 2024-01-02\n"
         log_file.write_text(content)
 
-        with patch("src.core.logger.Path.open", side_effect=OSError("Permission denied")):
+        with patch("core.logger.Path.open", side_effect=OSError("Permission denied")):
             run_handler.trim_log_to_max_runs(str(log_file))
 
         captured = capsys.readouterr()
@@ -938,7 +938,7 @@ class TestCreateConsoleLogger:
         levels = {"console": logging.DEBUG}
 
         logger_name = f"console_logger_{id(object())}"
-        with patch("src.core.logger.logging.getLogger") as mock_get_logger:
+        with patch("core.logger.logging.getLogger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_logger.handlers = []
             mock_get_logger.return_value = mock_logger
@@ -1044,7 +1044,7 @@ class TestGetLoggers:
     def test_returns_fallback_on_error(self) -> None:
         """Should return fallback loggers on error."""
         with patch(
-            "src.core.logger._get_log_levels_from_config",
+            "core.logger._get_log_levels_from_config",
             side_effect=ValueError("Config error"),
         ):
             result = get_loggers({})

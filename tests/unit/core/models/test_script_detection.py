@@ -1,6 +1,6 @@
 """Tests for script detection utilities."""
 
-from src.core.models.script_detection import (
+from core.models.script_detection import (
     ScriptType,
     detect_primary_script,
     get_all_scripts,

@@ -14,7 +14,7 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-from src.core.models.album_type import (
+from core.models.album_type import (
     AlbumType,
     AlbumTypePatterns,
     YearHandlingStrategy,

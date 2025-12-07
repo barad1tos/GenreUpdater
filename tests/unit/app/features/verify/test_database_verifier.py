@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 
-from src.app.features.verify.database_verifier import DatabaseVerifier
-from src.core.models.track_models import TrackDict
-from src.core.models.types import AppleScriptClientProtocol
+from app.features.verify.database_verifier import DatabaseVerifier
+from core.models.track_models import TrackDict
+from core.models.types import AppleScriptClientProtocol
 
 
 def _create_track(track_id: str, name: str = "Track") -> TrackDict:
@@ -155,7 +155,7 @@ class TestCanRunIncremental:
     async def test_returns_true_when_no_previous_run(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return True when no previous run file exists."""
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(tmp_path / "nonexistent.log"),
         ):
             result = await verifier.can_run_incremental()
@@ -170,7 +170,7 @@ class TestCanRunIncremental:
         last_run_file.write_text(old_time.isoformat())
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()
@@ -185,7 +185,7 @@ class TestCanRunIncremental:
         last_run_file.write_text(recent_time.isoformat())
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()
@@ -200,7 +200,7 @@ class TestCanRunIncremental:
         last_run_file.write_text(future_time.isoformat())
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()
@@ -215,7 +215,7 @@ class TestUpdateLastIncrementalRun:
     async def test_updates_timestamp(self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture) -> None:
         """Should update timestamp via IncrementalRunTracker."""
         with (
-            patch("src.app.features.verify.database_verifier.IncrementalRunTracker") as mock_tracker_class,
+            patch("app.features.verify.database_verifier.IncrementalRunTracker") as mock_tracker_class,
             caplog.at_level(logging.INFO),
         ):
             mock_tracker = MagicMock()
@@ -247,7 +247,7 @@ class TestHandleInvalidTracks:
         ]
         invalid_tracks = ["2"]
 
-        with patch("src.app.features.verify.database_verifier.save_to_csv") as mock_save:
+        with patch("app.features.verify.database_verifier.save_to_csv") as mock_save:
             verifier._handle_invalid_tracks(invalid_tracks, existing_tracks, "/path/tracks.csv")
 
             mock_save.assert_called_once()
@@ -308,7 +308,7 @@ class TestShouldAutoVerify:
     async def test_returns_true_when_no_previous_verification(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
         """Should return True when no previous verification file exists."""
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(tmp_path / "nonexistent.csv"),
         ):
             result = await verifier.should_auto_verify()
@@ -325,7 +325,7 @@ class TestShouldAutoVerify:
         last_verify_file.write_text(old_time.isoformat())
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(csv_file),
         ):
             result = await verifier.should_auto_verify()
@@ -342,7 +342,7 @@ class TestShouldAutoVerify:
         last_verify_file.write_text(recent_time.isoformat())
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(csv_file),
         ):
             result = await verifier.should_auto_verify()
@@ -358,7 +358,7 @@ class TestShouldAutoVerify:
         last_verify_file.write_text("invalid-datetime-format")
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(csv_file),
         ):
             result = await verifier.should_auto_verify()
@@ -595,11 +595,11 @@ class TestVerifyAndCleanTrackDatabase:
 
         with (
             patch(
-                "src.app.features.verify.database_verifier.get_full_log_path",
+                "app.features.verify.database_verifier.get_full_log_path",
                 return_value=csv_path,
             ),
             patch(
-                "src.app.features.verify.database_verifier.load_track_list",
+                "app.features.verify.database_verifier.load_track_list",
                 return_value={},
             ),
         ):
@@ -620,11 +620,11 @@ class TestVerifyAndCleanTrackDatabase:
 
         with (
             patch(
-                "src.app.features.verify.database_verifier.get_full_log_path",
+                "app.features.verify.database_verifier.get_full_log_path",
                 return_value=str(csv_file),
             ),
             patch(
-                "src.app.features.verify.database_verifier.load_track_list",
+                "app.features.verify.database_verifier.load_track_list",
                 return_value=tracks,
             ),
         ):
@@ -643,14 +643,14 @@ class TestVerifyAndCleanTrackDatabase:
         with (
             patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=["exists", "not_found"]),
             patch(
-                "src.app.features.verify.database_verifier.get_full_log_path",
+                "app.features.verify.database_verifier.get_full_log_path",
                 return_value=str(csv_file),
             ),
             patch(
-                "src.app.features.verify.database_verifier.load_track_list",
+                "app.features.verify.database_verifier.load_track_list",
                 return_value=tracks,
             ),
-            patch("src.app.features.verify.database_verifier.save_to_csv"),
+            patch("app.features.verify.database_verifier.save_to_csv"),
         ):
             result = await verifier.verify_and_clean_track_database(force=True)
 
@@ -668,7 +668,7 @@ class TestCanRunIncrementalLegacyFormats:
         last_run_file.write_text(old_time.strftime("%Y-%m-%d %H:%M:%S"))
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()
@@ -683,7 +683,7 @@ class TestCanRunIncrementalLegacyFormats:
         last_run_file.write_text(old_date)
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()
@@ -697,7 +697,7 @@ class TestCanRunIncrementalLegacyFormats:
         last_run_file.write_text("not-a-valid-datetime-at-all")
 
         with patch(
-            "src.app.features.verify.database_verifier.get_full_log_path",
+            "app.features.verify.database_verifier.get_full_log_path",
             return_value=str(last_run_file),
         ):
             result = await verifier.can_run_incremental()

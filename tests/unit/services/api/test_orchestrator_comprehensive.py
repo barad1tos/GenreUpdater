@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.api.orchestrator import (
+from services.api.orchestrator import (
     ExternalApiOrchestrator,
     normalize_name,
 )

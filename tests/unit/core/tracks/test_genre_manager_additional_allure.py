@@ -19,9 +19,9 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 
-from src.core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
-from src.core.models.track_models import TrackDict
-from src.core.tracks.genre_manager import GenreManager
+from core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
+from core.models.track_models import TrackDict
+from core.tracks.genre_manager import GenreManager
 
 
 def _create_mock_logger() -> MagicMock:

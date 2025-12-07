@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
 
-from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
+from core.utils.datetime_utils import datetime_to_applescript_timestamp
 
 
 def test_datetime_to_applescript_timestamp_rounds_to_minute() -> None:

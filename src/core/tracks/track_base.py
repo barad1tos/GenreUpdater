@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.metrics import Analytics
+    from metrics import Analytics
 
 
 class BaseProcessor:

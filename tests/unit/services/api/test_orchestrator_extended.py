@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.api.orchestrator import ExternalApiOrchestrator
+from services.api.orchestrator import ExternalApiOrchestrator
 
 if TYPE_CHECKING:
-    from src.services.pending_verification import PendingVerificationService
+    from services.pending_verification import PendingVerificationService
 
 
 @pytest.fixture

@@ -27,23 +27,23 @@ from typing import Any, NoReturn, TypedDict
 import aiohttp
 import certifi
 
-from src.core.debug_utils import debug
-from src.core.logger import LogFormat
-from src.core.models.script_detection import ScriptType, detect_primary_script
-from src.core.models.validators import is_valid_year
-from src.metrics import Analytics
-from src.services.api.applemusic import AppleMusicClient
-from src.services.api.api_base import EnhancedRateLimiter, ScoredRelease
-from src.services.api.discogs import DiscogsClient
-from src.services.api.lastfm import LastFmClient
-from src.services.api.musicbrainz import MusicBrainzClient
-from src.services.api.request_executor import ApiRequestExecutor
-from src.services.api.year_scoring import ArtistPeriodContext, create_release_scorer
-from src.services.api.year_score_resolver import YearScoreResolver
-from src.services.api.year_search_coordinator import YearSearchCoordinator
-from src.services.cache.orchestrator import CacheOrchestrator
-from src.services.pending_verification import PendingVerificationService
-from src.stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
+from core.debug_utils import debug
+from core.logger import LogFormat
+from core.models.script_detection import ScriptType, detect_primary_script
+from core.models.validators import is_valid_year
+from metrics import Analytics
+from services.api.applemusic import AppleMusicClient
+from services.api.api_base import EnhancedRateLimiter, ScoredRelease
+from services.api.discogs import DiscogsClient
+from services.api.lastfm import LastFmClient
+from services.api.musicbrainz import MusicBrainzClient
+from services.api.request_executor import ApiRequestExecutor
+from services.api.year_scoring import ArtistPeriodContext, create_release_scorer
+from services.api.year_score_resolver import YearScoreResolver
+from services.api.year_search_coordinator import YearSearchCoordinator
+from services.cache.orchestrator import CacheOrchestrator
+from services.pending_verification import PendingVerificationService
+from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
 def normalize_name(name: str) -> str:

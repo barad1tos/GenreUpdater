@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
-from src.services.cache.hash_service import UnifiedHashService
-from src.services.pending_verification import (
+from services.cache.hash_service import UnifiedHashService
+from services.pending_verification import (
     PendingAlbumEntry,
     PendingVerificationService,
     VerificationReason,

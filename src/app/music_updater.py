@@ -9,26 +9,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.app.features.verify.database_verifier import DatabaseVerifier
-from src.app.pipeline_snapshot import PipelineSnapshotManager
-from src.app.track_cleaning import TrackCleaningService
-from src.app.year_update import YearUpdateService
-from src.core.tracks.artist_renamer import ArtistRenamer
-from src.core.tracks.genre_manager import GenreManager
-from src.core.tracks.incremental_filter import IncrementalFilterService
-from src.core.tracks.track_processor import TrackProcessor
-from src.core.tracks.year_retriever import YearRetriever
-from src.core.logger import LogFormat, get_full_log_path
-from src.core.run_tracking import IncrementalRunTracker
-from src.core.models.metadata_utils import is_music_app_running
-from src.core.models.track_models import ChangeLogEntry, TrackDict
-from src.metrics.change_reports import (
+from app.features.verify.database_verifier import DatabaseVerifier
+from app.pipeline_snapshot import PipelineSnapshotManager
+from app.track_cleaning import TrackCleaningService
+from app.year_update import YearUpdateService
+from core.tracks.artist_renamer import ArtistRenamer
+from core.tracks.genre_manager import GenreManager
+from core.tracks.incremental_filter import IncrementalFilterService
+from core.tracks.track_processor import TrackProcessor
+from core.tracks.year_retriever import YearRetriever
+from core.logger import LogFormat, get_full_log_path
+from core.run_tracking import IncrementalRunTracker
+from core.models.metadata_utils import is_music_app_running
+from core.models.track_models import ChangeLogEntry, TrackDict
+from metrics.change_reports import (
     save_changes_report,
     sync_track_list_with_current,
 )
 
 if TYPE_CHECKING:
-    from src.services.dependency_container import DependencyContainer
+    from services.dependency_container import DependencyContainer
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker

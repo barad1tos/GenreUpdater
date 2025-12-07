@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import allure
 import pytest
 
-from src.services.api.musicbrainz import MusicBrainzClient
+from services.api.musicbrainz import MusicBrainzClient
 from tests.mocks.csv_mock import MockLogger
 
 

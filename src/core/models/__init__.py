@@ -1,7 +1,7 @@
 """Data models and protocols."""
 
-from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
-from src.core.models.track_models import AppConfig, ChangeLogEntry, TrackDict, TrackFieldValue
+from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict, TrackFieldValue
 
 __all__ = [
     "AppConfig",

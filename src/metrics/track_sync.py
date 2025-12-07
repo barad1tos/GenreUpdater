@@ -13,13 +13,13 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.core.models.types import TrackDict
-from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv
+from core.models.types import TrackDict
+from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from src.core.models.types import (
+    from core.models.types import (
         AppleScriptClientProtocol,
         CacheServiceProtocol,
     )

@@ -10,12 +10,12 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.core.models.validators import is_empty_year
+from core.models.validators import is_empty_year
 
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.track_models import TrackDict
+    from core.models.track_models import TrackDict
 
 
 # Constants for year consistency checking

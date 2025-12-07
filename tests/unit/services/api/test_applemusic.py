@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
+from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
 
 
 @pytest.fixture

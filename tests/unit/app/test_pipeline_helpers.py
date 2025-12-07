@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.app.pipeline_helpers import (
+from app.pipeline_helpers import (
     check_paths,
     is_code_action,
     is_script_action,
     is_valid_track_item,
     resolve_env_vars,
 )
-from src.core.models.track_models import CodeActionExtended, ScriptActionExtended
+from core.models.track_models import CodeActionExtended, ScriptActionExtended
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
-from src.app.features.crypto.encryption import (
+from app.features.crypto.encryption import (
     FERNET_KEY_LENGTH,
     FERNET_TOKEN_MIN_ENCODED_LENGTH,
     CryptographyManager,
 )
-from src.app.features.crypto.exceptions import (
+from app.features.crypto.exceptions import (
     DecryptionError,
     EncryptionError,
     InvalidTokenError,

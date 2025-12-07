@@ -233,7 +233,7 @@ def configure_patterns(config: dict[str, Any]) -> None:
         config: Application configuration dictionary
 
     Example:
-        >>> from src.core.models.album_type import configure_patterns
+        >>> from core.models.album_type import configure_patterns
         >>> configure_patterns({"album_type_detection": {"special_patterns": ["demo"]}})
     """
     global _configured_patterns  # noqa: PLW0603

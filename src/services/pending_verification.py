@@ -44,9 +44,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
-from src.core.logger import get_full_log_path
-from src.core.models.metadata_utils import clean_names
-from src.services.cache.hash_service import UnifiedHashService
+from core.logger import get_full_log_path
+from core.models.metadata_utils import clean_names
+from services.cache.hash_service import UnifiedHashService
 
 
 class VerificationReason(str, Enum):

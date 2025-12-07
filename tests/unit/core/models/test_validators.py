@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.models.validators import (
+from core.models.track_models import TrackDict
+from core.models.validators import (
     SecurityValidationError,
     SecurityValidator,
     is_empty_year,

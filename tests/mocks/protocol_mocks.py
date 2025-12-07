@@ -9,13 +9,13 @@ import contextlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from src.core.models.track_models import CachedApiResult, TrackDict
-from src.services.pending_verification import PendingAlbumEntry, VerificationReason
+from core.models.track_models import CachedApiResult, TrackDict
+from services.pending_verification import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from src.core.models.protocols import (
+    from core.models.protocols import (
         AppleScriptClientProtocol,
         CacheableKey,
         CacheableValue,

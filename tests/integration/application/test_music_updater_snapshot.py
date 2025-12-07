@@ -5,9 +5,9 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from src.app.music_updater import MusicUpdater
-from src.core.models.track_models import TrackDict
-from src.metrics.analytics import Analytics, LoggerContainer
+from app.music_updater import MusicUpdater
+from core.models.track_models import TrackDict
+from metrics.analytics import Analytics, LoggerContainer
 
 
 class MockDependencyContainer:
@@ -226,7 +226,7 @@ async def test_main_pipeline_reuses_track_snapshot(
         captured["path"] = file_path
         captured["partial"] = partial_sync
 
-    monkeypatch.setattr("src.app.music_updater.sync_track_list_with_current", fake_sync)
+    monkeypatch.setattr("app.music_updater.sync_track_list_with_current", fake_sync)
 
     await music_updater.run_main_pipeline(True)
 

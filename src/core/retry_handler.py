@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypedDict, TypeVar, cast
 
-from src.core.exceptions import ConfigurationError
+from core.exceptions import ConfigurationError
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")
@@ -394,7 +394,7 @@ class ConfigurationRetryHandler:
 
         """
         # Lazy import to avoid circular dependency
-        from src.core.core_config import load_config  # noqa: PLC0415
+        from core.core_config import load_config  # noqa: PLC0415
 
         # Try primary configuration
         try:

@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.core.tracks.genre_manager import GenreManager
-from src.services.api.orchestrator import ExternalApiOrchestrator
-from src.core.models.track_models import TrackDict
-from src.metrics.analytics import Analytics
+from core.tracks.genre_manager import GenreManager
+from services.api.orchestrator import ExternalApiOrchestrator
+from core.models.track_models import TrackDict
+from metrics.analytics import Analytics
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 

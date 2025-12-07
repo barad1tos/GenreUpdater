@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import allure
 import pytest
 
-from src.app.music_updater import MusicUpdater
+from app.music_updater import MusicUpdater
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
     MockAppleScriptClient,
@@ -218,8 +218,8 @@ class TestMusicUpdaterAllure:
 
         with (
             allure.step("Execute clean artist operation"),
-            patch("src.app.music_updater.is_music_app_running", return_value=True),
-            patch("src.app.music_updater.save_changes_report") as mock_save,
+            patch("app.music_updater.is_music_app_running", return_value=True),
+            patch("app.music_updater.save_changes_report") as mock_save,
         ):
             await updater.run_clean_artist("Test Artist")
 
@@ -248,7 +248,7 @@ class TestMusicUpdaterAllure:
         with (
             allure.step("Mock Music app not running"),
             patch(
-                "src.app.music_updater.is_music_app_running",
+                "app.music_updater.is_music_app_running",
                 return_value=False,
             ),
         ):
@@ -273,7 +273,7 @@ class TestMusicUpdaterAllure:
             updater = MusicUpdater(deps)
 
             # Mock Music app running check
-            with patch("src.app.music_updater.is_music_app_running", return_value=True):
+            with patch("app.music_updater.is_music_app_running", return_value=True):
                 # Setup test tracks
                 track1 = DummyTrackData.create(track_id="1", album="Album 1", year="")
                 track2 = DummyTrackData.create(track_id="2", album="Album 2", year="2020")
@@ -287,11 +287,11 @@ class TestMusicUpdaterAllure:
         with (
             allure.step("Execute year update operation"),
             patch(
-                "src.metrics.change_reports.sync_track_list_with_current",
+                "metrics.change_reports.sync_track_list_with_current",
                 new_callable=AsyncMock,
             ) as _mock_sync,
             patch(
-                "src.metrics.change_reports.save_changes_report",
+                "metrics.change_reports.save_changes_report",
             ) as _mock_save,
         ):
             await updater.run_update_years("Test Artist", force=False)
@@ -316,7 +316,7 @@ class TestMusicUpdaterAllure:
             updater = MusicUpdater(deps)
 
             # Mock Music app running check
-            with patch("src.app.music_updater.is_music_app_running", return_value=True):
+            with patch("app.music_updater.is_music_app_running", return_value=True):
                 # Setup test tracks
                 track1 = DummyTrackData.create(track_id="1", artist="Pipeline Artist", album="Album 1", genre="Pop", year="")
                 track2 = DummyTrackData.create(track_id="2", artist="Pipeline Artist", album="Album 1", genre="Alternative", year="2020")
@@ -331,9 +331,9 @@ class TestMusicUpdaterAllure:
 
         with (
             allure.step("Execute main pipeline"),
-            patch("src.app.music_updater.IncrementalRunTracker") as mock_tracker,
+            patch("app.music_updater.IncrementalRunTracker") as mock_tracker,
             patch(
-                "src.metrics.change_reports.save_changes_report",
+                "metrics.change_reports.save_changes_report",
                 new_callable=AsyncMock,
             ),
         ):
@@ -370,7 +370,7 @@ class TestMusicUpdaterAllure:
 
         with (
             allure.step("Execute clean artist with no tracks"),
-            patch("src.app.music_updater.is_music_app_running", return_value=True),
+            patch("app.music_updater.is_music_app_running", return_value=True),
         ):
             await updater.run_clean_artist("NonExistentArtist")
 
@@ -424,7 +424,7 @@ class TestMusicUpdaterAllure:
         with (
             allure.step("Mock Music app running"),
             patch(
-                "src.app.music_updater.is_music_app_running",
+                "app.music_updater.is_music_app_running",
                 return_value=True,
             ),
         ):

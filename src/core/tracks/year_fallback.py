@@ -9,18 +9,18 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from src.core.models.album_type import (
+from core.models.album_type import (
     AlbumType,
     YearHandlingStrategy,
     detect_album_type,
 )
-from src.core.models.validators import is_empty_year
+from core.models.validators import is_empty_year
 
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.protocols import PendingVerificationServiceProtocol
-    from src.core.models.track_models import TrackDict
+    from core.models.protocols import PendingVerificationServiceProtocol
+    from core.models.track_models import TrackDict
 
 
 class YearFallbackHandler:

@@ -12,7 +12,7 @@ import logging
 from typing import Any, NoReturn
 
 # Import cryptography manager
-from src.app.features.crypto import (
+from app.features.crypto import (
     CryptographyError,
     CryptographyManager,
     DecryptionError,

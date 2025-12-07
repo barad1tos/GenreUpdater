@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from src.core.models.types import AppleScriptClientProtocol
+from core.models.types import AppleScriptClientProtocol
 
 if TYPE_CHECKING:
     import logging

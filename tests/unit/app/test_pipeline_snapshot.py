@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.app.pipeline_snapshot import PipelineSnapshotManager
-from src.core.models.track_models import TrackDict
+from app.pipeline_snapshot import PipelineSnapshotManager
+from core.models.track_models import TrackDict
 
 
 @pytest.fixture

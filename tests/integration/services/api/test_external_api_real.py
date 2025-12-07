@@ -16,11 +16,11 @@ from typing import Any
 
 import pytest
 
-from src.app.app_config import Config
-from src.metrics.analytics import Analytics, LoggerContainer
-from src.services.api.orchestrator import ExternalApiOrchestrator
-from src.services.cache.orchestrator import CacheOrchestrator
-from src.services.pending_verification import PendingVerificationService
+from app.app_config import Config
+from metrics.analytics import Analytics, LoggerContainer
+from services.api.orchestrator import ExternalApiOrchestrator
+from services.cache.orchestrator import CacheOrchestrator
+from services.pending_verification import PendingVerificationService
 
 
 def is_internet_available() -> bool:

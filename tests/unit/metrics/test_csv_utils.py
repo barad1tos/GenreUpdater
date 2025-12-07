@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.metrics.csv_utils import TRACK_FIELDNAMES, save_csv
+from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
 
 @pytest.fixture

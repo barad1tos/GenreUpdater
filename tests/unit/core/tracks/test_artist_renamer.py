@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.tracks.artist_renamer import ArtistRenamer
+from core.models.track_models import TrackDict
+from core.tracks.artist_renamer import ArtistRenamer
 
 if TYPE_CHECKING:
     from pathlib import Path

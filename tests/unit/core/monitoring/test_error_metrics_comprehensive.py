@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from src.metrics.error_reports import (
+from metrics.error_reports import (
     ErrorCategory,
     ErrorClassifier,
     ErrorEvent,
@@ -40,7 +40,7 @@ def _freeze_time(monkeypatch: pytest.MonkeyPatch, timeline: Iterable[float]) -> 
             current_time = next(iterator)
         return current_time
 
-    monkeypatch.setattr("src.metrics.error_reports.time.time", fake_time)
+    monkeypatch.setattr("metrics.error_reports.time.time", fake_time)
 
 
 def test_error_severity_values() -> None:

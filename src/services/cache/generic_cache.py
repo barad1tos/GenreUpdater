@@ -13,12 +13,12 @@ from typing import TYPE_CHECKING, Any, Self, TypeGuard
 
 from pydantic import BaseModel
 
-from src.services.cache.cache_config import CacheContentType, SmartCacheConfig
-from src.services.cache.hash_service import UnifiedHashService
-from src.core.logger import LogFormat, ensure_directory, get_full_log_path
+from services.cache.cache_config import CacheContentType, SmartCacheConfig
+from services.cache.hash_service import UnifiedHashService
+from core.logger import LogFormat, ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheableKey, CacheableValue
+    from core.models.protocols import CacheableKey, CacheableValue
 else:  # pragma: no cover - runtime-only aliasing for type hints
     CacheableKey = Any
     CacheableValue = Any

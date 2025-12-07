@@ -32,20 +32,20 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-from src.core.logger import ensure_directory
-from src.core.models.track_models import ChangeLogEntry
-from src.core.models.types import TrackDict
-from src.metrics.csv_utils import TRACK_FIELDNAMES
-from src.metrics.csv_utils import save_csv as _save_csv
+from core.logger import ensure_directory
+from core.models.track_models import ChangeLogEntry
+from core.models.types import TrackDict
+from metrics.csv_utils import TRACK_FIELDNAMES
+from metrics.csv_utils import save_csv as _save_csv
 
 # Re-export HTML report functions for backward compatibility
-from src.metrics.html_reports import (
+from metrics.html_reports import (
     save_detailed_dry_run_report,
     save_html_report,
 )
 
 # Re-export track sync functions for backward compatibility
-from src.metrics.track_sync import (
+from metrics.track_sync import (
     load_track_list,
     save_track_map_to_csv,
     sync_track_list_with_current,

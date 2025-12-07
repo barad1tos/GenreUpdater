@@ -10,16 +10,16 @@ import itertools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.core.tracks.track_base import BaseProcessor
-from src.core.tracks.track_delta import compute_track_delta
-from src.core.logger import get_full_log_path
-from src.metrics.change_reports import load_track_list
+from core.tracks.track_base import BaseProcessor
+from core.tracks.track_delta import compute_track_delta
+from core.logger import get_full_log_path
+from metrics.change_reports import load_track_list
 
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.track_models import TrackDict
-    from src.metrics import Analytics
+    from core.models.track_models import TrackDict
+    from metrics import Analytics
 
 
 class IncrementalFilterService(BaseProcessor):

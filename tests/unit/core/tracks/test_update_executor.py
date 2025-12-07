@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.models.validators import SecurityValidationError, SecurityValidator
-from src.core.tracks.update_executor import TrackUpdateExecutor
+from core.models.track_models import TrackDict
+from core.models.validators import SecurityValidationError, SecurityValidator
+from core.tracks.update_executor import TrackUpdateExecutor
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheServiceProtocol
-    from src.core.models.types import AppleScriptClientProtocol
+    from core.models.protocols import CacheServiceProtocol
+    from core.models.types import AppleScriptClientProtocol
 
 
 @pytest.fixture

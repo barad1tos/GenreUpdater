@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING, Any, cast
 import allure
 import pytest
 
-from src.core.models.track_models import CachedApiResult, TrackDict
-from src.core.models.validators import SecurityValidator
-from src.core.tracks.track_processor import TrackProcessor
-from src.metrics import Analytics
-from src.metrics.analytics import LoggerContainer
+from core.models.track_models import CachedApiResult, TrackDict
+from core.models.validators import SecurityValidator
+from core.tracks.track_processor import TrackProcessor
+from metrics import Analytics
+from metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import (
+    from core.models.protocols import (
         AppleScriptClientProtocol,
         CacheableKey,
         CacheableValue,

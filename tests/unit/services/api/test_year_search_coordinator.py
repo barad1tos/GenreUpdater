@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.core.models.script_detection import ScriptType
-from src.services.api.year_search_coordinator import YearSearchCoordinator
+from core.models.script_detection import ScriptType
+from services.api.year_search_coordinator import YearSearchCoordinator
 
 
 @pytest.fixture

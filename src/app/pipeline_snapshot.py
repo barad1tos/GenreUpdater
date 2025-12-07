@@ -12,9 +12,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from datetime import datetime
 
-    from src.core.models.track_models import TrackDict
-    from src.core.tracks.track_delta import TrackDelta
-    from src.core.tracks.track_processor import TrackProcessor
+    from core.models.track_models import TrackDict
+    from core.tracks.track_delta import TrackDelta
+    from core.tracks.track_processor import TrackProcessor
 
 
 class PipelineSnapshotManager:

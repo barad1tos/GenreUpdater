@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.services.api.discogs import DiscogsClient
+from services.api.discogs import DiscogsClient
 
 from tests.mocks.csv_mock import MockLogger
 

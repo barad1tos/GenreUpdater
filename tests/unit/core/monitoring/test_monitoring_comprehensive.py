@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.metrics.monitoring import (
+from metrics.monitoring import (
     Alert,
     AlertLevel,
     AlertManager,
@@ -106,7 +106,7 @@ def test_performance_tracker_get_and_clear_metrics(performance_tracker: Performa
 @pytest.fixture
 def resource_monitor(monkeypatch: pytest.MonkeyPatch) -> ResourceMonitor:
     """Create resource monitor with psutil disabled for deterministic data."""
-    monkeypatch.setattr("src.metrics.monitoring.psutil_available", False)
+    monkeypatch.setattr("metrics.monitoring.psutil_available", False)
     return ResourceMonitor()
 
 
@@ -190,7 +190,7 @@ def test_alert_manager_filters_and_clear(alert_manager_instance: AlertManager) -
 @pytest.fixture
 def metrics_collector(monkeypatch: pytest.MonkeyPatch) -> MetricsCollector:
     """Provide metrics collector with deterministic resource data."""
-    monkeypatch.setattr("src.metrics.monitoring.psutil_available", False)
+    monkeypatch.setattr("metrics.monitoring.psutil_available", False)
     return MetricsCollector()
 
 
@@ -281,6 +281,6 @@ def test_log_alert_handler_logs() -> None:
         threshold=50.0,
     )
 
-    with patch("src.metrics.monitoring.logger") as mock_logger:
+    with patch("metrics.monitoring.logger") as mock_logger:
         log_alert_handler(alert)
         mock_logger.log.assert_called()

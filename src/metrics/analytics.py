@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
-from src.metrics.change_reports import save_html_report
+from metrics.change_reports import save_html_report
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable

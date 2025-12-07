@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from src.core.tracks.genre_manager import GenreManager
-from src.core.models.track_models import ChangeLogEntry, TrackDict
-from src.metrics.analytics import Analytics
+from core.tracks.genre_manager import GenreManager
+from core.models.track_models import ChangeLogEntry, TrackDict
+from metrics.analytics import Analytics
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.track_data import DummyTrackData
 
 if TYPE_CHECKING:
-    from src.core.tracks.track_processor import TrackProcessor
+    from core.tracks.track_processor import TrackProcessor
 
 
 class TestGenreManager:
@@ -466,7 +466,7 @@ class TestGenreManager:
         manager = TestGenreManager.create_manager()
         tracks = [DummyTrackData.create(track_id="1")]
 
-        with patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = None
 
             updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False)
@@ -483,7 +483,7 @@ class TestGenreManager:
 
         tracks = [DummyTrackData.create(track_id="1", genre="Old Genre")]
 
-        with patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = "New Genre"
 
             updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False)
@@ -521,10 +521,10 @@ class TestGenreManager:
             DummyTrackData.create(track_id="2", artist="Artist1", genre=""),
         ]
 
-        with patch("src.core.tracks.genre_manager.group_tracks_by_artist") as mock_group:
+        with patch("core.tracks.genre_manager.group_tracks_by_artist") as mock_group:
             mock_group.return_value = {"Artist1": tracks}
 
-            with patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+            with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
                 mock_determine.return_value = "Rock"
 
                 updated_tracks, change_logs = await manager.update_genres_by_artist_async(tracks)
@@ -542,7 +542,7 @@ class TestGenreManager:
         tracks = [DummyTrackData.create(track_id="1", genre="")]
         semaphore = asyncio.Semaphore()
 
-        with patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = "Rock"
 
             updated_tracks, change_logs = await manager.test_process_single_artist_wrapper("Test Artist", tracks, None, False, semaphore)
@@ -558,7 +558,7 @@ class TestGenreManager:
         tracks = [DummyTrackData.create(track_id="1")]
         semaphore = asyncio.Semaphore()
 
-        with patch("src.core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = "Rock"  # Same genre, no update needed
 
             updated_tracks, change_logs = await manager.test_process_single_artist_wrapper(

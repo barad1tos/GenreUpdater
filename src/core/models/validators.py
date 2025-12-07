@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeGuard
 
-from src.core.models.track_models import TrackDict
+from core.models.track_models import TrackDict
 
 
 class SupportsDictConversion(Protocol):
