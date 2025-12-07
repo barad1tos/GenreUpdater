@@ -8,7 +8,7 @@ Logic: Weekly auto-force (7+ days), no first-run force.
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -43,7 +43,7 @@ class TestShouldForceScan:
     @pytest.mark.asyncio
     async def test_no_metadata_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
         """First run (no metadata) should NOT trigger force scan - nothing to compare."""
-        with patch.object(snapshot_service, "get_snapshot_metadata", return_value=None):
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=None)):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "first run" in reason
@@ -59,7 +59,7 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=None,
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "first run" in reason
@@ -77,7 +77,7 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=three_days_ago.isoformat(),
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "fast mode" in reason
@@ -95,7 +95,7 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=eight_days_ago.isoformat(),
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", return_value=metadata):
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is True
             assert "weekly" in reason
@@ -115,9 +115,10 @@ class TestUpdateForceScanTime:
             snapshot_hash="abc",
             last_force_scan_time=None,
         )
+        mock_update = AsyncMock()
         with (
-            patch.object(snapshot_service, "get_snapshot_metadata", return_value=existing_metadata),
-            patch.object(snapshot_service, "update_snapshot_metadata") as mock_update,
+            patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=existing_metadata)),
+            patch.object(snapshot_service, "update_snapshot_metadata", new=mock_update),
         ):
             await snapshot_service._update_force_scan_time()
 
