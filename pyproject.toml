@@ -427,4 +427,4 @@ skips = ["B101", "B311", "B404", "B603"]
 paths_to_mutate = ["src/"]
 tests_dir = ["tests/"]
 max_stack_depth = 8
-pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--no-cov", "-m", "not integration and not slow and not e2e"]
+pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--no-cov", "--ignore=tests/integration", "--ignore=tests/e2e"]
