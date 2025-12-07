@@ -43,10 +43,12 @@ class TestShouldForceScan:
     @pytest.mark.asyncio
     async def test_no_metadata_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
         """First run (no metadata) should NOT trigger force scan - nothing to compare."""
-        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=None)):
+        mock_get = AsyncMock(return_value=None)
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "first run" in reason
+            mock_get.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_no_last_force_scan_time_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
@@ -59,10 +61,12 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=None,
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
+        mock_get = AsyncMock(return_value=metadata)
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "first run" in reason
+            mock_get.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_within_week_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
@@ -77,10 +81,12 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=three_days_ago.isoformat(),
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
+        mock_get = AsyncMock(return_value=metadata)
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is False
             assert "fast mode" in reason
+            mock_get.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_week_old_returns_true(self, snapshot_service: LibrarySnapshotService) -> None:
@@ -95,10 +101,12 @@ class TestShouldForceScan:
             snapshot_hash="abc123",
             last_force_scan_time=eight_days_ago.isoformat(),
         )
-        with patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=metadata)):
+        mock_get = AsyncMock(return_value=metadata)
+        with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
             assert should_force is True
             assert "weekly" in reason
+            mock_get.assert_awaited_once()
 
 
 class TestUpdateForceScanTime:
@@ -115,14 +123,16 @@ class TestUpdateForceScanTime:
             snapshot_hash="abc",
             last_force_scan_time=None,
         )
+        mock_get = AsyncMock(return_value=existing_metadata)
         mock_update = AsyncMock()
         with (
-            patch.object(snapshot_service, "get_snapshot_metadata", new=AsyncMock(return_value=existing_metadata)),
+            patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get),
             patch.object(snapshot_service, "update_snapshot_metadata", new=mock_update),
         ):
             await snapshot_service._update_force_scan_time()
 
-            mock_update.assert_called_once()
+            mock_get.assert_awaited_once()
+            mock_update.assert_awaited_once()
             updated_metadata = mock_update.call_args[0][0]
             assert updated_metadata.last_force_scan_time is not None
             # Verify it's a valid ISO timestamp
