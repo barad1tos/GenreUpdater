@@ -453,3 +453,96 @@ class TestMusicUpdaterAllure:
                 "Pending Verification Result",
                 allure.attachment_type.TEXT,
             )
+
+    @allure.story("Pipeline Mode - Library mtime capture")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Should capture library_mtime BEFORE fetching tracks")
+    @allure.description("Test that library modification time is captured before fetch to prevent race conditions")
+    @pytest.mark.asyncio
+    async def test_fetch_tracks_captures_library_mtime_before_fetch(self) -> None:
+        """Test that library_mtime is captured before track fetch to prevent race conditions."""
+        from datetime import UTC, datetime
+
+        with allure.step("Setup MusicUpdater with enabled snapshot service"):
+            deps = self.create_mock_dependencies()
+
+            # Enable snapshot service and set up library_mtime
+            pre_fetch_mtime = datetime(2025, 6, 15, 10, 30, tzinfo=UTC)
+            deps.library_snapshot_service.is_enabled = MagicMock(return_value=True)
+            deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=pre_fetch_mtime)
+
+            updater = MusicUpdater(deps)
+
+        with allure.step("Mock track fetching via Smart Delta"):
+            # Mock Smart Delta to return tracks
+            test_track = DummyTrackData.create(track_id="1", artist="Artist", album="Album")
+
+            with (
+                patch.object(updater, "_try_smart_delta_fetch", new_callable=AsyncMock) as mock_delta,
+                patch.object(updater.snapshot_manager, "set_snapshot") as mock_set_snapshot,
+            ):
+                mock_delta.return_value = [test_track]
+
+                # Call the method under test
+                result = await updater._fetch_tracks_for_pipeline_mode()
+
+        with allure.step("Verify library_mtime was captured and passed to snapshot"):
+            # Verify get_library_mtime was called
+            deps.library_snapshot_service.get_library_mtime.assert_called_once()
+
+            # Verify set_snapshot received the pre-captured library_mtime
+            mock_set_snapshot.assert_called_once()
+            call_kwargs = mock_set_snapshot.call_args.kwargs
+            assert call_kwargs.get("library_mtime") == pre_fetch_mtime
+
+            # Verify tracks were returned
+            assert result == [test_track]
+
+            allure.attach(
+                f"library_mtime captured: {pre_fetch_mtime}",
+                "Race Condition Prevention",
+                allure.attachment_type.TEXT,
+            )
+
+    @allure.story("Pipeline Mode - Library mtime with disabled snapshot")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Should handle disabled snapshot service gracefully")
+    @allure.description("Test that fetch works when snapshot service is disabled")
+    @pytest.mark.asyncio
+    async def test_fetch_tracks_handles_disabled_snapshot_service(self) -> None:
+        """Test that fetch works correctly when snapshot service is disabled."""
+        with allure.step("Setup MusicUpdater with disabled snapshot service"):
+            deps = self.create_mock_dependencies()
+
+            # Disable snapshot service
+            deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
+
+            updater = MusicUpdater(deps)
+
+        with allure.step("Mock track fetching"):
+            test_track = DummyTrackData.create(track_id="1", artist="Artist", album="Album")
+
+            with (
+                patch.object(updater, "_try_smart_delta_fetch", new_callable=AsyncMock) as mock_delta,
+                patch.object(updater.snapshot_manager, "set_snapshot") as mock_set_snapshot,
+            ):
+                mock_delta.return_value = [test_track]
+
+                result = await updater._fetch_tracks_for_pipeline_mode()
+
+        with allure.step("Verify snapshot set with None library_mtime"):
+            # get_library_mtime should NOT be called when service is disabled
+            deps.library_snapshot_service.get_library_mtime.assert_not_called()
+
+            # set_snapshot should still be called but with library_mtime=None
+            mock_set_snapshot.assert_called_once()
+            call_kwargs = mock_set_snapshot.call_args.kwargs
+            assert call_kwargs.get("library_mtime") is None
+
+            assert result == [test_track]
+
+            allure.attach(
+                "Snapshot service disabled - library_mtime is None",
+                "Graceful Handling",
+                allure.attachment_type.TEXT,
+            )
