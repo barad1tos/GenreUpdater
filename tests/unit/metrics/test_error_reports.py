@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from src.metrics.error_reports import (
+from metrics.error_reports import (
     ErrorCategory,
     ErrorClassifier,
     ErrorEvent,
@@ -586,7 +586,7 @@ class TestDefaultErrorAlertHandler:
 
     def test_logs_low_severity(self) -> None:
         """Test low severity uses INFO level."""
-        with patch("src.metrics.error_reports.logger") as mock_logger:
+        with patch("metrics.error_reports.logger") as mock_logger:
             default_error_alert_handler(
                 "Test Alert",
                 ErrorSeverity.LOW,
@@ -598,7 +598,7 @@ class TestDefaultErrorAlertHandler:
 
     def test_logs_critical_severity(self) -> None:
         """Test critical severity uses CRITICAL level."""
-        with patch("src.metrics.error_reports.logger") as mock_logger:
+        with patch("metrics.error_reports.logger") as mock_logger:
             default_error_alert_handler(
                 "Critical Alert",
                 ErrorSeverity.CRITICAL,
@@ -610,7 +610,7 @@ class TestDefaultErrorAlertHandler:
 
     def test_includes_error_rate_in_message(self) -> None:
         """Test error rate is included in log message."""
-        with patch("src.metrics.error_reports.logger") as mock_logger:
+        with patch("metrics.error_reports.logger") as mock_logger:
             default_error_alert_handler(
                 "Test Alert",
                 ErrorSeverity.HIGH,

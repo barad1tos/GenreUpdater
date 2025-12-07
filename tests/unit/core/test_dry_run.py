@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from src.core.dry_run import DRY_RUN_SUCCESS_MESSAGE, DryRunAppleScriptClient
-from src.core.models.types import AppleScriptClientProtocol
+from core.dry_run import DRY_RUN_SUCCESS_MESSAGE, DryRunAppleScriptClient
+from core.models.types import AppleScriptClientProtocol
 
 
 @pytest.fixture

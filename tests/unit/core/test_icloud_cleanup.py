@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.utils.icloud_cleanup import (
+from core.utils.icloud_cleanup import (
     ICLOUD_CONFLICT_PATTERN,
     CleanupContext,
     _delete_conflict,

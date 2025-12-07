@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from src.services.cache.fingerprint import (
+from services.cache.fingerprint import (
     FingerprintGenerationError,
     FingerprintGenerator,
 )

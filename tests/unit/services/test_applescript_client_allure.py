@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import allure
 import pytest
 
-from src.services.apple import (
+from services.apple import (
     MAX_SCRIPT_SIZE,
     MAX_TRACK_ID_LENGTH,
     AppleScriptClient,

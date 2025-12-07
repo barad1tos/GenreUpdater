@@ -6,8 +6,8 @@ depending on the services layer, maintaining clean architecture boundaries.
 
 # Re-export protocol types for use in utils layer
 # Re-export model types
-from src.core.models.track_models import CachedApiResult, TrackDict
-from src.core.models.protocols import (
+from core.models.track_models import CachedApiResult, TrackDict
+from core.models.protocols import (
     AnalyticsProtocol,
     AppleScriptClientProtocol,
     CacheServiceProtocol,

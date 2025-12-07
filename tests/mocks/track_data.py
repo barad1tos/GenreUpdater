@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.core.models.track_models import TrackDict
+from core.models.track_models import TrackDict
 
 
 # NOTE: DummyTrackSummary class removed after track_delta_service.py refactoring

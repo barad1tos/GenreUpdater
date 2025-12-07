@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.metrics import Analytics
-from src.metrics.analytics import LoggerContainer
+from metrics import Analytics
+from metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
-    from src.core.models.track_models import TrackDict
+    from core.models.track_models import TrackDict
 
 
 class MockLoadTrackList:

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.metrics.monitoring import (
+from metrics.monitoring import (
     Alert,
     AlertLevel,
     AlertManager,
@@ -232,7 +232,7 @@ class TestResourceMonitor:
 
     def test_collect_cpu_metrics_without_psutil(self, monitor: ResourceMonitor) -> None:
         """Test CPU metrics collection when psutil unavailable."""
-        with patch("src.metrics.monitoring.psutil_available", False):
+        with patch("metrics.monitoring.psutil_available", False):
             metric = monitor.collect_cpu_metrics()
 
             assert metric.resource_type == ResourceType.CPU
@@ -241,7 +241,7 @@ class TestResourceMonitor:
 
     def test_collect_memory_metrics_without_psutil(self, monitor: ResourceMonitor) -> None:
         """Test memory metrics collection when psutil unavailable."""
-        with patch("src.metrics.monitoring.psutil_available", False):
+        with patch("metrics.monitoring.psutil_available", False):
             metric = monitor.collect_memory_metrics()
 
             assert metric.resource_type == ResourceType.MEMORY
@@ -250,7 +250,7 @@ class TestResourceMonitor:
 
     def test_collect_disk_metrics_without_psutil(self, monitor: ResourceMonitor) -> None:
         """Test disk metrics collection when psutil unavailable."""
-        with patch("src.metrics.monitoring.psutil_available", False):
+        with patch("metrics.monitoring.psutil_available", False):
             metric = monitor.collect_disk_metrics()
 
             assert metric.resource_type == ResourceType.DISK
@@ -265,8 +265,8 @@ class TestResourceMonitor:
         mock_psutil.cpu_freq.return_value = None
 
         with (
-            patch("src.metrics.monitoring.psutil_available", True),
-            patch("src.metrics.monitoring._get_psutil", return_value=mock_psutil),
+            patch("metrics.monitoring.psutil_available", True),
+            patch("metrics.monitoring._get_psutil", return_value=mock_psutil),
         ):
             metric = monitor.collect_cpu_metrics()
 
@@ -286,8 +286,8 @@ class TestResourceMonitor:
         mock_psutil.virtual_memory.return_value = mock_memory
 
         with (
-            patch("src.metrics.monitoring.psutil_available", True),
-            patch("src.metrics.monitoring._get_psutil", return_value=mock_psutil),
+            patch("metrics.monitoring.psutil_available", True),
+            patch("metrics.monitoring._get_psutil", return_value=mock_psutil),
         ):
             metric = monitor.collect_memory_metrics()
 
@@ -306,8 +306,8 @@ class TestResourceMonitor:
         mock_psutil.disk_usage.return_value = mock_disk
 
         with (
-            patch("src.metrics.monitoring.psutil_available", True),
-            patch("src.metrics.monitoring._get_psutil", return_value=mock_psutil),
+            patch("metrics.monitoring.psutil_available", True),
+            patch("metrics.monitoring._get_psutil", return_value=mock_psutil),
         ):
             metric = monitor.collect_disk_metrics()
 
@@ -317,7 +317,7 @@ class TestResourceMonitor:
 
     def test_collect_all_metrics(self, monitor: ResourceMonitor) -> None:
         """Test collecting all resource metrics."""
-        with patch("src.metrics.monitoring.psutil_available", False):
+        with patch("metrics.monitoring.psutil_available", False):
             metrics = monitor.collect_all_metrics()
 
             assert len(metrics) == 3

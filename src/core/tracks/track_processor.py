@@ -9,20 +9,20 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.core.tracks.artist_renamer import ArtistRenamer
-from src.core.tracks.batch_fetcher import BatchTrackFetcher
-from src.core.tracks.cache_manager import TrackCacheManager
-from src.core.tracks.update_executor import TrackUpdateExecutor
-from src.core.utils.datetime_utils import datetime_to_applescript_timestamp
-from src.services.cache.snapshot import LibrarySnapshotService
-from src.core.models.metadata_utils import parse_tracks
-from src.core.models.track_models import TrackDict
-from src.services.apple.applescript_client import NO_TRACKS_FOUND
-from src.core.models.validators import SecurityValidationError, SecurityValidator
-from src.metrics import Analytics
+from core.tracks.artist_renamer import ArtistRenamer
+from core.tracks.batch_fetcher import BatchTrackFetcher
+from core.tracks.cache_manager import TrackCacheManager
+from core.tracks.update_executor import TrackUpdateExecutor
+from core.utils.datetime_utils import datetime_to_applescript_timestamp
+from services.cache.snapshot import LibrarySnapshotService
+from core.models.metadata_utils import parse_tracks
+from core.models.track_models import TrackDict
+from services.apple.applescript_client import NO_TRACKS_FOUND
+from core.models.validators import SecurityValidationError, SecurityValidator
+from metrics import Analytics
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
 
 
 class TrackProcessor:

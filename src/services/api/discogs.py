@@ -10,7 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict
 
-from src.metrics import Analytics
+from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
 

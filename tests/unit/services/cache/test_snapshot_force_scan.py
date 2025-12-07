@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.services.cache.snapshot import LibraryCacheMetadata, LibrarySnapshotService
+from services.cache.snapshot import LibraryCacheMetadata, LibrarySnapshotService
 
 
 @pytest.fixture

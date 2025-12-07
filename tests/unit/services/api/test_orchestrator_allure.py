@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.services.api.orchestrator import ExternalApiOrchestrator, normalize_name
+from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
 
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 

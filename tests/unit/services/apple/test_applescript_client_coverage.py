@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.apple.applescript_client import AppleScriptClient
+from services.apple.applescript_client import AppleScriptClient
 
 
 @pytest.fixture

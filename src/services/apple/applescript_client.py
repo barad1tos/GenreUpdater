@@ -16,12 +16,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from src.core.logger import LogFormat, spinner
-from src.core.models.protocols import AppleScriptClientProtocol
-from src.metrics import Analytics
-from src.services.apple.applescript_executor import AppleScriptExecutor
-from src.services.apple.file_validator import AppleScriptFileValidator
-from src.services.apple.sanitizer import (
+from core.logger import LogFormat, spinner
+from core.models.protocols import AppleScriptClientProtocol
+from metrics import Analytics
+from services.apple.applescript_executor import AppleScriptExecutor
+from services.apple.file_validator import AppleScriptFileValidator
+from services.apple.sanitizer import (
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
     DANGEROUS_ARGUMENT_CHARACTERS,

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.metrics.html_reports import (
+from metrics.html_reports import (
     DURATION_FIELD,
     _determine_event_row_class,
     _format_event_table_row,
@@ -414,7 +414,7 @@ class TestGenerateEmptyHtmlTemplate:
         """Should handle write errors gracefully."""
         report_file = tmp_path / "report.html"
 
-        with patch("src.metrics.html_reports.Path.open", side_effect=OSError("Write error")):
+        with patch("metrics.html_reports.Path.open", side_effect=OSError("Write error")):
             _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
 
@@ -534,7 +534,7 @@ class TestSaveHtmlReport:
         """Should handle file save errors."""
         config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
 
-        with patch("src.metrics.html_reports.Path.open", side_effect=OSError("Write error")):
+        with patch("metrics.html_reports.Path.open", side_effect=OSError("Write error")):
             save_html_report(
                 events=sample_events,
                 call_counts={"func": 1},
@@ -663,5 +663,5 @@ class TestSaveDetailedDryRunReport:
         changes = [{"change_type": "test", "data": "value"}]
         report_file = tmp_path / "report.html"
 
-        with patch("src.metrics.html_reports.Path.open", side_effect=OSError("Write error")):
+        with patch("metrics.html_reports.Path.open", side_effect=OSError("Write error")):
             save_detailed_dry_run_report(changes, str(report_file), console_logger, error_logger)

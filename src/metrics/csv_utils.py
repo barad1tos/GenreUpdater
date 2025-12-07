@@ -9,7 +9,7 @@ import csv
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.core.logger import ensure_directory
+from core.logger import ensure_directory
 
 if TYPE_CHECKING:
     import logging

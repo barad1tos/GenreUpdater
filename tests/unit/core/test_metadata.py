@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from src.core.models.metadata_utils import (
+from core.models.metadata_utils import (
     _get_earliest_track_across_albums,
     _get_earliest_track_per_album,
     _get_genre_from_track,
@@ -16,7 +16,7 @@ from src.core.models.metadata_utils import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
 )
-from src.core.models.track_models import TrackDict
+from core.models.track_models import TrackDict
 
 if TYPE_CHECKING:
     LogCaptureFixture = pytest.LogCaptureFixture

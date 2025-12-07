@@ -19,7 +19,7 @@ import traceback
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from src.services.api.api_base import ScoredRelease
+from services.api.api_base import ScoredRelease
 
 # Constants for data validation
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")

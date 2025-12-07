@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from src.core.models.validators import is_empty_year
-from src.metrics import Analytics
+from core.models.validators import is_empty_year
+from metrics import Analytics
 
 from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
@@ -29,12 +29,12 @@ from .year_utils import (
 if TYPE_CHECKING:
     import logging
 
-    from src.core.models.protocols import (
+    from core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    from src.core.models.track_models import ChangeLogEntry, TrackDict
+    from core.models.track_models import ChangeLogEntry, TrackDict
 
     from .track_processor import TrackProcessor
 

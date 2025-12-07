@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.app.app_config import Config
+from app.app_config import Config
 
 
 class TestConfigInit:
@@ -40,7 +40,9 @@ class TestConfigInit:
         monkeypatch.chdir(tmp_path)
         config_file = tmp_path / config_filename
         config_file.write_text("key: value")
-        config = Config()
+        # Patch load_dotenv to prevent .env file from re-setting CONFIG_PATH
+        with patch("app.app_config.load_dotenv", return_value=None):
+            config = Config()
         assert config.config_path == config_filename
 
     def test_init_raises_when_no_config_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,7 +50,11 @@ class TestConfigInit:
         monkeypatch.delenv("CONFIG_PATH", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        with pytest.raises(FileNotFoundError, match="No configuration file found"):
+        # Patch load_dotenv to prevent .env file from setting CONFIG_PATH
+        with (
+            patch("app.app_config.load_dotenv", return_value=None),
+            pytest.raises(FileNotFoundError, match="No configuration file found"),
+        ):
             Config()
 
 
@@ -59,7 +65,7 @@ class TestConfigLoad:
         """Config should load valid YAML file."""
         mock_config = {"database": {"host": "localhost", "port": 5432}}
 
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config("/fake/config.yaml")
             data = config.load()
 
@@ -71,7 +77,7 @@ class TestConfigLoad:
         """Config should only load file once."""
         mock_config = {"key": "value"}
 
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config) as mock_load:
+        with patch("app.app_config.load_yaml_config", return_value=mock_config) as mock_load:
             config = Config("/fake/config.yaml")
             data1 = config.load()
             data2 = config.load()
@@ -81,7 +87,7 @@ class TestConfigLoad:
 
     def test_load_raises_on_invalid_path(self) -> None:
         """Config should raise RuntimeError for load failures."""
-        with patch("src.app.app_config.load_yaml_config", side_effect=FileNotFoundError("not found")):
+        with patch("app.app_config.load_yaml_config", side_effect=FileNotFoundError("not found")):
             config = Config("/nonexistent/path/config.yaml")
 
             with pytest.raises(RuntimeError, match="Failed to load configuration"):
@@ -99,7 +105,7 @@ class TestConfigGet:
             "features": {"enabled": True},
             "count": 42,
         }
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config("/fake/config.yaml")
             config.load()
         return config
@@ -124,7 +130,7 @@ class TestConfigGet:
         """Get should auto-load config if not loaded."""
         mock_config = {"key": "auto_loaded"}
 
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config("/fake/config.yaml")
             assert config._loaded is False
 
@@ -156,7 +162,7 @@ class TestConfigTypedGetters:
             "path_val": "~/documents/file.txt",
             "path_with_env": "$HOME/config",
         }
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config("/fake/config.yaml")
             config.load()
         return config
@@ -233,7 +239,7 @@ class TestConfigResolvedPath:
         config_file.write_text("key: value")
 
         mock_config = {"key": "value"}
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config(str(config_file))
             resolved = config.resolved_path
 
@@ -243,7 +249,7 @@ class TestConfigResolvedPath:
         """resolved_path should auto-load config."""
         mock_config = {"key": "value"}
 
-        with patch("src.app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_config):
             config = Config("/fake/config.yaml")
             assert config._loaded is False
 

@@ -20,10 +20,10 @@ from unittest.mock import MagicMock
 import allure
 import pytest
 
-from src.core.models.validators import is_empty_year
-from src.core.tracks.year_batch import YearBatchProcessor
-from src.core.tracks.year_retriever import YearRetriever
-from src.core.models.track_models import TrackDict
+from core.models.validators import is_empty_year
+from core.tracks.year_batch import YearBatchProcessor
+from core.tracks.year_retriever import YearRetriever
+from core.models.track_models import TrackDict
 
 # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics

@@ -9,12 +9,12 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from src.core.models.validators import is_valid_year
+from core.models.validators import is_valid_year
 
 if TYPE_CHECKING:
     import logging
 
-    from src.services.api.api_base import ScoredRelease
+    from services.api.api_base import ScoredRelease
 
 
 # Constants for year scoring thresholds

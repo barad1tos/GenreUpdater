@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import allure
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.services.cache.orchestrator import CacheOrchestrator
+from core.models.track_models import TrackDict
+from services.cache.orchestrator import CacheOrchestrator
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheableValue
+    from core.models.protocols import CacheableValue
 
 
 @allure.epic("Music Genre Updater")
@@ -101,7 +101,7 @@ class TestCacheOrchestrator:
         """Test that iCloud cleanup is skipped when disabled in config."""
         orchestrator = self.create_orchestrator({"cache": {"cleanup_icloud_conflicts": False}})
 
-        with patch("src.services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup:
+        with patch("services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup:
             orchestrator._cleanup_icloud_conflicts()
             mock_cleanup.assert_not_called()
 
@@ -121,8 +121,8 @@ class TestCacheOrchestrator:
         )
 
         with (
-            patch("src.services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup,
-            patch("src.services.cache.orchestrator.get_full_log_path", return_value=str(Path(temp_dir) / "cache" / "test.json")),
+            patch("services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup,
+            patch("services.cache.orchestrator.get_full_log_path", return_value=str(Path(temp_dir) / "cache" / "test.json")),
         ):
             # Create the cache directory
             (Path(temp_dir) / "cache").mkdir(parents=True, exist_ok=True)
@@ -492,7 +492,7 @@ class TestCacheOrchestrator:
         """Test that get_last_run_timestamp returns datetime."""
         orchestrator = self.create_orchestrator()
 
-        with patch("src.services.cache.orchestrator.IncrementalRunTracker") as mock_tracker_class:
+        with patch("services.cache.orchestrator.IncrementalRunTracker") as mock_tracker_class:
             mock_tracker = MagicMock()
             mock_tracker.get_last_run_timestamp = AsyncMock(return_value=datetime(2024, 1, 1, tzinfo=UTC))
             mock_tracker_class.return_value = mock_tracker
@@ -508,7 +508,7 @@ class TestCacheOrchestrator:
         """Test that get_last_run_timestamp returns epoch when never run."""
         orchestrator = self.create_orchestrator()
 
-        with patch("src.services.cache.orchestrator.IncrementalRunTracker") as mock_tracker_class:
+        with patch("services.cache.orchestrator.IncrementalRunTracker") as mock_tracker_class:
             mock_tracker = MagicMock()
             mock_tracker.get_last_run_timestamp = AsyncMock(return_value=None)
             mock_tracker_class.return_value = mock_tracker

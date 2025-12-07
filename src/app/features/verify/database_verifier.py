@@ -11,18 +11,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.core.logger import LogFormat, get_full_log_path
+from core.logger import LogFormat, get_full_log_path
 
-from src.core.run_tracking import IncrementalRunTracker
-from src.core.models.types import TrackDict
-from src.metrics.change_reports import load_track_list, save_to_csv
+from core.run_tracking import IncrementalRunTracker
+from core.models.types import TrackDict
+from metrics.change_reports import load_track_list, save_to_csv
 
 # Constants
 LAST_VERIFY_SUFFIX = "_last_verify.txt"
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import AppleScriptClientProtocol
-    from src.metrics import Analytics
+    from core.models.protocols import AppleScriptClientProtocol
+    from metrics import Analytics
 
 
 # noinspection PyTypeChecker

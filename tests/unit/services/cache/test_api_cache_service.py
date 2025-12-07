@@ -13,10 +13,10 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
-from src.core.models.track_models import CachedApiResult
-from src.services.cache.api_cache import ApiCacheService
-from src.services.cache.cache_config import CacheEvent, CacheEventType
-from src.services.cache.hash_service import UnifiedHashService
+from core.models.track_models import CachedApiResult
+from services.cache.api_cache import ApiCacheService
+from services.cache.cache_config import CacheEvent, CacheEventType
+from services.cache.hash_service import UnifiedHashService
 
 
 @allure.epic("Music Genre Updater")
@@ -255,7 +255,7 @@ class TestApiCacheService:
         with (
             allure.step("Mock file operations"),
             patch("pathlib.Path.open") as mock_open,
-            patch("src.core.logger.ensure_directory"),
+            patch("core.logger.ensure_directory"),
         ):
             mock_open.return_value = mock_file
             await service.save_to_disk()
@@ -460,7 +460,7 @@ class TestApiCacheService:
         with (
             allure.step("Mock save failure"),
             patch("pathlib.Path.open", side_effect=OSError("Disk full")),
-            patch("src.core.logger.ensure_directory"),
+            patch("core.logger.ensure_directory"),
             pytest.raises(OSError, match="Disk full"),
         ):
             await service.save_to_disk()

@@ -44,6 +44,8 @@ jobs:
         run: uv run ruff format --check src/ tests/ main.py
 
       - name: Type check with mypy
+        env:
+          MYPYPATH: ${{ github.workspace }}/src
         run: uv run mypy src/ main.py
 
       - name: Security scan with bandit

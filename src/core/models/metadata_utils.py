@@ -23,7 +23,7 @@ from enum import IntEnum, auto
 from pathlib import Path
 from typing import Any
 
-from src.core.models.track_models import TrackDict
+from core.models.track_models import TrackDict
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
 _logged_cleaning_exceptions: set[tuple[str, str]] = set()

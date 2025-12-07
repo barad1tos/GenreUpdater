@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import allure
 import pytest
-from src.app.music_updater import MusicUpdater
-from src.app.orchestrator import Orchestrator
+from app.music_updater import MusicUpdater
+from app.orchestrator import Orchestrator
 
 _TEST_PASSWORD = "test-password"  # noqa: S105 - test-only credential placeholder
 
@@ -126,7 +126,7 @@ class TestOrchestratorAllure:
             orchestrator = Orchestrator(deps)
             args = self.create_mock_args(command="clean_artist", artist="Test Artist")
 
-        with allure.step("Mock Music app as not running"), patch("src.app.orchestrator.is_music_app_running", return_value=False):
+        with allure.step("Mock Music app as not running"), patch("app.orchestrator.is_music_app_running", return_value=False):
             await orchestrator.run_command(args)
 
         with allure.step("Verify error message"):
@@ -160,7 +160,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(dry_run=dry_run, test_mode=test_mode)
 
-        with allure.step("Run command with dry-run/test mode"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Run command with dry-run/test mode"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify dry-run context was set"):
@@ -187,7 +187,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(command="clean_artist", artist="Test Artist", force=True)
 
-        with allure.step("Execute clean artist command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute clean artist command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify clean artist was called with only artist kwarg"):
@@ -213,7 +213,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(command="update_years", artist="Test Artist", force=True)
 
-        with allure.step("Execute update years command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute update years command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify update years was called"):
@@ -238,7 +238,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(command="revert_years", artist="Test Artist", album="Test Album", backup_csv="backup.csv")
 
-        with allure.step("Execute revert years command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute revert years command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify revert years was called"):
@@ -264,7 +264,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(command="verify_database", force=True)
 
-        with allure.step("Execute verify database command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute verify database command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify database verification was called"):
@@ -291,7 +291,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args()
 
-        with allure.step("Execute default command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute default command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify main pipeline was called"):
@@ -320,8 +320,8 @@ class TestOrchestratorAllure:
 
         with (
             allure.step("Mock BatchProcessor"),
-            patch("src.app.orchestrator.is_music_app_running", return_value=True),
-            patch("src.app.orchestrator.BatchProcessor") as mock_batch_processor_class,
+            patch("app.orchestrator.is_music_app_running", return_value=True),
+            patch("app.orchestrator.BatchProcessor") as mock_batch_processor_class,
         ):
             mock_batch_processor = Mock()
             mock_batch_processor.process_from_file = AsyncMock()
@@ -362,7 +362,7 @@ class TestOrchestratorAllure:
         mock_secure_config = Mock()
         with (
             allure.step("Mock SecureConfig and file operations"),
-            patch("src.app.orchestrator.SecureConfig", return_value=mock_secure_config),
+            patch("app.orchestrator.SecureConfig", return_value=mock_secure_config),
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.open", MagicMock()),
             patch(
@@ -409,7 +409,7 @@ class TestOrchestratorAllure:
 
         with (
             allure.step("Mock SecureConfig to raise error"),
-            patch("src.app.orchestrator.SecureConfig") as mock_secure_config_class,
+            patch("app.orchestrator.SecureConfig") as mock_secure_config_class,
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.open", side_effect=OSError("File error")),
         ):
@@ -443,7 +443,7 @@ class TestOrchestratorAllure:
 
             args = self.create_mock_args(test_mode=True)
 
-        with allure.step("Execute in test mode"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute in test mode"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify test mode execution"):
@@ -477,7 +477,7 @@ class TestOrchestratorAllure:
             # Normal mode but with test_artists in config
             args = self.create_mock_args()
 
-        with allure.step("Execute command"), patch("src.app.orchestrator.is_music_app_running", return_value=True):
+        with allure.step("Execute command"), patch("app.orchestrator.is_music_app_running", return_value=True):
             await orchestrator.run_command(args)
 
         with allure.step("Verify test artists were applied"):

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.run_tracking import IncrementalRunTracker
+from core.run_tracking import IncrementalRunTracker
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ class TestUpdateLastRunTimestamp:
     @pytest.mark.asyncio
     async def test_handles_write_error_gracefully(self, tracker: IncrementalRunTracker, caplog: pytest.LogCaptureFixture) -> None:
         """Should log warning on write error without raising."""
-        with patch("src.core.run_tracking.Path.open", side_effect=OSError("Permission denied")):
+        with patch("core.run_tracking.Path.open", side_effect=OSError("Permission denied")):
             with caplog.at_level(logging.WARNING):
                 # Should not raise
                 await tracker.update_last_run_timestamp()
@@ -153,7 +153,7 @@ class TestGetLastRunTimestamp:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(datetime.now(UTC).isoformat())
 
-        with patch("src.core.run_tracking.Path.open", side_effect=OSError("Read error")):
+        with patch("core.run_tracking.Path.open", side_effect=OSError("Read error")):
             with caplog.at_level(logging.WARNING):
                 result = await tracker.get_last_run_timestamp()
 

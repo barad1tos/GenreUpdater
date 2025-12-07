@@ -5,9 +5,9 @@ import os
 import re
 from typing import Any, TypeGuard
 
-from src.core.models.track_models import CodeActionExtended as CodeAction
-from src.core.models.track_models import ScriptActionExtended as ScriptAction
-from src.core.models.track_models import TrackDict
+from core.models.track_models import CodeActionExtended as CodeAction
+from core.models.track_models import ScriptActionExtended as ScriptAction
+from core.models.track_models import TrackDict
 
 ActionType = ScriptAction | CodeAction
 

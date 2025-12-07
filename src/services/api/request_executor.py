@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheServiceProtocol
-    from src.services.api.api_base import EnhancedRateLimiter
+    from core.models.protocols import CacheServiceProtocol
+    from services.api.api_base import EnhancedRateLimiter
 
 
 # Constants

@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import yaml
 
-from src.app.features.batch.batch_processor import BatchProcessor
-from src.app.music_updater import MusicUpdater
-from src.core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from app.features.batch.batch_processor import BatchProcessor
+from app.music_updater import MusicUpdater
+from core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
+from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 if TYPE_CHECKING:
-    from src.services.dependency_container import DependencyContainer
+    from services.dependency_container import DependencyContainer
 
 
 class Orchestrator:

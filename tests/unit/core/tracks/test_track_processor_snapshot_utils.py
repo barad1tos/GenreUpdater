@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.core.tracks.track_processor import TrackProcessor
-from src.core.models.track_models import TrackDict
+from core.tracks.track_processor import TrackProcessor
+from core.models.track_models import TrackDict
 
 
 def test_merge_tracks_replaces_and_appends() -> None:

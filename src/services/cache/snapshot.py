@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import AppleScriptClientProtocol
+    from core.models.protocols import AppleScriptClientProtocol
 
-from src.services.cache.json_utils import dumps_json, loads_json
-from src.core.tracks.track_delta import TrackDelta, has_track_changed
-from src.core.logger import ensure_directory, spinner
-from src.core.models.track_models import TrackDict
+from services.cache.json_utils import dumps_json, loads_json
+from core.tracks.track_delta import TrackDelta, has_track_changed
+from core.logger import ensure_directory, spinner
+from core.models.track_models import TrackDict
 
 SNAPSHOT_VERSION = "1.0"
 DEFAULT_MAX_AGE_HOURS = 24

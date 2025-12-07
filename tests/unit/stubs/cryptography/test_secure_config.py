@@ -10,13 +10,13 @@ from unittest.mock import patch
 import pytest
 from cryptography.fernet import Fernet
 
-from src.app.features.crypto.exceptions import (
+from app.features.crypto.exceptions import (
     CryptographyError,
     DecryptionError,
     EncryptionError,
     InvalidTokenError,
 )
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
 @pytest.fixture

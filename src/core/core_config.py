@@ -13,9 +13,9 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from src.core.exceptions import ConfigurationError
-from src.core.retry_handler import ConfigurationRetryHandler
-from src.core.models.track_models import AppConfig
+from core.exceptions import ConfigurationError
+from core.retry_handler import ConfigurationRetryHandler
+from core.models.track_models import AppConfig
 
 # Type definitions for configuration
 ConfigValue = dict[str, Any] | list[Any] | str | int | float | bool | None

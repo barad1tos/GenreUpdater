@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from src.services.api.lastfm import LastFmClient
+from services.api.lastfm import LastFmClient
 
 from tests.mocks.csv_mock import MockLogger
 

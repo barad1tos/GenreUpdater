@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
-from src.core.models.metadata_utils import parse_tracks
-from src.services.apple.applescript_client import NO_TRACKS_FOUND
+from core.models.metadata_utils import parse_tracks
+from services.apple.applescript_client import NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable, Callable
 
-    from src.core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
-    from src.core.models.track_models import TrackDict
-    from src.metrics import Analytics
+    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.track_models import TrackDict
+    from metrics import Analytics
 
 
 # Maximum consecutive parse failures before aborting batch processing

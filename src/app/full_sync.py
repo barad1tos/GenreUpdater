@@ -8,7 +8,7 @@ Usage:
     python -m src.application.full_sync
 
 Or from project root:
-    python -c "import asyncio; from src.app.full_sync import main; asyncio.run(main())"
+    python -c "import asyncio; from app.full_sync import main; asyncio.run(main())"
 """
 
 import asyncio
@@ -18,9 +18,9 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from src.core.core_config import load_config
-from src.core.logger import get_loggers
-from src.core.models.protocols import CacheServiceProtocol
+from core.core_config import load_config
+from core.logger import get_loggers
+from core.models.protocols import CacheServiceProtocol
 
 # Add project root to path if needed
 project_root = Path(__file__).parent.parent.parent
@@ -28,15 +28,15 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Import after path setup to avoid import errors
-from src.app.music_updater import MusicUpdater  # noqa: E402
-from src.services.dependency_container import DependencyContainer  # noqa: E402
-from src.core.logger import get_full_log_path  # noqa: E402
-from src.core.models.metadata_utils import is_music_app_running  # noqa: E402
-from src.metrics.change_reports import sync_track_list_with_current  # noqa: E402
+from app.music_updater import MusicUpdater  # noqa: E402
+from services.dependency_container import DependencyContainer  # noqa: E402
+from core.logger import get_full_log_path  # noqa: E402
+from core.models.metadata_utils import is_music_app_running  # noqa: E402
+from metrics.change_reports import sync_track_list_with_current  # noqa: E402
 
 if TYPE_CHECKING:
-    from src.core.tracks.track_processor import TrackProcessor
-    from src.services.cache.orchestrator import CacheOrchestrator
+    from core.tracks.track_processor import TrackProcessor
+    from services.cache.orchestrator import CacheOrchestrator
 
 
 # noinspection PyArgumentEqualDefault

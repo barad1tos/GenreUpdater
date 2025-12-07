@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.app.full_sync import main, run_full_resync
+from app.full_sync import main, run_full_resync
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,7 +68,7 @@ class TestRunFullResync:
         mock_track_processor: MagicMock,
     ) -> None:
         """Should exit early when Music.app is not running."""
-        with patch("src.app.full_sync.is_music_app_running", return_value=False) as mock_check:
+        with patch("app.full_sync.is_music_app_running", return_value=False) as mock_check:
             await run_full_resync(
                 console_logger,
                 error_logger,
@@ -94,8 +94,8 @@ class TestRunFullResync:
         mock_track_processor.fetch_tracks_async.return_value = []
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.sync_track_list_with_current") as mock_sync,
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.sync_track_list_with_current") as mock_sync,
             caplog.at_level(logging.WARNING),
         ):
             await run_full_resync(
@@ -125,9 +125,9 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
-            patch("src.app.full_sync.sync_track_list_with_current", new_callable=AsyncMock) as mock_sync,
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock) as mock_sync,
             caplog.at_level(logging.INFO),
         ):
             await run_full_resync(
@@ -161,10 +161,10 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
             patch(
-                "src.app.full_sync.sync_track_list_with_current",
+                "app.full_sync.sync_track_list_with_current",
                 new_callable=AsyncMock,
                 side_effect=OSError("Disk full"),
             ),
@@ -192,10 +192,10 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
             patch(
-                "src.app.full_sync.sync_track_list_with_current",
+                "app.full_sync.sync_track_list_with_current",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("Unexpected error"),
             ),
@@ -224,9 +224,9 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
-            patch("src.app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
             caplog.at_level(logging.INFO),
         ):
             await run_full_resync(
@@ -254,10 +254,10 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
             patch(
-                "src.app.full_sync.sync_track_list_with_current",
+                "app.full_sync.sync_track_list_with_current",
                 new_callable=AsyncMock,
                 side_effect=ValueError("Invalid config"),
             ),
@@ -286,10 +286,10 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
             patch(
-                "src.app.full_sync.sync_track_list_with_current",
+                "app.full_sync.sync_track_list_with_current",
                 new_callable=AsyncMock,
                 side_effect=OSError("Test error"),
             ),
@@ -320,7 +320,7 @@ class TestRunFullResync:
         mock_track_processor.fetch_tracks_async.return_value = []
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.is_music_app_running", return_value=True),
             caplog.at_level(logging.INFO),
         ):
             await run_full_resync(
@@ -345,7 +345,7 @@ class TestRunFullResync:
     ) -> None:
         """Should log starting message."""
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=False),
+            patch("app.full_sync.is_music_app_running", return_value=False),
             caplog.at_level(logging.INFO),
         ):
             await run_full_resync(
@@ -373,9 +373,9 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
-            patch("src.app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
             caplog.at_level(logging.INFO),
         ):
             await run_full_resync(
@@ -404,9 +404,9 @@ class TestRunFullResync:
         mock_track_processor.ap_client = mock_ap_client
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
-            patch("src.app.full_sync.sync_track_list_with_current", new_callable=AsyncMock) as mock_sync,
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock) as mock_sync,
         ):
             await run_full_resync(
                 console_logger,
@@ -432,9 +432,9 @@ class TestRunFullResync:
         csv_path = str(tmp_path / "new_dir" / "track_list.csv")
 
         with (
-            patch("src.app.full_sync.is_music_app_running", return_value=True),
-            patch("src.app.full_sync.get_full_log_path", return_value=csv_path),
-            patch("src.app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=csv_path),
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock),
         ):
             await run_full_resync(
                 console_logger,
@@ -458,7 +458,7 @@ class TestMain:
     ) -> None:
         """Should exit when config file not found."""
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.project_root", tmp_path),
             pytest.raises(SystemExit) as exc_info,
         ):
             await main()
@@ -486,12 +486,12 @@ class TestMain:
         mock_updater.track_processor = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -517,12 +517,12 @@ class TestMain:
         mock_updater.track_processor = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -545,10 +545,10 @@ class TestMain:
         mock_deps.close = AsyncMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
             pytest.raises(SystemExit) as exc_info,
         ):
             await main()
@@ -572,10 +572,10 @@ class TestMain:
         mock_deps.close = AsyncMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
             pytest.raises(SystemExit) as exc_info,
         ):
             await main()
@@ -599,10 +599,10 @@ class TestMain:
         mock_deps.close = AsyncMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
             pytest.raises(SystemExit) as exc_info,
         ):
             await main()
@@ -626,10 +626,10 @@ class TestMain:
         mock_deps.close = AsyncMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
             pytest.raises(SystemExit) as exc_info,
         ):
             await main()
@@ -657,12 +657,12 @@ class TestMain:
         mock_updater.track_processor = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -689,12 +689,12 @@ class TestMain:
         mock_listener = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), mock_listener)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), mock_listener)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -723,12 +723,12 @@ class TestMain:
         mock_listener.stop.side_effect = RuntimeError("Listener error")
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), mock_listener)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), mock_listener)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -755,12 +755,12 @@ class TestMain:
         mock_updater.track_processor = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
@@ -788,12 +788,12 @@ class TestMain:
         mock_updater.track_processor = MagicMock()
 
         with (
-            patch("src.app.full_sync.project_root", tmp_path),
-            patch("src.app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("src.app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
-            patch("src.app.full_sync.DependencyContainer", return_value=mock_deps),
-            patch("src.app.full_sync.MusicUpdater", return_value=mock_updater),
-            patch("src.app.full_sync.run_full_resync", new_callable=AsyncMock),
+            patch("app.full_sync.project_root", tmp_path),
+            patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
+            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.DependencyContainer", return_value=mock_deps),
+            patch("app.full_sync.MusicUpdater", return_value=mock_updater),
+            patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 

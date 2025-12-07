@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.core.models.track_models import ChangeLogEntry
-from src.metrics.change_reports import (
+from core.models.track_models import ChangeLogEntry
+from metrics.change_reports import (
     ChangeType,
     Color,
     Format,
@@ -627,7 +627,7 @@ class TestSaveUnifiedChangesReport:
         error_logger: MagicMock,
     ) -> None:
         """Test empty changes prints no changes summary."""
-        with patch("src.metrics.change_reports._print_no_changes_summary") as mock_print:
+        with patch("metrics.change_reports._print_no_changes_summary") as mock_print:
             save_unified_changes_report([], None, console_logger, error_logger)
             mock_print.assert_called_once()
 
@@ -641,7 +641,7 @@ class TestSaveUnifiedChangesReport:
         changes: list[dict[str, Any]] = [
             {"change_type": "genre_update", "old_genre": "Rock", "new_genre": "Rock"},
         ]
-        with patch("src.metrics.change_reports._print_no_changes_summary") as mock_print:
+        with patch("metrics.change_reports._print_no_changes_summary") as mock_print:
             save_unified_changes_report(changes, None, console_logger, error_logger)
             mock_print.assert_called_once()
 
@@ -828,7 +828,7 @@ class TestSaveChangesReport:
                 "new_genre": "Metal",
             },
         ]
-        with patch("src.metrics.change_reports.save_unified_changes_report") as mock_save:
+        with patch("metrics.change_reports.save_unified_changes_report") as mock_save:
             save_changes_report(changes, str(file_path), console_logger, error_logger)
             # Check that compact_mode=True was passed
             call_args = mock_save.call_args

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from src.services.api.request_executor import (
+from services.api.request_executor import (
     API_RESPONSE_LOG_LIMIT,
     HTTP_SERVER_ERROR,
     HTTP_TOO_MANY_REQUESTS,
@@ -17,8 +17,8 @@ from src.services.api.request_executor import (
 )
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheServiceProtocol
-    from src.services.api.api_base import EnhancedRateLimiter
+    from core.models.protocols import CacheServiceProtocol
+    from services.api.api_base import EnhancedRateLimiter
 
 # Test API token (not a real credential)
 TEST_API_TOKEN = "test_token"  # noqa: S105

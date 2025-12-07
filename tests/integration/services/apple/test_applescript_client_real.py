@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from src.app.app_config import Config
-from src.metrics.analytics import Analytics, LoggerContainer
-from src.services.apple.applescript_client import AppleScriptClient
+from app.app_config import Config
+from metrics.analytics import Analytics, LoggerContainer
+from services.apple.applescript_client import AppleScriptClient
 
 
 def is_music_app_running() -> bool:

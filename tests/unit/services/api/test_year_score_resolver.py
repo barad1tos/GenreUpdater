@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from src.services.api.api_base import ScoredRelease
-from src.services.api.year_score_resolver import (
+from services.api.api_base import ScoredRelease
+from services.api.year_score_resolver import (
     MAX_LOGGED_YEARS,
     MIN_REISSUE_YEAR_DIFFERENCE,
     MIN_YEAR_GAP_FOR_REISSUE_DETECTION,

@@ -11,16 +11,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.core import debug_utils
-from src.core.models.track_models import ChangeLogEntry, TrackDict
-from src.core.tracks.year_batch import YearBatchProcessor
-from src.core.tracks.year_consistency import (
+from core import debug_utils
+from core.models.track_models import ChangeLogEntry, TrackDict
+from core.tracks.year_batch import YearBatchProcessor
+from core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,
 )
-from src.core.tracks.year_retriever import YearRetriever
+from core.tracks.year_retriever import YearRetriever
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import (
+    from core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
@@ -676,7 +676,7 @@ class TestGetAvailableTracks:
 
     def test_filters_prerelease_tracks(self) -> None:
         """Test filters out prerelease tracks using can_edit_metadata."""
-        from src.core.models.track_status import can_edit_metadata
+        from core.models.track_status import can_edit_metadata
 
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="2020", track_status="subscription"),
@@ -1633,7 +1633,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
 
     def test_skips_tracks_without_id(self) -> None:
         """Test skips tracks without ID."""
-        from src.core.models.track_status import can_edit_metadata
+        from core.models.track_status import can_edit_metadata
 
         tracks = [
             TrackDict(id="", name="T1", artist="A", album="Al", genre="R", year=""),
@@ -1649,7 +1649,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
 
     def test_skips_duplicate_track_ids(self) -> None:
         """Test skips duplicate track IDs."""
-        from src.core.models.track_status import can_edit_metadata
+        from core.models.track_status import can_edit_metadata
 
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year=""),
@@ -1671,7 +1671,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
 
     def test_skips_read_only_tracks(self) -> None:
         """Test skips read-only tracks (prerelease status)."""
-        from src.core.models.track_status import can_edit_metadata
+        from core.models.track_status import can_edit_metadata
 
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="", track_status="Prerelease"),

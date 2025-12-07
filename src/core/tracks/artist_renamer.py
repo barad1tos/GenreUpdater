@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from src.core.models.track_status import can_edit_metadata
-from src.core.models.validators import SecurityValidationError
+from core.models.track_status import can_edit_metadata
+from core.models.validators import SecurityValidationError
 
 if TYPE_CHECKING:
     import logging
     from pathlib import Path
 
-    from src.core.tracks.track_processor import TrackProcessor
-    from src.core.models.track_models import TrackDict
+    from core.tracks.track_processor import TrackProcessor
+    from core.models.track_models import TrackDict
 
 
 def _load_mapping(path: Path, error_logger: logging.Logger) -> dict[str, str]:

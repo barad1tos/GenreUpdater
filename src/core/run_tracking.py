@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from src.core.logger import get_full_log_path
+from core.logger import get_full_log_path
 
 
 # noinspection PyTypeChecker

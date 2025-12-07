@@ -10,17 +10,17 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.core.models.metadata_utils import (
+from core.models.metadata_utils import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
 )
-from src.core.models.track_models import ChangeLogEntry, TrackDict
-from src.core.models.track_status import can_edit_metadata, normalize_track_status
+from core.models.track_models import ChangeLogEntry, TrackDict
+from core.models.track_status import can_edit_metadata, normalize_track_status
 
 from .track_base import BaseProcessor
 
 if TYPE_CHECKING:
-    from src.metrics import Analytics
+    from metrics import Analytics
 
     from .track_processor import TrackProcessor
 

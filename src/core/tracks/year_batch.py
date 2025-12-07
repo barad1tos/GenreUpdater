@@ -22,13 +22,13 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from src.core.models.track_models import ChangeLogEntry
-from src.core.models.track_status import (
+from core.models.track_models import ChangeLogEntry
+from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
     is_subscription_status,
 )
-from src.core.models.validators import is_empty_year
+from core.models.validators import is_empty_year
 
 from .year_determination import YearDeterminator
 from .year_utils import normalize_collaboration_artist, resolve_positive_int
@@ -37,9 +37,9 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
-    from src.core.models.track_models import TrackDict
-    from src.core.tracks.track_processor import TrackProcessor
-    from src.metrics import Analytics
+    from core.models.track_models import TrackDict
+    from core.tracks.track_processor import TrackProcessor
+    from metrics import Analytics
 
 
 _PROGRESS_DESCRIPTION = "Processing albums"

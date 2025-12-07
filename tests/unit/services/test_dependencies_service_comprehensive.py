@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from src.services.dependency_container import (
+from services.dependency_container import (
     DependencyContainer,
 )
 
@@ -84,11 +84,11 @@ class TestDependencyContainer:
         """Test service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),
-            patch("src.services.dependency_container.Analytics") as mock_analytics,
-            patch("src.services.dependency_container.CacheOrchestrator") as mock_cache,
-            patch("src.services.dependency_container.PendingVerificationService") as mock_pending,
-            patch("src.services.dependency_container.LibrarySnapshotService") as mock_snapshot,
-            patch("src.services.dependency_container.create_external_api_orchestrator") as mock_api,
+            patch("services.dependency_container.Analytics") as mock_analytics,
+            patch("services.dependency_container.CacheOrchestrator") as mock_cache,
+            patch("services.dependency_container.PendingVerificationService") as mock_pending,
+            patch("services.dependency_container.LibrarySnapshotService") as mock_snapshot,
+            patch("services.dependency_container.create_external_api_orchestrator") as mock_api,
             patch.object(container, "_initialize_apple_script_client") as mock_init_ap,
         ):
             # Set up mock services
@@ -153,11 +153,11 @@ class TestDependencyContainer:
         # or create a test helper that doesn't use private methods
         with (
             patch.object(container, "_load_config", return_value={}),
-            patch("src.services.dependency_container.Analytics"),
-            patch("src.services.dependency_container.CacheOrchestrator") as mock_cache,
-            patch("src.services.dependency_container.LibrarySnapshotService") as mock_snapshot,
-            patch("src.services.dependency_container.PendingVerificationService") as mock_pending,
-            patch("src.services.dependency_container.create_external_api_orchestrator") as mock_api,
+            patch("services.dependency_container.Analytics"),
+            patch("services.dependency_container.CacheOrchestrator") as mock_cache,
+            patch("services.dependency_container.LibrarySnapshotService") as mock_snapshot,
+            patch("services.dependency_container.PendingVerificationService") as mock_pending,
+            patch("services.dependency_container.create_external_api_orchestrator") as mock_api,
         ):
             mock_cache_instance = MagicMock()
             mock_cache_instance.initialize = AsyncMock()
@@ -229,8 +229,8 @@ class TestDependencyContainer:
             patch.object(container, "_config", mock_config),
             patch.object(container, "_dry_run", True),
             patch.object(container, "_analytics", MagicMock()),
-            patch("src.services.dependency_container.AppleScriptClient") as mock_client,
-            patch("src.services.dependency_container.DryRunAppleScriptClient"),
+            patch("services.dependency_container.AppleScriptClient") as mock_client,
+            patch("services.dependency_container.DryRunAppleScriptClient"),
         ):
             mock_client_instance = MagicMock()
             mock_client.return_value = mock_client_instance
@@ -246,7 +246,7 @@ class TestDependencyContainer:
             patch.object(container, "_config", mock_config),
             patch.object(container, "_dry_run", False),
             patch.object(container, "_analytics", MagicMock()),
-            patch("src.services.dependency_container.AppleScriptClient") as mock_client,
+            patch("services.dependency_container.AppleScriptClient") as mock_client,
         ):
             mock_client_instance = MagicMock()
             mock_client.return_value = mock_client_instance
@@ -322,7 +322,7 @@ class TestDependencyContainer:
     def test_load_config(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
         """Test configuration loading."""
         with patch(
-            "src.services.dependency_container.load_config",
+            "services.dependency_container.load_config",
             return_value=mock_config,
         ):
             # Test through public interface
@@ -332,7 +332,7 @@ class TestDependencyContainer:
     def test_load_config_file_not_found(self, container: DependencyContainer) -> None:
         """Test configuration loading when file not found."""
         with patch(
-            "src.services.dependency_container.load_config",
+            "services.dependency_container.load_config",
             side_effect=FileNotFoundError("Not found"),
         ):
             # Test through public interface
@@ -342,7 +342,7 @@ class TestDependencyContainer:
     def test_load_config_yaml_error(self, container: DependencyContainer) -> None:
         """Test configuration loading with YAML error."""
         with patch(
-            "src.services.dependency_container.load_config",
+            "services.dependency_container.load_config",
             side_effect=Exception("Invalid YAML"),  # Use generic Exception instead of yaml.YAMLError
         ):
             # Test through public interface
@@ -494,10 +494,10 @@ class TestDependencyContainer:
         """Test concurrent service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),
-            patch("src.services.dependency_container.Analytics"),
-            patch("src.services.dependency_container.CacheOrchestrator"),
-            patch("src.services.dependency_container.PendingVerificationService"),
-            patch("src.services.dependency_container.create_external_api_orchestrator"),
+            patch("services.dependency_container.Analytics"),
+            patch("services.dependency_container.CacheOrchestrator"),
+            patch("services.dependency_container.PendingVerificationService"),
+            patch("services.dependency_container.create_external_api_orchestrator"),
             patch.object(container, "_initialize_apple_script_client") as mock_init_ap,
             patch.object(container, "_ap_client", AsyncMock()),
         ):

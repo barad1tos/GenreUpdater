@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from src.core.core_config import (
+from core.core_config import (
     REQUIRED_ENV_VARS,
     _read_and_parse_config,
     _validate_config_data_type,
@@ -353,7 +353,7 @@ class TestLoadConfigWithFallback:
 
     def test_delegates_to_retry_handler(self) -> None:
         """Should delegate to ConfigurationRetryHandler."""
-        with patch("src.core.core_config.ConfigurationRetryHandler") as mock_handler_class:
+        with patch("core.core_config.ConfigurationRetryHandler") as mock_handler_class:
             mock_handler = MagicMock()
             mock_handler.load_config_with_fallback.return_value = {"key": "value"}
             mock_handler_class.return_value = mock_handler

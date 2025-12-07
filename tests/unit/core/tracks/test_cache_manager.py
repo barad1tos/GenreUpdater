@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.tracks.cache_manager import TrackCacheManager
-from src.services.cache.snapshot import LibraryCacheMetadata
+from core.models.track_models import TrackDict
+from core.tracks.cache_manager import TrackCacheManager
+from services.cache.snapshot import LibraryCacheMetadata
 
 if TYPE_CHECKING:
-    from src.core.models.protocols import CacheServiceProtocol
+    from core.models.protocols import CacheServiceProtocol
 
 
 @pytest.fixture
@@ -384,7 +384,7 @@ class TestUpdateSnapshot:
         )
 
         # Patch _now() to return consistent time (avoids naive/aware mismatch)
-        with patch("src.services.cache.snapshot._now", return_value=fixed_time):
+        with patch("services.cache.snapshot._now", return_value=fixed_time):
             await manager.update_snapshot(sample_tracks, processed_track_ids=["1", "2"])
 
         mock_snapshot.save_delta.assert_called_once()

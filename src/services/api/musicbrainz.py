@@ -10,8 +10,8 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict, cast
 
-from src.core.models.track_models import MBArtist
-from src.metrics import Analytics
+from core.models.track_models import MBArtist
+from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
 

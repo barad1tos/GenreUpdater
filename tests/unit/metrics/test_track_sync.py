@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.models.types import TrackDict
-from src.metrics.track_sync import (
+from core.models.types import TrackDict
+from metrics.track_sync import (
     _FIELD_COUNT_WITH_ALBUM_ARTIST,
     _FIELD_COUNT_WITHOUT_ALBUM_ARTIST,
     _build_osascript_command,
@@ -229,7 +229,7 @@ class TestLoadTrackList:
         csv_file = tmp_path / "tracks.csv"
         csv_file.write_text("id,name\n1,Test")
 
-        with patch("src.metrics.track_sync.Path.open", side_effect=OSError("Read error")):
+        with patch("metrics.track_sync.Path.open", side_effect=OSError("Read error")):
             result = load_track_list(str(csv_file))
 
         assert result == {}
@@ -639,7 +639,7 @@ class TestSaveTrackMapToCsv:
         track_map = {"20": track1, "10": track2}
         csv_path = str(tmp_path / "output.csv")
 
-        with patch("src.metrics.track_sync.save_csv") as mock_save:
+        with patch("metrics.track_sync.save_csv") as mock_save:
             save_track_map_to_csv(track_map, csv_path, console_logger, error_logger)
 
             mock_save.assert_called_once()
@@ -659,7 +659,7 @@ class TestBuildCurrentMap:
         error_logger: logging.Logger,
     ) -> None:
         """Should build map from track list."""
-        from src.metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_current_map
 
         tracks = [_create_test_track("11", artist="Test Artist", album="Test Album")]
         processed_albums: dict[str, str] = {}
@@ -676,7 +676,7 @@ class TestBuildCurrentMap:
         error_logger: logging.Logger,
     ) -> None:
         """Should skip tracks without id."""
-        from src.metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_current_map
 
         track = TrackDict(id="", name="No ID", artist="Artist", album="Album")
         tracks = [track]
@@ -693,7 +693,7 @@ class TestBuildCurrentMap:
         error_logger: logging.Logger,
     ) -> None:
         """Should handle partial sync with processed albums."""
-        from src.metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_current_map
 
         tracks = [_create_test_track("12", artist="Test", album="Album2", new_year=None)]
         processed_albums = {"Test|Album2": "2023"}
@@ -714,7 +714,7 @@ class TestHandlePartialSyncCache:
         error_logger: logging.Logger,
     ) -> None:
         """Should skip when album not in processed albums."""
-        from src.metrics.track_sync import _handle_partial_sync_cache
+        from metrics.track_sync import _handle_partial_sync_cache
 
         track = _create_test_track("13", new_year=None)
         processed_albums: dict[str, str] = {}
@@ -730,7 +730,7 @@ class TestHandlePartialSyncCache:
         error_logger: logging.Logger,
     ) -> None:
         """Should update new_year from processed albums."""
-        from src.metrics.track_sync import _handle_partial_sync_cache
+        from metrics.track_sync import _handle_partial_sync_cache
 
         track = _create_test_track("14", new_year=None)
         processed_albums = {"Artist|Album": "2023"}
@@ -749,7 +749,7 @@ class TestHandlePartialSyncCache:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Should handle cache errors gracefully."""
-        from src.metrics.track_sync import _handle_partial_sync_cache
+        from metrics.track_sync import _handle_partial_sync_cache
 
         track = _create_test_track("15", new_year=None)
         processed_albums = {"Artist|Album": "2023"}
@@ -767,9 +767,9 @@ class TestExecuteOsascriptProcess:
     @pytest.mark.asyncio
     async def test_executes_command(self) -> None:
         """Should execute osascript command."""
-        from src.metrics.track_sync import _execute_osascript_process
+        from metrics.track_sync import _execute_osascript_process
 
-        with patch("src.metrics.track_sync.asyncio.create_subprocess_exec") as mock_exec:
+        with patch("metrics.track_sync.asyncio.create_subprocess_exec") as mock_exec:
             mock_process = AsyncMock()
             mock_process.returncode = 0
             mock_process.communicate = AsyncMock(return_value=(b"output", b""))
@@ -787,9 +787,9 @@ class TestFetchTrackFieldsDirect:
     @pytest.mark.asyncio
     async def test_returns_empty_on_error(self) -> None:
         """Should return empty dict on subprocess error."""
-        from src.metrics.track_sync import _fetch_track_fields_direct
+        from metrics.track_sync import _fetch_track_fields_direct
 
-        with patch("src.metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
+        with patch("metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
             mock_exec.side_effect = OSError("Failed")
 
             result = await _fetch_track_fields_direct("/path/to/script.scpt", None)
@@ -799,10 +799,10 @@ class TestFetchTrackFieldsDirect:
     @pytest.mark.asyncio
     async def test_parses_successful_output(self) -> None:
         """Should parse successful osascript output."""
-        from src.metrics.track_sync import _fetch_track_fields_direct
+        from metrics.track_sync import _fetch_track_fields_direct
 
         output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\tOK\t2020\t2021\tnew"
-        with patch("src.metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
+        with patch("metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = (0, output.encode(), b"")
 
             result = await _fetch_track_fields_direct("/path/to/script.scpt", None)
@@ -819,7 +819,7 @@ class TestFetchMissingTrackFieldsForSync:
         console_logger: logging.Logger,
     ) -> None:
         """Should return empty dict when all fields present."""
-        from src.metrics.track_sync import _fetch_missing_track_fields_for_sync
+        from metrics.track_sync import _fetch_missing_track_fields_for_sync
 
         tracks = [_create_test_track("16")]
 
@@ -833,14 +833,14 @@ class TestFetchMissingTrackFieldsForSync:
         console_logger: logging.Logger,
     ) -> None:
         """Should fetch fields when missing."""
-        from src.metrics.track_sync import _fetch_missing_track_fields_for_sync
+        from metrics.track_sync import _fetch_missing_track_fields_for_sync
 
         track = _create_test_track("17", date_added=None)
         tracks = [track]
         mock_client = MagicMock()
         mock_client.apple_scripts_dir = "/path/to/scripts"
 
-        with patch("src.metrics.track_sync._fetch_track_fields_direct", new_callable=AsyncMock) as mock_fetch:
+        with patch("metrics.track_sync._fetch_track_fields_direct", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = {"17": {"date_added": "2024-01-01"}}
 
             result = await _fetch_missing_track_fields_for_sync(tracks, mock_client, console_logger)
@@ -860,12 +860,12 @@ class TestSyncTrackListWithCurrent:
         error_logger: logging.Logger,
     ) -> None:
         """Should sync tracks to CSV file."""
-        from src.metrics.track_sync import sync_track_list_with_current
+        from metrics.track_sync import sync_track_list_with_current
 
         tracks = [_create_test_track("18", artist="Sync Artist", album="Sync Album")]
         csv_path = str(tmp_path / "sync_test.csv")
 
-        with patch("src.metrics.track_sync.save_csv"):
+        with patch("metrics.track_sync.save_csv"):
             await sync_track_list_with_current(tracks, csv_path, mock_cache_service, console_logger, error_logger)
 
     @pytest.mark.asyncio
@@ -877,7 +877,7 @@ class TestSyncTrackListWithCurrent:
         error_logger: logging.Logger,
     ) -> None:
         """Should remove tracks that no longer exist."""
-        from src.metrics.track_sync import sync_track_list_with_current
+        from metrics.track_sync import sync_track_list_with_current
 
         csv_file = tmp_path / "tracks.csv"
         csv_file.write_text(
@@ -886,5 +886,5 @@ class TestSyncTrackListWithCurrent:
         )
         tracks = [_create_test_track("19", artist="New Artist")]
 
-        with patch("src.metrics.track_sync.save_csv"):
+        with patch("metrics.track_sync.save_csv"):
             await sync_track_list_with_current(tracks, str(csv_file), mock_cache_service, console_logger, error_logger)

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.app.features.batch.batch_processor import BatchProcessor
+from app.features.batch.batch_processor import BatchProcessor
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
+from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
 
 
 @pytest.fixture

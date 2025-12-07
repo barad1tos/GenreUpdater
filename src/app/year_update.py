@@ -8,19 +8,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.core.logger import get_full_log_path
-from src.core.models import year_repair as repair_utils
-from src.core.models.track_models import ChangeLogEntry
-from src.metrics.change_reports import save_changes_report
+from core.logger import get_full_log_path
+from core.models import year_repair as repair_utils
+from core.models.track_models import ChangeLogEntry
+from metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
     import logging
     from typing import Any
 
-    from src.app.pipeline_snapshot import PipelineSnapshotManager
-    from src.core.models.track_models import TrackDict
-    from src.core.tracks.track_processor import TrackProcessor
-    from src.core.tracks.year_retriever import YearRetriever
+    from app.pipeline_snapshot import PipelineSnapshotManager
+    from core.models.track_models import TrackDict
+    from core.tracks.track_processor import TrackProcessor
+    from core.tracks.year_retriever import YearRetriever
 
 
 class YearUpdateService:

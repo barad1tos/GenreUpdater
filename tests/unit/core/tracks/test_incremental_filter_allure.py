@@ -11,11 +11,11 @@ from unittest.mock import MagicMock, patch
 import allure
 import pytest
 
-from src.core.models.track_models import TrackDict
-from src.core.tracks.incremental_filter import IncrementalFilterService
-from src.core.tracks.track_delta import TrackDelta
-from src.metrics import Analytics
-from src.metrics.analytics import LoggerContainer
+from core.models.track_models import TrackDict
+from core.tracks.incremental_filter import IncrementalFilterService
+from core.tracks.track_delta import TrackDelta
+from metrics import Analytics
+from metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -240,8 +240,8 @@ class TestIncrementalFilterServiceAllure:
             mock_get_full_log_path = _MockGetFullLogPath()
 
             with (
-                patch("src.core.tracks.incremental_filter.load_track_list", mock_load_track_list),
-                patch("src.core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
+                patch("core.tracks.incremental_filter.load_track_list", mock_load_track_list),
+                patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
             ):
                 result = service.filter_tracks_for_incremental_update(
                     tracks=tracks,
@@ -307,9 +307,9 @@ class TestIncrementalFilterServiceAllure:
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Should detect tracks with changed status")
     @allure.description("Test detection of tracks whose status changed since last run")
-    @patch("src.core.tracks.incremental_filter.get_full_log_path")
-    @patch("src.core.tracks.incremental_filter.load_track_list")
-    @patch("src.core.tracks.incremental_filter.compute_track_delta")
+    @patch("core.tracks.incremental_filter.get_full_log_path")
+    @patch("core.tracks.incremental_filter.load_track_list")
+    @patch("core.tracks.incremental_filter.compute_track_delta")
     def test_filter_tracks_status_changes(
         self,
         mock_compute_delta: MagicMock,
@@ -411,9 +411,9 @@ class TestIncrementalFilterServiceAllure:
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Should successfully find status changed tracks")
     @allure.description("Test successful status change detection with proper CSV loading")
-    @patch("src.core.tracks.incremental_filter.get_full_log_path")
-    @patch("src.core.tracks.incremental_filter.load_track_list")
-    @patch("src.core.tracks.incremental_filter.compute_track_delta")
+    @patch("core.tracks.incremental_filter.get_full_log_path")
+    @patch("core.tracks.incremental_filter.load_track_list")
+    @patch("core.tracks.incremental_filter.compute_track_delta")
     def test_find_status_changed_tracks_success(
         self,
         mock_compute_delta: MagicMock,
@@ -458,8 +458,8 @@ class TestIncrementalFilterServiceAllure:
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Should handle missing CSV file gracefully")
     @allure.description("Test behavior when CSV file for status comparison doesn't exist")
-    @patch("src.core.tracks.incremental_filter.get_full_log_path")
-    @patch("src.core.tracks.incremental_filter.load_track_list")
+    @patch("core.tracks.incremental_filter.get_full_log_path")
+    @patch("core.tracks.incremental_filter.load_track_list")
     def test_find_status_changed_tracks_no_csv(
         self,
         mock_load_track_list: MagicMock,
@@ -490,8 +490,8 @@ class TestIncrementalFilterServiceAllure:
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Should handle CSV loading errors gracefully")
     @allure.description("Test behavior when CSV loading raises an exception")
-    @patch("src.core.tracks.incremental_filter.get_full_log_path")
-    @patch("src.core.tracks.incremental_filter.load_track_list")
+    @patch("core.tracks.incremental_filter.get_full_log_path")
+    @patch("core.tracks.incremental_filter.load_track_list")
     def test_find_status_changed_tracks_error(
         self,
         mock_load_track_list: MagicMock,

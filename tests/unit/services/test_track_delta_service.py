@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from src.core.tracks.track_delta import TrackDelta, compute_track_delta
-from src.core.models.track_models import TrackDict
+from core.tracks.track_delta import TrackDelta, compute_track_delta
+from core.models.track_models import TrackDict
 
 
 @pytest.fixture

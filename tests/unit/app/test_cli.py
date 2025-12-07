@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.app.cli import CLI
+from app.cli import CLI
 
 # Test constants
 TEST_PASSWORD = "test_secret_123"  # noqa: S105

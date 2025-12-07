@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.core.models.track_status import (
+from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
     is_available_status,

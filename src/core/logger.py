@@ -88,7 +88,7 @@ class LogFormat:
     Use these methods to wrap values that should be highlighted in console output.
 
     Example:
-        from src.core.logger import LogFormat as LF
+        from core.logger import LogFormat as LF
         logger.info("Initializing %s...", LF.entity("CacheService"))
         logger.info("Loaded %s entries from %s", LF.number(100), LF.file("cache.json"))
     """
