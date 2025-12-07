@@ -165,11 +165,14 @@ jobs:
       - name: Run mutation testing
         if: steps.changed.outputs.skip != 'true'
         id: mutmut
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
         run: |
           MODULES="${{ steps.changed.outputs.modules }}"
           MODE="${{ steps.changed.outputs.mode }}"
 
           echo "=== Running mutmut (mode: $MODE) ==="
+          echo "PYTHONPATH: $PYTHONPATH"
 
           # Clean previous results
           rm -rf mutants/
@@ -177,13 +180,13 @@ jobs:
           if [ -z "$MODULES" ]; then
             # Full run - test all src/
             echo "Running full mutation test on src/"
-            uv run mutmut run || true
+            uv run mutmut run --no-progress || true
           else
             # Incremental - test specific modules
             echo "Running mutation test on: $MODULES"
             for module in $MODULES; do
               echo "Testing module pattern: $module"
-              uv run mutmut run "$module" || true
+              uv run mutmut run "$module" --no-progress || true
             done
           fi
 
