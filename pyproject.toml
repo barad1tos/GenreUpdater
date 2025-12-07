@@ -30,6 +30,7 @@ dependencies = [
     "aiofiles==25.1.0",
     "orjson==3.11.5",
     "rich==14.2.0",
+    "pytest==9.0.2",
 ]
 
 [dependency-groups]
@@ -42,7 +43,7 @@ dev = [
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
     # Testing
-    "pytest==9.0.1",
+    "pytest==9.0.2",
     "pytest-asyncio==1.3.0",
     "pytest-cov>=7.0.0",
     "coverage==7.12.0",
@@ -53,7 +54,7 @@ dev = [
     "types-pyyaml==6.0.12.20250915",
     "types-aiofiles==25.1.0.20251011",
     "cst-lsp==0.1.3",
-    "cosmic-ray>=8.4.3",
+    "mutmut>=3.3.1",
 ]
 
 [tool.uv]
@@ -410,6 +411,7 @@ skips = ["B101", "B311", "B404", "B603"]
 # Mutmut configuration - Mutation testing
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.mutmut]
-paths_to_mutate = ["src/metrics/track_sync.py"]
-also_copy = ["src/", "tests/"]
-pytest_add_cli_args_test_selection = ["-x", "-q", "--no-cov", "tests/unit/metrics/test_track_sync.py"]
+paths_to_mutate = ["src/"]
+also_copy = ["tests/"]
+max_stack_depth = 8  # Performance: limit call stack depth for test relevance
+pytest_add_cli_args_test_selection = ["-x", "-q", "--no-cov", "--tb=no"]
