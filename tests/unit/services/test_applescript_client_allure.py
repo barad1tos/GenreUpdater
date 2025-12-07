@@ -220,7 +220,7 @@ class TestAppleScriptClientAllure:
     _temp_scripts_dir: str | None = None
 
     @pytest.fixture(autouse=True)
-    def setup_temp_scripts_dir(self, applescript_test_dir: Path) -> Generator[None, None, None]:
+    def setup_temp_scripts_dir(self, applescript_test_dir: Path) -> Generator[None]:
         """Create temporary scripts directory for all tests."""
         TestAppleScriptClientAllure._temp_scripts_dir = str(applescript_test_dir)
         yield
@@ -239,8 +239,7 @@ class TestAppleScriptClientAllure:
 
         # If config doesn't have apple_scripts_dir or uses placeholder paths, use temp dir
         if TestAppleScriptClientAllure._temp_scripts_dir and (
-            "apple_scripts_dir" not in test_config
-            or test_config.get("apple_scripts_dir") in ("applescripts/", "custom_scripts/")
+            "apple_scripts_dir" not in test_config or test_config.get("apple_scripts_dir") in ("applescripts/", "custom_scripts/")
         ):
             test_config["apple_scripts_dir"] = TestAppleScriptClientAllure._temp_scripts_dir
 
