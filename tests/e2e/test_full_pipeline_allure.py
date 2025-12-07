@@ -116,10 +116,13 @@ class TestFullApplicationPipelineE2E:
 
         # Library snapshot service mock (required for smart delta fetch)
         mock_deps.library_snapshot_service = MagicMock()
+        mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
         mock_deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=False)
         mock_deps.library_snapshot_service.get_track_ids_from_snapshot = AsyncMock(return_value=set())
         mock_deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=None)
         mock_deps.library_snapshot_service.save_snapshot = AsyncMock()
+        mock_deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=None)
+        mock_deps.library_snapshot_service.compute_smart_delta = AsyncMock(return_value=(set(), set(), set()))
 
         return mock_deps
 
