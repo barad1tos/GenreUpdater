@@ -16,7 +16,7 @@ from src.app.features.crypto.exceptions import (
     EncryptionError,
     InvalidTokenError,
 )
-from src.types.cryptography.secure_config import SecureConfig, SecurityConfigError
+from src.stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
 @pytest.fixture
