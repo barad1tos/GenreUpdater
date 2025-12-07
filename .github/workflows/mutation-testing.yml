@@ -7,14 +7,14 @@ on:
 
   # Run after PR is merged to main (optional, for immediate feedback)
   push:
-    branches: [main]
+    branches: [ main ]
     paths:
       - 'src/**/*.py'
       - 'tests/**/*.py'
 
   # Run when PR is approved
   pull_request_review:
-    types: [submitted]
+    types: [ submitted ]
 
   # Manual trigger
   workflow_dispatch:
@@ -48,6 +48,7 @@ jobs:
     if: |
       (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'schedule') ||
       (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
     outputs:
       should_continue: ${{ steps.check.outputs.continue }}
@@ -310,10 +311,10 @@ jobs:
           {
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "commit": "${{ github.sha }}",
-            "score": ${{ needs.mutation-test.outputs.score }},
-            "killed": ${{ needs.mutation-test.outputs.killed }},
-            "survived": ${{ needs.mutation-test.outputs.survived }},
-            "total": ${{ needs.mutation-test.outputs.total }},
+            "score": ${{ needs.mutation-test.outputs.score || 0 }},
+            "killed": ${{ needs.mutation-test.outputs.killed || 0 }},
+            "survived": ${{ needs.mutation-test.outputs.survived || 0 }},
+            "total": ${{ needs.mutation-test.outputs.total || 0 }},
             "module": "${{ needs.mutation-test.outputs.mode || 'unknown' }}"
           }
           EOF
@@ -403,8 +404,11 @@ jobs:
             Survived: ${{ needs.mutation-test.outputs.survived }}
             Trend: ${{ steps.analyze.outputs.trend }} (${{ steps.analyze.outputs.trend_value }}%)"
 
-            git pull --rebase origin main
-            git push
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "Push failed, attempt $i/3, retrying in $((i * 5))s..."
+              sleep $((i * 5))
+            done
           fi
 
       - name: Generate trend summary
@@ -435,9 +439,13 @@ jobs:
   decision:
     name: "4. Decision"
     runs-on: ubuntu-latest
-    needs: [mutation-test, update-metrics]
+    needs: [ mutation-test, update-metrics ]
     timeout-minutes: 5
-    if: always() && needs.mutation-test.result == 'success' && needs.mutation-test.outputs.skipped != 'true'
+    if: |
+      always() &&
+      needs.mutation-test.result == 'success' &&
+      needs.update-metrics.result == 'success' &&
+      needs.mutation-test.outputs.skipped != 'true'
 
     steps:
       - name: Evaluate results
@@ -509,7 +517,7 @@ jobs:
             const isDuplicate = issues.data.some(issue => {
               const titleMatch = issue.title.includes('regression detected');
               const commitMatch = issue.body && issue.body.includes(commit);
-              return titleMatch || commitMatch;
+              return titleMatch && commitMatch;
             });
 
             if (isDuplicate) {
