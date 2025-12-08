@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import urlparse
 
 import allure
 import pytest
@@ -231,7 +232,9 @@ class TestDiscogsClientAllure:
 
             # Check that proper Discogs API URL was used
             call_args = mock_api_request.call_args
-            assert "discogs.com" in call_args[0][1]  # URL argument
+            url = call_args[0][1]  # URL argument
+            host = urlparse(url).hostname
+            assert host and (host == "api.discogs.com" or host.endswith(".discogs.com"))
 
             allure.attach("✅ Authentication handled correctly", "Auth Result", allure.attachment_type.TEXT)
 
