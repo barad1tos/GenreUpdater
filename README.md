@@ -330,16 +330,10 @@ The code is organized into four layers. You don't need to understand this to use
 <details>
 <summary>Architecture diagram and code structure</summary>
 
-### System Context (C4 Level 1)
-
-Shows how the system interacts with external actors and systems.
-
-![System Context](images/diagrams/c4-system-context.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>System Context (C4 Level 1) — how the system interacts with external actors</summary>
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     User((User))
 
@@ -368,18 +362,10 @@ graph LR
 ```
 </details>
 
----
-
-### Container Diagram (C4 Level 2)
-
-Shows the main containers inside the system and data flow between them.
-
-![Container Diagram](images/diagrams/c4-container.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Container Diagram (C4 Level 2) — main containers and data flow</summary>
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     User((User))
     MusicApp[(Music.app)]
@@ -418,16 +404,10 @@ graph TB
 ```
 </details>
 
----
-
-### Data Flow: Genre Update
-
-![Genre Update Flow](images/diagrams/flow-genre-update.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Data Flow: Genre Update</summary>
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 sequenceDiagram
     participant U as User
     participant CLI as CLI
@@ -454,16 +434,10 @@ sequenceDiagram
 ```
 </details>
 
----
-
-### Data Flow: Year Update
-
-![Year Update Flow](images/diagrams/flow-year-update.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Data Flow: Year Update</summary>
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 sequenceDiagram
     participant P as Pipeline
     participant API as API Orchestrator
@@ -493,16 +467,10 @@ sequenceDiagram
 ```
 </details>
 
----
-
-### Component: App Layer (`src/app/`)
-
-![App Layer](images/diagrams/component-app.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Component: App Layer (src/app/)</summary>
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     subgraph Entry["Entry Point"]
         CLI[cli.py]
@@ -537,13 +505,8 @@ graph LR
 ```
 </details>
 
----
-
-### Component: Core Layer (`src/core/`)
-
-![Core Layer](images/diagrams/component-core.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Component: Core Layer (src/core/) — business logic for track processing</summary>
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
@@ -582,13 +545,8 @@ graph TB
 ```
 </details>
 
----
-
-### Component: Services Layer (`src/services/`)
-
-![Services Layer](images/diagrams/component-services.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Component: Services Layer (src/services/) — I/O adapters and external integrations</summary>
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
@@ -647,13 +605,8 @@ graph TB
 ```
 </details>
 
----
-
-### Component: Metrics Layer (`src/metrics/`)
-
-![Component: Metrics Layer](images/diagrams/component-metrics.svg)
 <details>
-<summary>Diagram source</summary>
+<summary>Component: Metrics Layer (src/metrics/) — observability and reporting</summary>
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
