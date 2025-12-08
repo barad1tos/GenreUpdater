@@ -234,7 +234,8 @@ class TestDiscogsClientAllure:
             call_args = mock_api_request.call_args
             url = call_args[0][1]  # URL argument
             host = urlparse(url).hostname
-            assert host and (host == "api.discogs.com" or host.endswith(".discogs.com"))
+            assert host is not None
+            assert host == "api.discogs.com" or host.endswith(".discogs.com")
 
             allure.attach("✅ Authentication handled correctly", "Auth Result", allure.attachment_type.TEXT)
 
