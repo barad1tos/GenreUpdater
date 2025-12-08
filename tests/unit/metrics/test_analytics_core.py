@@ -453,6 +453,7 @@ class TestGetFuncName:
 
     def test_regular_function_has_name(self) -> None:
         """Test that regular function returns its __name__."""
+
         def sample_func() -> None:
             """Sample function for testing."""
 
