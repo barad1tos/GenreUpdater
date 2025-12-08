@@ -339,6 +339,7 @@ Shows how the system interacts with external actors and systems.
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     User((User))
 
@@ -378,6 +379,7 @@ Shows the main containers inside the system and data flow between them.
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     User((User))
     MusicApp[(Music.app)]
@@ -425,6 +427,7 @@ graph TB
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 sequenceDiagram
     participant U as User
     participant CLI as CLI
@@ -460,6 +463,7 @@ sequenceDiagram
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 sequenceDiagram
     participant P as Pipeline
     participant API as API Orchestrator
@@ -498,6 +502,7 @@ sequenceDiagram
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     subgraph Entry["Entry Point"]
         CLI[cli.py]
@@ -541,6 +546,7 @@ graph LR
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     subgraph Input["Input"]
         IN[TrackDict from AppleScript]
@@ -585,6 +591,7 @@ graph TB
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     subgraph Callers["From Core Layer"]
         Core[Track Processor]
@@ -649,6 +656,7 @@ graph TB
 <summary>Diagram source</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     subgraph Input["From Pipelines"]
         Data[Processing Results]
