@@ -52,6 +52,7 @@ class DummyTrackProcessor:
         new_artist_name: str,
         *,
         original_artist: str | None = None,
+        update_album_artist: bool = True,
     ) -> bool:
         """Record update call and return success."""
         self.calls.append(
@@ -59,6 +60,7 @@ class DummyTrackProcessor:
                 "track": track,
                 "new_artist": new_artist_name,
                 "original_artist": original_artist,
+                "update_album_artist": update_album_artist,
             }
         )
         return True

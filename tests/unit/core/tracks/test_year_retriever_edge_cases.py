@@ -13,9 +13,15 @@ for unit testing internal behavior.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
+
+if TYPE_CHECKING:
+    from core.models.protocols import (
+        CacheServiceProtocol,
+        PendingVerificationServiceProtocol,
+    )
 
 import allure
 import pytest
@@ -72,9 +78,9 @@ class TestYearRetrieverEdgeCases:
 
         return YearRetriever(
             track_processor=track_processor,
-            cache_service=cache_service,
+            cache_service=cast("CacheServiceProtocol", cache_service),
             external_api=external_api,
-            pending_verification=pending_verification,
+            pending_verification=cast("PendingVerificationServiceProtocol", pending_verification),
             console_logger=MockLogger(),
             error_logger=MockLogger(),
             analytics=MockAnalytics(),

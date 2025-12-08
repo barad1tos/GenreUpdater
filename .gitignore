@@ -74,6 +74,7 @@ dmypy.json
 csv/
 /temp
 .worktrees/
+/applescripts/*.scpt
 
 # Mutation testing
 mutants/
