@@ -21,8 +21,14 @@ jobs:
 
       - uses: nielsvaneck/render-md-mermaid@v3
         continue-on-error: true
-        env:
-          MMDC_EXTRA_ARGS: --backgroundColor "#262c3b" --theme dark --configFile .mermaid/config.json
+
+      - name: Apply dark background to SVGs
+        run: |
+          for svg in images/diagrams/*.svg; do
+            if [ -f "$svg" ]; then
+              sed -i 's/background-color: white/background-color: #262c3b/g' "$svg"
+            fi
+          done
 
       - uses: stefanzweifel/git-auto-commit-action@v7
         with:
