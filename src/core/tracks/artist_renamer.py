@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import logging
     from pathlib import Path
 
-    from core.tracks.track_processor import TrackProcessor
+    from core.models.protocols import TrackProcessorProtocol
     from core.models.track_models import TrackDict
 
 
@@ -64,7 +64,7 @@ class ArtistRenamer:
 
     def __init__(
         self,
-        track_processor: TrackProcessor,
+        track_processor: TrackProcessorProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         *,

@@ -35,6 +35,11 @@ if TYPE_CHECKING:
     from rich.status import Status
 
 
+def _get_func_name(func: Callable[..., Any]) -> str:
+    """Safely get function name, handling callables without __name__."""
+    return getattr(func, "__name__", repr(func))
+
+
 class TimingInfo:
     """Container for timing-related data."""
 
@@ -142,7 +147,7 @@ class Analytics:
         self._batch_call_count = 0
         self._batch_total_duration = 0.0
 
-        self.console_logger.debug(f"Analytics #{self.instance_id} initialised")
+        self.console_logger.debug(f"Analytics #{self.instance_id} initialized")
 
     # --- Public decorator helpers ---
     def track(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -166,7 +171,7 @@ class Analytics:
                 analytics_inst: Analytics | None = getattr(self, "analytics", None)
                 if not isinstance(analytics_inst, Analytics):
                     (getattr(self, "error_logger", None) or cls._null_logger()).error(
-                        f"Analytics missing on {self.__class__.__name__}; {func.__name__} untracked",
+                        f"Analytics missing on {self.__class__.__name__}; {_get_func_name(func)} untracked",
                     )
                     return await func(self, *args, **kwargs)
 
@@ -184,7 +189,7 @@ class Analytics:
                 analytics_inst: Analytics | None = getattr(self, "analytics", None)
                 if not isinstance(analytics_inst, Analytics):
                     (getattr(self, "error_logger", None) or cls._null_logger()).error(
-                        f"Analytics missing on {self.__class__.__name__}; {func.__name__} untracked",
+                        f"Analytics missing on {self.__class__.__name__}; {_get_func_name(func)} untracked",
                     )
                     return func(self, *args, **kwargs)
 
@@ -271,7 +276,8 @@ class Analytics:
             return asyncio.run(self._wrapped_call(func, event_type, False, *args, **kwargs))
         except RuntimeError as e:
             if "cannot be called from a running event loop" in str(e):
-                self.console_logger.warning(f"Cannot track {func.__name__} with asyncio.run() from within event loop; executing without tracking")
+                func_name = _get_func_name(func)
+                self.console_logger.warning(f"Cannot track {func_name} with asyncio.run() from within event loop; executing without tracking")
                 # Execute function directly without tracking to avoid blocking
                 return func(*args, **kwargs)
             raise
@@ -310,7 +316,7 @@ class Analytics:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        func_name = func.__name__
+        func_name = _get_func_name(func)
         decorator_start = time.time()
         func_start = decorator_start
         success = False

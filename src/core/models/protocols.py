@@ -551,6 +551,38 @@ class RateLimiterProtocol(Protocol):
 
 
 @runtime_checkable
+class TrackProcessorProtocol(Protocol):
+    """Protocol defining the interface for track processor operations.
+
+    This protocol allows components like ArtistRenamer to depend on an abstract
+    interface rather than the concrete TrackProcessor implementation, enabling
+    easier testing with mock/stub implementations.
+    """
+
+    async def update_artist_async(
+        self,
+        track: TrackDict,
+        new_artist_name: str,
+        *,
+        original_artist: str | None = None,
+        update_album_artist: bool = True,
+    ) -> bool:
+        """Update the artist name for a track.
+
+        Args:
+            track: Track to update
+            new_artist_name: New artist name to set
+            original_artist: Original artist name for logging (optional)
+            update_album_artist: Whether to also update album artist field
+
+        Returns:
+            True if the update was successful, False otherwise
+
+        """
+        ...
+
+
+@runtime_checkable
 class AnalyticsProtocol(Protocol):
     """Protocol defining the interface for analytics services.
 
