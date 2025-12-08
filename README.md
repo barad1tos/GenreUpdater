@@ -330,6 +330,10 @@ The code is organized into four layers. You don't need to understand this to use
 <details>
 <summary>Architecture diagram and code structure</summary>
 
+<br>
+
+<blockquote>
+
 <details>
 <summary>System Context (C4 Level 1) — how the system interacts with external actors</summary>
 
@@ -644,6 +648,8 @@ graph LR
     class HR,CR,ER report
 ```
 </details>
+
+</blockquote>
 
 ---
 
