@@ -404,11 +404,19 @@ jobs:
             Survived: ${{ needs.mutation-test.outputs.survived }}
             Trend: ${{ steps.analyze.outputs.trend }} (${{ steps.analyze.outputs.trend_value }}%)"
 
+            push_success=false
             for i in 1 2 3; do
-              git pull --rebase origin main && git push && break
+              if git pull --rebase origin main && git push; then
+                push_success=true
+                break
+              fi
               echo "Push failed, attempt $i/3, retrying in $((i * 5))s..."
               sleep $((i * 5))
             done
+            if [ "$push_success" = false ]; then
+              echo "::error::Failed to push metrics after 3 attempts"
+              exit 1
+            fi
           fi
 
       - name: Generate trend summary
@@ -444,7 +452,7 @@ jobs:
     if: |
       always() &&
       needs.mutation-test.result == 'success' &&
-      needs.update-metrics.result == 'success' &&
+      (needs.update-metrics.result == 'success' || needs.update-metrics.result == 'skipped') &&
       needs.mutation-test.outputs.skipped != 'true'
 
     steps:

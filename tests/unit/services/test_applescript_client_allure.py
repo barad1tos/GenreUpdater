@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -220,7 +220,7 @@ class TestAppleScriptClientAllure:
     _temp_scripts_dir: str | None = None
 
     @pytest.fixture(autouse=True)
-    def setup_temp_scripts_dir(self, applescript_test_dir: Path) -> Generator[None]:
+    def setup_temp_scripts_dir(self, applescript_test_dir: Path) -> Iterator[None]:
         """Create temporary scripts directory for all tests."""
         TestAppleScriptClientAllure._temp_scripts_dir = str(applescript_test_dir)
         yield
@@ -235,7 +235,7 @@ class TestAppleScriptClientAllure:
         # Use temp scripts dir if available, otherwise fall back to default
         scripts_dir = TestAppleScriptClientAllure._temp_scripts_dir or "applescripts/"
 
-        test_config = config or {"apple_script": {"timeout": 30, "concurrency": 5}, "apple_scripts_dir": scripts_dir}
+        test_config = dict(config) if config else {"apple_script": {"timeout": 30, "concurrency": 5}, "apple_scripts_dir": scripts_dir}
 
         # If config doesn't have apple_scripts_dir or uses placeholder paths, use temp dir
         if TestAppleScriptClientAllure._temp_scripts_dir and (
@@ -267,7 +267,8 @@ class TestAppleScriptClientAllure:
             client = TestAppleScriptClientAllure.create_client(config=config)
 
         with allure.step("Verify initialization"):
-            assert client.config == config
+            # Check apple_script settings are preserved (path may be replaced by temp dir)
+            assert client.config["apple_script"] == config["apple_script"]
             assert hasattr(client, "console_logger")
             assert hasattr(client, "error_logger")
             assert hasattr(client, "analytics")
