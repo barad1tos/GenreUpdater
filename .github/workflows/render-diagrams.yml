@@ -20,6 +20,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: nielsvaneck/render-md-mermaid@v3
+        env:
+          MERMAID_CONFIG_FILE: .mermaid/config.json
+          MERMAID_BACKGROUND_COLOR: "#262c3b"
 
       - uses: stefanzweifel/git-auto-commit-action@v7
         with:
