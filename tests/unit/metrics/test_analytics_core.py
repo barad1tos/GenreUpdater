@@ -186,6 +186,19 @@ class TestTrackDecorator:
         assert disabled_analytics.call_counts == {}
         assert disabled_analytics.success_counts == {}
 
+    @pytest.mark.asyncio
+    async def test_sync_call_from_event_loop(self, analytics: Analytics) -> None:
+        """Test that sync function executes without tracking from event loop."""
+
+        def sync_func(x: int) -> int:
+            """Simple sync function."""
+            return x * 2
+
+        # When called from inside an event loop, execute_sync_wrapped_call
+        # catches RuntimeError and executes without tracking
+        result = analytics.execute_sync_wrapped_call(sync_func, "test_event", 5)
+        assert result == 10
+
 
 class TestTrackInstanceMethod:
     """Tests for track_instance_method decorator."""
