@@ -7,6 +7,19 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: [ '--maxkb=500' ]
+      - id: check-merge-conflict
+
+  # uv lock sync - ensures uv.lock stays in sync with pyproject.toml
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.5.14
+    hooks:
+      - id: uv-lock
+
+  # GitHub Actions security scanner
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.0.1
+    hooks:
+      - id: zizmor
 
   # Use local ruff from pyproject.toml (single source of truth)
   - repo: local

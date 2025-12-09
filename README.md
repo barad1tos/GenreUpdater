@@ -330,9 +330,12 @@ The code is organized into four layers. You don't need to understand this to use
 <details>
 <summary>Architecture diagram and code structure</summary>
 
-### System Context (C4 Level 1)
+<br>
 
-Shows how the system interacts with external actors and systems.
+<blockquote>
+
+<details>
+<summary>System Context (C4 Level 1) — how the system interacts with external actors</summary>
 
 ```mermaid
 graph LR
@@ -357,16 +360,14 @@ graph LR
     classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef system fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef user fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
-class MusicApp,MB,DG,LF,FS external
-class MGU system
-class User user
+    class MusicApp,MB,DG,LF,FS external
+    class MGU system
+    class User user
 ```
+</details>
 
----
-
-### Container Diagram (C4 Level 2)
-
-Shows the main containers inside the system and data flow between them.
+<details>
+<summary>Container Diagram (C4 Level 2) — main containers and data flow</summary>
 
 ```mermaid
 graph TB
@@ -401,14 +402,14 @@ graph TB
     classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef internal fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef user fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
-class MusicApp,ExtAPIs,FileSystem external
-class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
-class User user
+    class MusicApp,ExtAPIs,FileSystem external
+    class CLI,Orch,Pipes,Core,Apple,Cache,APIs,Metrics internal
+    class User user
 ```
+</details>
 
----
-
-### Data Flow: Genre Update
+<details>
+<summary>Data Flow: Genre Update</summary>
 
 ```mermaid
 sequenceDiagram
@@ -435,10 +436,10 @@ sequenceDiagram
     P -->> O: changes made
     O -->> CLI: summary report
 ```
+</details>
 
----
-
-### Data Flow: Year Update
+<details>
+<summary>Data Flow: Year Update</summary>
 
 ```mermaid
 sequenceDiagram
@@ -468,10 +469,10 @@ sequenceDiagram
     end
     P ->> A: update year
 ```
+</details>
 
----
-
-### Component: App Layer (`src/app/`)
+<details>
+<summary>Component: App Layer (src/app/)</summary>
 
 ```mermaid
 graph LR
@@ -502,16 +503,17 @@ graph LR
     classDef entry fill:#73D0FF, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef pipeline fill:#5BC0EB, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef feature fill:#95E6CB, stroke:#1F2430, stroke-width:2px, color:#1F2430
-class CLI,Orch entry
-class MU,FS,YU,TC pipeline
-class Batch,Crypto,Verify feature
+    class CLI,Orch entry
+    class MU,FS,YU,TC pipeline
+    class Batch,Crypto,Verify feature
 ```
+</details>
 
----
-
-### Component: Core Layer (`src/core/`)
+<details>
+<summary>Component: Core Layer (src/core/) — business logic for track processing</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     subgraph Input["Input"]
         IN[TrackDict from AppleScript]
@@ -542,15 +544,16 @@ graph TB
     UE -->|execute| OUT
     classDef io fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef proc fill:#FFD580, stroke:#1F2430, stroke-width:2px, color:#1F2430
-class IN,OUT io
-class TP,GM,YR,AR,IF,UE proc
+    class IN,OUT io
+    class TP,GM,YR,AR,IF,UE proc
 ```
+</details>
 
----
-
-### Component: Services Layer (`src/services/`)
+<details>
+<summary>Component: Services Layer (src/services/) — I/O adapters and external integrations</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph TB
     subgraph Callers["From Core Layer"]
         Core[Track Processor]
@@ -599,17 +602,18 @@ graph TB
     classDef api fill:#BA68C8, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef external fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     class Core caller
-class AC,AE,RL apple
-class CO,SS,ALB,API_C cache
-class AO,MB,DG,LF,YS api
-class MusicApp,ExtAPI,Files external
+    class AC,AE,RL apple
+    class CO,SS,ALB,API_C cache
+    class AO,MB,DG,LF,YS api
+    class MusicApp,ExtAPI,Files external
 ```
+</details>
 
----
-
-### Component: Metrics Layer (`src/metrics/`)
+<details>
+<summary>Component: Metrics Layer (src/metrics/) — observability and reporting</summary>
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#262c3b', 'primaryColor': '#5CCFE6', 'primaryTextColor': '#CCCAC2'}}}%%
 graph LR
     subgraph Input["From Pipelines"]
         Data[Processing Results]
@@ -639,10 +643,13 @@ graph LR
     classDef io fill:#F28779, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef track fill:#BAE67E, stroke:#1F2430, stroke-width:2px, color:#1F2430
     classDef report fill:#C5E1A5, stroke:#1F2430, stroke-width:2px, color:#1F2430
-class Data,HTML,CSV io
-class AN,MO track
-class HR,CR,ER report
+    class Data,HTML,CSV io
+    class AN,MO track
+    class HR,CR,ER report
 ```
+</details>
+
+</blockquote>
 
 ---
 

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
+from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo, _get_func_name
 
 
 @pytest.fixture
@@ -185,6 +185,19 @@ class TestTrackDecorator:
         # Disabled analytics should not record any metrics or counters
         assert disabled_analytics.call_counts == {}
         assert disabled_analytics.success_counts == {}
+
+    @pytest.mark.asyncio
+    async def test_sync_call_from_event_loop(self, analytics: Analytics) -> None:
+        """Test that sync function executes without tracking from event loop."""
+
+        def sync_func(x: int) -> int:
+            """Simple sync function."""
+            return x * 2
+
+        # When called from inside an event loop, execute_sync_wrapped_call
+        # catches RuntimeError and executes without tracking
+        result = analytics.execute_sync_wrapped_call(sync_func, "test_event", 5)
+        assert result == 10
 
 
 class TestTrackInstanceMethod:
@@ -446,3 +459,50 @@ class TestNullLogger:
         assert isinstance(null_logger, logging.Logger)
         # Should be able to log without error
         null_logger.info("test message")
+
+
+class TestGetFuncName:
+    """Tests for _get_func_name helper function."""
+
+    def test_regular_function_has_name(self) -> None:
+        """Test that regular function returns its __name__."""
+
+        def sample_func() -> None:
+            """Sample function for testing."""
+
+        assert _get_func_name(sample_func) == "sample_func"
+
+    def test_lambda_function(self) -> None:
+        """Test that lambda returns its repr when no __name__."""
+        my_lambda = lambda x: x * 2  # noqa: E731
+        name = _get_func_name(my_lambda)
+        assert name == "<lambda>"
+
+    def test_callable_without_name(self) -> None:
+        """Test callable without __name__ returns repr."""
+
+        class CallableWithoutName:
+            """Callable object without __name__ attribute."""
+
+            def __call__(self) -> None:
+                """Make it callable."""
+
+            def __repr__(self) -> str:
+                """Custom repr."""
+                return "CustomCallable()"
+
+        obj = CallableWithoutName()
+        name = _get_func_name(obj)
+        assert name == "CustomCallable()"
+
+    def test_method_has_name(self) -> None:
+        """Test that method returns its __name__."""
+
+        class MyClass:
+            """Test class with method."""
+
+            def my_method(self) -> None:
+                """Test method."""
+
+        assert _get_func_name(MyClass.my_method) == "my_method"
+        assert _get_func_name(MyClass().my_method) == "my_method"
