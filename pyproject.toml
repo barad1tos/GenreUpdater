@@ -59,6 +59,9 @@ dev = [
     "deptry>=0.24.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.uv]
 # uv configuration
 index-url = "https://pypi.org/simple"
