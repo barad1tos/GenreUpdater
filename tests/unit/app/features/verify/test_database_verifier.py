@@ -366,59 +366,6 @@ class TestShouldAutoVerify:
         assert result is True
 
 
-class TestVerifyTrackExists:
-    """Tests for _verify_track_exists method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_true_when_exists(self, verifier: DatabaseVerifier) -> None:
-        """Should return True when AppleScript returns 'exists'."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="exists"):
-            result = await verifier._verify_track_exists("123")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_not_found(self, verifier: DatabaseVerifier) -> None:
-        """Should return False when AppleScript returns 'not_found'."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="not_found"):
-            result = await verifier._verify_track_exists("123")
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_returns_true_on_error_assume_exists(self, verifier: DatabaseVerifier) -> None:
-        """Should return True when AppleScript returns 'error_assume_exists'."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="error_assume_exists"):
-            result = await verifier._verify_track_exists("123")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_true_on_none_result(self, verifier: DatabaseVerifier) -> None:
-        """Should return True when AppleScript returns None."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value=None):
-            result = await verifier._verify_track_exists("123")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_true_on_exception(self, verifier: DatabaseVerifier) -> None:
-        """Should return True when AppleScript raises exception."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=OSError("AppleScript failed")):
-            result = await verifier._verify_track_exists("123")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_raises_on_non_numeric_track_id(self, verifier: DatabaseVerifier) -> None:
-        """Should raise ValueError for non-numeric track_id."""
-        with pytest.raises(ValueError, match="track_id must be numeric"):
-            await verifier._verify_track_exists("abc")
-
-    @pytest.mark.asyncio
-    async def test_converts_non_string_result_to_string(self, verifier: DatabaseVerifier) -> None:
-        """Should handle non-string AppleScript result."""
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value=123):
-            result = await verifier._verify_track_exists("456")
-        # Non-"exists" and non-"not_found" returns True
-        assert result is True
-
-
 class TestShouldSkipVerification:
     """Tests for _should_skip_verification method."""
 
@@ -508,34 +455,6 @@ class TestGetTracksToVerify:
         result = verifier._get_tracks_to_verify(tracks, apply_test_filter=True)
         assert len(result) == 1
         assert result[0].id == "1"
-
-
-class TestVerifyTracksInBatches:
-    """Tests for _verify_tracks_in_batches method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_invalid_track_ids(self, verifier: DatabaseVerifier) -> None:
-        """Should return list of invalid track IDs."""
-        tracks = [_create_track("1"), _create_track("2"), _create_track("3")]
-
-        with patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=["exists", "not_found", "exists"]):
-            result = await verifier._verify_tracks_in_batches(tracks, {"batch_size": 10, "pause_seconds": 0})
-
-        assert result == ["2"]
-
-    @pytest.mark.asyncio
-    async def test_processes_in_batches(self, verifier: DatabaseVerifier) -> None:
-        """Should process tracks in batches."""
-        tracks = [_create_track(str(i)) for i in range(5)]
-
-        with (
-            patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, return_value="exists"),
-            patch.object(verifier, "_log_batch_progress") as mock_log,
-        ):
-            await verifier._verify_tracks_in_batches(tracks, {"batch_size": 2, "pause_seconds": 0})
-
-        # 5 tracks / 2 batch_size = 3 batches
-        assert mock_log.call_count == 3
 
 
 class TestUpdateVerificationTimestamp:
@@ -634,14 +553,16 @@ class TestVerifyAndCleanTrackDatabase:
 
     @pytest.mark.asyncio
     async def test_verifies_and_returns_invalid_count(self, verifier: DatabaseVerifier, tmp_path: Path) -> None:
-        """Should verify tracks and return invalid count."""
+        """Should verify tracks and return invalid count using bulk ID comparison."""
         csv_file = tmp_path / "tracks.csv"
         csv_file.write_text("")
 
+        # CSV contains tracks "1" and "2"
         tracks = {"1": _create_track("1"), "2": _create_track("2")}
 
         with (
-            patch.object(verifier.ap_client, "run_script_code", new_callable=AsyncMock, side_effect=["exists", "not_found"]),
+            # Mock bulk fetch: Music.app only has track "1", so "2" is invalid
+            patch.object(verifier.ap_client, "fetch_all_track_ids", new_callable=AsyncMock, return_value=["1"]),
             patch(
                 "app.features.verify.database_verifier.get_full_log_path",
                 return_value=str(csv_file),
@@ -734,3 +655,113 @@ class TestLogMethods:
             verifier._log_verify_complete(total=100, invalid=5, removed=5)
 
         assert "DONE" in caplog.text or "done" in caplog.text.lower()
+
+
+class TestVerifyTracksBulk:
+    """Tests for bulk ID comparison verification."""
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_tracks(self, verifier: DatabaseVerifier) -> None:
+        """Should return empty list when no tracks to verify."""
+        result = await verifier._verify_tracks_bulk([])
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_tracks_have_no_ids(self, verifier: DatabaseVerifier) -> None:
+        """Should return empty list when tracks have no IDs."""
+        tracks = [{"name": "Track1"}, {"name": "Track2"}]  # No 'id' field
+        result = await verifier._verify_tracks_bulk(tracks)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_fetch_failure(self, verifier: DatabaseVerifier) -> None:
+        """Should return empty list and skip deletion when fetch fails."""
+        tracks = [_create_track("1"), _create_track("2")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            side_effect=OSError("Connection failed"),
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        # Safety: don't delete anything on failure
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_music_app_returns_empty(self, verifier: DatabaseVerifier) -> None:
+        """Should return empty list when Music.app returns no IDs (safety)."""
+        tracks = [_create_track("1"), _create_track("2")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            return_value=[],  # Music.app returned empty
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        # Safety: don't delete anything when fetch returns empty
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_all_valid(self, verifier: DatabaseVerifier) -> None:
+        """Should return empty list when all tracks exist in Music.app."""
+        tracks = [_create_track("1"), _create_track("2"), _create_track("3")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            return_value=["1", "2", "3"],  # All IDs present
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_invalid_ids(self, verifier: DatabaseVerifier) -> None:
+        """Should return IDs that are not in Music.app."""
+        tracks = [_create_track("1"), _create_track("2"), _create_track("3")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            return_value=["1", "3"],  # ID "2" missing
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        assert result == ["2"]
+
+    @pytest.mark.asyncio
+    async def test_returns_multiple_invalid_ids(self, verifier: DatabaseVerifier) -> None:
+        """Should return all IDs not in Music.app."""
+        tracks = [_create_track("1"), _create_track("2"), _create_track("3"), _create_track("4")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            return_value=["1"],  # Only ID "1" exists
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        # IDs "2", "3", "4" are invalid
+        assert set(result) == {"2", "3", "4"}
+
+    @pytest.mark.asyncio
+    async def test_handles_timeout_error(self, verifier: DatabaseVerifier) -> None:
+        """Should handle timeout gracefully and skip deletion."""
+        tracks = [_create_track("1")]
+
+        with patch.object(
+            verifier.ap_client,
+            "fetch_all_track_ids",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError("Script timed out"),
+        ):
+            result = await verifier._verify_tracks_bulk(tracks)
+
+        assert result == []

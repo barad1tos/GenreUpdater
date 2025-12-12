@@ -75,6 +75,7 @@ csv/
 /temp
 .worktrees/
 /applescripts/*.scpt
+/applescripts/temp_script_*.applescript
 
 # Mutation testing
 mutants/
