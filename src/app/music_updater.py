@@ -29,6 +29,7 @@ from metrics.change_reports import (
 
 if TYPE_CHECKING:
     from services.dependency_container import DependencyContainer
+    from services.pending_verification import PendingAlbumEntry
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -334,16 +335,34 @@ class MusicUpdater:
             )
             return
 
+        # Filter albums that need verification (interval elapsed)
+        albums_to_verify: list[PendingAlbumEntry] = [
+            entry
+            for entry in pending_albums
+            if await self.deps.pending_verification_service.is_verification_needed(entry.artist, entry.album)
+        ]
+        skipped_count = len(pending_albums) - len(albums_to_verify)
+
+        if not albums_to_verify:
+            self.console_logger.info(
+                "%s %s | %s pending, none due yet",
+                LogFormat.label("PENDING"),
+                LogFormat.dim("SKIP"),
+                LogFormat.number(len(pending_albums)),
+            )
+            return
+
         self.console_logger.info(
-            "%s %s | albums: %s",
+            "%s %s | due: %s (skipped: %s)",
             LogFormat.label("PENDING"),
             LogFormat.success("START"),
-            LogFormat.number(len(pending_albums)),
+            LogFormat.number(len(albums_to_verify)),
+            LogFormat.dim(str(skipped_count)),
         )
 
         verified_count = 0
         failed_count = 0
-        for entry in pending_albums:
+        for entry in albums_to_verify:
             year_str, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
             if not year_str:
                 failed_count += 1
