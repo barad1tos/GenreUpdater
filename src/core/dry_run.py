@@ -9,7 +9,6 @@ music library.
 from __future__ import annotations
 
 # Standard library imports
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from core.models.types import AppleScriptClientProtocol

@@ -19,7 +19,6 @@ from metrics import Analytics
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
 from services.apple.sanitizer import (
-    AppleScriptSanitizationError,
     AppleScriptSanitizer,
     DANGEROUS_ARGUMENT_CHARACTERS,
 )

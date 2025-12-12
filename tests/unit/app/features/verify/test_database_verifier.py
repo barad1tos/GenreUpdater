@@ -41,8 +41,7 @@ def db_verify_logger() -> logging.Logger:
 @pytest.fixture
 def mock_ap_client() -> Any:
     """Create mock AppleScript client."""
-    client = create_autospec(AppleScriptClientProtocol, instance=True)
-    return client
+    return create_autospec(AppleScriptClientProtocol, instance=True)
 
 
 @pytest.fixture
