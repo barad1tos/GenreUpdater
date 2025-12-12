@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
 
 import yaml
 
-from core.core_config import load_config
+from core.core_config import load_config, validate_api_auth
 from core.dry_run import DryRunAppleScriptClient
 from core.logger import LogFormat, shorten_path
 from core.models.album_type import configure_patterns as configure_album_patterns
@@ -74,6 +74,7 @@ class DependencyContainer:
         *,
         logging_listener: SafeQueueListener | None = None,
         dry_run: bool = False,
+        skip_api_validation: bool = False,
     ) -> None:
         """Initialize the dependency container.
 
@@ -85,7 +86,7 @@ class DependencyContainer:
             db_verify_logger: Logger for database verification operations
             logging_listener: Optional queue listener for logging
             dry_run: Whether to run in dry-run mode (no changes made)
-
+            skip_api_validation: Whether to skip API auth validation (for non-API commands)
 
         """
         # Initialize logger properties first
@@ -106,6 +107,7 @@ class DependencyContainer:
         self._api_orchestrator: ExternalApiOrchestrator | None = None
         self._retry_handler: DatabaseRetryHandler | None = None
         self._dry_run = dry_run
+        self._skip_api_validation = skip_api_validation
 
     @property
     def dry_run(self) -> bool:
@@ -537,12 +539,20 @@ class DependencyContainer:
         Raises:
             FileNotFoundError: If the config file doesn't exist
             yaml.YAMLError: If there's an error parsing the YAML
+            ValueError: If API authentication configuration is incomplete
             RuntimeError: For any other errors during loading
 
         """
         try:
             config = load_config(self._config_path)
             self._console_logger.info("Configuration: [cyan]%s[/cyan]", Path(self._config_path).name)
+
+            # Validate API auth configuration (fail-fast for API-dependent commands)
+            if not self._skip_api_validation:
+                year_config = config.get("year_retrieval", {})
+                api_auth = year_config.get("api_auth", {})
+                validate_api_auth(api_auth)
+
             return config
         except FileNotFoundError as e:
             short_path = Path(self._config_path).name

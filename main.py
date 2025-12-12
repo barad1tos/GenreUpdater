@@ -27,6 +27,15 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._migrat
 sys.path.insert(0, str(Path(__file__).parent))
 
 
+# Commands that don't require external API access
+_COMMANDS_WITHOUT_API = frozenset({
+    "verify_database", "verify-db",
+    "rotate_keys", "rotate-keys",
+    "clean_artist",
+    "revert_years",
+})
+
+
 async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContainer, SafeQueueListener | None, logging.Logger, logging.Logger]:
     """Set up configuration, logging, and dependencies.
 
@@ -52,6 +61,10 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
     # Initialize logging
     logger_console, logger_error, analytics_logger, db_verify_logger, listener = get_loggers(config)
 
+    # Skip API validation for commands that don't need external APIs
+    command = getattr(args, "command", None)
+    skip_api_validation = command in _COMMANDS_WITHOUT_API
+
     # Create dependency container
     deps = DependencyContainer(
         config_path=config_manager.resolved_path,
@@ -61,6 +74,7 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
         db_verify_logger=db_verify_logger,
         logging_listener=listener,
         dry_run=args.dry_run,
+        skip_api_validation=skip_api_validation,
     )
 
     # Initialize all services
