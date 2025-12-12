@@ -185,23 +185,6 @@ class TestHandleFutureYearsFound:
         mock_pending_verification.mark_for_verification.assert_called_once()
 
 
-class TestHandleReleaseYearsFound:
-    """Tests for handle_release_years method on YearDeterminator."""
-
-    @pytest.mark.asyncio
-    async def test_returns_dominant_year(self, year_retriever: YearRetriever) -> None:
-        """Test returns dominant year from release years."""
-        result = await year_retriever._year_determinator.handle_release_years("Artist", "Album", ["2020", "2020", "2020"])
-        assert result == "2020"
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_dominant(self, year_retriever: YearRetriever) -> None:
-        """Test returns None when no dominant year."""
-        result = await year_retriever._year_determinator.handle_release_years("Artist", "Album", ["2020", "2021", "2022"])
-        # No dominant year when all are different
-        assert result is None or isinstance(result, str)
-
-
 class TestValidateTrackIds:
     """Tests for _validate_track_ids method on YearBatchProcessor."""
 

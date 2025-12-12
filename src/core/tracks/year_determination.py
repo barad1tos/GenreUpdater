@@ -397,39 +397,6 @@ class YearDeterminator:
         )
         return True
 
-    async def handle_release_years(
-        self,
-        artist: str,
-        album: str,
-        release_years: list[str],
-    ) -> str | None:
-        """Handle case when release years are found in track metadata.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            release_years: List of release years found
-
-        Returns:
-            Year string if valid, None if it should skip
-
-        """
-        if not release_years:
-            return None
-
-        year_counts = Counter(release_years)
-        most_common_year = year_counts.most_common(1)[0][0]
-
-        self.console_logger.info(
-            "Using release year %s from Music.app metadata for '%s - %s' (fallback)",
-            most_common_year,
-            artist,
-            album,
-        )
-
-        await self.cache_service.store_album_year_in_cache(artist, album, most_common_year)
-        return most_common_year
-
     @staticmethod
     def extract_future_years(album_tracks: list[TrackDict]) -> list[int]:
         """Extract future years from album tracks.
