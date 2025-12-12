@@ -313,7 +313,11 @@ class DatabaseVerifier:
             List of track IDs that are no longer in Music.app
 
         """
-        csv_ids = {str(t.get("id", "")) for t in tracks_to_verify if t.get("id")}
+        csv_ids: set[str] = set()
+        for t in tracks_to_verify:
+            track_id = t.get("id")
+            if track_id is not None:
+                csv_ids.add(str(track_id))
         if not csv_ids:
             return []
 
@@ -345,7 +349,7 @@ class DatabaseVerifier:
                 len(csv_ids),
             )
 
-        return list(invalid_ids)
+        return sorted(invalid_ids)
 
     async def _should_skip_verification(self, force: bool, csv_path: str, auto_verify_days: int) -> bool:
         """Check if verification should be skipped based on the last verification date.
