@@ -14,7 +14,6 @@ from services.apple.applescript_client import AppleScriptClient
 from services.apple.rate_limiter import EnhancedRateLimiter
 from services.apple.sanitizer import (
     MAX_SCRIPT_SIZE,
-    MAX_TRACK_ID_LENGTH,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
 )
@@ -25,5 +24,4 @@ __all__ = [
     "AppleScriptSanitizationError",
     "EnhancedRateLimiter",
     "MAX_SCRIPT_SIZE",
-    "MAX_TRACK_ID_LENGTH",
 ]

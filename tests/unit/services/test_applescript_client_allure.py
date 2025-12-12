@@ -13,7 +13,6 @@ import pytest
 
 from services.apple import (
     MAX_SCRIPT_SIZE,
-    MAX_TRACK_ID_LENGTH,
     AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
@@ -107,47 +106,6 @@ class TestAppleScriptSanitizerAllure:
 
             allure.attach(safe_code, "Safe Code", allure.attachment_type.TEXT)
             allure.attach("Passed", "Validation Result", allure.attachment_type.TEXT)
-
-    @allure.story("Input Sanitization")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should sanitize track IDs properly")
-    @allure.description("Test sanitization of track IDs to prevent injection")
-    @pytest.mark.parametrize(
-        ("track_id", "should_pass"),
-        [
-            ("normal_track_123", True),
-            ("track-with-hyphens", True),
-            ("track_with_underscores", True),
-            ("123456789", True),
-            ("track; rm -rf /", False),  # Command injection attempt
-            ("track && malicious", False),  # Command chaining
-            ("track`command`", False),  # Command substitution
-            ("track$injection", False),  # Variable injection
-            ("a" * (MAX_TRACK_ID_LENGTH + 1), False),  # Too long
-        ],
-    )
-    def test_sanitize_track_id(self, track_id: str, should_pass: bool) -> None:
-        """Test track ID sanitization."""
-        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
-
-        with allure.step(f"Sanitizing track ID: {track_id[:50]}..."):
-            try:
-                sanitization_passed = sanitizer.validate_track_id(track_id)
-                result = track_id if sanitization_passed else None
-            except AppleScriptSanitizationError:
-                sanitization_passed = False
-                result = None
-
-        with allure.step("Verify track ID sanitization"):
-            if should_pass:
-                assert sanitization_passed, f"Track ID should pass sanitization: {track_id}"
-                assert result == track_id
-            else:
-                assert not sanitization_passed, f"Track ID should fail sanitization: {track_id}"
-
-            allure.attach(track_id, "Input Track ID", allure.attachment_type.TEXT)
-            allure.attach(str(sanitization_passed), "Sanitization Result", allure.attachment_type.TEXT)
-            allure.attach(str(should_pass), "Expected Result", allure.attachment_type.TEXT)
 
     @allure.story("Script Size Validation")
     @allure.severity(allure.severity_level.NORMAL)
@@ -692,25 +650,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             assert stats["total_wait_time"] > 0
 
         allure.attach("Rate limiting enforced", "Validation Result", allure.attachment_type.TEXT)
-
-    @allure.story("Security Validation")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should validate track IDs with dangerous characters")
-    @allure.description("Test track ID validation with security checks")
-    def test_track_id_with_dangerous_chars_logging(self) -> None:
-        """Test track ID validation logging for dangerous characters."""
-        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
-
-        with allure.step("Test track ID with dangerous characters triggers warning"):
-            # This should return False and log a warning
-            result = sanitizer.validate_track_id("track; rm -rf /")
-            assert result is False
-
-            # Verify warning was logged
-            if isinstance(sanitizer.logger, MockLogger):
-                assert len(sanitizer.logger.warning_messages) > 0
-
-        allure.attach("Dangerous track ID logged", "Validation Result", allure.attachment_type.TEXT)
 
     @allure.story("Security Validation")
     @allure.severity(allure.severity_level.CRITICAL)
