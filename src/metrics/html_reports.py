@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.logger import ensure_directory, get_full_log_path
+from core.logger import get_full_log_path
 
 
 # Constant for duration field name (shared with analytics module)

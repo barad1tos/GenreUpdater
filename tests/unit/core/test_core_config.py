@@ -8,7 +8,7 @@ Testing private functions is intentional to ensure correctness of internal logic
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
