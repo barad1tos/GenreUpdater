@@ -105,45 +105,6 @@ class TrackCacheManager:
         self.console_logger.debug("Snapshot exists but is stale")
         return None
 
-    async def get_snapshot_for_delta_update(self) -> tuple[list[TrackDict] | None, datetime | None]:
-        """Get snapshot tracks and minimum date for delta update.
-
-        Returns:
-            Tuple of (snapshot_tracks, min_date) or (None, None) if not available
-        """
-        if self.snapshot_service is None:
-            return None, None
-
-        snapshot_tracks = await self.snapshot_service.load_snapshot()
-        if snapshot_tracks is None:
-            return None, None
-
-        if await self.snapshot_service.is_snapshot_valid():
-            # Snapshot is valid, no delta needed
-            return snapshot_tracks, None
-
-        if not self.snapshot_service.is_delta_enabled():
-            self.console_logger.warning("Snapshot stale and delta updates disabled; full rescan required")
-            return None, None
-
-        # Calculate minimum date for delta fetch
-        metadata = await self.snapshot_service.get_snapshot_metadata()
-        min_date = metadata.last_full_scan if metadata else None
-
-        delta_cache = await self.snapshot_service.load_delta()
-        if delta_cache and (candidates := [c for c in (min_date, delta_cache.last_run) if c is not None]):
-            min_date = max(candidates)
-
-        if min_date is None:
-            self.console_logger.info("Unable to determine delta window; falling back to full scan")
-            return None, None
-
-        self.console_logger.info(
-            "Attempting delta update: %d cached tracks + new changes since last scan",
-            len(snapshot_tracks),
-        )
-        return snapshot_tracks, min_date
-
     @staticmethod
     def merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
         """Merge delta updates into the existing snapshot while preserving order.
