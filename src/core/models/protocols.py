@@ -392,25 +392,6 @@ class AppleScriptClientProtocol(Protocol):
         """
         ...
 
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code.
-
-        Args:
-            script_code: AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout: Optional timeout in seconds
-
-        Returns:
-            Script output or None if no output
-
-        """
-        ...
-
     async def fetch_tracks_by_ids(
         self,
         track_ids: list[str],

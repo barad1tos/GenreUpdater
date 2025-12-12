@@ -37,7 +37,6 @@ class MockAppleScriptClient:
         self.apple_scripts_dir: str | None = "/fake/scripts"
         self.scripts_run: list[tuple[str, list[str] | None]] = []
         self.script_contexts: list[dict[str, Any]] = []
-        self.script_code_calls: list[dict[str, Any]] = []
         self.script_responses: dict[str, str | None] = {}
         self.should_fail = False
         self.failure_message = "AppleScript Error"
@@ -117,33 +116,6 @@ class MockAppleScriptClient:
         if script_name == "batch_update_tracks.applescript":
             return "Success: Batch update process completed."
 
-        return None
-
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code.
-
-        Args:
-            script_code: AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout: Optional timeout in seconds
-
-        Returns:
-            Script output or None if no output
-        """
-        self.script_code_calls.append(
-            {
-                "script_code": script_code,
-                "arguments": list(arguments) if arguments is not None else None,
-                "timeout": timeout,
-            }
-        )
-        if self.should_fail:
-            raise MockAppleScriptError(self.failure_message)
         return None
 
     def set_response(self, script_name: str, response: str | None) -> None:

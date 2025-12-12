@@ -3,15 +3,12 @@
 This module provides an abstraction for executing AppleScript commands asynchronously.
 It centralizes the logic for interacting with AppleScript via the `osascript` command,
 handles errors, applies concurrency limits via semaphore-based control, and ensures non-blocking execution.
-
-The module supports both executing AppleScript files and inline AppleScript code.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -276,79 +273,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
             self.error_logger.exception(error_msg)
             raise
 
-    @Analytics.track_instance_method("applescript_run_code")
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Execute an AppleScript code asynchronously and return its output.
-
-        Requires initialize() to have been called.
-        For large or complex scripts, use temporary file execution for reliability.
-
-        :param script_code: The AppleScript code to execute.
-        :param arguments: List of arguments to pass to the script.
-        :param timeout: Timeout in seconds for script execution
-        :return: The output of the script, or None if an error occurred
-        """
-        if not script_code.strip():
-            self.error_logger.error("No script code provided.")
-            return None
-
-        if timeout is None:
-            # Use default timeout from applescript_timeouts config, with fallback to applescript_timeout_seconds
-            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
-
-        # Ensure timeout is a float, using configured default if needed
-        timeout_float = (
-            float(timeout)
-            if timeout is not None
-            else float(self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600))
-        )
-
-        if self.executor.should_use_temp_file(script_code):
-            # Validate the script before writing to the temp file
-            try:
-                self.sanitizer.validate_script_code(script_code)
-                self.console_logger.debug("AppleScript code passed security validation (temp file mode)")
-            except AppleScriptSanitizationError as e:
-                self.error_logger.exception("Security violation in AppleScript code: %s", e)
-                self.error_logger.exception("Blocked potentially dangerous script: %s", script_code[:200])
-                return None
-
-            code_preview = self._format_script_preview(script_code)
-            self.console_logger.info(
-                "tempfile-script (%dB) [timeout: %ss] %s",
-                len(script_code.encode()),
-                timeout_float,
-                code_preview,
-            )
-
-            return await self.executor.run_via_temp_file(script_code, arguments, timeout_float)
-        # Use traditional -e flag execution for simple scripts
-        try:
-            cmd = self.sanitizer.create_safe_command(script_code, arguments)
-            self.console_logger.debug("AppleScript code passed security validation (inline mode)")
-        except AppleScriptSanitizationError as e:
-            self.error_logger.exception("Security violation in AppleScript code: %s", e)
-            self.error_logger.exception("Blocked potentially dangerous script: %s", script_code[:200])
-            return None
-        except (ValueError, TypeError, AttributeError) as e:
-            self.error_logger.exception("Error during script sanitization: %s", e)
-            return None
-
-        code_preview = self._format_script_preview(script_code)
-        self.console_logger.info(
-            "inline-script (%dB) [timeout: %ss] %s",
-            len(script_code.encode()),
-            timeout_float,
-            code_preview,
-        )
-
-        return await self.executor.run_osascript(cmd, "inline-script", timeout_float)
-
     @Analytics.track_instance_method("applescript_fetch_by_ids")
     async def fetch_tracks_by_ids(
         self,
@@ -500,31 +424,3 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 )
 
         return tracks
-
-    def _format_script_preview(self, script_code: str) -> str:
-        """Format AppleScript code for log output, showing only essential parts.
-
-        Args:
-            script_code: The AppleScript code to format.
-
-        Returns:
-            str: Formatted string with essential parts of the script.
-
-        """
-        try:
-            # Normalize whitespace
-            normalized_code = re.sub(r"\s+", " ", script_code.replace("\n", " ").replace("\r", " ")).strip()
-
-            # Find the "tell application" pattern
-            if tell_match := re.search(r'tell application\s+["\'](.*?)["\']', normalized_code, re.IGNORECASE):
-                app_name = tell_match[1]
-                # Include the first part of the command for better context
-                command_preview = f"{normalized_code[tell_match.end() :].strip()[:30]}..."
-                return f'tell application "{app_name}" {command_preview}'
-
-            # Fallback if the pattern is not found
-            preview_length = 100  # Default preview length
-            return f"{normalized_code[:preview_length]}..." if len(normalized_code) > preview_length else normalized_code
-        except (AttributeError, IndexError, TypeError, ValueError, re.error) as e:
-            self.error_logger.exception("Error formatting script preview: %s", e)
-            return "[Script preview error]"

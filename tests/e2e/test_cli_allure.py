@@ -78,7 +78,6 @@ class TestCLIE2E:
             return "" if "fetch_track_summaries" in script_name else "[]"
 
         mock_deps.ap_client.run_script = AsyncMock(side_effect=smart_run_script)
-        mock_deps.ap_client.run_script_code = AsyncMock(return_value="[]")
         mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         # Cache service mock

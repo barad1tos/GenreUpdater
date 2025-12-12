@@ -29,11 +29,6 @@ class DummyAppleScriptClient:
         """Mock run_script method."""
         return ""
 
-    @staticmethod
-    async def run_script_code(*_args: Any, **_kwargs: Any) -> str | None:
-        """Mock run_script_code method."""
-        return ""
-
 
 class DummyCacheService:
     """Dummy cache service for testing."""

@@ -151,18 +151,6 @@ class _MockAppleScriptClient:
 
         return None
 
-    async def run_script_code(
-        self,
-        _script_code: str,
-        _arguments: list[str] | None = None,
-        _timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code."""
-        if self.should_fail:
-            msg = self.failure_message
-            raise RuntimeError(msg)
-        return None
-
     def set_response(self, script_name: str, response: str | None) -> None:
         """Set a predefined response for a specific script."""
         self.script_responses[script_name] = response
