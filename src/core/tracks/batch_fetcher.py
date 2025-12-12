@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from rich.console import Console
-
+from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
 from services.apple.applescript_client import NO_TRACKS_FOUND
 
@@ -167,7 +166,7 @@ class BatchTrackFetcher:
         batch_number = 0
         consecutive_failures = 0
 
-        console = Console()
+        console = get_shared_console()
         with console.status("[cyan]Fetching library...[/cyan]") as status:
             while True:
                 batch_number += 1

@@ -21,6 +21,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from core.logger import get_shared_console
 from core.models.track_models import ChangeLogEntry
 from core.models.track_status import (
     can_edit_metadata,
@@ -54,6 +55,7 @@ def _create_album_progress() -> Progress:
         TaskProgressColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
+        console=get_shared_console(),
     )
 
 
