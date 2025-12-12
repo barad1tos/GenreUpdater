@@ -18,9 +18,7 @@ from core.core_config import (
     _read_and_parse_config,
     _validate_config_data_type,
     _validate_config_path,
-    create_fallback_config_paths,
     format_pydantic_errors,
-    load_config_with_fallback,
     resolve_env_vars,
     validate_api_auth,
     validate_required_env_vars,
@@ -315,50 +313,3 @@ class TestValidateApiAuth:
 
         # Should not raise
         validate_api_auth(api_auth)
-
-
-class TestCreateFallbackConfigPaths:
-    """Tests for create_fallback_config_paths function."""
-
-    def test_generates_backup_path(self) -> None:
-        """Should generate backup path with .backup suffix."""
-        result = create_fallback_config_paths("/path/to/config.yaml")
-
-        backup_paths = [p for p in result if "backup" in p.lower()]
-        assert backup_paths
-        assert "config.backup.yaml" in backup_paths[0]
-
-    def test_generates_home_config_path(self) -> None:
-        """Should generate path in ~/.config/genres-autoupdater/."""
-        result = create_fallback_config_paths("config.yaml")
-
-        home_paths = [p for p in result if ".config" in p and "genres-autoupdater" in p]
-        assert home_paths
-
-    def test_generates_default_config_path(self) -> None:
-        """Should generate default-config.yaml path."""
-        result = create_fallback_config_paths("/path/to/config.yaml")
-
-        default_paths = [p for p in result if "default-config.yaml" in p]
-        assert default_paths
-
-    def test_returns_three_fallback_paths(self) -> None:
-        """Should return exactly 3 fallback paths."""
-        result = create_fallback_config_paths("my-config.yaml")
-        assert len(result) == 3
-
-
-class TestLoadConfigWithFallback:
-    """Tests for load_config_with_fallback function."""
-
-    def test_delegates_to_retry_handler(self) -> None:
-        """Should delegate to ConfigurationRetryHandler."""
-        with patch("core.core_config.ConfigurationRetryHandler") as mock_handler_class:
-            mock_handler = MagicMock()
-            mock_handler.load_config_with_fallback.return_value = {"key": "value"}
-            mock_handler_class.return_value = mock_handler
-
-            result = load_config_with_fallback("config.yaml", ["backup.yaml"])
-
-            mock_handler.load_config_with_fallback.assert_called_once_with("config.yaml", ["backup.yaml"])
-            assert result == {"key": "value"}
