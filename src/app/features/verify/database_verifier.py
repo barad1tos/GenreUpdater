@@ -299,89 +299,57 @@ class DatabaseVerifier:
             tracker.get_last_run_file_path(),
         )
 
-    async def _verify_track_exists(self, track_id: str) -> bool:
-        """Verify if a track exists in Music.app.
+    async def _verify_tracks_bulk(self, tracks_to_verify: list[TrackDict]) -> list[str]:
+        """Verify tracks using bulk ID comparison (~2 min vs ~10+ hours).
+
+        Instead of checking each track individually via AppleScript (O(n) calls),
+        this method fetches all track IDs from Music.app in one call and uses
+        set difference to find tracks that no longer exist.
 
         Args:
-            track_id: ID of the track to verify
+            tracks_to_verify: List of tracks to verify
 
         Returns:
-            True if the track exists, False otherwise
-
-        Raises:
-            ValueError: If track_id is not numeric
+            List of track IDs that are no longer in Music.app
 
         """
-        # Validate track_id is numeric to prevent AppleScript injection
+        csv_ids: set[str] = set()
+        for t in tracks_to_verify:
+            track_id = t.get("id")
+            if track_id is not None:
+                csv_ids.add(str(track_id))
+        if not csv_ids:
+            return []
+
+        # Fetch all track IDs from Music.app (AppleScriptClient handles logging/errors)
         try:
-            int(track_id)
-        except ValueError as e:
-            error_message = f"track_id must be numeric, got {track_id!r}"
-            self.error_logger.exception(error_message)
-            raise ValueError(error_message) from e
+            track_ids = await self.ap_client.fetch_all_track_ids()
+            music_ids = set(track_ids)
+        except OSError as e:
+            # Safety: don't delete anything if fetch failed
+            self.error_logger.warning("Skipping verification - fetch failed: %s", e)
+            return []
 
-        script = f"""
-        tell application "Music"
-            try
-                -- Efficiently check existence by trying to get a property
-                -- Using 'properties' to get a dictionary is slightly more robust than just 'id'
-                get properties of track id {track_id} of library playlist 1
-                return "exists"
-            on error errMsg number errNum
-                if errNum is -1728 then
-                    -- Error code for "item not found"
-                    return "not_found"
-                else
-                    -- Log other errors but treat as potentially existing
-                    log "Error verifying track {track_id}: " & errNum & " " & errMsg
-                    return "error_assume_exists"
-                end if
-            end try
-        end tell
-        """
+        if not music_ids:
+            self.error_logger.warning("Skipping verification - no track IDs returned from Music.app")
+            return []
 
-        try:
-            # Use injected ap_client with proper validation
-            script_result: Any = await self.ap_client.run_script_code(script)
+        invalid_ids = csv_ids - music_ids
 
-            # Handle None results
-            if script_result is None:
-                self.error_logger.warning(
-                    "AppleScript verification for track ID %s returned None. Assuming exists.",
-                    track_id,
-                )
-                return True
-
-            # Validate and convert to string for consistent processing
-            if not isinstance(script_result, str):
-                self.error_logger.warning(
-                    "AppleScript returned non-string result: %s. Converting to string.",
-                    type(script_result).__name__,
-                )
-
-            script_result_str = str(script_result)
-
-            # Process script result
-            if script_result_str == "exists":
-                return True
-            if script_result_str == "not_found":
-                self.console_logger.debug("Track ID %s not found in Music.app.", track_id)
-                return False
-            # Includes "error_assume_exists" case and other unexpected results
-            self.error_logger.warning(
-                "AppleScript verification for track ID %s returned unexpected result: '%s'. Assuming exists.",
-                track_id,
-                script_result_str,
+        if invalid_ids:
+            self.console_logger.info(
+                "%s %d tracks no longer in Music.app",
+                LogFormat.warning("VERIFY"),
+                len(invalid_ids),
+            )
+        else:
+            self.console_logger.info(
+                "%s All %d tracks valid",
+                LogFormat.success("VERIFY"),
+                len(csv_ids),
             )
 
-        except (ValueError, OSError):
-            self.error_logger.exception(
-                "Exception during AppleScript execution for track %s",
-                track_id,
-            )
-            return True  # Assume exists on error to prevent accidental deletion
-
-        return True  # Default fallback for unexpected results
+        return sorted(invalid_ids)
 
     async def _should_skip_verification(self, force: bool, csv_path: str, auto_verify_days: int) -> bool:
         """Check if verification should be skipped based on the last verification date.
@@ -455,58 +423,6 @@ class DatabaseVerifier:
             )
             return tracks
         return existing_tracks
-
-    async def _verify_tracks_in_batches(self, tracks_to_verify: list[TrackDict], verify_config: dict[str, Any]) -> list[str]:
-        """Verify tracks in batches and return a list of invalid track IDs.
-
-        Args:
-            tracks_to_verify: List of tracks to verify
-            verify_config: Verification configuration settings
-
-        Returns:
-            List of invalid track IDs
-
-        """
-        batch_size: int = verify_config.get("batch_size", 20)
-        pause_seconds: float = verify_config.get("pause_seconds", 0.2)
-        invalid_tracks: list[str] = []
-        total_batches = (len(tracks_to_verify) + batch_size - 1) // batch_size
-
-        for batch_num, i in enumerate(range(0, len(tracks_to_verify), batch_size), start=1):
-            batch: list[TrackDict] = tracks_to_verify[i : i + batch_size]
-
-            # Create verification tasks with track IDs
-            track_ids: list[str] = []
-            tasks: list[Any] = []
-            for track in batch:
-                if track_id := str(track.get("id", "")):
-                    track_ids.append(track_id)
-                    tasks.append(self._verify_track_exists(track_id))
-
-            # Execute batch concurrently (AppleScriptClient semaphore limits actual concurrency)
-            results: list[bool] = await asyncio.gather(*tasks)
-
-            # Process results and count invalid tracks in this batch
-            batch_invalid = 0
-            for track_id, exists in zip(track_ids, results, strict=True):
-                if not exists:
-                    invalid_tracks.append(track_id)
-                    batch_invalid += 1
-
-            # Log batch progress (compact format)
-            self._log_batch_progress(
-                batch_num=batch_num,
-                total_batches=total_batches,
-                checked=len(batch),
-                valid=len(batch) - batch_invalid,
-                invalid=batch_invalid,
-            )
-
-            # Pause between batches
-            if i + batch_size < len(tracks_to_verify):
-                await asyncio.sleep(pause_seconds)
-
-        return invalid_tracks
 
     def _handle_invalid_tracks(self, invalid_tracks: list[str], existing_tracks: list[TrackDict], csv_path: str) -> None:
         """Handle removal or logging of invalid tracks.
@@ -615,8 +531,8 @@ class DatabaseVerifier:
         # Log verification start
         self._log_verify_start(len(tracks_to_verify))
 
-        # Verify tracks in batches
-        invalid_tracks = await self._verify_tracks_in_batches(tracks_to_verify, verify_config)
+        # Verify tracks using bulk ID comparison (single AppleScript call)
+        invalid_tracks = await self._verify_tracks_bulk(tracks_to_verify)
 
         # Handle invalid tracks (removal or dry-run logging)
         self._handle_invalid_tracks(invalid_tracks, existing_tracks, csv_path)
