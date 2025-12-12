@@ -105,14 +105,17 @@ class YearConsistencyChecker:
 
         # Check for release_year inconsistency case
         if result := self._check_release_year_inconsistency(tracks, years, most_common[0]):
+            self._log_anomalous_tracks(tracks, result)
             return result
 
         # Check for clear majority
         if result := self._check_majority_dominance(most_common, total_tracks, tracks):
+            self._log_anomalous_tracks(tracks, result)
             return result
 
         # Handle collaboration albums (some empty years but otherwise consistent)
         if result := self._check_collaboration_pattern(year_counts, years, most_common, total_tracks, tracks):
+            self._log_anomalous_tracks(tracks, result)
             return result
 
         # Check for parity
@@ -320,29 +323,14 @@ class YearConsistencyChecker:
 
         return None
 
-    def identify_anomalous_tracks(self, tracks: list[TrackDict], dominant_year: str) -> list[TrackDict]:
-        """Identify tracks with years different from dominant year.
-
-        Args:
-            tracks: List of tracks to check
-            dominant_year: The dominant year to compare against
-
-        Returns:
-            List of tracks with anomalous years
-
-        """
-        anomalous_tracks: list[TrackDict] = []
+    def _log_anomalous_tracks(self, tracks: list[TrackDict], dominant_year: str) -> None:
+        """Log tracks with years different from dominant year (debug info)."""
         for track in tracks:
             track_year = str(track.get("year", ""))
-
-            # Track has year but it's not a dominant anomaly
             if track_year and track_year.strip() not in ["", "0"] and track_year != dominant_year:
-                anomalous_tracks.append(track)
-                self.console_logger.info(
-                    "Track '%s' has anomalous year %s (dominant: %s)",
+                self.console_logger.debug(
+                    "Track '%s': year %s differs from dominant %s",
                     track.get("name", "Unknown"),
                     track_year,
                     dominant_year,
                 )
-
-        return anomalous_tracks
