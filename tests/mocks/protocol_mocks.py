@@ -379,11 +379,9 @@ class MockExternalApiService:
     def __init__(self) -> None:
         """Initialize the mock external API service."""
         self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
-        self.should_update_response = True
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
         self.discogs_year_response: str | None = "2020"
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
-        self.should_update_calls: list[dict[str, Any]] = []
         self.artist_activity_requests: list[str] = []
         self.discogs_requests: list[tuple[str, str]] = []
         self.initialize_calls: list[bool] = []
@@ -396,34 +394,6 @@ class MockExternalApiService:
     async def close(self) -> None:
         """Close all connections and clean up resources."""
         self.close_count += 1
-
-    def should_update_album_year(
-        self,
-        tracks: list[dict[str, str]],
-        artist: str = "",
-        album: str = "",
-        current_library_year: str = "",
-    ) -> bool:
-        """Determine whether to update the year for an album.
-
-        Args:
-            tracks: List of track dictionaries
-            artist: Artist name
-            album: Album name
-            current_library_year: Current year in library
-
-        Returns:
-            True if should update, False otherwise
-        """
-        self.should_update_calls.append(
-            {
-                "tracks": tracks,
-                "artist": artist,
-                "album": album,
-                "current_library_year": current_library_year,
-            }
-        )
-        return self.should_update_response
 
     async def get_album_year(
         self,

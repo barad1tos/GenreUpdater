@@ -822,40 +822,6 @@ class ExternalApiOrchestrator:
             self.future_year_threshold,
         )
 
-    def should_update_album_year(
-        self,
-        tracks: list[dict[str, str]],
-        artist: str = "",
-        album: str = "",
-        current_library_year: str = "",
-    ) -> bool:
-        """Determine whether to update the year for an album based on the status of its tracks."""
-        if not tracks:
-            return True
-
-        if not self.skip_prerelease:
-            return True
-
-        current_year = dt.now(tz=UTC).year
-        prerelease_count = self._count_prerelease_tracks(tracks)
-        future_year_count, max_future_year, ratio_triggered, significant_future_year = self._compute_future_year_stats(tracks, current_year)
-        if self._is_prerelease_album(prerelease_count, ratio_triggered, significant_future_year):
-            self._handle_prerelease_album(
-                artist,
-                album,
-                current_library_year,
-                prerelease_count,
-                future_year_count,
-                max_future_year,
-                len(tracks),
-            )
-            return False
-
-        if ratio_triggered and not significant_future_year:
-            self._log_future_year_within_threshold(artist, album)
-
-        return True
-
     async def get_album_year(
         self,
         artist: str,

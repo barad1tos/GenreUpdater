@@ -278,27 +278,6 @@ class ExternalApiServiceProtocol(Protocol):
         """Close all connections and clean up resources."""
         ...
 
-    def should_update_album_year(
-        self,
-        tracks: list[dict[str, str]],
-        artist: str = "",
-        album: str = "",
-        current_library_year: str = "",
-    ) -> bool:
-        """Determine whether to update the year for an album based on the status of its tracks.
-
-        Args:
-            tracks: List of track dictionaries
-            artist: Artist name (optional)
-            album: Album name (optional)
-            current_library_year: Current year in library (optional)
-
-        Returns:
-            True if you should update, False otherwise
-
-        """
-        ...
-
     async def get_album_year(
         self,
         artist: str,
