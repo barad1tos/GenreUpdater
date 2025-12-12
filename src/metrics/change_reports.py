@@ -39,10 +39,7 @@ from metrics.csv_utils import TRACK_FIELDNAMES
 from metrics.csv_utils import save_csv as _save_csv
 
 # Re-export HTML report functions for backward compatibility
-from metrics.html_reports import (
-    save_detailed_dry_run_report,
-    save_html_report,
-)
+from metrics.html_reports import save_html_report
 
 # Re-export track sync functions for backward compatibility
 from metrics.track_sync import (
@@ -61,7 +58,6 @@ __all__ = [
     # Public functions
     "load_track_list",
     "save_changes_report",
-    "save_detailed_dry_run_report",
     "save_html_report",
     "save_to_csv",
     "save_track_map_to_csv",
@@ -772,43 +768,3 @@ def _process_genre_year_changes(genre_changes: list[dict[str, str]]) -> list[dic
 
         processed_changes.append(change_copy)
     return processed_changes
-
-
-def save_unified_dry_run(
-    cleaning_changes: list[dict[str, str]],
-    genre_changes: list[dict[str, str]],
-    file_path: str,
-    console_logger: logging.Logger,
-    error_logger: logging.Logger,
-) -> None:
-    """Save unified dry run report combining cleaning and genre changes.
-
-    Args:
-        cleaning_changes: List of dictionaries with cleaning changes
-        genre_changes: List of dictionaries with genre changes
-        file_path: Path to the CSV file
-        console_logger: Logger for console output
-        error_logger: Logger for error output
-
-    """
-    # Get standard fieldnames and process changes using helper functions
-    fieldnames = _get_dry_run_fieldnames()
-    processed_cleaning = _process_cleaning_changes(cleaning_changes)
-    processed_genre = _process_genre_year_changes(genre_changes)
-
-    # Combine and sort changes
-    combined_changes = processed_cleaning + processed_genre
-    combined_changes.sort(
-        key=lambda x: (x.get("artist", "Unknown"), x.get("album", "Unknown")),
-    )
-
-    # Save to CSV with directory creation
-    ensure_directory(str(Path(file_path).parent), error_logger)
-    _save_csv(
-        combined_changes,
-        fieldnames,
-        file_path,
-        console_logger,
-        error_logger,
-        "dry run report",
-    )
