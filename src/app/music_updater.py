@@ -338,9 +338,7 @@ class MusicUpdater:
 
         # Filter albums that need verification (interval elapsed)
         albums_to_verify: list[PendingAlbumEntry] = [
-            entry
-            for entry in pending_albums
-            if await self.deps.pending_verification_service.is_verification_needed(entry.artist, entry.album)
+            entry for entry in pending_albums if await self.deps.pending_verification_service.is_verification_needed(entry.artist, entry.album)
         ]
         skipped_count = len(pending_albums) - len(albums_to_verify)
 

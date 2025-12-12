@@ -28,12 +28,16 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._migrat
 
 
 # Commands that don't require external API access
-_COMMANDS_WITHOUT_API = frozenset({
-    "verify_database", "verify-db",
-    "rotate_keys", "rotate-keys",
-    "clean_artist",
-    "revert_years",
-})
+_COMMANDS_WITHOUT_API = frozenset(
+    {
+        "verify_database",
+        "verify-db",
+        "rotate_keys",
+        "rotate-keys",
+        "clean_artist",
+        "revert_years",
+    }
+)
 
 
 async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContainer, SafeQueueListener | None, logging.Logger, logging.Logger]:
