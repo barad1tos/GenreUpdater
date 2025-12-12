@@ -8,10 +8,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import allure
 import pytest
-from core.tracks.year_retriever import YearRetriever
-from core.models.track_models import TrackDict
-from metrics.analytics import Analytics
 
+from core.models.track_models import TrackDict
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
+from core.tracks.year_retriever import YearRetriever
+from metrics.analytics import Analytics
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
@@ -22,6 +23,20 @@ class TestYearPipelineIntegration:
     """Integration tests for the year retrieval pipeline workflow."""
 
     @staticmethod
+    def _create_retry_handler() -> DatabaseRetryHandler:
+        """Create a retry handler for testing."""
+        import logging
+
+        policy = RetryPolicy(
+            max_retries=2,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_range=0.0,
+            operation_timeout_seconds=30.0,
+        )
+        return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
+
+    @staticmethod
     def create_year_retriever(
         mock_track_processor: AsyncMock | None = None,
         mock_cache_service: MagicMock | None = None,
@@ -29,6 +44,7 @@ class TestYearPipelineIntegration:
         mock_pending_verification: MagicMock | None = None,
         config: dict[str, Any] | None = None,
         dry_run: bool = False,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if mock_track_processor is None:
@@ -54,6 +70,9 @@ class TestYearPipelineIntegration:
             mock_pending_verification.mark_for_verification = AsyncMock()
             mock_pending_verification.generate_problematic_albums_report = AsyncMock(return_value=0)
 
+        if retry_handler is None:
+            retry_handler = TestYearPipelineIntegration._create_retry_handler()
+
         test_config = config or {"force_update": False, "processing": {"batch_size": 100}, "year_update": {"concurrent_limit": 5}}
 
         return YearRetriever(
@@ -61,6 +80,7 @@ class TestYearPipelineIntegration:
             cache_service=cast(Any, mock_cache_service),
             external_api=cast(Any, mock_external_api),
             pending_verification=cast(Any, mock_pending_verification),
+            retry_handler=retry_handler,
             console_logger=MockLogger(),  # type: ignore[arg-type]
             error_logger=MockLogger(),  # type: ignore[arg-type]
             analytics=cast(Analytics, cast(object, MockAnalytics())),

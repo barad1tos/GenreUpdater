@@ -21,6 +21,7 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_retriever import YearRetriever
 
@@ -36,6 +37,20 @@ class TestYearRetrieverEdgeCases:
     """Edge case tests documenting known issues in year retrieval."""
 
     @staticmethod
+    def _create_retry_handler() -> DatabaseRetryHandler:
+        """Create a retry handler for testing."""
+        import logging
+
+        policy = RetryPolicy(
+            max_retries=2,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_range=0.0,
+            operation_timeout_seconds=30.0,
+        )
+        return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
+
+    @staticmethod
     def create_year_retriever(
         track_processor: Any = None,
         cache_service: Any = None,
@@ -43,6 +58,7 @@ class TestYearRetrieverEdgeCases:
         pending_verification: Any = None,
         config: dict[str, Any] | None = None,
         dry_run: bool = False,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if track_processor is None:
@@ -58,6 +74,9 @@ class TestYearRetrieverEdgeCases:
         if pending_verification is None:
             pending_verification = MockPendingVerificationService()
 
+        if retry_handler is None:
+            retry_handler = TestYearRetrieverEdgeCases._create_retry_handler()
+
         test_config = config or {
             "year_retrieval": {
                 "api_timeout": 30,
@@ -71,6 +90,7 @@ class TestYearRetrieverEdgeCases:
             cache_service=cache_service,
             external_api=external_api,
             pending_verification=pending_verification,
+            retry_handler=retry_handler,
             console_logger=MockLogger(),
             error_logger=MockLogger(),
             analytics=MockAnalytics(),

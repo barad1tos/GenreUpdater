@@ -13,6 +13,7 @@ import pytest
 
 from core import debug_utils
 from core.models.track_models import ChangeLogEntry, TrackDict
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,
@@ -70,6 +71,19 @@ def error_logger() -> logging.Logger:
 
 
 @pytest.fixture
+def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
+    """Create test retry handler."""
+    policy = RetryPolicy(
+        max_retries=2,
+        base_delay_seconds=0.01,
+        max_delay_seconds=0.1,
+        jitter_range=0.0,
+        operation_timeout_seconds=30.0,
+    )
+    return DatabaseRetryHandler(logger=logger, default_policy=policy)
+
+
+@pytest.fixture
 def config() -> dict[str, Any]:
     """Create test config."""
     return {
@@ -102,6 +116,7 @@ def year_retriever(
     mock_cache_service: AsyncMock,
     mock_external_api: AsyncMock,
     mock_pending_verification: AsyncMock,
+    retry_handler: DatabaseRetryHandler,
     logger: logging.Logger,
     error_logger: logging.Logger,
     config: dict[str, Any],
@@ -112,6 +127,7 @@ def year_retriever(
         cache_service=cast("CacheServiceProtocol", mock_cache_service),
         external_api=cast("ExternalApiServiceProtocol", mock_external_api),
         pending_verification=cast("PendingVerificationServiceProtocol", mock_pending_verification),
+        retry_handler=retry_handler,
         console_logger=logger,
         error_logger=error_logger,
         analytics=MagicMock(),
@@ -241,13 +257,13 @@ class TestUpdateTrackWithRetry:
         mock_track_processor: AsyncMock,
     ) -> None:
         """Test gives up after max retries on persistent exceptions."""
-        # Configure retries via config
-        year_retriever.config["year_retrieval"] = {"processing": {"track_retry_attempts": 2, "track_retry_delay": 0.01}}
+        # The retry_handler fixture has max_retries=2, meaning 1 initial + 2 retries = 3 total attempts
         # Keep raising exceptions
         mock_track_processor.update_track_async.side_effect = OSError("Network error")
         result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
         assert result is False
-        assert mock_track_processor.update_track_async.call_count == 2
+        # With max_retries=2: 1 initial attempt + 2 retries = 3 total calls
+        assert mock_track_processor.update_track_async.call_count == 3
 
     @pytest.mark.asyncio
     async def test_returns_false_immediately_on_false_result(

@@ -84,6 +84,7 @@ class MusicUpdater:
             cache_service=deps.cache_service,
             external_api=deps.external_api_service,
             pending_verification=deps.pending_verification_service,
+            retry_handler=deps.retry_handler,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,

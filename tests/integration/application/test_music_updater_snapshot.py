@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from app.music_updater import MusicUpdater
 from core.models.track_models import TrackDict
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
 
 
@@ -170,6 +171,17 @@ async def test_main_pipeline_reuses_track_snapshot(
     }
 
     analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+
+    # Create retry handler for testing
+    retry_policy = RetryPolicy(
+        max_retries=2,
+        base_delay_seconds=0.01,
+        max_delay_seconds=0.1,
+        jitter_range=0.0,
+        operation_timeout_seconds=30.0,
+    )
+    retry_handler = DatabaseRetryHandler(logger=logger, default_policy=retry_policy)
+
     deps = MockDependencyContainer(
         config=config,
         console_logger=logger,
@@ -180,6 +192,7 @@ async def test_main_pipeline_reuses_track_snapshot(
         cache_service=DummyCacheService(),
         pending_verification_service=DummyPendingVerificationService(),
         external_api_service=DummyExternalApiService(),
+        retry_handler=retry_handler,
         dry_run=False,
         year_updates_logger=logger,
         db_verify_logger=logger,

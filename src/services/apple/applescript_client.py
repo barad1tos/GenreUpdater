@@ -11,7 +11,7 @@ import asyncio
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, spinner
 from core.models.protocols import AppleScriptClientProtocol
@@ -22,6 +22,9 @@ from services.apple.sanitizer import (
     AppleScriptSanitizer,
     DANGEROUS_ARGUMENT_CHARACTERS,
 )
+
+if TYPE_CHECKING:
+    from core.retry_handler import DatabaseRetryHandler
 
 # Logging constants
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
@@ -52,6 +55,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         analytics: Analytics,
         console_logger: logging.Logger | None = None,
         error_logger: logging.Logger | None = None,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> None:
         """Initialize the AppleScript client."""
         self.config = config
@@ -83,6 +87,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             apple_scripts_directory=self.apple_scripts_dir,
             console_logger=self.console_logger,
             error_logger=self.error_logger,
+            retry_handler=retry_handler,
         )
 
     async def initialize(self) -> None:

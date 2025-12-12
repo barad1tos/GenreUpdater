@@ -316,8 +316,7 @@ class DatabaseRetryHandler:
     ) -> RetryResult:
         """Execute operation with retry logic.
 
-        Convenience method for simple retry operations that don't need
-        access to the retry context during execution.
+        Implements retry loop directly for reliable async operation retry.
 
         Args:
             operation: Async callable to execute with retry
@@ -327,9 +326,86 @@ class DatabaseRetryHandler:
         Returns:
             Result from successful operation execution
 
+        Raises:
+            OSError, ValueError, RuntimeError: If all retries exhausted
+
         """
-        async with self.async_retry_operation(operation_id, policy) as _:
-            return await operation()
+        retry_policy: RetryPolicy = policy or self.database_policy
+        context: RetryOperationContext = RetryOperationContext(
+            operation_id=operation_id,
+            policy=retry_policy,
+        )
+
+        self.logger.debug(
+            "Starting retry operation '%s' with policy: max_retries=%d, base_delay=%.2fs",
+            operation_id,
+            retry_policy.max_retries,
+            retry_policy.base_delay_seconds,
+        )
+
+        last_error: Exception | None = None
+
+        for attempt in range(retry_policy.max_retries + 1):
+            context.attempt_count = attempt + 1
+
+            # Check for total operation timeout
+            if context.has_exceeded_timeout:
+                self._raise_timeout_error(operation_id, context, retry_policy)
+
+            try:
+                result = await operation()
+                self.logger.debug(
+                    "Operation '%s' succeeded on attempt %d/%d (%.2fs elapsed)",
+                    operation_id,
+                    attempt + 1,
+                    retry_policy.max_retries + 1,
+                    context.total_elapsed_seconds,
+                )
+                return result
+
+            except (ValueError, RuntimeError, OSError) as error:
+                last_error = error
+                context.last_error = error
+
+                # Check if this is the last attempt
+                if attempt >= retry_policy.max_retries:
+                    self.logger.exception(
+                        "Operation '%s' failed permanently after %d attempts (%.2fs elapsed)",
+                        operation_id,
+                        attempt + 1,
+                        context.total_elapsed_seconds,
+                    )
+                    raise
+
+                # Check if error is worth retrying
+                if not self.is_transient_error(error):
+                    self.logger.warning(
+                        "Operation '%s' failed with non-transient error: %s",
+                        operation_id,
+                        error,
+                    )
+                    raise
+
+                # Calculate delay for next attempt
+                delay_seconds: float = DatabaseRetryHandler.calculate_delay_seconds(attempt, retry_policy)
+
+                self.logger.warning(
+                    "Operation '%s' failed on attempt %d/%d: %s. Retrying in %.2fs...",
+                    operation_id,
+                    attempt + 1,
+                    retry_policy.max_retries + 1,
+                    error,
+                    delay_seconds,
+                )
+
+                # Wait before retry
+                await asyncio.sleep(delay_seconds)
+
+        # Should not reach here, but safety fallback
+        if last_error:
+            raise last_error
+        msg = f"Operation '{operation_id}' failed without error (unexpected state)"
+        raise RuntimeError(msg)
 
     def _raise_timeout_error(
         self,
