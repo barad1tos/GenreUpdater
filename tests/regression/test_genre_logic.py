@@ -13,9 +13,6 @@ import pytest
 
 from core.models.metadata_utils import determine_dominant_genre_for_artist
 
-# Type alias for track dictionary
-TrackDict = dict[str, Any]
-
 
 @pytest.mark.regression
 class TestGenreDataValidity:
@@ -23,7 +20,7 @@ class TestGenreDataValidity:
 
     def test_all_tracks_have_artist_field(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Every track should have an artist field (may be empty)."""
         for track in library_tracks:
@@ -31,7 +28,7 @@ class TestGenreDataValidity:
 
     def test_all_tracks_have_genre_field(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Every track should have a genre field (may be empty)."""
         for track in library_tracks:
@@ -39,7 +36,7 @@ class TestGenreDataValidity:
 
     def test_no_null_genre_values(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Genre should be string, not None (empty string is ok)."""
         for track in library_tracks:
@@ -53,7 +50,7 @@ class TestDominantGenreCalculation:
 
     def test_dominant_genre_returns_string_or_unknown(
         self,
-        artists_with_tracks: dict[str, list[TrackDict]],
+        artists_with_tracks: dict[str, list[dict[str, Any]]],
         error_logger: logging.Logger,
     ) -> None:
         """determine_dominant_genre_for_artist should return string for all artists."""
@@ -64,7 +61,7 @@ class TestDominantGenreCalculation:
 
     def test_dominant_genre_not_always_unknown(
         self,
-        artists_with_tracks: dict[str, list[TrackDict]],
+        artists_with_tracks: dict[str, list[dict[str, Any]]],
         error_logger: logging.Logger,
     ) -> None:
         """At least some artists should have non-Unknown genres."""
@@ -82,7 +79,7 @@ class TestDominantGenreCalculation:
 
     def test_artists_with_genres_get_dominant_genre(
         self,
-        artists_with_tracks: dict[str, list[TrackDict]],
+        artists_with_tracks: dict[str, list[dict[str, Any]]],
         error_logger: logging.Logger,
     ) -> None:
         """Artists with at least one non-empty genre should get non-Unknown dominant."""
@@ -111,7 +108,7 @@ class TestGenreFormat:
 
     def test_no_excessive_whitespace(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Genres should not have leading/trailing whitespace."""
         violations: list[tuple[str, str, str]] = []
@@ -127,13 +124,14 @@ class TestGenreFormat:
                     )
                 )
 
-        assert len(violations) == 0, f"Found {len(violations)} genres with excessive whitespace:\n" + "\n".join(
-            f"  {v[0]}: {v[1]} - '{v[2]}'" for v in violations[:10]
+        assert not violations, (
+            f"Found {len(violations)} genres with excessive whitespace:\n"
+            + "\n".join(f"  {v[0]}: {v[1]} - '{v[2]}'" for v in violations[:10])
         )
 
     def test_no_genre_longer_than_reasonable(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Genres should not exceed 100 characters (sanity check)."""
         max_reasonable_length = 100
@@ -150,6 +148,7 @@ class TestGenreFormat:
                     )
                 )
 
-        assert len(violations) == 0, f"Found {len(violations)} genres longer than {max_reasonable_length}:\n" + "\n".join(
-            f"  {v[0]}: {v[1]} - {v[2]}" for v in violations[:10]
+        assert not violations, (
+            f"Found {len(violations)} genres longer than {max_reasonable_length}:\n"
+            + "\n".join(f"  {v[0]}: {v[1]} - {v[2]}" for v in violations[:10])
         )

@@ -9,15 +9,12 @@ from typing import Any
 
 import pytest
 
-# Type alias for track dictionary (same as core.models.track.TrackDict)
-TrackDict = dict[str, Any]
-
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 SNAPSHOT_FILE = FIXTURES_DIR / "library_snapshot.json"
 
 
 @pytest.fixture(scope="session")
-def library_tracks() -> list[TrackDict]:
+def library_tracks() -> list[dict[str, Any]]:
     """Load real library snapshot (30K+ tracks).
 
     This fixture loads the full library snapshot that is automatically
@@ -32,10 +29,10 @@ def library_tracks() -> list[TrackDict]:
 
 @pytest.fixture(scope="session")
 def artists_with_tracks(
-    library_tracks: list[TrackDict],
-) -> dict[str, list[TrackDict]]:
+    library_tracks: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
     """Group tracks by artist."""
-    artists: dict[str, list[TrackDict]] = {}
+    artists: dict[str, list[dict[str, Any]]] = {}
     for track in library_tracks:
         if artist := track.get("artist", ""):
             artists.setdefault(artist, []).append(track)
@@ -44,10 +41,10 @@ def artists_with_tracks(
 
 @pytest.fixture(scope="session")
 def albums_with_tracks(
-    library_tracks: list[TrackDict],
-) -> dict[tuple[str, str], list[TrackDict]]:
+    library_tracks: list[dict[str, Any]],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
     """Group tracks by (artist, album) tuple."""
-    albums: dict[tuple[str, str], list[TrackDict]] = {}
+    albums: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for track in library_tracks:
         artist = track.get("artist", "")
         album = track.get("album", "")
@@ -71,14 +68,14 @@ def console_logger() -> logging.Logger:
 
 
 @pytest.fixture(scope="session")
-def unique_artists(artists_with_tracks: dict[str, list[TrackDict]]) -> list[str]:
+def unique_artists(artists_with_tracks: dict[str, list[dict[str, Any]]]) -> list[str]:
     """List of unique artist names."""
     return list(artists_with_tracks.keys())
 
 
 @pytest.fixture(scope="session")
 def unique_albums(
-    albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+    albums_with_tracks: dict[tuple[str, str], list[dict[str, Any]]],
 ) -> list[tuple[str, str]]:
     """List of unique (artist, album) tuples."""
     return list(albums_with_tracks.keys())

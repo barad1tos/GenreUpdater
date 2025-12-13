@@ -13,9 +13,6 @@ import pytest
 
 from core.tracks.year_consistency import YearConsistencyChecker
 
-# Type alias for track dictionary
-TrackDict = dict[str, Any]
-
 
 @pytest.mark.regression
 class TestYearDataValidity:
@@ -23,7 +20,7 @@ class TestYearDataValidity:
 
     def test_all_tracks_have_year_field(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Every track should have a year field (may be empty)."""
         for track in library_tracks:
@@ -31,7 +28,7 @@ class TestYearDataValidity:
 
     def test_year_format_valid(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """All non-empty years should be 4-digit strings."""
         invalid_years: list[tuple[str, str, str, str]] = []
@@ -55,7 +52,7 @@ class TestYearDataValidity:
 
     def test_years_in_reasonable_range(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Years should be between 1900 and current year + 1."""
         import datetime
@@ -91,7 +88,7 @@ class TestDominantYearCalculation:
 
     def test_dominant_year_returns_string_or_none(
         self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        albums_with_tracks: dict[tuple[str, str], list[dict[str, Any]]],
         console_logger: logging.Logger,
     ) -> None:
         """get_dominant_year should return string or None for all albums."""
@@ -103,7 +100,7 @@ class TestDominantYearCalculation:
 
     def test_dominant_year_format_valid(
         self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        albums_with_tracks: dict[tuple[str, str], list[dict[str, Any]]],
         console_logger: logging.Logger,
     ) -> None:
         """Dominant years should be valid 4-digit strings."""
@@ -119,7 +116,7 @@ class TestDominantYearCalculation:
 
     def test_albums_with_consistent_years_get_dominant(
         self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        albums_with_tracks: dict[tuple[str, str], list[dict[str, Any]]],
         console_logger: logging.Logger,
     ) -> None:
         """Albums where all tracks have same year should return that year.
@@ -185,7 +182,7 @@ class TestYearDistribution:
 
     def test_most_tracks_have_years(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Majority of tracks should have non-empty years."""
         tracks_with_year = sum(1 for t in library_tracks if t.get("year") and t.get("year") != "0")
@@ -198,7 +195,7 @@ class TestYearDistribution:
 
     def test_year_distribution_reasonable(
         self,
-        library_tracks: list[TrackDict],
+        library_tracks: list[dict[str, Any]],
     ) -> None:
         """Years should cluster around recent decades (basic sanity check)."""
         from collections import Counter
