@@ -5,49 +5,53 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
 
 import pytest
+
+from core.models.track_models import TrackDict
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 SNAPSHOT_FILE = FIXTURES_DIR / "library_snapshot.json"
 
 
 @pytest.fixture(scope="session")
-def library_tracks() -> list[dict[str, Any]]:
-    """Load real library snapshot (30K+ tracks).
+def library_tracks() -> list[TrackDict]:
+    """Load real library snapshot (30K+ tracks) as TrackDict models.
 
     This fixture loads the full library snapshot that is automatically
     synced from production via the daemon post-run hook.
+    JSON dicts are converted to TrackDict Pydantic models for type safety.
     """
     if not SNAPSHOT_FILE.exists():
         pytest.skip(f"Library snapshot not found: {SNAPSHOT_FILE}")
 
     with SNAPSHOT_FILE.open(encoding="utf-8") as f:
-        return json.load(f)
+        raw_data = json.load(f)
+
+    return [TrackDict.model_validate(track) for track in raw_data]
 
 
 @pytest.fixture(scope="session")
 def artists_with_tracks(
-    library_tracks: list[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
+    library_tracks: list[TrackDict],
+) -> dict[str, list[TrackDict]]:
     """Group tracks by artist."""
-    artists: dict[str, list[dict[str, Any]]] = {}
+    artists: dict[str, list[TrackDict]] = {}
     for track in library_tracks:
-        if artist := track.get("artist", ""):
+        if artist := track.artist:
             artists.setdefault(artist, []).append(track)
     return artists
 
 
 @pytest.fixture(scope="session")
 def albums_with_tracks(
-    library_tracks: list[dict[str, Any]],
-) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    library_tracks: list[TrackDict],
+) -> dict[tuple[str, str], list[TrackDict]]:
     """Group tracks by (artist, album) tuple."""
-    albums: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    albums: dict[tuple[str, str], list[TrackDict]] = {}
     for track in library_tracks:
-        artist = track.get("artist", "")
-        album = track.get("album", "")
+        artist = track.artist
+        album = track.album
         if artist and album:
             albums.setdefault((artist, album), []).append(track)
     return albums
@@ -68,14 +72,14 @@ def console_logger() -> logging.Logger:
 
 
 @pytest.fixture(scope="session")
-def unique_artists(artists_with_tracks: dict[str, list[dict[str, Any]]]) -> list[str]:
+def unique_artists(artists_with_tracks: dict[str, list[TrackDict]]) -> list[str]:
     """List of unique artist names."""
     return list(artists_with_tracks.keys())
 
 
 @pytest.fixture(scope="session")
 def unique_albums(
-    albums_with_tracks: dict[tuple[str, str], list[dict[str, Any]]],
+    albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
 ) -> list[tuple[str, str]]:
     """List of unique (artist, album) tuples."""
     return list(albums_with_tracks.keys())
