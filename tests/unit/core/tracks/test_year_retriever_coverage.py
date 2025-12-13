@@ -1588,7 +1588,10 @@ class TestDetermineAlbumYearBranches:
             result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
             assert result == "2020"
             mock_cache_service.store_album_year_in_cache.assert_called_once_with(
-                "Artist", "Album", "2020", confidence=80,
+                "Artist",
+                "Album",
+                "2020",
+                confidence=80,
             )
 
     @pytest.mark.asyncio

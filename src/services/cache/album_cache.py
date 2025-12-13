@@ -135,7 +135,10 @@ class AlbumCacheService:
 
             self.logger.debug(
                 "Album year cache entry: %s - %s = %s (confidence %d%%)",
-                artist, album, entry.year, entry.confidence,
+                artist,
+                album,
+                entry.year,
+                entry.confidence,
             )
             return entry
 
@@ -169,7 +172,10 @@ class AlbumCacheService:
         )
         self.logger.debug(
             "Stored album year: %s - %s = %s (confidence %d%%)",
-            normalized_artist, normalized_album, normalized_year, confidence,
+            normalized_artist,
+            normalized_album,
+            normalized_year,
+            confidence,
         )
 
     async def invalidate_album(self, artist: str, album: str) -> None:
@@ -352,13 +358,15 @@ class AlbumCacheService:
                 writer = csv.writer(file_obj)
                 writer.writerow(["artist", "album", "year", "timestamp", "confidence"])
                 for item in items:
-                    writer.writerow([
-                        item.artist,
-                        item.album,
-                        item.year,
-                        f"{item.timestamp:.6f}",
-                        item.confidence,
-                    ])
+                    writer.writerow(
+                        [
+                            item.artist,
+                            item.album,
+                            item.year,
+                            f"{item.timestamp:.6f}",
+                            item.confidence,
+                        ]
+                    )
             # Atomic replace - if this fails, original file is untouched
             Path(temp_path).replace(file_path_obj)
         except BaseException:

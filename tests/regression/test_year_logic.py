@@ -49,9 +49,8 @@ class TestYearDataValidity:
                     )
                 )
 
-        assert len(invalid_years) == 0, (
-            f"Found {len(invalid_years)} invalid year formats:\n"
-            + "\n".join(f"  {v[0]}: {v[1]} - {v[2]} = '{v[3]}'" for v in invalid_years[:10])
+        assert len(invalid_years) == 0, f"Found {len(invalid_years)} invalid year formats:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - {v[2]} = '{v[3]}'" for v in invalid_years[:10]
         )
 
     def test_years_in_reasonable_range(
@@ -81,9 +80,8 @@ class TestYearDataValidity:
                         )
                     )
 
-        assert len(out_of_range) == 0, (
-            f"Found {len(out_of_range)} years outside {min_year}-{max_year}:\n"
-            + "\n".join(f"  {v[0]}: {v[1]} - {v[2]} = {v[3]}" for v in out_of_range[:10])
+        assert len(out_of_range) == 0, f"Found {len(out_of_range)} years outside {min_year}-{max_year}:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - {v[2]} = {v[3]}" for v in out_of_range[:10]
         )
 
 
@@ -101,9 +99,7 @@ class TestDominantYearCalculation:
 
         for (artist, album), tracks in albums_with_tracks.items():
             result = checker.get_dominant_year(tracks)
-            assert result is None or isinstance(
-                result, str
-            ), f"Album {artist} - {album}: expected str|None, got {type(result)}"
+            assert result is None or isinstance(result, str), f"Album {artist} - {album}: expected str|None, got {type(result)}"
 
     def test_dominant_year_format_valid(
         self,
@@ -119,10 +115,7 @@ class TestDominantYearCalculation:
             if result is not None and not (result.isdigit() and len(result) == 4):
                 invalid.append((artist, album, result))
 
-        assert len(invalid) == 0, (
-            f"Found {len(invalid)} invalid dominant years:\n"
-            + "\n".join(f"  {v[0]} - {v[1]} = '{v[2]}'" for v in invalid[:10])
-        )
+        assert len(invalid) == 0, f"Found {len(invalid)} invalid dominant years:\n" + "\n".join(f"  {v[0]} - {v[1]} = '{v[2]}'" for v in invalid[:10])
 
     def test_albums_with_consistent_years_get_dominant(
         self,
@@ -153,11 +146,7 @@ class TestDominantYearCalculation:
                 # (where release year is much older than dateAdded)
                 try:
                     expected_int = int(expected)
-                    earliest_added_year = min(
-                        int(str(t.get("date_added", ""))[:4])
-                        for t in tracks
-                        if t.get("date_added")
-                    )
+                    earliest_added_year = min(int(str(t.get("date_added", ""))[:4]) for t in tracks if t.get("date_added"))
                     if earliest_added_year - expected_int > suspicion_threshold:
                         continue  # Skip - expected to return None for API verification
                 except (ValueError, TypeError):
@@ -175,11 +164,7 @@ class TestDominantYearCalculation:
                 expected_year = years.pop()
                 try:
                     expected_int = int(expected_year)
-                    earliest_added = min(
-                        int(str(t.get("date_added", ""))[:4])
-                        for t in tracks
-                        if t.get("date_added")
-                    )
+                    earliest_added = min(int(str(t.get("date_added", ""))[:4]) for t in tracks if t.get("date_added"))
                     if earliest_added - expected_int <= suspicion_threshold:
                         total_testable += 1
                 except (ValueError, TypeError):
@@ -190,8 +175,7 @@ class TestDominantYearCalculation:
         assert failure_ratio < 0.05, (
             f"Too many failures for consistent albums: "
             f"{len(failures)}/{total_testable} ({failure_ratio:.1%})\n"
-            f"First 10:\n"
-            + "\n".join(f"  {f[0]} - {f[1]}: expected {f[2]}, got {f[3]}" for f in failures[:10])
+            f"First 10:\n" + "\n".join(f"  {f[0]} - {f[1]}: expected {f[2]}, got {f[3]}" for f in failures[:10])
         )
 
 
@@ -204,17 +188,13 @@ class TestYearDistribution:
         library_tracks: list[TrackDict],
     ) -> None:
         """Majority of tracks should have non-empty years."""
-        tracks_with_year = sum(
-            1 for t in library_tracks if t.get("year") and t.get("year") != "0"
-        )
+        tracks_with_year = sum(1 for t in library_tracks if t.get("year") and t.get("year") != "0")
         total = len(library_tracks)
 
         year_ratio = tracks_with_year / total if total > 0 else 0
 
         # At least 80% of tracks should have years
-        assert year_ratio >= 0.8, (
-            f"Too few tracks with years: {tracks_with_year}/{total} ({year_ratio:.1%})"
-        )
+        assert year_ratio >= 0.8, f"Too few tracks with years: {tracks_with_year}/{total} ({year_ratio:.1%})"
 
     def test_year_distribution_reasonable(
         self,
@@ -223,11 +203,7 @@ class TestYearDistribution:
         """Years should cluster around recent decades (basic sanity check)."""
         from collections import Counter
 
-        years = [
-            int(t.get("year", "0"))
-            for t in library_tracks
-            if t.get("year") and t.get("year", "").isdigit() and t.get("year") != "0"
-        ]
+        years = [int(t.get("year", "0")) for t in library_tracks if t.get("year") and t.get("year", "").isdigit() and t.get("year") != "0"]
 
         if not years:
             pytest.skip("No valid years in library")

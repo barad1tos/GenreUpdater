@@ -397,15 +397,11 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached album year for an artist/album pair."""
         return await self.get_album_year(artist, album)
 
-    async def get_album_year_entry_from_cache(
-        self, artist: str, album: str
-    ) -> AlbumCacheEntry | None:
+    async def get_album_year_entry_from_cache(self, artist: str, album: str) -> AlbumCacheEntry | None:
         """Get full album cache entry for an artist/album pair."""
         return await self.album_service.get_album_year_entry(artist, album)
 
-    async def store_album_year_in_cache(
-        self, artist: str, album: str, year: str, confidence: int = 0
-    ) -> None:
+    async def store_album_year_in_cache(self, artist: str, album: str, year: str, confidence: int = 0) -> None:
         """Store album year in persistent cache."""
         await self.store_album_year(artist, album, year, confidence)
 

@@ -78,9 +78,7 @@ class _MockCacheService:
         """Get album year entry from cache (returns None to trigger API call)."""
         return
 
-    async def store_album_year_in_cache(
-        self, _artist: str, _album: str, _year: str, confidence: int = 0
-    ) -> None:
+    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str, confidence: int = 0) -> None:
         """Store album year in cache."""
 
 

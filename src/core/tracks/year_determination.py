@@ -126,14 +126,20 @@ class YearDeterminator:
             if debug.year:
                 self.console_logger.debug(
                     "Using cached year %s for %s - %s (confidence %d%%)",
-                    cached_entry.year, artist, album, cached_entry.confidence,
+                    cached_entry.year,
+                    artist,
+                    album,
+                    cached_entry.confidence,
                 )
             return cached_entry.year
 
         # 3. Check for consensus release_year
         if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
             await self.cache_service.store_album_year_in_cache(
-                artist, album, consensus_year, confidence=CONSENSUS_YEAR_CONFIDENCE,
+                artist,
+                album,
+                consensus_year,
+                confidence=CONSENSUS_YEAR_CONFIDENCE,
             )
             return consensus_year
 
@@ -159,7 +165,10 @@ class YearDeterminator:
 
             if validated_year is not None:
                 await self.cache_service.store_album_year_in_cache(
-                    artist, album, validated_year, confidence=confidence_score,
+                    artist,
+                    album,
+                    validated_year,
+                    confidence=confidence_score,
                 )
                 return validated_year
 

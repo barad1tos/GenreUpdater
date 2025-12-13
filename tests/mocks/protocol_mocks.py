@@ -270,9 +270,7 @@ class MockCacheService:
         entry = self.album_cache.get(key)
         return entry.year if entry else None
 
-    async def get_album_year_entry_from_cache(
-        self, artist: str, album: str
-    ) -> AlbumCacheEntry | None:
+    async def get_album_year_entry_from_cache(self, artist: str, album: str) -> AlbumCacheEntry | None:
         """Get full album cache entry for an artist/album pair.
 
         Args:

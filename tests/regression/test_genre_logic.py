@@ -44,9 +44,7 @@ class TestGenreDataValidity:
         """Genre should be string, not None (empty string is ok)."""
         for track in library_tracks:
             genre = track.get("genre")
-            assert genre is None or isinstance(
-                genre, str
-            ), f"Track {track.get('id')} has non-string genre: {type(genre)}"
+            assert genre is None or isinstance(genre, str), f"Track {track.get('id')} has non-string genre: {type(genre)}"
 
 
 @pytest.mark.regression
@@ -61,9 +59,7 @@ class TestDominantGenreCalculation:
         """determine_dominant_genre_for_artist should return string for all artists."""
         for artist, tracks in artists_with_tracks.items():
             result = determine_dominant_genre_for_artist(tracks, error_logger)
-            assert isinstance(
-                result, str
-            ), f"Artist {artist}: expected str, got {type(result)}"
+            assert isinstance(result, str), f"Artist {artist}: expected str, got {type(result)}"
             assert len(result) > 0, f"Artist {artist}: empty genre string"
 
     def test_dominant_genre_not_always_unknown(
@@ -82,10 +78,7 @@ class TestDominantGenreCalculation:
 
         # Allow up to 20% unknown genres (reasonable for real data)
         unknown_ratio = unknown_count / total_count if total_count > 0 else 0
-        assert unknown_ratio < 0.2, (
-            f"Too many Unknown genres: {unknown_count}/{total_count} "
-            f"({unknown_ratio:.1%})"
-        )
+        assert unknown_ratio < 0.2, f"Too many Unknown genres: {unknown_count}/{total_count} ({unknown_ratio:.1%})"
 
     def test_artists_with_genres_get_dominant_genre(
         self,
@@ -108,9 +101,7 @@ class TestDominantGenreCalculation:
         # Allow some failures (edge cases with parsing issues)
         failure_ratio = len(failures) / len(artists_with_tracks)
         assert failure_ratio < 0.05, (
-            f"Too many failures: {len(failures)}/{len(artists_with_tracks)} "
-            f"({failure_ratio:.1%})\n"
-            f"First 10 failures:\n" + "\n".join(failures[:10])
+            f"Too many failures: {len(failures)}/{len(artists_with_tracks)} ({failure_ratio:.1%})\nFirst 10 failures:\n" + "\n".join(failures[:10])
         )
 
 
@@ -136,9 +127,8 @@ class TestGenreFormat:
                     )
                 )
 
-        assert len(violations) == 0, (
-            f"Found {len(violations)} genres with excessive whitespace:\n"
-            + "\n".join(f"  {v[0]}: {v[1]} - '{v[2]}'" for v in violations[:10])
+        assert len(violations) == 0, f"Found {len(violations)} genres with excessive whitespace:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - '{v[2]}'" for v in violations[:10]
         )
 
     def test_no_genre_longer_than_reasonable(
@@ -160,7 +150,6 @@ class TestGenreFormat:
                     )
                 )
 
-        assert len(violations) == 0, (
-            f"Found {len(violations)} genres longer than {max_reasonable_length}:\n"
-            + "\n".join(f"  {v[0]}: {v[1]} - {v[2]}" for v in violations[:10])
+        assert len(violations) == 0, f"Found {len(violations)} genres longer than {max_reasonable_length}:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - {v[2]}" for v in violations[:10]
         )
