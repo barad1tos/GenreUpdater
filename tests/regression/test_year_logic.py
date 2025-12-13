@@ -183,8 +183,7 @@ class TestYearDistribution:
         library_tracks: list[TrackDict],
     ) -> None:
         """Majority of tracks should have non-empty years."""
-        tracks_with_year = sum(bool(t.year and t.year != "0")
-                           for t in library_tracks)
+        tracks_with_year = sum(bool(t.year and t.year != "0") for t in library_tracks)
         total = len(library_tracks)
 
         year_ratio = tracks_with_year / total if total > 0 else 0
