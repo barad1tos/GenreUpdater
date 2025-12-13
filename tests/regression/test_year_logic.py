@@ -39,16 +39,15 @@ class TestYearDataValidity:
         for track in library_tracks:
             year = track.get("year", "")
             # Allow empty, "0", or 4-digit year
-            if year and year != "0":
-                if not (year.isdigit() and len(year) == 4):
-                    invalid_years.append(
-                        (
-                            str(track.get("id")),
-                            track.get("artist", ""),
-                            track.get("album", ""),
-                            year,
-                        )
+            if year and year != "0" and not (year.isdigit() and len(year) == 4):
+                invalid_years.append(
+                    (
+                        str(track.get("id")),
+                        track.get("artist", ""),
+                        track.get("album", ""),
+                        year,
                     )
+                )
 
         assert len(invalid_years) == 0, (
             f"Found {len(invalid_years)} invalid year formats:\n"
@@ -117,9 +116,8 @@ class TestDominantYearCalculation:
 
         for (artist, album), tracks in albums_with_tracks.items():
             result = checker.get_dominant_year(tracks)
-            if result is not None:
-                if not (result.isdigit() and len(result) == 4):
-                    invalid.append((artist, album, result))
+            if result is not None and not (result.isdigit() and len(result) == 4):
+                invalid.append((artist, album, result))
 
         assert len(invalid) == 0, (
             f"Found {len(invalid)} invalid dominant years:\n"
@@ -171,7 +169,7 @@ class TestDominantYearCalculation:
 
         # Count only non-suspicious albums
         total_testable = 0
-        for (_, _), tracks in albums_with_tracks.items():
+        for tracks in albums_with_tracks.values():
             years = {t.get("year", "") for t in tracks} - {"", "0"}
             if len(years) == 1:
                 expected_year = years.pop()

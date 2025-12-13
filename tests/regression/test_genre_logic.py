@@ -75,7 +75,7 @@ class TestDominantGenreCalculation:
         unknown_count = 0
         total_count = len(artists_with_tracks)
 
-        for artist, tracks in artists_with_tracks.items():
+        for tracks in artists_with_tracks.values():
             result = determine_dominant_genre_for_artist(tracks, error_logger)
             if result == "Unknown":
                 unknown_count += 1
