@@ -83,6 +83,7 @@ exclude = [
     "dist",
     "__pycache__",
     "*/__init__.py",
+    "vulture_whitelist.py",
 ]
 
 # Assume Python 3.13+

@@ -1615,12 +1615,12 @@ class TestYearFallbackConfidenceScoring:
             assert len(mock_pending.marked_albums) == 0, "Should not mark for verification"
 
             allure.attach(
-                f"Existing year: 2005\n"
-                f"Proposed year: 1997 (correct)\n"
-                f"Difference: 8 years (dramatic)\n"
-                f"Confidence: 85% (high)\n"
-                f"Result: API year APPLIED\n"
-                f"Album marked: No",
+                "Existing year: 2005\n"
+                "Proposed year: 1997 (correct)\n"
+                "Difference: 8 years (dramatic)\n"
+                "Confidence: 85% (high)\n"
+                "Result: API year APPLIED\n"
+                "Album marked: No",
                 "Fix Verification",
                 allure.attachment_type.TEXT,
             )
@@ -1666,12 +1666,12 @@ class TestYearFallbackConfidenceScoring:
             assert reason == "suspicious_year_change"
 
             allure.attach(
-                f"Existing year: 2018 (valid)\n"
-                f"Proposed year: 2010\n"
-                f"Difference: 8 years (dramatic)\n"
-                f"Confidence: 40% (low)\n"
-                f"Result: Update SKIPPED (preserves existing)\n"
-                f"Album marked: Yes (for manual verification)",
+                "Existing year: 2018 (valid)\n"
+                "Proposed year: 2010\n"
+                "Difference: 8 years (dramatic)\n"
+                "Confidence: 40% (low)\n"
+                "Result: Update SKIPPED (preserves existing)\n"
+                "Album marked: Yes (for manual verification)",
                 "Preservation Verification",
                 allure.attachment_type.TEXT,
             )
