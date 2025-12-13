@@ -22,7 +22,7 @@ from core.logger import LogFormat, get_full_log_path
 from core.run_tracking import IncrementalRunTracker
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
 from core.utils.icloud_cleanup import cleanup_cache_directory
-from services.cache.album_cache import AlbumCacheService
+from services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
 from services.cache.api_cache import ApiCacheService
 from services.cache.cache_config import CacheEvent, CacheEventType
 from services.cache.generic_cache import GenericCacheService
@@ -142,15 +142,16 @@ class CacheOrchestrator(CacheServiceProtocol):
         """
         return await self.album_service.get_album_year(artist, album)
 
-    async def store_album_year(self, artist: str, album: str, year: str) -> None:
+    async def store_album_year(self, artist: str, album: str, year: str, confidence: int = 0) -> None:
         """Store album release year in cache.
 
         Args:
             artist: Artist name
             album: Album name
             year: Album release year
+            confidence: Confidence score 0-100 (higher = more trustworthy)
         """
-        await self.album_service.store_album_year(artist, album, year)
+        await self.album_service.store_album_year(artist, album, year, confidence)
 
     # =========================== API CACHE API ===========================
 
@@ -396,9 +397,17 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached album year for an artist/album pair."""
         return await self.get_album_year(artist, album)
 
-    async def store_album_year_in_cache(self, artist: str, album: str, year: str) -> None:
+    async def get_album_year_entry_from_cache(
+        self, artist: str, album: str
+    ) -> AlbumCacheEntry | None:
+        """Get full album cache entry for an artist/album pair."""
+        return await self.album_service.get_album_year_entry(artist, album)
+
+    async def store_album_year_in_cache(
+        self, artist: str, album: str, year: str, confidence: int = 0
+    ) -> None:
         """Store album year in persistent cache."""
-        await self.store_album_year(artist, album, year)
+        await self.store_album_year(artist, album, year, confidence)
 
     async def invalidate_album_cache(self, artist: str, album: str) -> None:
         """Invalidate cached data for a specific album."""

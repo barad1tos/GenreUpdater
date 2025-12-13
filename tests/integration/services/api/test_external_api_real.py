@@ -185,7 +185,7 @@ class TestMusicBrainzIntegration:
 
         # Should find the year - 1969 is well-documented
         assert result is not None
-        year, is_reliable = result
+        year, is_reliable, _confidence = result
         assert year == "1969"
         assert is_reliable is True
 
@@ -200,9 +200,9 @@ class TestMusicBrainzIntegration:
             album="This Album Does Not Exist ABC456",
         )
 
-        # Should return (None, False) for non-existent album
+        # Should return (None, False, 0) for non-existent album
         assert result is not None
-        year, is_reliable = result
+        year, is_reliable, _confidence = result
         assert year is None
         assert is_reliable is False
 
@@ -219,7 +219,7 @@ class TestMusicBrainzIntegration:
         )
 
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "1973"
 
     @pytest.mark.asyncio
@@ -235,7 +235,7 @@ class TestMusicBrainzIntegration:
         )
 
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "2011"
 
 
@@ -315,7 +315,7 @@ class TestConcurrentApiCalls:
 
         async def get_year(artist: str, album: str) -> tuple[str, str, str | None]:
             """Fetch album year from API."""
-            album_year, _ = await api_orchestrator.get_album_year(artist=artist, album=album)
+            album_year, _, _confidence = await api_orchestrator.get_album_year(artist=artist, album=album)
             return artist, album, album_year
 
         # Run lookups concurrently
@@ -346,7 +346,7 @@ class TestApiErrorHandling:
 
         # Back in Black was released in 1980
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "1980"
 
     @pytest.mark.asyncio
@@ -363,7 +363,7 @@ class TestApiErrorHandling:
 
         # Post was released in 1995
         if result is not None:  # May not find if API doesn't handle Unicode well
-            year, _ = result
+            year, _, _confidence = result
             assert year == "1995"
 
     @pytest.mark.asyncio

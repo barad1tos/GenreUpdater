@@ -56,12 +56,13 @@ class TestYearPipelineIntegration:
             mock_cache_service.get_async = AsyncMock(return_value=None)
             mock_cache_service.set_async = AsyncMock()
             mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
+            mock_cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=None)
             mock_cache_service.cache_album_year = AsyncMock()
             mock_cache_service.store_album_year_in_cache = AsyncMock()
 
         if mock_external_api is None:
             mock_external_api = AsyncMock()
-            mock_external_api.get_album_year = AsyncMock(return_value=("2020", True))
+            mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
         if mock_pending_verification is None:
             mock_pending_verification = MagicMock()
@@ -125,7 +126,7 @@ class TestYearPipelineIntegration:
 
             # Mock successful MusicBrainz response
             mock_external_api = AsyncMock()
-            mock_external_api.get_album_year = AsyncMock(return_value=("1969", True))
+            mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90))
 
             year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_external_api=mock_external_api)
 
@@ -235,7 +236,7 @@ class TestYearPipelineIntegration:
 
             # Mock all APIs failing to find year
             mock_external_api = AsyncMock()
-            mock_external_api.get_album_year = AsyncMock(return_value=(None, False))
+            mock_external_api.get_album_year = AsyncMock(return_value=(None, False, 0))  # 3-tuple
 
             year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_external_api=mock_external_api)
 
@@ -296,7 +297,7 @@ class TestYearPipelineIntegration:
 
             # Mock API response for prerelease handling
             mock_external_api = AsyncMock()
-            mock_external_api.get_album_year = AsyncMock(return_value=("2024", True))
+            mock_external_api.get_album_year = AsyncMock(return_value=("2024", True, 85))
 
             year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_external_api=mock_external_api)
 
@@ -363,7 +364,7 @@ class TestYearPipelineIntegration:
 
             # Mock API for verification scenario
             mock_external_api = AsyncMock()
-            mock_external_api.get_album_year = AsyncMock(return_value=("2020", True))
+            mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
             # Mock pending verification service
             mock_pending_verification = MagicMock()

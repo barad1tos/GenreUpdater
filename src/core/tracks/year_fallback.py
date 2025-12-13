@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from core.models.protocols import PendingVerificationServiceProtocol
     from core.models.track_models import TrackDict
 
+# Confidence threshold for trusting API over library
+DEFAULT_TRUST_API_SCORE_THRESHOLD = 70  # Trust API if confidence >= this
+
 
 class YearFallbackHandler:
     """Handles fallback logic for year decisions.
@@ -43,6 +46,7 @@ class YearFallbackHandler:
         fallback_enabled: bool,
         absurd_year_threshold: int,
         year_difference_threshold: int,
+        trust_api_score_threshold: int = DEFAULT_TRUST_API_SCORE_THRESHOLD,
     ) -> None:
         """Initialize the year fallback handler.
 
@@ -51,7 +55,8 @@ class YearFallbackHandler:
             pending_verification: Service for marking albums for verification
             fallback_enabled: Whether fallback logic is enabled
             absurd_year_threshold: Years below this are considered absurd
-            year_difference_threshold: Max allowed year difference before suspicious
+            year_difference_threshold: Max allowed year difference before dramatic change
+            trust_api_score_threshold: Trust API if confidence >= this value
 
         """
         self.console_logger = console_logger
@@ -59,12 +64,14 @@ class YearFallbackHandler:
         self.fallback_enabled = fallback_enabled
         self.absurd_year_threshold = absurd_year_threshold
         self.year_difference_threshold = year_difference_threshold
+        self.trust_api_score_threshold = trust_api_score_threshold
 
     async def apply_year_fallback(
         self,
         proposed_year: str,
         album_tracks: list[TrackDict],
         is_definitive: bool,
+        confidence_score: int,
         artist: str,
         album: str,
     ) -> str | None:
@@ -74,6 +81,7 @@ class YearFallbackHandler:
             proposed_year: Year from API
             album_tracks: List of tracks in the album
             is_definitive: Whether API is confident in the year
+            confidence_score: API confidence score (0-100)
             artist: Artist name
             album: Album name
 
@@ -119,8 +127,8 @@ class YearFallbackHandler:
         if special_result is not None:
             return special_result if special_result != "" else None
 
-        # Rule 5: Check for dramatic year change
-        if await self._handle_dramatic_year_change(proposed_year, existing_year, artist, album):
+        # Rule 5: Check for dramatic year change (now considers confidence score and suspicious years)
+        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album):
             return None
 
         # Rule 6: Apply year (low confidence but reasonable change)
@@ -218,13 +226,32 @@ class YearFallbackHandler:
         self,
         proposed_year: str,
         existing_year: str,
+        confidence_score: int,
         artist: str,
         album: str,
     ) -> bool:
-        """Handle dramatic year changes. Returns True if it should skip."""
+        """Handle dramatic year changes. Returns True if should skip update.
+
+        Logic:
+        1. High confidence API (>=70%) → trust API, apply year
+        2. Low confidence + dramatic change → preserve existing, mark for verification
+        """
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
 
+        # High confidence API → trust API despite dramatic change
+        if confidence_score >= self.trust_api_score_threshold:
+            self.console_logger.info(
+                "[FALLBACK] Applying API year %s (confidence %d%%) despite dramatic change from %s for %s - %s",
+                proposed_year,
+                confidence_score,
+                existing_year,
+                artist,
+                album,
+            )
+            return False  # Don't skip - apply the year
+
+        # Low confidence + dramatic change → preserve existing year
         await self.pending_verification.mark_for_verification(
             artist=artist,
             album=album,
@@ -233,16 +260,18 @@ class YearFallbackHandler:
                 "existing_year": existing_year,
                 "proposed_year": proposed_year,
                 "year_difference": abs(int(existing_year) - int(proposed_year)),
+                "confidence_score": confidence_score,
                 "confidence": "low",
             },
         )
         self.console_logger.warning(
-            "[FALLBACK] Preserving existing year %s for %s - %s (dramatic change to %s detected, diff > %d years)",
+            "[FALLBACK] Preserving existing year %s for %s - %s (dramatic change to %s, diff > %d years, confidence %d%%)",
             existing_year,
             artist,
             album,
             proposed_year,
             self.year_difference_threshold,
+            confidence_score,
         )
         return True
 

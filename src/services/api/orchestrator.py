@@ -827,17 +827,21 @@ class ExternalApiOrchestrator:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool]:
-        """Determine the original release year for an album using optimized API calls and revised scoring."""
+    ) -> tuple[str | None, bool, int]:
+        """Determine the original release year for an album using optimized API calls and revised scoring.
+
+        Returns:
+            Tuple of (year, is_definitive, confidence_score)
+        """
         # Initialize and prepare inputs
         try:
             inputs = await self._initialize_year_search(artist, album, current_library_year)
             if not inputs:
-                return None, False
+                return None, False, 0
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             if debug.year:
                 self.error_logger.exception("Error in get_album_year initialization: %s", e)
-            return None, False
+            return None, False, 0
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
 
@@ -922,8 +926,12 @@ class ExternalApiOrchestrator:
             current_library_year or "none",
         )
 
-    def _handle_year_search_error(self, log_artist: str, log_album: str, current_library_year: str | None) -> tuple[str | None, bool]:
-        """Handle errors during year search and return fallback year."""
+    def _handle_year_search_error(self, log_artist: str, log_album: str, current_library_year: str | None) -> tuple[str | None, bool, int]:
+        """Handle errors during year search and return fallback year.
+
+        Returns:
+            Tuple of (year, is_definitive, confidence_score)
+        """
         self.error_logger.exception(
             "Unexpected error in get_album_year for '%s - %s'",
             log_artist,
@@ -939,10 +947,10 @@ class ExternalApiOrchestrator:
                     log_artist,
                     log_album,
                 )
-                return None, False
+                return None, False, 0
 
-            return current_library_year, False
-        return None, False
+            return current_library_year, False, 0
+        return None, False, 0
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
@@ -1014,8 +1022,12 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
-    ) -> tuple[str | None, bool]:
-        """Handle case when no API results are found."""
+    ) -> tuple[str | None, bool, int]:
+        """Handle case when no API results are found.
+
+        Returns:
+            Tuple of (year, is_definitive, confidence_score)
+        """
         self.console_logger.warning("No release data found from any API for '%s - %s'", log_artist, log_album)
         await self._safe_mark_for_verification(artist, album)
         # Apply defensive fix to prevent current year contamination
@@ -1033,7 +1045,7 @@ class ExternalApiOrchestrator:
                 result_year = current_library_year
         else:
             result_year = None
-        return result_year, False
+        return result_year, False, 0
 
     async def _process_api_results(
         self,
@@ -1043,8 +1055,12 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
-    ) -> tuple[str | None, bool]:
-        """Process API results and determine the best release year."""
+    ) -> tuple[str | None, bool, int]:
+        """Process API results and determine the best release year.
+
+        Returns:
+            Tuple of (year, is_definitive, confidence_score)
+        """
         # Aggregate scores by year using YearScoreResolver
         year_scores = self.year_score_resolver.aggregate_year_scores(all_releases)
 
@@ -1057,19 +1073,19 @@ class ExternalApiOrchestrator:
             )
             await self._safe_mark_for_verification(artist, album)
             fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album)
-            return fallback_year, False
+            return fallback_year, False, 0
 
         # Determine the best year and definitive status using YearScoreResolver
-        best_year, is_definitive = self.year_score_resolver.select_best_year(year_scores)
+        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores)
 
-        self.console_logger.info("Selected year: %s. Definitive? %s", best_year, is_definitive)
+        self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 
         if not is_definitive:
             await self._safe_mark_for_verification(artist, album)
         else:
             await self._safe_remove_from_pending(artist, album)
 
-        return best_year, is_definitive
+        return best_year, is_definitive, confidence_score
 
     def _get_fallback_year_when_no_api_results(self, current_library_year: str | None, log_artist: str, log_album: str) -> str | None:
         """Apply defensive fix to prevent current year contamination when no API results found."""

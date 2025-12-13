@@ -29,6 +29,7 @@ class AlbumCacheEntry:
     album: str
     year: str
     timestamp: float
+    confidence: int = 0  # 0-100, higher = more trustworthy
 
 
 class AlbumCacheService:
@@ -98,13 +99,57 @@ class AlbumCacheService:
         self.logger.debug("Album year cache miss: %s - %s", artist, album)
         return None
 
-    async def store_album_year(self, artist: str, album: str, year: str) -> None:
+    async def get_album_year_entry(self, artist: str, album: str) -> AlbumCacheEntry | None:
+        """Get full album cache entry (not just year).
+
+        Use this method when you need to check confidence level before trusting cached data.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Full AlbumCacheEntry if found and not expired, None otherwise
+        """
+        await asyncio.sleep(0)
+        key = UnifiedHashService.hash_album_key(artist, album)
+
+        if key in self.album_years_cache:
+            entry = self.album_years_cache[key]
+
+            # Validate cache entry consistency (detect true hash collision)
+            if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
+                self.logger.warning(
+                    "Hash collision detected: requested '%s - %s', found '%s - %s'",
+                    artist,
+                    album,
+                    entry.artist,
+                    entry.album,
+                )
+                return None
+
+            if self._is_entry_expired(entry):
+                self.logger.debug("Album year cache expired: %s - %s", artist, album)
+                del self.album_years_cache[key]
+                return None
+
+            self.logger.debug(
+                "Album year cache entry: %s - %s = %s (confidence %d%%)",
+                artist, album, entry.year, entry.confidence,
+            )
+            return entry
+
+        self.logger.debug("Album year cache miss: %s - %s", artist, album)
+        return None
+
+    async def store_album_year(self, artist: str, album: str, year: str, confidence: int = 0) -> None:
         """Store album release year in cache.
 
         Args:
             artist: Artist name
             album: Album name
             year: Album release year
+            confidence: Confidence score 0-100 (higher = more trustworthy)
         """
         # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
         await asyncio.sleep(0)
@@ -120,8 +165,12 @@ class AlbumCacheService:
             album=normalized_album,
             year=normalized_year,
             timestamp=time.time(),
+            confidence=confidence,
         )
-        self.logger.debug("Stored album year: %s - %s = %s", normalized_artist, normalized_album, normalized_year)
+        self.logger.debug(
+            "Stored album year: %s - %s = %s (confidence %d%%)",
+            normalized_artist, normalized_album, normalized_year, confidence,
+        )
 
     async def invalidate_album(self, artist: str, album: str) -> None:
         """Invalidate specific album from cache.
@@ -252,6 +301,9 @@ class AlbumCacheService:
             year = row["year"].strip()
             timestamp_raw = row.get("timestamp", "")
             timestamp = float(timestamp_raw) if timestamp_raw else time.time()
+            # Backward compatible: old entries without confidence default to 0
+            confidence_raw = row.get("confidence", "0")
+            confidence = int(confidence_raw) if confidence_raw else 0
 
             if artist and album and year:
                 key = UnifiedHashService.hash_album_key(artist, album)
@@ -260,6 +312,7 @@ class AlbumCacheService:
                     album=album,
                     year=year,
                     timestamp=timestamp,
+                    confidence=confidence,
                 )
             else:
                 self.logger.warning("Skipping invalid CSV row: %s", row)
@@ -297,9 +350,15 @@ class AlbumCacheService:
 
             with file_obj:
                 writer = csv.writer(file_obj)
-                writer.writerow(["artist", "album", "year", "timestamp"])
+                writer.writerow(["artist", "album", "year", "timestamp", "confidence"])
                 for item in items:
-                    writer.writerow([item.artist, item.album, item.year, f"{item.timestamp:.6f}"])
+                    writer.writerow([
+                        item.artist,
+                        item.album,
+                        item.year,
+                        f"{item.timestamp:.6f}",
+                        item.confidence,
+                    ])
             # Atomic replace - if this fails, original file is untouched
             Path(temp_path).replace(file_path_obj)
         except BaseException:

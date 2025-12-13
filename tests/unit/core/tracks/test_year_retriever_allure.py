@@ -74,7 +74,13 @@ class _MockCacheService:
         """Get album year from cache."""
         return self._cache.get(f"{_artist}|{_album}_year")
 
-    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str) -> None:
+    async def get_album_year_entry_from_cache(self, _artist: str, _album: str) -> None:
+        """Get album year entry from cache (returns None to trigger API call)."""
+        return None
+
+    async def store_album_year_in_cache(
+        self, _artist: str, _album: str, _year: str, confidence: int = 0
+    ) -> None:
         """Store album year in cache."""
 
 
@@ -84,9 +90,9 @@ class _MockExternalApiService:
     def __init__(self) -> None:
         """Initialize mock external API service."""
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
-        self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
+        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
 
-    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool]:
+    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool, int]:
         """Get album year from API."""
         self.get_album_year_calls.append((artist, album, existing_year))
         return self.get_album_year_response
@@ -408,7 +414,7 @@ class TestYearRetrieverAllure:
         with allure.step("Setup mock external API"):
             mock_external_api = _MockExternalApiService()
             expected_year = "1995"
-            mock_external_api.get_album_year_response = (expected_year, True)
+            mock_external_api.get_album_year_response = (expected_year, True, 85)
 
         with allure.step("Create YearRetriever with mock API"):
             retriever = self.create_year_retriever(external_api=mock_external_api)

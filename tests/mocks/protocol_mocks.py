@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from core.models.track_models import CachedApiResult, TrackDict
+from services.cache.album_cache import AlbumCacheEntry
 from services.pending_verification import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class MockCacheService:
     def __init__(self) -> None:
         """Initialize the mock cache service."""
         self.storage: dict[str, CacheableValue] = {}
-        self.album_cache: dict[str, str] = {}
+        self.album_cache: dict[str, AlbumCacheEntry] = {}
         self.api_cache: dict[str, CachedApiResult] = {}
         self.last_run_timestamp = datetime(2024, 1, 1, tzinfo=UTC)
         self.ttl_overrides: dict[str, int | None] = {}
@@ -266,6 +267,22 @@ class MockCacheService:
             Cached year string or None if not found
         """
         key = self.generate_album_key(artist, album)
+        entry = self.album_cache.get(key)
+        return entry.year if entry else None
+
+    async def get_album_year_entry_from_cache(
+        self, artist: str, album: str
+    ) -> AlbumCacheEntry | None:
+        """Get full album cache entry for an artist/album pair.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Full AlbumCacheEntry or None if not found
+        """
+        key = self.generate_album_key(artist, album)
         return self.album_cache.get(key)
 
     async def store_album_year_in_cache(
@@ -273,6 +290,7 @@ class MockCacheService:
         artist: str,
         album: str,
         year: str,
+        confidence: int = 0,
     ) -> None:
         """Store album year in persistent cache.
 
@@ -280,9 +298,18 @@ class MockCacheService:
             artist: Artist name
             album: Album name
             year: Year to cache
+            confidence: Confidence score 0-100
         """
+        import time
+
         key = self.generate_album_key(artist, album)
-        self.album_cache[key] = year
+        self.album_cache[key] = AlbumCacheEntry(
+            artist=artist,
+            album=album,
+            year=year,
+            timestamp=time.time(),
+            confidence=confidence,
+        )
 
     async def invalidate_album_cache(self, artist: str, album: str) -> None:
         """Invalidate cached data for a specific album.
@@ -378,7 +405,7 @@ class MockExternalApiService:
 
     def __init__(self) -> None:
         """Initialize the mock external API service."""
-        self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
+        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
         self.discogs_year_response: str | None = "2020"
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
@@ -400,7 +427,7 @@ class MockExternalApiService:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool]:
+    ) -> tuple[str | None, bool, int]:
         """Get album year from external sources.
 
         Args:
@@ -409,7 +436,7 @@ class MockExternalApiService:
             current_library_year: Current year in library
 
         Returns:
-            Tuple of (year, is_definitive)
+            Tuple of (year, is_definitive, confidence_score)
         """
         self.get_album_year_calls.append((artist, album, current_library_year))
         return self.get_album_year_response

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from core.models.track_models import CachedApiResult
+    from services.cache.album_cache import AlbumCacheEntry
     from services.pending_verification import PendingAlbumEntry
 
 # Type variable for generic cached values
@@ -162,11 +163,29 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
+    async def get_album_year_entry_from_cache(
+        self, artist: str, album: str
+    ) -> AlbumCacheEntry | None:
+        """Get full album cache entry for an artist/album pair.
+
+        Use this method when you need to check confidence level before trusting cached data.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Full AlbumCacheEntry or None if not found
+
+        """
+        ...
+
     async def store_album_year_in_cache(
         self,
         artist: str,
         album: str,
         year: str,
+        confidence: int = 0,
     ) -> None:
         """Store album year in persistent cache.
 
@@ -174,6 +193,7 @@ class CacheServiceProtocol(Protocol):
             artist: Artist name
             album: Album name
             year: Year to cache
+            confidence: Confidence score 0-100 (higher = more trustworthy)
 
         """
         ...
@@ -283,7 +303,7 @@ class ExternalApiServiceProtocol(Protocol):
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool]:
+    ) -> tuple[str | None, bool, int]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
         Args:
@@ -292,7 +312,7 @@ class ExternalApiServiceProtocol(Protocol):
             current_library_year: Current year in library (optional)
 
         Returns:
-            Tuple of (year_string, is_definitive) where is_definitive indicates confidence
+            Tuple of (year_string, is_definitive, confidence_score) where is_definitive indicates confidence
 
         """
         ...

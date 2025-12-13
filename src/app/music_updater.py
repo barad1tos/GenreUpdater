@@ -362,7 +362,7 @@ class MusicUpdater:
         verified_count = 0
         failed_count = 0
         for entry in albums_to_verify:
-            year_str, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            year_str, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
             if not year_str:
                 failed_count += 1
                 continue

@@ -73,18 +73,22 @@ class YearScoreResolver:
 
         return year_scores
 
-    def select_best_year(self, year_scores: defaultdict[str, list[int]]) -> tuple[str, bool]:
-        """Select the best year from aggregated scores and determine if definitive."""
+    def select_best_year(self, year_scores: defaultdict[str, list[int]]) -> tuple[str, bool, int]:
+        """Select the best year from aggregated scores and determine if definitive.
+
+        Returns:
+            Tuple of (best_year, is_definitive, confidence_score)
+        """
         if not year_scores:
             self.console_logger.warning("No year scores to evaluate")
-            return "", False
+            return "", False, 0
 
         final_year_scores = self._compute_final_year_scores(year_scores)
         sorted_years = self._sort_years_by_score(final_year_scores)
 
         if not sorted_years:
             self.console_logger.warning("No valid years after score computation")
-            return "", False
+            return "", False, 0
 
         self._log_ranked_years(sorted_years)
 
@@ -102,14 +106,14 @@ class YearScoreResolver:
                     "Single result validation failed for year %s - marking as non-definitive",
                     best_year,
                 )
-                return best_year, False
+                return best_year, False, best_score
         else:
             is_definitive = self._determine_definitiveness(score_thresholds, best_year_is_future, has_score_conflict)
 
         if not is_definitive:
             self._log_non_definitive_reasons(best_year_is_future, score_thresholds, has_score_conflict, best_score)
 
-        return best_year, is_definitive
+        return best_year, is_definitive, best_score
 
     @staticmethod
     def _compute_final_year_scores(year_scores: defaultdict[str, list[int]]) -> dict[str, int]:

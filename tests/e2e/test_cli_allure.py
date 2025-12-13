@@ -70,6 +70,7 @@ class TestCLIE2E:
 
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()
+        mock_deps.ap_client.fetch_all_track_ids = AsyncMock(return_value=[])
 
         async def smart_run_script(script_name: str, args: list[str] | None = None, timeout: int = 30) -> str:
             """Mock AppleScript execution with context-aware responses."""
@@ -88,7 +89,7 @@ class TestCLIE2E:
         # API orchestrator mock
         mock_deps.api_orchestrator = MagicMock()
         mock_deps.api_orchestrator.get_artist_genres = AsyncMock(return_value=["Rock", "Alternative"])
-        mock_deps.api_orchestrator.get_album_year = AsyncMock(return_value=("2020", True))
+        mock_deps.api_orchestrator.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
         # Verification service mock
         mock_deps.pending_verification = MagicMock()

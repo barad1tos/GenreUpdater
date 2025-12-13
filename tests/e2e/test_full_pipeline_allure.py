@@ -105,7 +105,7 @@ class TestFullApplicationPipelineE2E:
 
         # External API orchestrator mock
         mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False))
+        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))  # 3-tuple
 
         # Pending verification mock
         mock_deps.pending_verification = MagicMock()
