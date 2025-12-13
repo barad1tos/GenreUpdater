@@ -1,0 +1,159 @@
+name: Diagnose Year Lookup Failures
+
+on:
+  schedule:
+    # Monday 5 AM UTC (8 AM Kyiv time)
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      max_albums:
+        description: 'Max albums to diagnose (0 = all)'
+        type: number
+        default: 10
+      dry_run:
+        description: 'Dry run (no issues created)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    name: Diagnose Failures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check fixture exists
+        id: check-fixture
+        run: |
+          FIXTURE="tests/fixtures/pending_year_verification.csv"
+          if [ ! -f "$FIXTURE" ]; then
+            echo "::warning::pending_year_verification.csv not found. Skipping diagnostics."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            LINES=$(wc -l < "$FIXTURE" | tr -d ' ')
+            echo "Found $LINES lines in pending_year_verification.csv"
+            if [ "$LINES" -le 1 ]; then
+              echo "::notice::No pending albums to diagnose"
+              echo "skip=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Install uv
+        if: steps.check-fixture.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        if: steps.check-fixture.outputs.skip != 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        if: steps.check-fixture.outputs.skip != 'true'
+        run: |
+          uv sync
+          # Install PyGithub for issue creation
+          uv add PyGithub
+
+      - name: Run diagnostics
+        if: steps.check-fixture.outputs.skip != 'true'
+        env:
+          # MusicBrainz requires User-Agent, no API key
+          MUSICBRAINZ_USER_AGENT: "GenreUpdater/2.0 (https://github.com/${{ github.repository }})"
+          # Optional: Discogs token for higher rate limits
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          # Last.fm API key
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+        run: |
+          MAX_ALBUMS="${{ inputs.max_albums || '10' }}"
+
+          echo "=== Running diagnostics ==="
+          echo "Max albums: $MAX_ALBUMS"
+
+          uv run python scripts/diagnose_failures.py \
+            --input tests/fixtures/pending_year_verification.csv \
+            --output diagnostic_results.json \
+            --max-albums "$MAX_ALBUMS"
+
+          echo ""
+          echo "=== Diagnostic Results ==="
+          cat diagnostic_results.json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          print(f'Timestamp: {data[\"timestamp\"]}')
+          print(f'Diagnosed: {len(data[\"diagnoses\"])} albums')
+          for d in data['diagnoses'][:5]:
+              print(f'  - {d[\"artist\"]} - {d[\"album\"]}: {len(d[\"possible_causes\"])} causes')
+          "
+
+      - name: Create GitHub Issues
+        if: steps.check-fixture.outputs.skip != 'true' && inputs.dry_run != true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Creating GitHub Issues ==="
+
+          uv run python scripts/create_issue.py \
+            --input diagnostic_results.json \
+            --repo ${{ github.repository }} \
+            --labels "year-lookup-failed,automated,needs-investigation"
+
+      - name: Dry run - show what would be created
+        if: steps.check-fixture.outputs.skip != 'true' && inputs.dry_run == true
+        run: |
+          echo "=== DRY RUN - Would create these issues ==="
+
+          uv run python scripts/create_issue.py \
+            --input diagnostic_results.json \
+            --repo ${{ github.repository }} \
+            --dry-run
+
+      - name: Upload diagnostic report
+        if: steps.check-fixture.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-report-${{ github.run_number }}
+          path: |
+            diagnostic_results.json
+            issue_results.json
+          retention-days: 30
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Diagnostics Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check-fixture.outputs.skip }}" = "true" ]; then
+            echo ":warning: **Skipped** - No pending albums to diagnose" >> $GITHUB_STEP_SUMMARY
+          elif [ -f diagnostic_results.json ]; then
+            COUNT=$(cat diagnostic_results.json | python3 -c "import sys, json; print(len(json.load(sys.stdin)['diagnoses']))")
+            echo ":white_check_mark: **Diagnosed $COUNT albums**" >> $GITHUB_STEP_SUMMARY
+
+            if [ -f issue_results.json ]; then
+              CREATED=$(cat issue_results.json | python3 -c "import sys, json; d=json.load(sys.stdin); print(sum(1 for r in d['results'] if r['action']=='created'))")
+              UPDATED=$(cat issue_results.json | python3 -c "import sys, json; d=json.load(sys.stdin); print(sum(1 for r in d['results'] if r['action']=='updated'))")
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Action | Count |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Issues Created | $CREATED |" >> $GITHUB_STEP_SUMMARY
+              echo "| Issues Updated | $UPDATED |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo ":x: **Failed** - Check logs for details" >> $GITHUB_STEP_SUMMARY
+          fi

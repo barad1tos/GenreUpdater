@@ -164,6 +164,18 @@ if timeout "$TIMEOUT_SECONDS" uv run python main.py \
     # Update timestamp
     date +%s > "$TIMESTAMP_FILE"
 
+    # Sync diagnostic data to main repo for CI
+    MAIN_REPO="${DAEMON_DIR%-daemon}"
+    SYNC_SCRIPT="$MAIN_REPO/scripts/sync-diagnostics.sh"
+    if [[ -x "$SYNC_SCRIPT" ]]; then
+        log "Syncing diagnostic data to git..."
+        if "$SYNC_SCRIPT" 2>&1 | tee -a "$DAEMON_LOG"; then
+            log "Diagnostic sync completed"
+        else
+            log "Warning: Diagnostic sync failed (non-critical)"
+        fi
+    fi
+
     notify "Genre Updater" "Update completed successfully" "Glass"
 else
     EXIT_CODE=$?
