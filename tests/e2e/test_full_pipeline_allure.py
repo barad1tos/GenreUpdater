@@ -94,7 +94,6 @@ class TestFullApplicationPipelineE2E:
             return "" if "fetch_track_summaries" in script_name else "[]"
 
         mock_deps.ap_client.run_script = AsyncMock(side_effect=smart_run_script)
-        mock_deps.ap_client.run_script_code = AsyncMock(return_value="[]")  # For database verification
 
         # Cache service mock
         mock_deps.cache_service = MagicMock()
@@ -106,7 +105,7 @@ class TestFullApplicationPipelineE2E:
 
         # External API orchestrator mock
         mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False))
+        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))  # 3-tuple
 
         # Pending verification mock
         mock_deps.pending_verification = MagicMock()

@@ -44,6 +44,24 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.status import Status
 
+# Module-level shared console container (avoids global statement)
+_console_holder: dict[str, Console] = {}
+
+
+def get_shared_console() -> Console:
+    """Get or create the shared Rich console instance.
+
+    All Rich output (logging, spinners, progress bars) should use this
+    single Console instance to prevent output interleaving issues.
+
+    Returns:
+        The shared Console instance.
+
+    """
+    if "console" not in _console_holder:
+        _console_holder["console"] = Console()
+    return _console_holder["console"]
+
 
 class SafeQueueListener(QueueListener):
     """A QueueListener wrapper that safely handles stop() calls."""
@@ -221,7 +239,7 @@ async def spinner(message: str, console: Console | None = None) -> AsyncGenerato
         async with spinner("Fetching all track IDs from Music.app..."):
             result = await run_applescript(...)
     """
-    _console = console or Console()
+    _console = console or get_shared_console()
     with _console.status(f"[cyan]{message}[/cyan]") as status:
         yield status
 
@@ -750,7 +768,7 @@ def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
     if not console_logger.handlers:
         ch = RichHandler(
             level=levels["console"],
-            console=Console(),
+            console=get_shared_console(),
             show_path=False,
             enable_link_path=False,
             log_time_format="%H:%M:%S",

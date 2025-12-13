@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 # Constants
 SUSPICIOUS_ALBUM_MIN_LEN = 3  # Album names with length <= 3 are suspicious
 SUSPICIOUS_MANY_YEARS = 3  # If >= 3 unique years present, skip auto updates
+CACHE_TRUST_THRESHOLD = 90  # Only trust cached year if confidence >= this value
+CONSENSUS_YEAR_CONFIDENCE = 80  # Confidence score for consensus release_year
 
 
 class YearDeterminator:
@@ -118,19 +120,32 @@ class YearDeterminator:
         if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
             return dominant_year
 
-        # 2. Check cache (might have from previous API call)
-        cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
-        if cached_year:
-            return cached_year
+        # 2. Check cache — BUT only trust if high confidence
+        cached_entry = await self.cache_service.get_album_year_entry_from_cache(artist, album)
+        if cached_entry and cached_entry.confidence >= CACHE_TRUST_THRESHOLD:
+            if debug.year:
+                self.console_logger.debug(
+                    "Using cached year %s for %s - %s (confidence %d%%)",
+                    cached_entry.year,
+                    artist,
+                    album,
+                    cached_entry.confidence,
+                )
+            return cached_entry.year
 
         # 3. Check for consensus release_year
         if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
-            await self.cache_service.store_album_year_in_cache(artist, album, consensus_year)
+            await self.cache_service.store_album_year_in_cache(
+                artist,
+                album,
+                consensus_year,
+                confidence=CONSENSUS_YEAR_CONFIDENCE,
+            )
             return consensus_year
 
         # 4. API as last resort
         try:
-            year_result, is_definitive = await self.external_api.get_album_year(artist, album)
+            year_result, is_definitive, confidence_score = await self.external_api.get_album_year(artist, album)
         except (OSError, ValueError, RuntimeError) as e:
             if debug.year:
                 self.console_logger.exception("Exception in get_album_year: %s", e)
@@ -143,12 +158,18 @@ class YearDeterminator:
                 proposed_year=year_result,
                 album_tracks=album_tracks,
                 is_definitive=is_definitive,
+                confidence_score=confidence_score,
                 artist=artist,
                 album=album,
             )
 
             if validated_year is not None:
-                await self.cache_service.store_album_year_in_cache(artist, album, validated_year)
+                await self.cache_service.store_album_year_in_cache(
+                    artist,
+                    album,
+                    validated_year,
+                    confidence=confidence_score,
+                )
                 return validated_year
 
         return None
@@ -396,39 +417,6 @@ class YearDeterminator:
             recheck_days=self.prerelease_recheck_days,
         )
         return True
-
-    async def handle_release_years(
-        self,
-        artist: str,
-        album: str,
-        release_years: list[str],
-    ) -> str | None:
-        """Handle case when release years are found in track metadata.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            release_years: List of release years found
-
-        Returns:
-            Year string if valid, None if it should skip
-
-        """
-        if not release_years:
-            return None
-
-        year_counts = Counter(release_years)
-        most_common_year = year_counts.most_common(1)[0][0]
-
-        self.console_logger.info(
-            "Using release year %s from Music.app metadata for '%s - %s' (fallback)",
-            most_common_year,
-            artist,
-            album,
-        )
-
-        await self.cache_service.store_album_year_in_cache(artist, album, most_common_year)
-        return most_common_year
 
     @staticmethod
     def extract_future_years(album_tracks: list[TrackDict]) -> list[int]:

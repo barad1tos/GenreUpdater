@@ -66,7 +66,7 @@ class TestGenrePipelineIntegration:
 
     @staticmethod
     def create_mock_api_orchestrator(
-        fallback_responses: list[tuple[str | None, bool]] | None,
+        fallback_responses: list[tuple[str | None, bool, int]] | None,
     ) -> MagicMock:
         """Create a mock API orchestrator with fallback behavior."""
         mock_orchestrator = MagicMock(spec=ExternalApiOrchestrator)
@@ -75,7 +75,7 @@ class TestGenrePipelineIntegration:
             mock_orchestrator.get_album_year = AsyncMock(side_effect=fallback_responses)
         else:
             # Default successful response
-            mock_orchestrator.get_album_year = AsyncMock(return_value=("2020", True))
+            mock_orchestrator.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
         return mock_orchestrator
 

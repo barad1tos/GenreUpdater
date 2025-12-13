@@ -151,32 +151,6 @@ class TestDryRunClientRunScript:
         assert "Test artists configured" in caplog.text
 
 
-class TestDryRunClientRunScriptCode:
-    """Tests for run_script_code method."""
-
-    @pytest.mark.asyncio
-    async def test_run_script_code_returns_success(self, dry_run_client: DryRunAppleScriptClient) -> None:
-        """Should return success message for inline code."""
-        result = await dry_run_client.run_script_code("tell application Music")
-        assert result == DRY_RUN_SUCCESS_MESSAGE
-
-    @pytest.mark.asyncio
-    async def test_run_script_code_records_action(self, dry_run_client: DryRunAppleScriptClient) -> None:
-        """Should record inline code execution."""
-        code = "tell application Music to play"
-        await dry_run_client.run_script_code(code, arguments=["arg"])
-
-        assert len(dry_run_client.actions) == 1
-        assert dry_run_client.actions[0]["code"] == code
-        assert dry_run_client.actions[0]["args"] == ["arg"]
-
-    @pytest.mark.asyncio
-    async def test_run_script_code_with_timeout(self, dry_run_client: DryRunAppleScriptClient) -> None:
-        """Should handle timeout parameter."""
-        result = await dry_run_client.run_script_code("tell application Music", timeout=5.0)
-        assert result == DRY_RUN_SUCCESS_MESSAGE
-
-
 class TestDryRunClientFetchTracksByIds:
     """Tests for fetch_tracks_by_ids method."""
 
@@ -209,9 +183,9 @@ class TestDryRunClientGetActions:
     async def test_get_actions_returns_recorded_actions(self, dry_run_client: DryRunAppleScriptClient) -> None:
         """Should return all recorded actions."""
         await dry_run_client.run_script("update1.scpt", arguments=["a"])
-        await dry_run_client.run_script_code("code1")
+        await dry_run_client.run_script("update2.scpt", arguments=["b"])
 
         actions = dry_run_client.get_actions()
         assert len(actions) == 2
         assert actions[0]["script"] == "update1.scpt"
-        assert actions[1]["code"] == "code1"
+        assert actions[1]["script"] == "update2.scpt"

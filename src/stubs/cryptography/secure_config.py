@@ -128,7 +128,7 @@ class SecureConfig:
         self.logger.exception(result)
         raise SecurityConfigError(result) from error
 
-    def rotate_key(self, new_password: str | None = None) -> None:
+    def rotate_key(self, new_passphrase: str | None = None) -> None:
         """Rotate the encryption key to a new one for enhanced security.
 
         Performs key rotation using the centralized cryptography module,
@@ -136,15 +136,15 @@ class SecureConfig:
         maintaining the ability to decrypt existing tokens.
 
         Args:
-            new_password: Optional new password for key derivation, if None
-                         a random key will be generated
+            new_passphrase: Optional new passphrase for key derivation, if None
+                            a random key will be generated
 
         Raises:
             SecurityConfigError: If key rotation fails
 
         """
         try:
-            self.crypto_manager.rotate_key(new_password)
+            self.crypto_manager.rotate_key(new_passphrase)
             self.logger.info("Encryption key rotated successfully")
         except CryptographyError as e:
             error_message = f"Key rotation failed: {e.message}"

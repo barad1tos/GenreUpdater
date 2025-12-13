@@ -152,9 +152,9 @@ class TestCacheOrchestrator:
         orchestrator = self.create_orchestrator()
 
         with patch.object(orchestrator.album_service, "store_album_year", new_callable=AsyncMock) as mock_store:
-            await orchestrator.store_album_year("Artist", "Album", "1999")
+            await orchestrator.store_album_year("Artist", "Album", "1999", 85)
 
-            mock_store.assert_called_once_with("Artist", "Album", "1999")
+            mock_store.assert_called_once_with("Artist", "Album", "1999", 85)
 
     # =========================== API CACHE TESTS ===========================
 

@@ -25,13 +25,13 @@ from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
-from rich.console import Console
-
+from core.logger import get_shared_console
 from metrics.change_reports import save_html_report
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
+    from rich.console import Console
     from rich.status import Status
 
 
@@ -146,6 +146,9 @@ class Analytics:
         self._suppress_console_logging = False
         self._batch_call_count = 0
         self._batch_total_duration = 0.0
+
+        # Shared console for coordinated Rich output
+        self._console = get_shared_console()
 
         self.console_logger.debug(f"Analytics #{self.instance_id} initialized")
 
@@ -441,7 +444,7 @@ class Analytics:
                     status.update(f"[cyan]Fetching batch {i+1}/{len(batches)}...[/cyan]")
                     await fetch_batch(batch)
         """
-        _console = console or Console()
+        _console = console or self._console
         self._suppress_console_logging = True
         self._batch_call_count = 0
         self._batch_total_duration = 0.0

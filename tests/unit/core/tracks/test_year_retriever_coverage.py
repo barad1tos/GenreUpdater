@@ -13,6 +13,7 @@ import pytest
 
 from core import debug_utils
 from core.models.track_models import ChangeLogEntry, TrackDict
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,
@@ -38,14 +39,17 @@ def mock_track_processor() -> AsyncMock:
 @pytest.fixture
 def mock_cache_service() -> AsyncMock:
     """Create mock cache service."""
-    return AsyncMock()
+    mock = AsyncMock()
+    # Default: no cached entry (triggers API call)
+    mock.get_album_year_entry_from_cache = AsyncMock(return_value=None)
+    return mock
 
 
 @pytest.fixture
 def mock_external_api() -> AsyncMock:
     """Create mock external API."""
     api = AsyncMock()
-    api.get_album_year = AsyncMock(return_value=("2020", True))
+    api.get_album_year = AsyncMock(return_value=("2020", True, 85))
     return api
 
 
@@ -67,6 +71,19 @@ def logger() -> logging.Logger:
 def error_logger() -> logging.Logger:
     """Create test error logger."""
     return logging.getLogger("test.year_retriever.error")
+
+
+@pytest.fixture
+def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
+    """Create test retry handler."""
+    policy = RetryPolicy(
+        max_retries=2,
+        base_delay_seconds=0.01,
+        max_delay_seconds=0.1,
+        jitter_range=0.0,
+        operation_timeout_seconds=30.0,
+    )
+    return DatabaseRetryHandler(logger=logger, default_policy=policy)
 
 
 @pytest.fixture
@@ -102,6 +119,7 @@ def year_retriever(
     mock_cache_service: AsyncMock,
     mock_external_api: AsyncMock,
     mock_pending_verification: AsyncMock,
+    retry_handler: DatabaseRetryHandler,
     logger: logging.Logger,
     error_logger: logging.Logger,
     config: dict[str, Any],
@@ -112,6 +130,7 @@ def year_retriever(
         cache_service=cast("CacheServiceProtocol", mock_cache_service),
         external_api=cast("ExternalApiServiceProtocol", mock_external_api),
         pending_verification=cast("PendingVerificationServiceProtocol", mock_pending_verification),
+        retry_handler=retry_handler,
         console_logger=logger,
         error_logger=error_logger,
         analytics=MagicMock(),
@@ -185,23 +204,6 @@ class TestHandleFutureYearsFound:
         mock_pending_verification.mark_for_verification.assert_called_once()
 
 
-class TestHandleReleaseYearsFound:
-    """Tests for handle_release_years method on YearDeterminator."""
-
-    @pytest.mark.asyncio
-    async def test_returns_dominant_year(self, year_retriever: YearRetriever) -> None:
-        """Test returns dominant year from release years."""
-        result = await year_retriever._year_determinator.handle_release_years("Artist", "Album", ["2020", "2020", "2020"])
-        assert result == "2020"
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_dominant(self, year_retriever: YearRetriever) -> None:
-        """Test returns None when no dominant year."""
-        result = await year_retriever._year_determinator.handle_release_years("Artist", "Album", ["2020", "2021", "2022"])
-        # No dominant year when all are different
-        assert result is None or isinstance(result, str)
-
-
 class TestValidateTrackIds:
     """Tests for _validate_track_ids method on YearBatchProcessor."""
 
@@ -258,13 +260,13 @@ class TestUpdateTrackWithRetry:
         mock_track_processor: AsyncMock,
     ) -> None:
         """Test gives up after max retries on persistent exceptions."""
-        # Configure retries via config
-        year_retriever.config["year_retrieval"] = {"processing": {"track_retry_attempts": 2, "track_retry_delay": 0.01}}
+        # The retry_handler fixture has max_retries=2, meaning 1 initial + 2 retries = 3 total attempts
         # Keep raising exceptions
         mock_track_processor.update_track_async.side_effect = OSError("Network error")
         result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
         assert result is False
-        assert mock_track_processor.update_track_async.call_count == 2
+        # With max_retries=2: 1 initial attempt + 2 retries = 3 total calls
+        assert mock_track_processor.update_track_async.call_count == 3
 
     @pytest.mark.asyncio
     async def test_returns_false_immediately_on_false_result(
@@ -561,7 +563,7 @@ class TestProcessSingleAlbum:
         tracks = [
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="", track_status="Apple Music"),
         ]
-        mock_external_api.get_album_year.return_value = ("2020", True)
+        mock_external_api.get_album_year.return_value = ("2020", True, 85)  # 3-tuple with confidence
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
         await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
@@ -788,7 +790,7 @@ class TestDetermineAlbumYear:
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year=""),
         ]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_external_api.get_album_year.return_value = ("2020", True)
+        mock_external_api.get_album_year.return_value = ("2020", True, 85)  # 3-tuple with confidence score
 
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
@@ -810,7 +812,7 @@ class TestDetermineAlbumYear:
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year=""),
         ]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_external_api.get_album_year.return_value = (None, False)
+        mock_external_api.get_album_year.return_value = (None, False, 0)  # 3-tuple
 
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
@@ -1027,7 +1029,7 @@ class TestProcessBatchesConcurrently:
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False)),
+            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0)),
         ):
             await year_retriever._batch_processor._process_batches_concurrently(
                 album_items=album_items,
@@ -1066,7 +1068,7 @@ class TestProcessAlbumEntry:
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False)),
+            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0)),
         ):
             await year_retriever._batch_processor._process_album_entry(
                 album_entry=album_entry,
@@ -1585,7 +1587,12 @@ class TestDetermineAlbumYearBranches:
         ):
             result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
             assert result == "2020"
-            mock_cache_service.store_album_year_in_cache.assert_called_once_with("Artist", "Album", "2020")
+            mock_cache_service.store_album_year_in_cache.assert_called_once_with(
+                "Artist",
+                "Album",
+                "2020",
+                confidence=80,
+            )
 
     @pytest.mark.asyncio
     async def test_returns_cached_year(

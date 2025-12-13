@@ -31,6 +31,7 @@ dependencies = [
     "rich==14.2.0",
     "pytest==9.0.2",
     "psutil>=7.1.3",
+    "pygithub>=2.8.1",
 ]
 
 [dependency-groups]
@@ -83,6 +84,7 @@ exclude = [
     "dist",
     "__pycache__",
     "*/__init__.py",
+    "vulture_whitelist.py",
 ]
 
 # Assume Python 3.13+
@@ -325,6 +327,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "e2e: marks tests as end-to-end tests",
+    "regression: marks tests as regression tests using real library data",
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 # pydocstyle - google docstyle

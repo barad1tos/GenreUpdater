@@ -185,7 +185,7 @@ class TestMusicBrainzIntegration:
 
         # Should find the year - 1969 is well-documented
         assert result is not None
-        year, is_reliable = result
+        year, is_reliable, _confidence = result
         assert year == "1969"
         assert is_reliable is True
 
@@ -200,9 +200,9 @@ class TestMusicBrainzIntegration:
             album="This Album Does Not Exist ABC456",
         )
 
-        # Should return (None, False) for non-existent album
+        # Should return (None, False, 0) for non-existent album
         assert result is not None
-        year, is_reliable = result
+        year, is_reliable, _confidence = result
         assert year is None
         assert is_reliable is False
 
@@ -219,7 +219,7 @@ class TestMusicBrainzIntegration:
         )
 
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "1973"
 
     @pytest.mark.asyncio
@@ -235,7 +235,7 @@ class TestMusicBrainzIntegration:
         )
 
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "2011"
 
 
@@ -297,72 +297,6 @@ class TestArtistActivityPeriod:
         assert end_year is None
 
 
-class TestYearValidation:
-    """Tests for year validation logic."""
-
-    @pytest.mark.asyncio
-    async def test_should_update_album_year_with_no_tracks(
-        self,
-        api_orchestrator: ExternalApiOrchestrator,
-    ) -> None:
-        """Test should_update returns True when no tracks provided."""
-        # Method signature: should_update_album_year(tracks, artist, album, current_library_year)
-        should_update = api_orchestrator.should_update_album_year(
-            tracks=[],  # No tracks
-            artist="The Beatles",
-            album="Abbey Road",
-            current_library_year="1969",
-        )
-
-        # With no tracks, should return True
-        assert should_update is True
-
-    @pytest.mark.asyncio
-    async def test_should_update_album_year_with_valid_tracks(
-        self,
-        api_orchestrator: ExternalApiOrchestrator,
-    ) -> None:
-        """Test should_update with valid historical tracks."""
-        # Create mock tracks with valid historical years
-        tracks = [
-            {"id": "1", "name": "Come Together", "year": "1969"},
-            {"id": "2", "name": "Something", "year": "1969"},
-        ]
-
-        should_update = api_orchestrator.should_update_album_year(
-            tracks=tracks,
-            artist="The Beatles",
-            album="Abbey Road",
-            current_library_year="1969",
-        )
-
-        # Should return True for valid historical tracks
-        assert should_update is True
-
-    @pytest.mark.asyncio
-    async def test_should_update_detects_prerelease(
-        self,
-        api_orchestrator: ExternalApiOrchestrator,
-    ) -> None:
-        """Test should_update handles prerelease detection."""
-        # Create tracks with future year (if skip_prerelease is enabled)
-        future_year = str(2030)  # Clearly a future year
-        tracks = [
-            {"id": "1", "name": "Future Song 1", "year": future_year},
-            {"id": "2", "name": "Future Song 2", "year": future_year},
-        ]
-
-        # The result depends on skip_prerelease config
-        # Just verify it doesn't crash
-        result = api_orchestrator.should_update_album_year(
-            tracks=tracks,
-            artist="Test Artist",
-            album="Future Album",
-        )
-
-        assert isinstance(result, bool)
-
-
 class TestConcurrentApiCalls:
     """Tests for concurrent API operations."""
 
@@ -381,7 +315,7 @@ class TestConcurrentApiCalls:
 
         async def get_year(artist: str, album: str) -> tuple[str, str, str | None]:
             """Fetch album year from API."""
-            album_year, _ = await api_orchestrator.get_album_year(artist=artist, album=album)
+            album_year, _, _confidence = await api_orchestrator.get_album_year(artist=artist, album=album)
             return artist, album, album_year
 
         # Run lookups concurrently
@@ -412,7 +346,7 @@ class TestApiErrorHandling:
 
         # Back in Black was released in 1980
         assert result is not None
-        year, _ = result
+        year, _, _confidence = result
         assert year == "1980"
 
     @pytest.mark.asyncio
@@ -429,7 +363,7 @@ class TestApiErrorHandling:
 
         # Post was released in 1995
         if result is not None:  # May not find if API doesn't handle Unicode well
-            year, _ = result
+            year, _, _confidence = result
             assert year == "1995"
 
     @pytest.mark.asyncio

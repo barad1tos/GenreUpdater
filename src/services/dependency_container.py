@@ -17,10 +17,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
 
 import yaml
 
-from core.core_config import load_config
+from core.core_config import load_config, validate_api_auth
 from core.dry_run import DryRunAppleScriptClient
 from core.logger import LogFormat, shorten_path
 from core.models.album_type import configure_patterns as configure_album_patterns
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
@@ -73,6 +74,7 @@ class DependencyContainer:
         *,
         logging_listener: SafeQueueListener | None = None,
         dry_run: bool = False,
+        skip_api_validation: bool = False,
     ) -> None:
         """Initialize the dependency container.
 
@@ -84,7 +86,7 @@ class DependencyContainer:
             db_verify_logger: Logger for database verification operations
             logging_listener: Optional queue listener for logging
             dry_run: Whether to run in dry-run mode (no changes made)
-
+            skip_api_validation: Whether to skip API auth validation (for non-API commands)
 
         """
         # Initialize logger properties first
@@ -103,7 +105,9 @@ class DependencyContainer:
         self._library_snapshot_service: LibrarySnapshotService | None = None
         self._pending_verification_service: PendingVerificationService | None = None
         self._api_orchestrator: ExternalApiOrchestrator | None = None
+        self._retry_handler: DatabaseRetryHandler | None = None
         self._dry_run = dry_run
+        self._skip_api_validation = skip_api_validation
 
     @property
     def dry_run(self) -> bool:
@@ -167,6 +171,14 @@ class DependencyContainer:
             msg = "External API orchestrator not initialized"
             raise RuntimeError(msg)
         return self._api_orchestrator
+
+    @property
+    def retry_handler(self) -> DatabaseRetryHandler:
+        """Get the retry handler."""
+        if self._retry_handler is None:
+            msg = "Retry handler not initialized"
+            raise RuntimeError(msg)
+        return self._retry_handler
 
     @property
     def console_logger(self) -> logging.Logger:
@@ -259,6 +271,7 @@ class DependencyContainer:
                 analytics,
                 self._console_logger,
                 self._error_logger,
+                retry_handler=self._retry_handler,
             )
             # Then wrap it with DryRunAppleScriptClient
             self._ap_client = DryRunAppleScriptClient(
@@ -274,6 +287,7 @@ class DependencyContainer:
                 analytics,
                 self._console_logger,
                 self._error_logger,
+                retry_handler=self._retry_handler,
             )
 
         self._log_apple_scripts_dir(self._ap_client, dry_run)
@@ -314,6 +328,26 @@ class DependencyContainer:
                 self._analytics,
                 self._cache_service,
                 self._pending_verification_service,
+            )
+
+        # Initialize retry handler from config
+        if self._retry_handler is None:
+            retry_config = self._config.get("applescript_retry", {})
+            retry_policy = RetryPolicy(
+                max_retries=retry_config.get("max_retries", 3),
+                base_delay_seconds=retry_config.get("base_delay_seconds", 1.0),
+                max_delay_seconds=retry_config.get("max_delay_seconds", 10.0),
+                jitter_range=retry_config.get("jitter_range", 0.2),
+                operation_timeout_seconds=retry_config.get("operation_timeout_seconds", 60.0),
+            )
+            self._retry_handler = DatabaseRetryHandler(
+                logger=self._console_logger,
+                default_policy=retry_policy,
+            )
+            self._console_logger.debug(
+                "Retry handler initialized with policy: max_retries=%d, base_delay=%.1fs",
+                retry_policy.max_retries,
+                retry_policy.base_delay_seconds,
             )
 
         # Ensure the AppleScript client is instantiated
@@ -505,12 +539,20 @@ class DependencyContainer:
         Raises:
             FileNotFoundError: If the config file doesn't exist
             yaml.YAMLError: If there's an error parsing the YAML
+            ValueError: If API authentication configuration is incomplete
             RuntimeError: For any other errors during loading
 
         """
         try:
             config = load_config(self._config_path)
             self._console_logger.info("Configuration: [cyan]%s[/cyan]", Path(self._config_path).name)
+
+            # Validate API auth configuration (fail-fast for API-dependent commands)
+            if not self._skip_api_validation:
+                year_config = config.get("year_retrieval", {})
+                api_auth = year_config.get("api_auth", {})
+                validate_api_auth(api_auth)
+
             return config
         except FileNotFoundError as e:
             short_path = Path(self._config_path).name

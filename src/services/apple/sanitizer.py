@@ -47,7 +47,6 @@ DANGEROUS_APPLESCRIPT_PATTERNS = [
 DANGEROUS_ARGUMENT_CHARACTERS = [";", "&", "|", "`", "$", ">", "<", "!"]
 
 # Security limits
-MAX_TRACK_ID_LENGTH = 100
 MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
 
 
@@ -122,33 +121,6 @@ class AppleScriptSanitizer:
             )
 
         return sanitized
-
-    def validate_track_id(self, track_id: str) -> bool:
-        """Validate a track ID for safe use in AppleScript.
-
-        Args:
-            track_id: The track ID to validate
-
-        Returns:
-            bool: True if the track ID is safe to use
-
-        """
-        # Track IDs should be numeric or alphanumeric
-        if not re.match(r"^[a-zA-Z0-9\-_]+$", track_id):
-            self.logger.warning("Invalid track ID format: %s", track_id)
-            return False
-
-        # Reasonable length limits
-        if len(track_id) > MAX_TRACK_ID_LENGTH:
-            self.logger.warning("Track ID too long: %d characters", len(track_id))
-            return False
-
-        # Check for suspicious patterns
-        if any(char in track_id for char in DANGEROUS_ARGUMENT_CHARACTERS):
-            self.logger.warning("Dangerous characters in track ID: %s", track_id)
-            return False
-
-        return True
 
     def validate_script_code(self, script_code: str | None, allow_music_app: bool = True) -> None:
         """Validate AppleScript code for security vulnerabilities.

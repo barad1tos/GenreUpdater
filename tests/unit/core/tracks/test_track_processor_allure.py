@@ -151,18 +151,6 @@ class _MockAppleScriptClient:
 
         return None
 
-    async def run_script_code(
-        self,
-        _script_code: str,
-        _arguments: list[str] | None = None,
-        _timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code."""
-        if self.should_fail:
-            msg = self.failure_message
-            raise RuntimeError(msg)
-        return None
-
     def set_response(self, script_name: str, response: str | None) -> None:
         """Set a predefined response for a specific script."""
         self.script_responses[script_name] = response
@@ -231,7 +219,10 @@ class _MockCacheService:
         key = f"{artist}::{album}".lower()
         return self.album_cache.get(key)
 
-    async def store_album_year_in_cache(self, artist: str, album: str, year: str) -> None:
+    async def get_album_year_entry_from_cache(self, _artist: str, _album: str) -> None:
+        """Get album year entry from cache (returns None to trigger API call)."""
+
+    async def store_album_year_in_cache(self, artist: str, album: str, year: str, _confidence: int = 0) -> None:
         """Store album year in cache."""
         key = f"{artist}::{album}".lower()
         self.album_cache[key] = year

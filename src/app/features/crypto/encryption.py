@@ -44,13 +44,13 @@ class CryptographyManager:
         self._fernet: Fernet | None = None
         self._encryption_key: bytes | None = None
 
-    def _generate_key_from_password(self, password: str) -> bytes:
-        """Generate encryption key from password using PBKDF2.
+    def _generate_key_from_passphrase(self, passphrase: str) -> bytes:
+        """Generate encryption key from passphrase using PBKDF2.
 
-        Uses a fixed salt derived from password for consistency.
+        Uses a fixed salt derived from passphrase for consistency.
 
         Args:
-            password: Password for key derivation
+            passphrase: Passphrase for key derivation
 
         Returns:
             32-byte encryption key
@@ -60,8 +60,8 @@ class CryptographyManager:
 
         """
         try:
-            # Use a deterministic salt based on password hash for consistency
-            salt = hashlib.sha256(password.encode()).digest()[:16]
+            # Use a deterministic salt based on passphrase hash for consistency
+            salt = hashlib.sha256(passphrase.encode()).digest()[:16]
 
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
@@ -69,17 +69,17 @@ class CryptographyManager:
                 salt=salt,
                 iterations=600_000,  # OWASP 2023 minimum recommendation
             )
-            return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+            return base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
         except Exception as e:
             self._raise_key_error("Key generation failed: ", e)
             # This line should never be reached due to the exception above, but helps type checker
             raise  # pragma: no cover
 
-    def _load_or_create_key(self, password: str | None = None) -> bytes:
+    def _load_or_create_key(self, passphrase: str | None = None) -> bytes:
         """Load existing encryption key or create a new one.
 
         Args:
-            password: Password for key derivation
+            passphrase: Passphrase for key derivation
 
         Returns:
             Encryption key bytes
@@ -89,17 +89,17 @@ class CryptographyManager:
 
         """
         try:
-            return self._load_existing_or_generate_new_key(password)
+            return self._load_existing_or_generate_new_key(passphrase)
         except Exception as e:
             self._raise_key_error("Key management failed: ", e)
             # This line should never be reached due to the exception above, but helps type checker
             raise  # pragma: no cover
 
-    def _load_existing_or_generate_new_key(self, password: str | None) -> bytes:
+    def _load_existing_or_generate_new_key(self, passphrase: str | None) -> bytes:
         """Load existing encryption key or generate a new one.
 
         Args:
-            password: Optional password for key derivation
+            passphrase: Optional passphrase for key derivation
 
         Returns:
             Encryption key bytes
@@ -120,7 +120,7 @@ class CryptographyManager:
             return key_data
 
             # Generate new key
-        key = self._generate_key_from_password(password) if password else Fernet.generate_key()
+        key = self._generate_key_from_passphrase(passphrase) if passphrase else Fernet.generate_key()
         # Save key securely
         self.key_file_path.write_bytes(key)
         self.key_file_path.chmod(0o600)  # Owner read/write only
@@ -128,12 +128,12 @@ class CryptographyManager:
         self.logger.info("Generated new encryption key at %s", self.key_file_path)
         return key
 
-    def _get_fernet(self, key: str | None = None, password: str | None = None) -> Fernet:
+    def _get_fernet(self, key: str | None = None, passphrase: str | None = None) -> Fernet:
         """Get or create Fernet cipher instance.
 
         Args:
-            key: Base64-encoded encryption key or password for key derivation
-            password: Password for key derivation (alternative to key parameter)
+            key: Base64-encoded encryption key or passphrase for key derivation
+            passphrase: Passphrase for key derivation (alternative to key parameter)
 
         Returns:
             Fernet cipher instance
@@ -144,7 +144,7 @@ class CryptographyManager:
         """
         try:
             if key:
-                # Try to determine if the key is base64-encoded or a password
+                # Try to determine if the key is base64-encoded or a passphrase
                 # Improved heuristic: attempt to decode AND validate with Fernet
                 if len(key) == FERNET_KEY_LENGTH:
                     with contextlib.suppress(binascii.Error, Exception):
@@ -154,13 +154,13 @@ class CryptographyManager:
                             fernet_key = base64.urlsafe_b64encode(decoded)
                             # Validate by creating Fernet instance
                             return Fernet(fernet_key)
-                # Treat as password for key derivation
-                derived_key = self._generate_key_from_password(key)
+                # Treat as passphrase for key derivation
+                derived_key = self._generate_key_from_passphrase(key)
                 return Fernet(derived_key)
 
-            if password:
-                # Use password for key derivation
-                derived_key = self._generate_key_from_password(password)
+            if passphrase:
+                # Use passphrase for key derivation
+                derived_key = self._generate_key_from_passphrase(passphrase)
                 return Fernet(derived_key)
 
             # Use cached Fernet or create new one
@@ -218,13 +218,13 @@ class CryptographyManager:
         except (ValueError, TypeError, AttributeError):
             return False
 
-    def encrypt_token(self, token: str, key: str | None = None, password: str | None = None) -> str:
+    def encrypt_token(self, token: str, key: str | None = None, passphrase: str | None = None) -> str:
         """Encrypt a token using Fernet symmetric encryption.
 
         Args:
             token: Token to encrypt
             key: Optional base64-encoded encryption key
-            password: Optional password for key derivation
+            passphrase: Optional passphrase for key derivation
 
         Returns:
             Base64-encoded encrypted token
@@ -238,7 +238,7 @@ class CryptographyManager:
                 error_message = "Token cannot be empty"
                 raise EncryptionError(error_message)
 
-            fernet = self._get_fernet(key, password)
+            fernet = self._get_fernet(key, passphrase)
             encrypted_bytes = fernet.encrypt(token.encode())
             encrypted_token = base64.urlsafe_b64encode(encrypted_bytes).decode()
 
@@ -252,13 +252,13 @@ class CryptographyManager:
             self.logger.exception(error_message)
             raise EncryptionError(error_message, {"original_error": str(e)}) from e
 
-    def decrypt_token(self, encrypted_token: str, key: str | None = None, password: str | None = None) -> str:
+    def decrypt_token(self, encrypted_token: str, key: str | None = None, passphrase: str | None = None) -> str:
         """Decrypt a token using Fernet symmetric encryption.
 
         Args:
             encrypted_token: Base64-encoded encrypted token
             key: Optional base64-encoded encryption key
-            password: Optional password for key derivation
+            passphrase: Optional passphrase for key derivation
 
         Returns:
             Decrypted token
@@ -280,7 +280,7 @@ class CryptographyManager:
                 error_message = "Invalid token format - not valid base64"
                 raise InvalidTokenError(error_message) from e
 
-            fernet = self._get_fernet(key, password)
+            fernet = self._get_fernet(key, passphrase)
             decrypted_bytes = fernet.decrypt(encrypted_bytes)
             decrypted_token: str = decrypted_bytes.decode()
 
@@ -298,7 +298,7 @@ class CryptographyManager:
             self.logger.exception(error_message)
             raise DecryptionError(error_message, {"original_error": str(e)}) from e
 
-    def rotate_key(self, new_password: str | None = None, backup_old_key: bool = True) -> None:
+    def rotate_key(self, new_passphrase: str | None = None, backup_old_key: bool = True) -> None:
         """Rotate the encryption key to a new one.
 
         **WARNING**: This method only rotates the encryption key file itself.
@@ -311,7 +311,7 @@ class CryptographyManager:
         which handles the complete re-encryption workflow.
 
         Args:
-            new_password: Password for new key derivation
+            new_passphrase: Passphrase for new key derivation
             backup_old_key: Whether to backup the old key
 
         Raises:
@@ -327,7 +327,7 @@ class CryptographyManager:
                 self.logger.info("Backed up old key to %s", backup_path)
 
             # Generate new key
-            new_key = self._generate_key_from_password(new_password) if new_password else Fernet.generate_key()
+            new_key = self._generate_key_from_passphrase(new_passphrase) if new_passphrase else Fernet.generate_key()
 
             # Save new key
             self.key_file_path.write_bytes(new_key)

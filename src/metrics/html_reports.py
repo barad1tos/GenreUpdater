@@ -7,12 +7,11 @@ including performance metrics, function call summaries, and dry-run reports.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.logger import ensure_directory, get_full_log_path
+from core.logger import get_full_log_path
 
 
 # Constant for duration field name (shared with analytics module)
@@ -420,127 +419,3 @@ def save_html_report(
         console_logger.info("Analytics HTML report saved to %s.", report_file)
     except (OSError, UnicodeError):
         error_logger.exception("Failed to save HTML report")
-
-
-def save_detailed_dry_run_report(
-    changes: list[dict[str, str]],
-    file_path: str,
-    console_logger: logging.Logger,
-    error_logger: logging.Logger,
-) -> None:
-    """Generate a detailed HTML report with separate tables for each change type."""
-    if not changes:
-        console_logger.info("No changes to report for dry run.")
-        return
-
-    # Group changes by type
-    changes_by_type: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for change in changes:
-        change_type = change.get("change_type", "unknown").replace("_", " ").title()
-        changes_by_type[change_type].append(change)
-
-    # Generate HTML
-    html = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Dry Run Report</title>
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                margin: 10px;
-                background-color: #f9f9f9;
-                color: #333;
-            }
-            h2 { color: #1a1a1a; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-            table {
-                border-collapse: collapse; width: 100%; margin-bottom: 15px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.1); table-layout: auto;
-            }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
-            thead { background-color: #e9ecef; }
-            th { font-weight: 600; }
-            tbody tr:nth-child(even) { background-color: #f2f2f2; }
-            tbody tr:hover { background-color: #e9e9e9; }
-            .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Dry Run Simulation Report</h1>
-    """
-
-    # Create table for each change type
-    for change_type, change_list in changes_by_type.items():
-        if not change_list:
-            continue
-
-        html += f"<h2>{change_type} ({len(change_list)} potential changes)</h2>"
-
-        # Strictly defined columns for each report type for reliability
-        header_map = {
-            "Cleaning": [
-                "artist",
-                "original_name",
-                "cleaned_name",
-                "original_album",
-                "cleaned_album",
-            ],
-            "Genre Update": [
-                "artist",
-                "album",
-                "track_name",
-                "original_genre",
-                "new_genre",
-            ],
-            "Year Update": [
-                "artist",
-                "album",
-                "track_name",
-                "original_year",
-                "simulated_year",
-            ],
-        }
-
-        # Get the correct list of keys for the current report type.
-        # If the type is unknown, fallback to the old behavior as a backup option.
-        headers = header_map.get(
-            change_type,
-            [h for h in change_list[0] if h not in ["change_type", "timestamp", "track_id", "date_added"]],
-        )
-
-        html += "<table><thead><tr>"
-        for header in headers:
-            # Create readable column headers
-            html += f"<th>{header.replace('_', ' ').title()}</th>"
-        html += "</tr></thead><tbody>"
-
-        # Fill table with data
-        for item in change_list:
-            html += "<tr>"
-            # Go through the fixed list of headers
-            for header_key in headers:
-                value = item.get(header_key, "")
-                html += f"<td>{value}</td>"
-            html += "</tr>"
-
-        html += "</tbody></table>"
-
-    html += """
-        </div>
-    </body>
-    </html>
-    """
-
-    # Save HTML file
-    try:
-        ensure_directory(str(Path(file_path).parent))
-        with Path(file_path).open("w", encoding="utf-8") as f:
-            f.write(html)
-        console_logger.info(
-            "Successfully generated detailed dry run HTML report at: %s",
-            file_path,
-        )
-    except (OSError, UnicodeError):
-        error_logger.exception("Failed to save detailed dry run HTML report")

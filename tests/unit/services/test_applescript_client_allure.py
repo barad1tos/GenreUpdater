@@ -13,7 +13,6 @@ import pytest
 
 from services.apple import (
     MAX_SCRIPT_SIZE,
-    MAX_TRACK_ID_LENGTH,
     AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
@@ -107,47 +106,6 @@ class TestAppleScriptSanitizerAllure:
 
             allure.attach(safe_code, "Safe Code", allure.attachment_type.TEXT)
             allure.attach("Passed", "Validation Result", allure.attachment_type.TEXT)
-
-    @allure.story("Input Sanitization")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should sanitize track IDs properly")
-    @allure.description("Test sanitization of track IDs to prevent injection")
-    @pytest.mark.parametrize(
-        ("track_id", "should_pass"),
-        [
-            ("normal_track_123", True),
-            ("track-with-hyphens", True),
-            ("track_with_underscores", True),
-            ("123456789", True),
-            ("track; rm -rf /", False),  # Command injection attempt
-            ("track && malicious", False),  # Command chaining
-            ("track`command`", False),  # Command substitution
-            ("track$injection", False),  # Variable injection
-            ("a" * (MAX_TRACK_ID_LENGTH + 1), False),  # Too long
-        ],
-    )
-    def test_sanitize_track_id(self, track_id: str, should_pass: bool) -> None:
-        """Test track ID sanitization."""
-        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
-
-        with allure.step(f"Sanitizing track ID: {track_id[:50]}..."):
-            try:
-                sanitization_passed = sanitizer.validate_track_id(track_id)
-                result = track_id if sanitization_passed else None
-            except AppleScriptSanitizationError:
-                sanitization_passed = False
-                result = None
-
-        with allure.step("Verify track ID sanitization"):
-            if should_pass:
-                assert sanitization_passed, f"Track ID should pass sanitization: {track_id}"
-                assert result == track_id
-            else:
-                assert not sanitization_passed, f"Track ID should fail sanitization: {track_id}"
-
-            allure.attach(track_id, "Input Track ID", allure.attachment_type.TEXT)
-            allure.attach(str(sanitization_passed), "Sanitization Result", allure.attachment_type.TEXT)
-            allure.attach(str(should_pass), "Expected Result", allure.attachment_type.TEXT)
 
     @allure.story("Script Size Validation")
     @allure.severity(allure.severity_level.NORMAL)
@@ -281,60 +239,6 @@ class TestAppleScriptClientAllure:
         allure.attach(str(config["apple_script"]["timeout"]), "Timeout Setting", allure.attachment_type.TEXT)  # type: ignore[index]
         allure.attach(str(config["apple_script"]["concurrency"]), "Concurrency Setting", allure.attachment_type.TEXT)  # type: ignore[index]
 
-    @allure.story("Script Execution")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should execute AppleScript commands safely")
-    @allure.description("Test safe execution of AppleScript commands with proper validation")
-    @pytest.mark.asyncio
-    async def test_execute_applescript_safely(self) -> None:
-        """Test safe AppleScript execution."""
-        client = TestAppleScriptClientAllure.create_client()
-        await client.initialize()
-
-        with allure.step("Setup mock subprocess execution"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            # Mock successful script execution
-            mock_process = MagicMock()
-            mock_process.communicate = AsyncMock(return_value=(b"Success result", b""))
-            mock_process.wait = AsyncMock(return_value=0)
-            mock_process.returncode = 0
-            mock_subprocess.return_value = mock_process
-
-            safe_script = 'tell application "Music" to get name of current track'
-
-            with allure.step("Execute safe AppleScript"):
-                result = await client.run_script_code(safe_script)
-
-        with allure.step("Verify safe execution"):
-            assert result is not None
-            # Verify subprocess was called
-            mock_subprocess.assert_called_once()
-
-            allure.attach(safe_script, "Executed Script", allure.attachment_type.TEXT)
-            allure.attach(str(result), "Execution Result", allure.attachment_type.TEXT)
-
-    @allure.story("Security Enforcement")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should block dangerous AppleScript execution")
-    @allure.description("Test that dangerous AppleScript commands are blocked")
-    @pytest.mark.asyncio
-    async def test_block_dangerous_applescript(self) -> None:
-        """Test blocking of dangerous AppleScript execution."""
-        client = TestAppleScriptClientAllure.create_client()
-        await client.initialize()
-
-        with allure.step("Attempt to execute dangerous script"):
-            dangerous_script = 'do shell script "rm -rf /"'
-
-            # run_script_code returns None when blocking dangerous scripts
-            result = await client.run_script_code(dangerous_script)
-
-        with allure.step("Verify dangerous script was blocked"):
-            assert result is None, "Dangerous script should have been blocked"
-
-            allure.attach(dangerous_script, "Blocked Script", allure.attachment_type.TEXT)
-            allure.attach("Script returned None (blocked)", "Security Result", allure.attachment_type.TEXT)
-            allure.attach("Script execution blocked successfully", "Security Status", allure.attachment_type.TEXT)
-
     @allure.story("Music Application Integration")
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Should fetch tracks from Music.app")
@@ -402,89 +306,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             allure.attach("test_track_001", "Updated Track ID", allure.attachment_type.TEXT)
             allure.attach("Electronic", "New Genre", allure.attachment_type.TEXT)
             allure.attach(str(result), "Update Result", allure.attachment_type.TEXT)
-
-    @allure.story("Error Handling")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should handle AppleScript execution errors")
-    @allure.description("Test error handling when AppleScript execution fails")
-    @pytest.mark.asyncio
-    async def test_handle_applescript_execution_errors(self) -> None:
-        """Test handling of AppleScript execution errors."""
-        client = TestAppleScriptClientAllure.create_client()
-        await client.initialize()
-
-        with allure.step("Setup failing AppleScript execution"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            mock_process = MagicMock()
-            mock_process.communicate = AsyncMock(return_value=(b"", b"AppleScript Error: syntax error"))
-            mock_process.wait = AsyncMock(return_value=1)
-            mock_process.returncode = 1  # Error exit code
-            mock_subprocess.return_value = mock_process
-
-            safe_script = 'tell application "Music" to get invalid property'
-
-            with allure.step("Execute failing AppleScript"):
-                result = await client.run_script_code(safe_script)
-
-        with allure.step("Verify error handling"):
-            # Client should handle the error gracefully
-            # Result might be None or error string depending on implementation
-            assert result is None or "error" in result.lower()
-
-            # Verify error was logged (check if it's our MockLogger)
-            if isinstance(client.error_logger, MockLogger):
-                error_messages = client.error_logger.error_messages
-                assert len(error_messages) > 0
-                allure.attach(str(error_messages), "Error Messages", allure.attachment_type.TEXT)
-
-            allure.attach(safe_script, "Failed Script", allure.attachment_type.TEXT)
-            allure.attach("Error handled gracefully", "Error Handling Result", allure.attachment_type.TEXT)
-
-    @allure.story("Concurrency Control")
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Should manage concurrent AppleScript executions")
-    @allure.description("Test concurrency control for multiple AppleScript executions")
-    @pytest.mark.asyncio
-    async def test_concurrency_control(self) -> None:
-        """Test concurrency control for AppleScript executions."""
-        config = {
-            "apple_script": {
-                "timeout": 30,
-                "concurrency": 2,  # Limited concurrency for testing
-            },
-            "apple_scripts_dir": "applescripts/",
-        }
-        client = TestAppleScriptClientAllure.create_client(config=config)
-        await client.initialize()
-
-        with allure.step("Setup multiple concurrent script executions"), patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            mock_process = MagicMock()
-            mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
-            mock_process.wait = AsyncMock(return_value=0)
-            mock_process.returncode = 0
-            mock_subprocess.return_value = mock_process
-
-            # Create multiple concurrent tasks
-            scripts = [
-                'tell application "Music" to get name of track 1',
-                'tell application "Music" to get name of track 2',
-                'tell application "Music" to get name of track 3',
-            ]
-
-            with allure.step("Execute concurrent scripts"):
-                tasks = [client.run_script_code(script) for script in scripts]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        with allure.step("Verify concurrency control"):
-            # All tasks should complete successfully
-            successful_results = [r for r in results if not isinstance(r, Exception)]
-            assert len(successful_results) == len(scripts)
-
-            # Verify subprocess calls were made
-            assert mock_subprocess.call_count == len(scripts)
-
-            allure.attach(str(len(scripts)), "Concurrent Scripts", allure.attachment_type.TEXT)
-            allure.attach(str(len(successful_results)), "Successful Executions", allure.attachment_type.TEXT)
-            allure.attach(str(config["apple_script"]["concurrency"]), "Concurrency Limit", allure.attachment_type.TEXT)  # type: ignore[index]
 
     @allure.story("Input Sanitization")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -628,7 +449,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             mock_subprocess.return_value = mock_process
 
             # Run some operations
-            await client.run_script_code('tell application "Music" to play')
+            await client.run_script("update_property.applescript", arguments=["test"])
 
         with allure.step("Test error handling for invalid scripts"):
             # Since AppleScriptClient doesn't have a shutdown method,
@@ -640,47 +461,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
             allure.attach("Invalid script handling", "Error Handling Result", allure.attachment_type.TEXT)
             allure.attach("Resources managed properly", "Resource Status", allure.attachment_type.TEXT)
-
-    @allure.story("Timeout Handling")
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Should handle script execution timeouts")
-    @allure.description("Test timeout handling for long-running AppleScript operations")
-    @pytest.mark.asyncio
-    async def test_execution_timeout(self) -> None:
-        """Test handling of script execution timeouts."""
-        config = {
-            "apple_script": {"timeout": 1},  # 1 second timeout
-            "apple_scripts_dir": "applescripts/",
-        }
-        client = TestAppleScriptClientAllure.create_client(config=config)
-        await client.initialize()
-
-        with (
-            allure.step("Simulate timeout scenario"),
-            patch("asyncio.create_subprocess_exec") as mock_subprocess,
-        ):
-            mock_process = MagicMock()
-
-            async def slow_communicate() -> tuple[bytes, bytes]:
-                """Simulate slow subprocess communication."""
-                await asyncio.sleep(5)  # Longer than timeout
-                return b"", b"Timeout"
-
-            mock_process.communicate = slow_communicate
-            mock_process.wait = AsyncMock(return_value=-1)
-            mock_process.returncode = -1
-            mock_subprocess.return_value = mock_process
-
-            with allure.step("Execute script with timeout"):
-                # This should timeout
-                result = await client.run_script_code('tell application "Music" to get every track')
-
-        with allure.step("Verify timeout handling"):
-            # Result should indicate timeout or be None
-            assert result is None or "timeout" in str(result).lower()
-
-            allure.attach("1 second", "Timeout Setting", allure.attachment_type.TEXT)
-            allure.attach("Timeout handled gracefully", "Timeout Result", allure.attachment_type.TEXT)
 
     @allure.story("Script Code Validation")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -774,31 +554,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             sanitizer.validate_script_code("   ")
 
             allure.attach("Empty script validation working", "Validation Result", allure.attachment_type.TEXT)
-
-    @allure.story("Error Recovery")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should handle subprocess errors gracefully")
-    @allure.description("Test error handling for subprocess failures")
-    @pytest.mark.asyncio
-    async def test_subprocess_error_handling(self) -> None:
-        """Test subprocess error handling."""
-        client = TestAppleScriptClientAllure.create_client()
-        await client.initialize()
-
-        with (
-            allure.step("Test subprocess creation failure"),
-            patch("asyncio.create_subprocess_exec", side_effect=OSError("Cannot create process")),
-        ):
-            result = await client.run_script_code('tell application "Music" to play')
-
-            # Should return None on subprocess error
-            assert result is None
-
-            # Check error was logged
-            if isinstance(client.error_logger, MockLogger):
-                assert len(client.error_logger.error_messages) > 0
-
-        allure.attach("Subprocess errors handled gracefully", "Error Result", allure.attachment_type.TEXT)
 
     @allure.story("Command Construction")
     @allure.severity(allure.severity_level.NORMAL)
@@ -895,25 +650,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             assert stats["total_wait_time"] > 0
 
         allure.attach("Rate limiting enforced", "Validation Result", allure.attachment_type.TEXT)
-
-    @allure.story("Security Validation")
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Should validate track IDs with dangerous characters")
-    @allure.description("Test track ID validation with security checks")
-    def test_track_id_with_dangerous_chars_logging(self) -> None:
-        """Test track ID validation logging for dangerous characters."""
-        sanitizer = TestAppleScriptSanitizerAllure.create_sanitizer()
-
-        with allure.step("Test track ID with dangerous characters triggers warning"):
-            # This should return False and log a warning
-            result = sanitizer.validate_track_id("track; rm -rf /")
-            assert result is False
-
-            # Verify warning was logged
-            if isinstance(sanitizer.logger, MockLogger):
-                assert len(sanitizer.logger.warning_messages) > 0
-
-        allure.attach("Dangerous track ID logged", "Validation Result", allure.attachment_type.TEXT)
 
     @allure.story("Security Validation")
     @allure.severity(allure.severity_level.CRITICAL)

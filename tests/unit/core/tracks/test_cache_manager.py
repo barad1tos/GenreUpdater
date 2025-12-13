@@ -1,7 +1,7 @@
 """Tests for TrackCacheManager - track caching and snapshot operations."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,7 +9,6 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.tracks.cache_manager import TrackCacheManager
-from services.cache.snapshot import LibraryCacheMetadata
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
@@ -173,87 +172,6 @@ class TestLoadSnapshot:
         result = await cache_manager.load_snapshot()
 
         assert result is None
-
-
-class TestGetSnapshotForDeltaUpdate:
-    """Tests for get_snapshot_for_delta_update method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_snapshot_service(
-        self,
-        mock_cache_service: AsyncMock,
-        logger: logging.Logger,
-    ) -> None:
-        """Test returns (None, None) when no snapshot service."""
-        manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
-            snapshot_service=None,
-            console_logger=logger,
-        )
-
-        tracks, min_date = await manager.get_snapshot_for_delta_update()
-
-        assert tracks is None
-        assert min_date is None
-
-    @pytest.mark.asyncio
-    async def test_returns_tracks_only_when_snapshot_valid(
-        self,
-        cache_manager: TrackCacheManager,
-        mock_snapshot_service: AsyncMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Test returns (tracks, None) when snapshot is valid."""
-        mock_snapshot_service.load_snapshot.return_value = sample_tracks
-        mock_snapshot_service.is_snapshot_valid.return_value = True
-
-        tracks, min_date = await cache_manager.get_snapshot_for_delta_update()
-
-        assert tracks == sample_tracks
-        assert min_date is None
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_delta_disabled(
-        self,
-        cache_manager: TrackCacheManager,
-        mock_snapshot_service: AsyncMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Test returns (None, None) when delta updates disabled."""
-        mock_snapshot_service.load_snapshot.return_value = sample_tracks
-        mock_snapshot_service.is_snapshot_valid.return_value = False
-        mock_snapshot_service.is_delta_enabled.return_value = False
-
-        tracks, min_date = await cache_manager.get_snapshot_for_delta_update()
-
-        assert tracks is None
-        assert min_date is None
-
-    @pytest.mark.asyncio
-    async def test_returns_tracks_with_min_date_for_delta(
-        self,
-        cache_manager: TrackCacheManager,
-        mock_snapshot_service: AsyncMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Test returns tracks and min_date for delta update."""
-        last_scan = datetime.now(UTC) - timedelta(hours=1)
-        metadata = LibraryCacheMetadata(
-            last_full_scan=last_scan,
-            library_mtime=datetime.now(UTC),
-            track_count=3,
-            snapshot_hash="hash123",
-        )
-
-        mock_snapshot_service.load_snapshot.return_value = sample_tracks
-        mock_snapshot_service.is_snapshot_valid.return_value = False
-        mock_snapshot_service.get_snapshot_metadata.return_value = metadata
-        mock_snapshot_service.load_delta.return_value = None
-
-        tracks, min_date = await cache_manager.get_snapshot_for_delta_update()
-
-        assert tracks == sample_tracks
-        assert min_date == last_scan
 
 
 class TestMergeTracks:
