@@ -7,14 +7,14 @@ with real production data from the library snapshot.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import Any
 
 import pytest
 
 from core.models.metadata_utils import determine_dominant_genre_for_artist
 
-if TYPE_CHECKING:
-    from core.models.track import TrackDict
+# Type alias for track dictionary
+TrackDict = dict[str, Any]
 
 
 @pytest.mark.regression

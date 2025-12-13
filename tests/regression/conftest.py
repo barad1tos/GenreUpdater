@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 import pytest
 
-if TYPE_CHECKING:
-    from core.models.track import TrackDict
+# Type alias for track dictionary (same as core.models.track.TrackDict)
+TrackDict = dict[str, Any]
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 SNAPSHOT_FILE = FIXTURES_DIR / "library_snapshot.json"
@@ -37,8 +37,7 @@ def artists_with_tracks(
     """Group tracks by artist."""
     artists: dict[str, list[TrackDict]] = {}
     for track in library_tracks:
-        artist = track.get("artist", "")
-        if artist:
+        if artist := track.get("artist", ""):
             artists.setdefault(artist, []).append(track)
     return artists
 
@@ -86,7 +85,6 @@ def unique_albums(
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
     """Add regression marker to all tests in this directory."""
