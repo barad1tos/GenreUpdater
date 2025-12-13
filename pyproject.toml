@@ -325,6 +325,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "e2e: marks tests as end-to-end tests",
+    "regression: marks tests as regression tests using real library data",
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 # pydocstyle - google docstyle
