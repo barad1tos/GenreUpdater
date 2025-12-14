@@ -1143,6 +1143,81 @@ class ExternalApiOrchestrator:
 
         return safe_int(str_result[0]), safe_int(str_result[1])
 
+    async def get_artist_start_year(self, artist_norm: str) -> int | None:
+        """Get artist's career start year with caching and fallback.
+
+        Uses MusicBrainz as primary source, iTunes as fallback.
+        Results are cached in GenericCacheService.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Artist's career start year, or None if not found
+
+        Cache TTL:
+            - Positive result: 1 year (31536000 seconds)
+            - Negative result: 1 day (86400 seconds)
+
+        """
+        cache_key = f"artist_start_year:{artist_norm}"
+
+        # 1. Check cache first
+        cached = self.cache_service.generic_service.get(cache_key)
+        if cached is not None:
+            # -1 is sentinel for "not found" (None can't be cached directly)
+            if cached == -1:
+                self.console_logger.debug(
+                    "[orchestrator] Artist start year cache hit (negative): %s",
+                    artist_norm,
+                )
+                return None
+            # Ensure cached value is convertible to int
+            if not isinstance(cached, (int, str)):
+                self.console_logger.warning(
+                    "[orchestrator] Invalid cached artist start year type for '%s': %s",
+                    artist_norm,
+                    type(cached).__name__,
+                )
+                return None
+            cached_year = int(cached)
+            self.console_logger.debug(
+                "[orchestrator] Artist start year cache hit: %s → %d",
+                artist_norm,
+                cached_year,
+            )
+            return cached_year
+
+        # 2. Try MusicBrainz (primary source)
+        begin_year, _ = await self.get_artist_activity_period(artist_norm)
+        if begin_year:
+            self.cache_service.generic_service.set(cache_key, begin_year, ttl=31536000)
+            self.console_logger.debug(
+                "[orchestrator] Artist start year from MusicBrainz: %s → %d",
+                artist_norm,
+                begin_year,
+            )
+            return begin_year
+
+        # 3. Fallback to iTunes
+        itunes_year = await self.applemusic_client.get_artist_start_year(artist_norm)
+        if itunes_year:
+            self.cache_service.generic_service.set(cache_key, itunes_year, ttl=31536000)
+            self.console_logger.debug(
+                "[orchestrator] Artist start year from iTunes (fallback): %s → %d",
+                artist_norm,
+                itunes_year,
+            )
+            return itunes_year
+
+        # 4. Cache negative result with shorter TTL
+        self.cache_service.generic_service.set(cache_key, -1, ttl=86400)
+        self.console_logger.debug(
+            "[orchestrator] Artist start year not found, caching negative: %s",
+            artist_norm,
+        )
+        return None
+
     async def get_year_from_discogs(
         self,
         artist: str,

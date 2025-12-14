@@ -14,6 +14,8 @@ The iTunes Search API is particularly valuable for:
 API Reference: https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/
 """
 
+
+import contextlib
 import logging
 import traceback
 from collections.abc import Callable, Coroutine
@@ -300,3 +302,146 @@ class AppleMusicClient:
             return None
 
         return scored_release
+
+    async def get_artist_start_year(self, artist_norm: str) -> int | None:
+        """Get artist's earliest release year from iTunes.
+
+        iTunes doesn't have an explicit artist start date, so we use
+        the earliest album release year as a proxy.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Earliest release year found, or None if no releases found
+
+        """
+        self.console_logger.debug(
+            "[itunes] get_artist_start_year called for artist='%s'",
+            artist_norm,
+        )
+
+        try:
+            response_data = await self._fetch_artist_albums(artist_norm)
+            if not response_data:
+                return None
+
+            results = response_data.get("results", [])
+            if not results:
+                self.console_logger.debug(
+                    "[itunes] No albums found for artist: '%s'",
+                    artist_norm,
+                )
+                return None
+
+            years = self._extract_release_years(results, artist_norm)
+            if not years:
+                self.console_logger.debug(
+                    "[itunes] No valid release years found for artist: '%s'",
+                    artist_norm,
+                )
+                return None
+
+            earliest_year = min(years)
+            self.console_logger.debug(
+                "[itunes] Artist '%s' earliest release year: %d (from %d albums)",
+                artist_norm,
+                earliest_year,
+                len(years),
+            )
+            return earliest_year
+
+        except (OSError, ValueError, RuntimeError) as e:
+            self.error_logger.warning(
+                "[itunes] Error fetching artist start year for '%s': %s",
+                artist_norm,
+                e,
+            )
+            return None
+
+    async def _fetch_artist_albums(self, artist_norm: str) -> dict[str, Any] | None:
+        """Fetch all albums for an artist from iTunes API.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            API response data or None if request failed
+
+        """
+        params = {
+            "term": artist_norm,
+            "country": self.country_code,
+            "entity": "album",
+            "limit": "200",
+        }
+
+        response_data = await self.make_api_request_func(
+            api_name="itunes",
+            url=self.base_url,
+            params=params,
+            max_retries=2,
+            base_delay=0.5,
+        )
+
+        if not response_data:
+            self.console_logger.debug(
+                "[itunes] No response data for artist albums query: '%s'",
+                artist_norm,
+            )
+            return None
+
+        return response_data
+
+    def _extract_release_years(
+        self, results: list[dict[str, Any]], artist_norm: str
+    ) -> list[int]:
+        """Extract valid release years from iTunes search results.
+
+        Args:
+            results: List of iTunes API result dictionaries
+            artist_norm: Normalized artist name for filtering
+
+        Returns:
+            List of valid release years
+
+        """
+        years: list[int] = []
+        artist_norm_lower = artist_norm.lower()
+
+        for result in results:
+            year = self._extract_year_from_result(result, artist_norm_lower)
+            if year is not None:
+                years.append(year)
+
+        return years
+
+    @staticmethod
+    def _extract_year_from_result(
+            result: dict[str, Any], artist_norm_lower: str
+    ) -> int | None:
+        """Extract release year from a single iTunes result if it matches artist.
+
+        Args:
+            result: Single iTunes API result dictionary
+            artist_norm_lower: Lowercased normalized artist name
+
+        Returns:
+            Release year as int, or None if not valid/matching
+
+        """
+        artist_name = result.get("artistName", "").strip().lower()
+        release_date = result.get("releaseDate", "").strip()
+
+        # Filter by artist name (fuzzy match)
+        if artist_norm_lower not in artist_name and artist_name not in artist_norm_lower:
+            return None
+
+        if not release_date:
+            return None
+
+        with contextlib.suppress(IndexError, ValueError):
+            year_str = release_date.split("-")[0]
+            if year_str.isdigit() and len(year_str) == VALID_YEAR_LENGTH:
+                return int(year_str)
+        return None

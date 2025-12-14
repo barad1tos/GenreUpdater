@@ -205,6 +205,20 @@ class YearDeterminator:
             )
             return False
 
+        # Check if already processed via new_year tracking
+        # If new_year is set and matches current year, we've already updated this album
+        sample_track = album_tracks[0] if album_tracks else None
+        if sample_track and sample_track.new_year:
+            current_year = sample_track.year or ""
+            if sample_track.new_year == current_year:
+                self.console_logger.debug(
+                    "Skipping '%s - %s': already processed (new_year=%s matches current)",
+                    artist,
+                    album,
+                    current_year,
+                )
+                return True
+
         # Check cache first - API data is more reliable than Music.app
         cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
 

@@ -75,6 +75,7 @@ def _create_track_from_row(
         artist=track_data["artist"],
         album=track_data["album"],
         genre=track_data["genre"] or None,
+        year=track_data.get("year") or None,  # Current year for delta detection
         date_added=track_data["date_added"] or None,
         last_modified=track_data.get("last_modified", "") or None,
         track_status=track_data["track_status"] or None,
@@ -226,6 +227,7 @@ def _create_normalized_track_dict(
         artist=artist,
         album=album,
         genre=(track.genre or "").strip(),
+        year=(track.year or "").strip(),  # Current year for delta detection
         date_added=(track.date_added or "").strip(),
         track_status=(track.track_status or "").strip(),
         old_year=(track.old_year or "").strip(),
@@ -236,15 +238,14 @@ def _create_normalized_track_dict(
 def _get_fields_to_check() -> list[str]:
     """Get the list of fields that should be checked during track merging.
 
-    Note:
-        Uses old_year and new_year for change tracking. The 'year' field exists
-        in TrackDict but is not populated in this context (reports.py sync operations).
+    Includes year for delta detection and old_year/new_year for change tracking.
     """
     return [
         "name",
         "artist",
         "album",
         "genre",
+        "year",  # Current year for delta detection
         "date_added",
         "track_status",
         "old_year",
@@ -507,6 +508,7 @@ def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
         "artist": track.artist or "",
         "album": track.album or "",
         "genre": track.genre or "",
+        "year": track.year or "",  # Current year for delta detection
         "date_added": track.date_added or "",
         "last_modified": getattr(track, "last_modified", "") or "",
         "track_status": track.track_status or "",

@@ -160,11 +160,16 @@ class TrackCacheManager:
         # Use override if provided (captured before fetch), otherwise get current mtime
         library_mtime = library_mtime_override or await self.snapshot_service.get_library_mtime()
 
+        # Preserve last_force_scan_time from existing metadata
+        existing_metadata = await self.snapshot_service.get_snapshot_metadata()
+        last_force_scan_time = existing_metadata.last_force_scan_time if existing_metadata else None
+
         metadata = LibraryCacheMetadata(
             last_full_scan=current_time,
             library_mtime=library_mtime,
             track_count=len(tracks),
             snapshot_hash=snapshot_hash,
+            last_force_scan_time=last_force_scan_time,
         )
         await self.snapshot_service.update_snapshot_metadata(metadata)
 

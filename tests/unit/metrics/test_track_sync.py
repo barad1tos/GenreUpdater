@@ -43,6 +43,7 @@ def _create_test_track(
     artist: str = "Artist",
     album: str = "Album",
     genre: str | None = "Rock",
+    year: str | None = "2020",
     date_added: str | None = "2024-01-01",
     track_status: str | None = "OK",
     old_year: str | None = "2020",
@@ -55,6 +56,7 @@ def _create_test_track(
         artist=artist,
         album=album,
         genre=genre,
+        year=year,
         date_added=date_added,
         track_status=track_status,
         old_year=old_year,
@@ -143,6 +145,7 @@ class TestCreateTrackFromRow:
             "artist": "Test Artist",
             "album": "Test Album",
             "genre": "Rock",
+            "year": "2020",
             "date_added": "2024-01-01",
             "track_status": "OK",
             "old_year": "2020",
@@ -158,6 +161,30 @@ class TestCreateTrackFromRow:
         assert track.name == "Test Track"
         assert track.artist == "Test Artist"
         assert track.genre == "Rock"
+
+    def test_creates_track_with_year_field(self) -> None:
+        """Should read year field from row (Issue #85 - delta detection)."""
+        row = {
+            "id": "123",
+            "name": "Test",
+            "artist": "Artist",
+            "album": "Album",
+            "genre": "Rock",
+            "year": "2020",
+            "date_added": "2024-01-01",
+            "track_status": "OK",
+            "old_year": "2015",
+            "new_year": "2020",
+        }
+        fields_to_read = list(row.keys())
+        expected_fieldnames = fields_to_read
+
+        track = _create_track_from_row(row, fields_to_read, expected_fieldnames)
+
+        assert track is not None
+        assert track.year == "2020"
+        assert track.old_year == "2015"
+        assert track.new_year == "2020"
 
     @pytest.mark.parametrize(
         "invalid_id",
@@ -322,6 +349,12 @@ class TestGetFieldsToCheck:
         assert "genre" in fields
         assert "old_year" in fields
         assert "new_year" in fields
+
+    def test_returns_year_field_for_delta_detection(self) -> None:
+        """Should return year field for delta detection (Issue #85)."""
+        fields = _get_fields_to_check()
+
+        assert "year" in fields
 
 
 class TestCheckIfTrackNeedsUpdate:
@@ -594,6 +627,7 @@ class TestConvertTrackToCsvDict:
             artist="My Artist",
             album="My Album",
             genre="Electronic",
+            year="2019",
             date_added="2024-03-15",
             track_status="Active",
             old_year="2018",
@@ -607,18 +641,30 @@ class TestConvertTrackToCsvDict:
         assert result["artist"] == "My Artist"
         assert result["album"] == "My Album"
         assert result["genre"] == "Electronic"
+        assert result["year"] == "2019"
         assert result["date_added"] == "2024-03-15"
         assert result["track_status"] == "Active"
         assert result["old_year"] == "2018"
         assert result["new_year"] == "2019"
 
+    def test_converts_year_field_to_csv(self) -> None:
+        """Should include year field in CSV dict (Issue #85 - delta detection)."""
+        track = _create_test_track("10", year="2020", old_year="2015", new_year="2020")
+
+        result = _convert_track_to_csv_dict(track)
+
+        assert result["year"] == "2020"
+        assert result["old_year"] == "2015"
+        assert result["new_year"] == "2020"
+
     def test_handles_none_values(self) -> None:
         """Should convert None values to empty strings."""
-        track = _create_test_track("9", genre=None, date_added=None, old_year=None, new_year=None)
+        track = _create_test_track("9", genre=None, year=None, date_added=None, old_year=None, new_year=None)
 
         result = _convert_track_to_csv_dict(track)
 
         assert result["genre"] == ""
+        assert result["year"] == ""
         assert result["date_added"] == ""
         assert result["old_year"] == ""
         assert result["new_year"] == ""

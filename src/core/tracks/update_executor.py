@@ -134,7 +134,7 @@ class TrackUpdateExecutor:
 
             # Check result - distinguish between actual changes and no-ops
             return self._process_update_result(result, property_name, track_id)
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError, KeyError):
             self.error_logger.exception(
                 "Error updating property %s for track %s",
                 property_name,

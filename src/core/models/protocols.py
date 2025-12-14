@@ -330,6 +330,24 @@ class ExternalApiServiceProtocol(Protocol):
         """
         ...
 
+    async def get_artist_start_year(
+        self,
+        artist_norm: str,
+    ) -> int | None:
+        """Get artist's career start year with caching and fallback.
+
+        Uses MusicBrainz as primary source, iTunes as fallback.
+        Results are cached for performance.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Artist's career start year, or None if not found
+
+        """
+        ...
+
     async def get_year_from_discogs(
         self,
         artist: str,

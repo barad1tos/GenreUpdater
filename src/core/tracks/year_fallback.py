@@ -19,7 +19,10 @@ from core.models.validators import is_empty_year
 if TYPE_CHECKING:
     import logging
 
-    from core.models.protocols import PendingVerificationServiceProtocol
+    from core.models.protocols import (
+        ExternalApiServiceProtocol,
+        PendingVerificationServiceProtocol,
+    )
     from core.models.track_models import TrackDict
 
 # Confidence threshold for trusting API over library
@@ -47,6 +50,7 @@ class YearFallbackHandler:
         absurd_year_threshold: int,
         year_difference_threshold: int,
         trust_api_score_threshold: int = DEFAULT_TRUST_API_SCORE_THRESHOLD,
+        api_orchestrator: ExternalApiServiceProtocol | None = None,
     ) -> None:
         """Initialize the year fallback handler.
 
@@ -57,6 +61,7 @@ class YearFallbackHandler:
             absurd_year_threshold: Years below this are considered absurd
             year_difference_threshold: Max allowed year difference before dramatic change
             trust_api_score_threshold: Trust API if confidence >= this value
+            api_orchestrator: API orchestrator for artist data lookups (optional)
 
         """
         self.console_logger = console_logger
@@ -65,6 +70,7 @@ class YearFallbackHandler:
         self.absurd_year_threshold = absurd_year_threshold
         self.year_difference_threshold = year_difference_threshold
         self.trust_api_score_threshold = trust_api_score_threshold
+        self.api_orchestrator = api_orchestrator
 
     async def apply_year_fallback(
         self,
@@ -222,6 +228,70 @@ class YearFallbackHandler:
         )
         return proposed_year
 
+    async def _check_year_plausibility(
+        self,
+        existing_year: str,
+        proposed_year: str,
+        artist: str,
+    ) -> bool | None:
+        """Check if existing year is plausible for the artist.
+
+        Uses artist's career start year to determine if existing library year
+        is even possible. If artist formed in 2015, a year of 2000 is impossible.
+
+        Args:
+            existing_year: Current year in library
+            proposed_year: Year proposed by API
+            artist: Artist name (for API lookup)
+
+        Returns:
+            False: existing year is implausible → apply API year
+            None: can't determine or existing is plausible → continue to next rule
+
+        """
+        if self.api_orchestrator is None:
+            # No orchestrator available, can't check plausibility
+            return None
+
+        try:
+            existing_int = int(existing_year)
+        except (ValueError, TypeError):
+            # Invalid existing year, apply API year
+            return False
+
+        # Get artist's career start year
+        artist_start = await self.api_orchestrator.get_artist_start_year(artist)
+
+        if artist_start is None:
+            # Can't verify artist data → safer to apply API year
+            self.console_logger.info(
+                "[PLAUSIBILITY] No artist data found for '%s', applying API year %s",
+                artist,
+                proposed_year,
+            )
+            return False
+
+        if existing_int < artist_start:
+            # Existing year is BEFORE artist started → IMPOSSIBLE
+            self.console_logger.info(
+                "[PLAUSIBILITY] Existing year %d is before artist '%s' started (%d), "
+                "applying API year %s",
+                existing_int,
+                artist,
+                artist_start,
+                proposed_year,
+            )
+            return False
+
+        # Existing year is plausible (after artist started)
+        self.console_logger.debug(
+            "[PLAUSIBILITY] Existing year %d is plausible for '%s' (started %d)",
+            existing_int,
+            artist,
+            artist_start,
+        )
+        return None
+
     async def _handle_dramatic_year_change(
         self,
         proposed_year: str,
@@ -233,8 +303,10 @@ class YearFallbackHandler:
         """Handle dramatic year changes. Returns True if should skip update.
 
         Logic:
-        1. High confidence API (>=70%) → trust API, apply year
-        2. Low confidence + dramatic change → preserve existing, mark for verification
+        1. Not dramatic change → apply API year
+        2. High confidence API (>=70%) → trust API, apply year
+        3. NEW: Check plausibility → if existing is impossible → apply API year
+        4. Low confidence + dramatic + plausible → preserve existing, mark for verification
         """
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
@@ -251,7 +323,28 @@ class YearFallbackHandler:
             )
             return False  # Don't skip - apply the year
 
-        # Low confidence + dramatic change → preserve existing year
+        # NEW: Check if existing year is plausible for the artist
+        plausibility_result = await self._check_year_plausibility(
+            existing_year=existing_year,
+            proposed_year=proposed_year,
+            artist=artist,
+        )
+        if plausibility_result is False:
+            # Existing year is implausible → apply API year
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="implausible_existing_year",
+                metadata={
+                    "existing_year": existing_year,
+                    "proposed_year": proposed_year,
+                    "confidence_score": confidence_score,
+                    "plausibility": "existing_year_impossible",
+                },
+            )
+            return False  # Don't skip - apply the year
+
+        # Low confidence + dramatic change + plausible existing → preserve existing year
         await self.pending_verification.mark_for_verification(
             artist=artist,
             album=album,

@@ -176,9 +176,9 @@ class YearUpdateService:
 
             self._snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes
-            self._console_logger.info("=== AFTER Step 3 completed successfully with %d changes ===", len(changes_log))
+            self._console_logger.info("=== AFTER Step 4 completed successfully with %d changes ===", len(changes_log))
         except Exception as e:
-            self._error_logger.exception("=== ERROR in Step 3 ===")
+            self._error_logger.exception("=== ERROR in Step 4 ===")
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
             changes_log.append(

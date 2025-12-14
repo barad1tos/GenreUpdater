@@ -144,6 +144,7 @@ class YearRetriever:
             fallback_enabled=self.fallback_enabled,
             absurd_year_threshold=self.absurd_year_threshold,
             year_difference_threshold=self.year_difference_threshold,
+            api_orchestrator=self.external_api,
         )
 
         # Initialize year determinator

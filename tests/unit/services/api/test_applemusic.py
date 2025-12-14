@@ -569,3 +569,216 @@ class TestEdgeCases:
         result = await client.get_scored_releases("artist", "album")
 
         assert result == []
+
+
+class TestGetArtistStartYear:
+    """Tests for get_artist_start_year method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_earliest_year(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test returns earliest release year for artist."""
+        mock_api_request_func.return_value = {
+            "results": [
+                {"artistName": "Metallica", "releaseDate": "1991-08-12T00:00:00Z"},
+                {"artistName": "Metallica", "releaseDate": "1983-07-25T00:00:00Z"},
+                {"artistName": "Metallica", "releaseDate": "1986-03-03T00:00:00Z"},
+            ]
+        }
+
+        result = await client.get_artist_start_year("metallica")
+
+        assert result == 1983
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_results(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test returns None when no albums found."""
+        mock_api_request_func.return_value = {"results": []}
+
+        result = await client.get_artist_start_year("unknown artist")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_api_fails(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test returns None when API request fails."""
+        mock_api_request_func.return_value = None
+
+        result = await client.get_artist_start_year("metallica")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_filters_by_artist_name(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test filters results by matching artist name."""
+        mock_api_request_func.return_value = {
+            "results": [
+                {"artistName": "Metallica", "releaseDate": "1991-08-12T00:00:00Z"},
+                {"artistName": "Other Artist", "releaseDate": "1970-01-01T00:00:00Z"},
+                {"artistName": "Metallica Tribute", "releaseDate": "2000-01-01T00:00:00Z"},
+            ]
+        }
+
+        result = await client.get_artist_start_year("metallica")
+
+        # Should only consider "Metallica" and "Metallica Tribute" (contains metallica)
+        assert result == 1991  # Earliest from matching artists
+
+    @pytest.mark.asyncio
+    async def test_skips_invalid_release_dates(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test skips results with invalid release dates."""
+        mock_api_request_func.return_value = {
+            "results": [
+                {"artistName": "Metallica", "releaseDate": ""},
+                {"artistName": "Metallica", "releaseDate": "invalid"},
+                {"artistName": "Metallica", "releaseDate": "1991-08-12T00:00:00Z"},
+            ]
+        }
+
+        result = await client.get_artist_start_year("metallica")
+
+        assert result == 1991
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_all_dates_invalid(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test returns None when all release dates are invalid."""
+        mock_api_request_func.return_value = {
+            "results": [
+                {"artistName": "Metallica", "releaseDate": ""},
+                {"artistName": "Metallica", "releaseDate": "not-a-date"},
+            ]
+        }
+
+        result = await client.get_artist_start_year("metallica")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test handles API errors gracefully."""
+        mock_api_request_func.side_effect = OSError("Connection error")
+
+        result = await client.get_artist_start_year("metallica")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_artist_matching(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test artist name matching is case insensitive."""
+        mock_api_request_func.return_value = {
+            "results": [
+                {"artistName": "METALLICA", "releaseDate": "1983-07-25T00:00:00Z"},
+                {"artistName": "metallica", "releaseDate": "1991-08-12T00:00:00Z"},
+            ]
+        }
+
+        result = await client.get_artist_start_year("Metallica")
+
+        assert result == 1983
+
+    @pytest.mark.asyncio
+    async def test_makes_correct_api_call(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test makes correct API call with parameters."""
+        mock_api_request_func.return_value = {"results": []}
+
+        await client.get_artist_start_year("metallica")
+
+        mock_api_request_func.assert_called_once()
+        call_kwargs = mock_api_request_func.call_args[1]
+        assert call_kwargs["params"]["term"] == "metallica"
+        assert call_kwargs["params"]["entity"] == "album"
+        assert call_kwargs["params"]["limit"] == "200"
+
+
+class TestExtractYearFromResult:
+    """Tests for _extract_year_from_result helper method."""
+
+    def test_extracts_valid_year(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """Test extracts year from valid result."""
+        result = {"artistName": "Metallica", "releaseDate": "1991-08-12T00:00:00Z"}
+
+        year = client._extract_year_from_result(result, "metallica")
+
+        assert year == 1991
+
+    def test_returns_none_for_non_matching_artist(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """Test returns None when artist doesn't match."""
+        result = {"artistName": "Iron Maiden", "releaseDate": "1980-04-14T00:00:00Z"}
+
+        year = client._extract_year_from_result(result, "metallica")
+
+        assert year is None
+
+    def test_returns_none_for_empty_release_date(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """Test returns None when release date is empty."""
+        result = {"artistName": "Metallica", "releaseDate": ""}
+
+        year = client._extract_year_from_result(result, "metallica")
+
+        assert year is None
+
+    def test_returns_none_for_invalid_year_format(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """Test returns None when year format is invalid."""
+        result = {"artistName": "Metallica", "releaseDate": "91-08-12T00:00:00Z"}
+
+        year = client._extract_year_from_result(result, "metallica")
+
+        assert year is None
+
+    def test_handles_partial_artist_match(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """Test handles partial artist name matches."""
+        result = {"artistName": "Metallica & Friends", "releaseDate": "2000-01-01T00:00:00Z"}
+
+        year = client._extract_year_from_result(result, "metallica")
+
+        assert year == 2000

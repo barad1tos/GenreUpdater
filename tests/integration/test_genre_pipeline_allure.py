@@ -167,9 +167,9 @@ class TestGenrePipelineIntegration:
             # Mock API fallback scenario: MB fails, Discogs fails, LastFM succeeds
             mock_orchestrator = TestGenrePipelineIntegration.create_mock_api_orchestrator(
                 [
-                    (None, False),  # MusicBrainz fails
-                    (None, False),  # Discogs fails
-                    ("2019", True),  # LastFM succeeds
+                    (None, False, 0),  # MusicBrainz fails
+                    (None, False, 0),  # Discogs fails
+                    ("2019", True, 85),  # LastFM succeeds
                 ]
             )
             del mock_orchestrator  # Created for demonstration but not used in current test
@@ -379,9 +379,7 @@ class TestGenrePipelineIntegration:
             assert call_count >= 0
 
             # Error logger should have recorded any errors
-            error_logger = genre_manager.error_logger
-            error_messages = getattr(error_logger, "error_messages", [])
-            if error_messages:
+            if error_messages := getattr(genre_manager.error_logger, "error_messages", []):
                 error_count = len(error_messages)
                 allure.attach(f"{error_count}", "Errors Logged", allure.attachment_type.TEXT)
 

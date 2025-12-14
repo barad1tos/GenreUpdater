@@ -38,7 +38,7 @@ def _now() -> datetime:
     return utc_now.replace(tzinfo=None)
 
 
-@dataclass(slots=True)
+@dataclass
 class LibraryCacheMetadata:
     """Metadata describing the stored snapshot."""
 
@@ -73,7 +73,7 @@ class LibraryCacheMetadata:
         )
 
 
-@dataclass(slots=True)
+@dataclass
 class LibraryDeltaCache:
     """Delta cache tracking incremental processing state."""
 
@@ -461,33 +461,81 @@ class LibrarySnapshotService:
     ) -> list[str]:
         """Detect tracks with changed metadata (force mode only).
 
-        Fetches full library metadata and compares with snapshot.
-        """
-        async with spinner("Force mode: fetching full library metadata..."):
-            result = await applescript_client.run_script("fetch_tracks.scpt", arguments=["", ""])
-        raw_tracks = self._parse_fetch_tracks_output(result) if result else []
+        Fetches only common tracks (exist in both current and snapshot) in batches
+        and compares metadata to detect changes.
 
-        if not raw_tracks:
+        This is much more efficient than fetching the entire library:
+        - Only fetches tracks that could potentially be "updated"
+        - New tracks are handled separately (not in common_ids)
+        - Removed tracks don't need fetching
+        """
+        # Only fetch tracks that exist in both - these are the only candidates for "updated"
+        common_ids = sorted(current_ids & snapshot_ids)
+
+        if not common_ids:
+            self.logger.info("No common tracks to check for updates")
             await self._update_force_scan_time()
             return []
 
-        # Build map of current tracks
+        # Fetch common tracks in batches using fetch_tracks_by_ids.scpt
+        batch_size = 200
+        timeout_per_batch = 120  # 2 minutes per 200 IDs is generous
         current_map: dict[str, TrackDict] = {}
-        for raw_track in raw_tracks:
-            try:
-                track_dict = self._parse_raw_track(raw_track)
-                current_map[str(track_dict.id)] = track_dict
-            except (KeyError, ValueError) as exc:
-                self.logger.warning("Failed to parse track: %s", exc)
+        total_batches = (len(common_ids) + batch_size - 1) // batch_size
 
-        # Find updated tracks (exist in both, metadata changed)
-        common_ids = current_ids & snapshot_ids
+        self.logger.info(
+            "Force mode: fetching %d common tracks in %d batches...",
+            len(common_ids),
+            total_batches,
+        )
+
+        async with spinner(f"Force mode: fetching {len(common_ids)} tracks for update detection..."):
+            for i in range(0, len(common_ids), batch_size):
+                batch = common_ids[i : i + batch_size]
+                batch_num = i // batch_size + 1
+                ids_param = ",".join(batch)
+
+                result = await applescript_client.run_script(
+                    "fetch_tracks_by_ids.scpt",
+                    arguments=[ids_param],
+                    timeout=timeout_per_batch,
+                )
+
+                if not result:
+                    self.logger.warning(
+                        "Batch %d/%d returned empty, skipping",
+                        batch_num,
+                        total_batches,
+                    )
+                    continue
+
+                raw_tracks = self._parse_fetch_tracks_output(result)
+                for raw_track in raw_tracks:
+                    try:
+                        track_dict = self._parse_raw_track(raw_track)
+                        current_map[str(track_dict.id)] = track_dict
+                    except (KeyError, ValueError) as exc:
+                        self.logger.warning("Failed to parse track: %s", exc)
+
+        if not current_map:
+            self.logger.warning("Force scan: no tracks fetched successfully")
+            await self._update_force_scan_time()
+            return []
+
+        # Find updated tracks (metadata changed)
         updated_ids = [
             track_id
             for track_id in common_ids
-            if track_id in current_map and track_id in snapshot_map and has_track_changed(current_map[track_id], snapshot_map[track_id])
+            if track_id in current_map
+            and track_id in snapshot_map
+            and has_track_changed(current_map[track_id], snapshot_map[track_id])
         ]
-        self.logger.info("Force scan found %d updated tracks", len(updated_ids))
+        self.logger.info(
+            "Force scan found %d updated tracks (checked %d/%d common)",
+            len(updated_ids),
+            len(current_map),
+            len(common_ids),
+        )
 
         await self._update_force_scan_time()
         return updated_ids

@@ -70,6 +70,7 @@ class ScoringConfig(TypedDict, total=False):
     # Source reliability
     source_mb_bonus: int
     source_discogs_bonus: int
+    source_itunes_bonus: int
     source_lastfm_penalty: int
 
 
@@ -173,8 +174,8 @@ class ReleaseScorer:
             # Source reliability
             "source_mb_bonus": 5,
             "source_discogs_bonus": 2,
+            "source_itunes_bonus": 4,
             "source_lastfm_penalty": -5,
-            "source_itunes_penalty": -10,
             # Future year penalty
             "future_year_penalty": -10,
         }
@@ -569,10 +570,10 @@ class ReleaseScorer:
             source_adjustment = int(scoring_cfg.get("source_mb_bonus", 5))
         elif source == "discogs":
             source_adjustment = int(scoring_cfg.get("source_discogs_bonus", 2))
+        elif source == "itunes":
+            source_adjustment = int(scoring_cfg.get("source_itunes_bonus", 4))
         elif source == "lastfm":
             source_adjustment = int(scoring_cfg.get("source_lastfm_penalty", -5))
-        elif source == "itunes":
-            source_adjustment = int(scoring_cfg.get("source_itunes_penalty", -10))
 
         if source_adjustment != 0:
             score_components.append(f"Source {source.title()}: {source_adjustment:+}")

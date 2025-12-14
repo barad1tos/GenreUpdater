@@ -471,6 +471,22 @@ class MockExternalApiService:
         self.discogs_requests.append((artist, album))
         return self.discogs_year_response
 
+    async def get_artist_start_year(
+        self,
+        artist_norm: str,
+    ) -> int | None:
+        """Get artist's career start year.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Artist's start year or None
+
+        """
+        self.artist_activity_requests.append(artist_norm)
+        return self.artist_activity_response[0]
+
 
 class MockPendingVerificationService:
     """Mock implementation of PendingVerificationServiceProtocol for testing."""
@@ -478,7 +494,7 @@ class MockPendingVerificationService:
     def __init__(self) -> None:
         """Initialize the mock pending verification service."""
         self.pending_albums: list[PendingAlbumEntry] = []
-        self.marked_albums: list[tuple[str, str, str, dict[str, Any] | None]] = []
+        self.marked_albums: list[tuple[str, str, str, dict[str, Any] | None, int | None]] = []
         self.year_updates: list[tuple[str, str, str]] = []
         self.is_initialized = False
         self.last_min_attempts = 0
@@ -493,6 +509,7 @@ class MockPendingVerificationService:
         album: str,
         reason: str = "no_year_found",
         metadata: dict[str, Any] | None = None,
+        recheck_days: int | None = None,
     ) -> None:
         """Mark an album for future verification.
 
@@ -501,8 +518,9 @@ class MockPendingVerificationService:
             album: Album name
             reason: Reason for marking
             metadata: Additional metadata
+            recheck_days: Optional override for verification interval in days
         """
-        self.marked_albums.append((artist, album, reason, metadata))
+        self.marked_albums.append((artist, album, reason, metadata, recheck_days))
         self.pending_albums.append(
             PendingAlbumEntry(
                 timestamp=datetime.now(UTC),
