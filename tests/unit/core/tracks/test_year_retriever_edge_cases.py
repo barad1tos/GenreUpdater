@@ -654,8 +654,8 @@ class TestYearFallbackLogic:
 
         with allure.step("Verify: Album marked for verification"):
             assert len(mock_pending.marked_albums) == 1
-            # marked_albums is list of tuples: (artist, album, reason, metadata)
-            marked_artist, _album, reason, _metadata = mock_pending.marked_albums[0]
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            marked_artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
             assert marked_artist == "Abney Park"
             assert reason == "suspicious_year_change"
 
