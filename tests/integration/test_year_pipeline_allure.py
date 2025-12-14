@@ -70,6 +70,8 @@ class TestYearPipelineIntegration:
             mock_pending_verification.get_pending_tracks = MagicMock(return_value=[])
             mock_pending_verification.mark_for_verification = AsyncMock()
             mock_pending_verification.generate_problematic_albums_report = AsyncMock(return_value=0)
+            mock_pending_verification.get_entry = AsyncMock(return_value=None)
+            mock_pending_verification.is_verification_needed = AsyncMock(return_value=False)
 
         if retry_handler is None:
             retry_handler = TestYearPipelineIntegration._create_retry_handler()
@@ -366,16 +368,8 @@ class TestYearPipelineIntegration:
             mock_external_api = AsyncMock()
             mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
-            # Mock pending verification service
-            mock_pending_verification = MagicMock()
-            mock_pending_verification.add_track = MagicMock()
-            mock_pending_verification.get_pending_tracks = MagicMock(return_value=[])
-            mock_pending_verification.mark_for_verification = AsyncMock()
-            mock_pending_verification.generate_problematic_albums_report = AsyncMock(return_value=0)
-
-            year_retriever = TestYearPipelineIntegration.create_year_retriever(
-                mock_external_api=mock_external_api, mock_pending_verification=mock_pending_verification
-            )
+            # Use centralized mock from create_year_retriever helper
+            year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_external_api=mock_external_api)
 
             allure.attach(
                 json.dumps([{"id": t.id, "name": t.name, "year": t.year, "album": t.album} for t in tracks], indent=2),
