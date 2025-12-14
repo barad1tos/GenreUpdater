@@ -62,21 +62,18 @@ def _field_changed(current: str, stored: str) -> bool:
 def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
     """Check if track metadata has changed between current and stored versions.
 
+    Only checks fields relevant to genre/year processing. Excludes last_modified
+    and date_added because they change for many reasons unrelated to our updates
+    (e.g., playback, ratings, other metadata edits) and cause false positives.
+
     Args:
         current: Current track from Apple Music
         stored: Stored track from CSV snapshot
 
     Returns:
-        True if any tracked field has changed
+        True if any relevant field has changed (track_status, genre, year)
 
     """
-    # Compare the same fields that TrackSummary would compare
-    stored_last_modified = getattr(stored, "last_modified", "") or ""
-    current_last_modified = current.last_modified or ""
-
-    stored_date_added = stored.date_added or ""
-    current_date_added = current.date_added or ""
-
     stored_track_status = stored.track_status or ""
     current_track_status = current.track_status or ""
 
@@ -90,13 +87,11 @@ def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
     # This prevents mass updates on first run after adding track_status field
     track_status_changed = stored_track_status and current_track_status and current_track_status != stored_track_status
 
-    # Check for changes in metadata fields
-    last_modified_changed = _field_changed(current_last_modified, stored_last_modified)
-    date_added_changed = _field_changed(current_date_added, stored_date_added)
+    # Check for changes in metadata fields relevant to genre/year processing
     genre_changed = _field_changed(current_genre, stored_genre)
     year_changed = _field_changed(current_year, stored_year)
 
-    return bool(last_modified_changed or date_added_changed or track_status_changed or genre_changed or year_changed)
+    return bool(track_status_changed or genre_changed or year_changed)
 
 
 def compute_track_delta(
