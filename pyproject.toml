@@ -443,6 +443,6 @@ skips = ["B101", "B311", "B404", "B603"]
 paths_to_mutate = ["src/"]
 tests_dir = ["tests/"]
 max_stack_depth = 8
-# Disable coverage for all mutmut pytest calls (baseline + mutations)
-pytest_args = ["--no-cov"]
+# Disable coverage plugin entirely for mutmut (--no-cov alone doesn't prevent fail-under check)
+pytest_args = ["-p", "no:pytest_cov"]
 pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e"]
