@@ -546,6 +546,19 @@ class LibrarySnapshotService:
         """Return whether delta caching is enabled."""
         return self.enabled and self.delta_enabled
 
+    def clear_snapshot(self) -> bool:
+        """Delete the snapshot file to force fresh data fetch from Music.app.
+
+        Returns:
+            True if snapshot was deleted, False if it didn't exist.
+        """
+        snapshot_path = self._snapshot_path
+        if snapshot_path.exists():
+            snapshot_path.unlink()
+            self.logger.info("Cleared library snapshot: %s", snapshot_path)
+            return True
+        return False
+
     async def should_force_scan(self, force_flag: bool = False) -> tuple[bool, str]:
         """Determine if full metadata scan is needed.
 

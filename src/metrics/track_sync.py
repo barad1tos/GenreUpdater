@@ -549,9 +549,7 @@ def _update_track_with_cached_fields_for_sync(
     if not track.track_status and cached_fields.get("track_status"):
         track.track_status = cached_fields["track_status"]
 
-    # Year handling: AppleScript's 'year' = current year in Music.app
-    cached_year = cached_fields.get("year")
-    if cached_year:
+    if cached_year := cached_fields.get("year"):
         # Always update track.year (current state for delta detection)
         if not track.year:
             track.year = cached_year
