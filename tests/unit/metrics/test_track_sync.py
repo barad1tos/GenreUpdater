@@ -18,6 +18,7 @@ from core.models.types import TrackDict
 from metrics.track_sync import (
     _FIELD_COUNT_WITH_ALBUM_ARTIST,
     _FIELD_COUNT_WITHOUT_ALBUM_ARTIST,
+    _MISSING_VALUE_PLACEHOLDER,
     _build_osascript_command,
     _convert_track_to_csv_dict,
     _create_normalized_track_dict,
@@ -28,7 +29,9 @@ from metrics.track_sync import (
     _merge_musicapp_into_csv,
     _normalize_track_year_fields,
     _parse_osascript_output,
+    _parse_single_track_line,
     _resolve_field_indices,
+    _sanitize_applescript_field,
     _track_fields_differ,
     _update_csv_track_from_musicapp,
     _update_track_with_cached_fields_for_sync,
@@ -783,6 +786,84 @@ class TestResolveFieldIndicesTyping:
         assert mod_date_idx == date_added_idx + 1
         assert status_idx == mod_date_idx + 1
         assert old_year_idx == status_idx + 1
+
+
+class TestSanitizeApplescriptField:
+    """Tests for _sanitize_applescript_field helper function."""
+
+    def test_returns_empty_for_missing_value(self) -> None:
+        """Should convert 'missing value' placeholder to empty string."""
+        result = _sanitize_applescript_field(_MISSING_VALUE_PLACEHOLDER)
+
+        assert result == ""
+
+    def test_returns_value_unchanged_for_normal_string(self) -> None:
+        """Should return normal strings unchanged."""
+        result = _sanitize_applescript_field("2024-01-01 12:00:00")
+
+        assert result == "2024-01-01 12:00:00"
+
+    def test_returns_empty_string_unchanged(self) -> None:
+        """Should return empty string unchanged."""
+        result = _sanitize_applescript_field("")
+
+        assert result == ""
+
+    def test_case_sensitive_missing_value(self) -> None:
+        """Should only match exact 'missing value' case."""
+        result = _sanitize_applescript_field("Missing Value")
+
+        assert result == "Missing Value"
+
+
+class TestParseSingleTrackLine:
+    """Tests for _parse_single_track_line helper function."""
+
+    def test_parses_fields_with_12_field_indices(self) -> None:
+        """Should parse fields correctly using 12-field indices."""
+        fields = ["1", "Track", "Artist", "AlbumArtist", "Album", "Rock", "2024-01-01", "2024-01-02", "OK", "2020", "2021", ""]
+        indices = (6, 7, 8, 9)
+
+        result = _parse_single_track_line(fields, indices)
+
+        assert result["date_added"] == "2024-01-01"
+        assert result["last_modified"] == "2024-01-02"
+        assert result["track_status"] == "OK"
+        assert result["old_year"] == "2020"
+
+    def test_parses_fields_with_11_field_indices(self) -> None:
+        """Should parse fields correctly using 11-field indices."""
+        fields = ["1", "Track", "Artist", "Album", "Rock", "2024-01-01", "2024-01-02", "OK", "2020", "2021", ""]
+        indices = (5, 6, 7, 8)
+
+        result = _parse_single_track_line(fields, indices)
+
+        assert result["date_added"] == "2024-01-01"
+        assert result["last_modified"] == "2024-01-02"
+        assert result["track_status"] == "OK"
+        assert result["old_year"] == "2020"
+
+    def test_sanitizes_missing_value_in_all_fields(self) -> None:
+        """Should sanitize 'missing value' placeholder in all fields."""
+        fields = ["1", "Track", "Artist", "Album", "Rock", "missing value", "missing value", "missing value", "missing value", "", ""]
+        indices = (5, 6, 7, 8)
+
+        result = _parse_single_track_line(fields, indices)
+
+        assert result["date_added"] == ""
+        assert result["last_modified"] == ""
+        assert result["track_status"] == ""
+        assert result["old_year"] == ""
+
+    def test_returns_typed_dict(self) -> None:
+        """Should return properly typed ParsedTrackFields."""
+        fields = ["1", "T", "A", "B", "R", "d", "m", "s", "y", "", ""]
+        indices = (5, 6, 7, 8)
+
+        result: ParsedTrackFields = _parse_single_track_line(fields, indices)
+
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"date_added", "last_modified", "track_status", "old_year"}
 
 
 class TestHandleOsascriptError:

@@ -370,6 +370,28 @@ def _resolve_field_indices(field_count: int) -> tuple[int, int, int, int] | None
     return None
 
 
+_MISSING_VALUE_PLACEHOLDER = "missing value"
+
+
+def _sanitize_applescript_field(value: str) -> str:
+    """Convert AppleScript 'missing value' placeholder to empty string."""
+    return "" if value == _MISSING_VALUE_PLACEHOLDER else value
+
+
+def _parse_single_track_line(
+    fields: list[str],
+    indices: tuple[int, int, int, int],
+) -> ParsedTrackFields:
+    """Parse fields into ParsedTrackFields using resolved indices."""
+    date_added_idx, mod_date_idx, status_idx, old_year_idx = indices
+    return {
+        "date_added": _sanitize_applescript_field(fields[date_added_idx]),
+        "last_modified": _sanitize_applescript_field(fields[mod_date_idx]),
+        "track_status": _sanitize_applescript_field(fields[status_idx]),
+        "old_year": _sanitize_applescript_field(fields[old_year_idx]),
+    }
+
+
 def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     """Parse AppleScript output into track cache dictionary.
 
@@ -389,7 +411,7 @@ def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     tracks_data = stripped_output.split(line_separator) if line_separator else stripped_output.splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
-        if not track_line.strip():  # Skip empty lines
+        if not track_line.strip():
             continue
         fields = track_line.split(field_separator)
         indices = _resolve_field_indices(len(fields))
@@ -398,19 +420,10 @@ def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
                 "Track line %d has %d fields, expected 11 or 12. Skipping line: %r",
                 line_num,
                 len(fields),
-                track_line[:100],  # Truncate long lines for readability
+                track_line[:100],
             )
             continue
-        date_added_index, modification_date_index, status_index, old_year_index = indices
-        track_id = fields[0]
-        # Fields order: ID, Name, Artist, [AlbumArtist], Album, Genre, DateAdded, ModificationDate, Status, Year, ReleaseYear, NewYear
-        missing_value = "missing value"
-        tracks_cache[track_id] = {
-            "date_added": (fields[date_added_index] if fields[date_added_index] != missing_value else ""),
-            "last_modified": (fields[modification_date_index] if fields[modification_date_index] != missing_value else ""),
-            "track_status": (fields[status_index] if fields[status_index] != missing_value else ""),
-            "old_year": (fields[old_year_index] if fields[old_year_index] != missing_value else ""),
-        }
+        tracks_cache[fields[0]] = _parse_single_track_line(fields, indices)
 
     return tracks_cache
 
