@@ -27,18 +27,13 @@ def pytest_configure(config: pytest.Config) -> None:
     is_mutmut = "mutants" in pythonpath or any("mutants" in str(p) for p in sys.path)
 
     if is_mutmut:
-        # Disable coverage plugin entirely
-        cov_plugin = config.pluginmanager.get_plugin("_cov")
-        if cov_plugin:
+        # Unregister coverage plugin if already loaded
+        if cov_plugin := config.pluginmanager.get_plugin("_cov"):
             config.pluginmanager.unregister(cov_plugin)
 
-        # Also try disabling by name
+        # Block coverage plugins from loading
         config.pluginmanager.set_blocked("pytest_cov")
         config.pluginmanager.set_blocked("_cov")
-
-        # Override fail-under to 0 as fallback
-        if hasattr(config, "_inicache"):
-            config._inicache["cov_fail_under"] = 0
 
 
 @pytest.fixture
