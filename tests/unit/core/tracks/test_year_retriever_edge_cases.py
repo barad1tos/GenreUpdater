@@ -704,8 +704,8 @@ class TestYearFallbackLogic:
 
         with allure.step("Verify: Album marked with special type"):
             assert len(mock_pending.marked_albums) == 1
-            # marked_albums is list of tuples: (artist, album, reason, metadata)
-            _artist, _album, reason, _metadata = mock_pending.marked_albums[0]
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            _artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
             assert "special_album" in reason
 
             allure.attach(
@@ -1661,7 +1661,8 @@ class TestYearFallbackConfidenceScoring:
 
         with allure.step("Verify: Album marked for verification"):
             assert len(mock_pending.marked_albums) == 1
-            marked_artist, _album, reason, _metadata = mock_pending.marked_albums[0]
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            marked_artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
             assert marked_artist == "Blue Stahli"
             assert reason == "suspicious_year_change"
 
@@ -1683,9 +1684,9 @@ class TestYearFallbackConfidenceScoring:
     async def test_confidence_threshold_boundary(self) -> None:
         """Test that exactly 70% confidence (threshold) allows update."""
         mock_pending = MockPendingVerificationService()
+        # Using default trust_api_score_threshold=70
         retriever = self.create_retriever_with_fallback(
             pending_verification=mock_pending,
-            trust_api_score_threshold=70,
         )
 
         tracks = [
@@ -1710,9 +1711,9 @@ class TestYearFallbackConfidenceScoring:
     async def test_confidence_below_threshold_blocks(self) -> None:
         """Test that 69% confidence (just below threshold) blocks update."""
         mock_pending = MockPendingVerificationService()
+        # Using default trust_api_score_threshold=70
         retriever = self.create_retriever_with_fallback(
             pending_verification=mock_pending,
-            trust_api_score_threshold=70,
         )
 
         tracks = [
