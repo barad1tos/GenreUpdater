@@ -13,11 +13,11 @@ on run argv
     else
         set selectedArtist to ""
     end if
-    
+
     -- Batch processing parameters (offset, limit)
     set batchOffset to 0
     set batchLimit to 0
-    
+
     if (count of argv) >= 2 and item 2 of argv is not "" then
         set batchOffset to item 2 of argv as integer
     end if
@@ -98,6 +98,7 @@ on run argv
         set albumList to my fetch_property_list(trackObjects, "album", trackCount)
         set genreList to my fetch_property_list(trackObjects, "genre", trackCount)
         set dateAddedList to my fetch_property_list(trackObjects, "date added", trackCount)
+        set modificationDateList to my fetch_property_list(trackObjects, "modification date", trackCount)
         set yearList to my fetch_property_list(trackObjects, "year", trackCount)
 
         -- Loop through each track index and filter by status
@@ -117,6 +118,8 @@ on run argv
                     set track_genre to my text_or_empty(my item_or_missing(genreList, idx))
                     set date_added_raw to my item_or_missing(dateAddedList, idx)
                     set date_added to my formatDate(date_added_raw)
+                    set modification_date_raw to my item_or_missing(modificationDateList, idx)
+                    set modification_date to my formatDate(modification_date_raw)
                     set track_status to statusText -- Already a clean string
 
                     set raw_year to my item_or_missing(yearList, idx)
@@ -133,9 +136,9 @@ on run argv
                         set release_year to ""
                     end try
 
-                    -- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year
+                    -- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, new_year
                     -- Note: new_year is empty placeholder, will be populated by Python after year determination
-                    set trackFields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, ""}
+                    set trackFields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, ""}
 
                     set oldDelimiters to AppleScript's text item delimiters
                     set AppleScript's text item delimiters to fieldSeparator
@@ -190,6 +193,8 @@ on fetch_property_list(trackObjects, propertyName, expectedCount)
                     set propertyValue to (genre of currentTrack)
                 else if propertyName is "date added" then
                     set propertyValue to (date added of currentTrack)
+                else if propertyName is "modification date" then
+                    set propertyValue to (modification date of currentTrack)
                 else if propertyName is "year" then
                     set propertyValue to (year of currentTrack)
                 end if

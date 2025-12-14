@@ -34,6 +34,7 @@ from metrics.track_sync import (
     _update_track_with_cached_fields_for_sync,
     _validate_csv_header,
     load_track_list,
+    ParsedTrackFields,
     save_track_map_to_csv,
 )
 
@@ -92,12 +93,12 @@ class TestFieldCountConstants:
     """Tests for field count constants."""
 
     def test_field_count_with_album_artist(self) -> None:
-        """Should have correct value for format with album artist."""
-        assert _FIELD_COUNT_WITH_ALBUM_ARTIST == 11
+        """Should have correct value for format with album artist (12 fields with modification_date)."""
+        assert _FIELD_COUNT_WITH_ALBUM_ARTIST == 12
 
     def test_field_count_without_album_artist(self) -> None:
-        """Should have correct value for format without album artist."""
-        assert _FIELD_COUNT_WITHOUT_ALBUM_ARTIST == 10
+        """Should have correct value for format without album artist (11 fields with modification_date)."""
+        assert _FIELD_COUNT_WITHOUT_ALBUM_ARTIST == 11
 
 
 class TestValidateCsvHeader:
@@ -485,17 +486,17 @@ class TestBuildOsascriptCommand:
 class TestResolveFieldIndices:
     """Tests for _resolve_field_indices function."""
 
+    def test_returns_indices_for_12_fields(self) -> None:
+        """Should return correct indices for 12-field format (with album_artist, modification_date)."""
+        result = _resolve_field_indices(12)
+
+        assert result == (6, 7, 8, 9)
+
     def test_returns_indices_for_11_fields(self) -> None:
-        """Should return correct indices for 11-field format."""
+        """Should return correct indices for 11-field format (no album_artist, has modification_date)."""
         result = _resolve_field_indices(11)
 
-        assert result == (6, 7, 8)
-
-    def test_returns_indices_for_10_fields(self) -> None:
-        """Should return correct indices for 10-field format."""
-        result = _resolve_field_indices(10)
-
-        assert result == (5, 6, 7)
+        assert result == (5, 6, 7, 8)
 
     def test_returns_none_for_unexpected_count(self) -> None:
         """Should return None for unexpected field count."""
@@ -505,16 +506,40 @@ class TestResolveFieldIndices:
 
 
 class TestParseOsascriptOutput:
-    """Tests for _parse_osascript_output function."""
+    """Tests for _parse_osascript_output function.
+
+    Field format (12 fields with album_artist):
+    0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added,
+    7:modification_date, 8:status, 9:year, 10:release_year, 11:new_year
+
+    Field format (11 fields without album_artist):
+    0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added,
+    6:modification_date, 7:status, 8:year, 9:release_year, 10:new_year
+    """
 
     def test_parses_tab_separated_output(self) -> None:
-        """Should parse tab-separated output."""
-        raw_output = "1\tTrack 1\tArtist\tAlbum\tRock\t2024-01-01\tOK\t2020\t2021\tnew_value"
+        """Should parse tab-separated output (11 fields without album_artist)."""
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        raw_output = "1\tTrack 1\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew_value"
 
         result = _parse_osascript_output(raw_output)
 
         assert "1" in result
         assert result["1"]["date_added"] == "2024-01-01"
+        assert result["1"]["last_modified"] == "2024-01-02"
+        assert result["1"]["track_status"] == "OK"
+        assert result["1"]["old_year"] == "2020"
+
+    def test_parses_12_field_output(self) -> None:
+        """Should parse 12-field output (with album_artist)."""
+        # 12 fields: id, name, artist, album_artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        raw_output = "1\tTrack\tArtist\tAlbum Artist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\t"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert "1" in result
+        assert result["1"]["date_added"] == "2024-01-01"
+        assert result["1"]["last_modified"] == "2024-01-02"
         assert result["1"]["track_status"] == "OK"
         assert result["1"]["old_year"] == "2020"
 
@@ -522,25 +547,30 @@ class TestParseOsascriptOutput:
         """Should parse chr(30) field-separated output."""
         sep = chr(30)
         line_sep = chr(29)
-        raw_output = sep.join(["1", "Track", "Artist", "Album", "Rock", "2024-01-01", "OK", "2020", "2021", "new"]) + line_sep
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        raw_output = sep.join(["1", "Track", "Artist", "Album", "Rock", "2024-01-01", "2024-01-02", "OK", "2020", "2021", "new"]) + line_sep
 
         result = _parse_osascript_output(raw_output)
 
         assert "1" in result
+        assert result["1"]["last_modified"] == "2024-01-02"
 
     def test_handles_missing_value_placeholder(self) -> None:
         """Should handle 'missing value' placeholder."""
-        raw_output = "1\tTrack\tArtist\tAlbum\tRock\tmissing value\tmissing value\tmissing value\t2021\tnew"
+        # 11 fields with missing values for date_added, mod_date, status
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\tmissing value\tmissing value\tmissing value\tmissing value\t2021\tnew"
 
         result = _parse_osascript_output(raw_output)
 
         assert result["1"]["date_added"] == ""
+        assert result["1"]["last_modified"] == ""
         assert result["1"]["track_status"] == ""
         assert result["1"]["old_year"] == ""
 
     def test_skips_empty_lines(self) -> None:
         """Should skip empty lines."""
-        raw_output = "\n1\tTrack\tArtist\tAlbum\tRock\t2024\tOK\t2020\t2021\tnew\n\n"
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        raw_output = "\n1\tTrack\tArtist\tAlbum\tRock\t2024\t2024\tOK\t2020\t2021\tnew\n\n"
 
         result = _parse_osascript_output(raw_output)
 
@@ -553,8 +583,206 @@ class TestParseOsascriptOutput:
         with caplog.at_level(logging.WARNING):
             result = _parse_osascript_output(raw_output)
 
-        assert "expected 10 or 11" in caplog.text
+        assert "expected 11 or 12" in caplog.text
         assert len(result) == 0
+
+
+class TestParsedTrackFieldsTyping:
+    """Tests for ParsedTrackFields TypedDict strict interface compliance."""
+
+    def test_returns_typed_dict_with_all_required_keys(self) -> None:
+        """Should return dict with all 4 required ParsedTrackFields keys."""
+        # 11 fields format
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew"
+
+        result = _parse_osascript_output(raw_output)
+
+        # Verify all 4 keys are present
+        track_fields: ParsedTrackFields = result["1"]
+        assert "date_added" in track_fields
+        assert "last_modified" in track_fields
+        assert "track_status" in track_fields
+        assert "old_year" in track_fields
+
+    def test_parsed_fields_are_strings(self) -> None:
+        """Should return string values for all fields."""
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew"
+
+        result = _parse_osascript_output(raw_output)
+        track_fields = result["1"]
+
+        assert isinstance(track_fields["date_added"], str)
+        assert isinstance(track_fields["last_modified"], str)
+        assert isinstance(track_fields["track_status"], str)
+        assert isinstance(track_fields["old_year"], str)
+
+    def test_typed_dict_assignment_compiles(self) -> None:
+        """Should allow direct assignment to ParsedTrackFields variable."""
+        # This test verifies type checker compliance at runtime
+        fields: ParsedTrackFields = {
+            "date_added": "2024-01-01",
+            "last_modified": "2024-01-02",
+            "track_status": "OK",
+            "old_year": "2020",
+        }
+
+        assert fields["date_added"] == "2024-01-01"
+        assert fields["last_modified"] == "2024-01-02"
+
+
+class TestLastModifiedParsing:
+    """Tests for last_modified (modification_date) field parsing edge cases."""
+
+    def test_parses_last_modified_different_from_date_added(self) -> None:
+        """Should correctly parse last_modified when different from date_added."""
+        # Real-world scenario: track added at 02:35, modified at 03:35
+        raw_output = "99148\tBlackened\tMetallica\tMetallica\tAlbum\tDSBM\t2022-02-12 02:35:43\t2022-02-12 03:35:43\tsubscription\t1988\t1988\t"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert result["99148"]["date_added"] == "2022-02-12 02:35:43"
+        assert result["99148"]["last_modified"] == "2022-02-12 03:35:43"
+        # Verify they are different (modification happened 1 hour after adding)
+        assert result["99148"]["date_added"] != result["99148"]["last_modified"]
+
+    def test_parses_last_modified_same_as_date_added(self) -> None:
+        """Should correctly parse last_modified when same as date_added (never modified)."""
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01 12:00:00\t2024-01-01 12:00:00\tOK\t2020\t2021\tnew"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert result["1"]["date_added"] == "2024-01-01 12:00:00"
+        assert result["1"]["last_modified"] == "2024-01-01 12:00:00"
+
+    def test_handles_empty_last_modified(self) -> None:
+        """Should handle empty last_modified field gracefully."""
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t\tOK\t2020\t2021\tnew"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert result["1"]["last_modified"] == ""
+        assert result["1"]["date_added"] == "2024-01-01"
+
+    def test_handles_missing_value_for_last_modified(self) -> None:
+        """Should convert 'missing value' to empty string for last_modified."""
+        raw_output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\tmissing value\tOK\t2020\t2021\tnew"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert result["1"]["last_modified"] == ""
+        assert result["1"]["date_added"] == "2024-01-01"
+
+    def test_parses_multiple_tracks_with_different_modification_dates(self) -> None:
+        """Should correctly parse multiple tracks with varying modification dates."""
+        raw_output = (
+            "1\tTrack1\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-05\tOK\t2020\t2021\t\n"
+            "2\tTrack2\tArtist\tAlbum\tRock\t2024-01-01\t2024-02-10\tOK\t2020\t2021\t\n"
+            "3\tTrack3\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-01\tOK\t2020\t2021\t"
+        )
+
+        result = _parse_osascript_output(raw_output)
+
+        assert result["1"]["last_modified"] == "2024-01-05"
+        assert result["2"]["last_modified"] == "2024-02-10"
+        assert result["3"]["last_modified"] == "2024-01-01"
+
+
+class TestStripPreservesTrailingTabs:
+    """Tests for strip('\\n\\r') fix that preserves trailing tabs (empty fields)."""
+
+    def test_preserves_trailing_empty_field(self) -> None:
+        """Should preserve 12th empty field when line ends with tab."""
+        # 12 fields with trailing tab for empty new_year
+        raw_output = "1\tTrack\tArtist\tAlbumArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\t"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert "1" in result
+        assert result["1"]["date_added"] == "2024-01-01"
+        assert result["1"]["last_modified"] == "2024-01-02"
+
+    def test_handles_multiple_trailing_empty_fields(self) -> None:
+        """Should handle lines with multiple empty fields at end."""
+        # 12 fields: year and new_year are empty
+        raw_output = "1\tTrack\tArtist\tAlbumArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t\t\t"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert "1" in result
+        assert result["1"]["old_year"] == ""
+
+    def test_strip_only_removes_newlines_not_tabs(self) -> None:
+        """Should strip newlines/carriage returns but not tabs."""
+        # Line wrapped in newlines - should be stripped without affecting tabs
+        raw_output = "\n\r1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew\n\r"
+
+        result = _parse_osascript_output(raw_output)
+
+        assert "1" in result
+        assert len(result) == 1
+
+    def test_handles_chr29_separator_with_trailing_fields(self) -> None:
+        """Should preserve trailing fields with chr(29) line separator."""
+        sep = chr(30)
+        line_sep = chr(29)
+        # 12 fields with empty last field
+        raw_output = (
+            sep.join(["1", "Track", "Artist", "AlbumArtist", "Album", "Rock", "2024-01-01", "2024-01-02", "OK", "2020", "2021", ""]) + line_sep
+        )
+
+        result = _parse_osascript_output(raw_output)
+
+        assert "1" in result
+        assert result["1"]["last_modified"] == "2024-01-02"
+
+
+class TestResolveFieldIndicesTyping:
+    """Tests for _resolve_field_indices return type (4-tuple)."""
+
+    def test_returns_4_tuple_for_12_fields(self) -> None:
+        """Should return 4-element tuple for 12-field format."""
+        result = _resolve_field_indices(12)
+
+        assert result is not None
+        assert len(result) == 4
+        date_added_idx, mod_date_idx, status_idx, old_year_idx = result
+        assert isinstance(date_added_idx, int)
+        assert isinstance(mod_date_idx, int)
+        assert isinstance(status_idx, int)
+        assert isinstance(old_year_idx, int)
+
+    def test_returns_4_tuple_for_11_fields(self) -> None:
+        """Should return 4-element tuple for 11-field format."""
+        result = _resolve_field_indices(11)
+
+        assert result is not None
+        assert len(result) == 4
+
+    def test_modification_date_index_follows_date_added(self) -> None:
+        """Should have modification_date index immediately after date_added."""
+        result_12 = _resolve_field_indices(12)
+        result_11 = _resolve_field_indices(11)
+
+        assert result_12 is not None
+        assert result_11 is not None
+
+        # For 12 fields: date_added=6, mod_date=7
+        assert result_12[1] == result_12[0] + 1
+
+        # For 11 fields: date_added=5, mod_date=6
+        assert result_11[1] == result_11[0] + 1
+
+    def test_indices_are_consecutive_for_parsed_fields(self) -> None:
+        """Should have consecutive indices for all 4 parsed fields."""
+        result = _resolve_field_indices(12)
+
+        assert result is not None
+        date_added_idx, mod_date_idx, status_idx, old_year_idx = result
+
+        # All 4 indices should be consecutive
+        assert mod_date_idx == date_added_idx + 1
+        assert status_idx == mod_date_idx + 1
+        assert old_year_idx == status_idx + 1
 
 
 class TestHandleOsascriptError:
@@ -860,13 +1088,15 @@ class TestFetchTrackFieldsDirect:
         """Should parse successful osascript output."""
         from metrics.track_sync import _fetch_track_fields_direct
 
-        output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\tOK\t2020\t2021\tnew"
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew"
         with patch("metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = (0, output.encode(), b"")
 
             result = await _fetch_track_fields_direct("/path/to/script.scpt", None)
 
             assert "1" in result
+            assert result["1"]["last_modified"] == "2024-01-02"
 
 
 class TestFetchMissingTrackFieldsForSync:

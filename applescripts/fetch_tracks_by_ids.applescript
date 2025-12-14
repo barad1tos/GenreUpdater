@@ -55,13 +55,14 @@ on serializeTrack(trackRef, fieldSeparator)
             set track_album to my safeText(album of trackRef)
             set track_genre to my safeText(genre of trackRef)
             set date_added to my formatDate(date added of trackRef)
+            set modification_date to my formatDate(modification date of trackRef)
             set track_status to my safeText(cloud status of trackRef)
             set track_year to my normalizeYear(year of trackRef)
             set release_year to my extractReleaseYear(trackRef)
             set new_year to "" -- maintained for compatibility
         end tell
 
-        set fields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, track_status, track_year, release_year, new_year}
+        set fields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, new_year}
         return my joinFields(fields, fieldSeparator)
     on error
         return ""

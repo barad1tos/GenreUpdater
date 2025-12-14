@@ -11,7 +11,7 @@ import csv
 import logging
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from core.models.types import TrackDict
 from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
@@ -23,6 +23,19 @@ if TYPE_CHECKING:
         AppleScriptClientProtocol,
         CacheServiceProtocol,
     )
+
+
+class ParsedTrackFields(TypedDict):
+    """Typed dict for parsed AppleScript track fields.
+
+    Contains the 4 fields extracted from AppleScript output that are
+    needed for track synchronization and delta detection.
+    """
+
+    date_added: str
+    last_modified: str
+    track_status: str
+    old_year: str
 
 
 # Note: TRACK_FIELDNAMES is imported from csv_utils for shared fieldname definition
@@ -329,40 +342,51 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
 
 
 # AppleScript output field count constants
-_FIELD_COUNT_WITH_ALBUM_ARTIST = 11
-_FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 10
+# Format: id, name, artist, album_artist, album, genre, date_added, modification_date, status, year, release_year, new_year
+_FIELD_COUNT_WITH_ALBUM_ARTIST = 12
+_FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 11
 
-# Field indices for format with album_artist (11 fields)
-_DATE_ADDED_IDX_11 = 6
+# Field indices for format with album_artist (12 fields)
+# 0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added, 7:mod_date, 8:status, 9:year, 10:release_year, 11:new_year
+_DATE_ADDED_IDX_12 = 6
+_MODIFICATION_DATE_IDX_12 = 7
+_STATUS_IDX_12 = 8
+_OLD_YEAR_IDX_12 = 9
+
+# Field indices for format without album_artist (11 fields)
+# 0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added, 6:mod_date, 7:status, 8:year, 9:release_year, 10:new_year
+_DATE_ADDED_IDX_11 = 5
+_MODIFICATION_DATE_IDX_11 = 6
 _STATUS_IDX_11 = 7
 _OLD_YEAR_IDX_11 = 8
 
-# Field indices for format without album_artist (10 fields)
-_DATE_ADDED_IDX_10 = 5
-_STATUS_IDX_10 = 6
-_OLD_YEAR_IDX_10 = 7
 
-
-def _resolve_field_indices(field_count: int) -> tuple[int, int, int] | None:
-    """Return indices for date_added, status, and old_year columns."""
+def _resolve_field_indices(field_count: int) -> tuple[int, int, int, int] | None:
+    """Return indices for date_added, modification_date, status, and old_year columns."""
     if field_count == _FIELD_COUNT_WITH_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_11, _STATUS_IDX_11, _OLD_YEAR_IDX_11
+        return _DATE_ADDED_IDX_12, _MODIFICATION_DATE_IDX_12, _STATUS_IDX_12, _OLD_YEAR_IDX_12
     if field_count == _FIELD_COUNT_WITHOUT_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_10, _STATUS_IDX_10, _OLD_YEAR_IDX_10
+        return _DATE_ADDED_IDX_11, _MODIFICATION_DATE_IDX_11, _STATUS_IDX_11, _OLD_YEAR_IDX_11
     return None
 
 
-def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
+def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     """Parse AppleScript output into track cache dictionary.
 
     Validates field count to detect AppleScript output format changes and logs
     warnings for lines with incorrect field counts to aid debugging.
+
+    Returns:
+        Dict mapping track_id to ParsedTrackFields with date_added,
+        last_modified, track_status, and old_year.
     """
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     line_separator = chr(29) if chr(29) in raw_output else None
     field_separator = chr(30) if chr(30) in raw_output else "\t"
-    tracks_data = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
+    # Use strip('\n\r') instead of strip() to preserve trailing tabs (empty fields)
+    stripped_output = raw_output.strip("\n\r")
+    tracks_data = stripped_output.split(line_separator) if line_separator else stripped_output.splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
         if not track_line.strip():  # Skip empty lines
@@ -371,18 +395,19 @@ def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
         indices = _resolve_field_indices(len(fields))
         if indices is None:
             logging.warning(
-                "Track line %d has %d fields, expected 10 or 11. Skipping line: %r",
+                "Track line %d has %d fields, expected 11 or 12. Skipping line: %r",
                 line_num,
                 len(fields),
                 track_line[:100],  # Truncate long lines for readability
             )
             continue
-        date_added_index, status_index, old_year_index = indices
+        date_added_index, modification_date_index, status_index, old_year_index = indices
         track_id = fields[0]
-        # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
+        # Fields order: ID, Name, Artist, [AlbumArtist], Album, Genre, DateAdded, ModificationDate, Status, Year, ReleaseYear, NewYear
         missing_value = "missing value"
         tracks_cache[track_id] = {
             "date_added": (fields[date_added_index] if fields[date_added_index] != missing_value else ""),
+            "last_modified": (fields[modification_date_index] if fields[modification_date_index] != missing_value else ""),
             "track_status": (fields[status_index] if fields[status_index] != missing_value else ""),
             "old_year": (fields[old_year_index] if fields[old_year_index] != missing_value else ""),
         }
@@ -414,7 +439,7 @@ async def _execute_osascript_process(
 async def _fetch_track_fields_direct(
     script_path: str,
     artist_filter: str | None,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, ParsedTrackFields]:
     """Fetch track fields using direct osascript call.
 
     Args:
@@ -422,10 +447,10 @@ async def _fetch_track_fields_direct(
         artist_filter: Artist filter to limit query scope
 
     Returns:
-        Dict mapping track_id to dict with date_added, track_status, old_year fields
-
+        Dict mapping track_id to ParsedTrackFields with date_added,
+        last_modified, track_status, old_year fields.
     """
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     try:
         cmd = _build_osascript_command(script_path, artist_filter)
@@ -449,9 +474,9 @@ async def _fetch_missing_track_fields_for_sync(
     final_list: list[TrackDict],
     applescript_client: AppleScriptClientProtocol | None,
     console_logger: logging.Logger,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, ParsedTrackFields]:
     """Fetch missing track fields via AppleScript if needed for sync operation."""
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     has_missing_fields = any(not track.date_added or not track.track_status or not track.old_year for track in final_list if track.id)
 
@@ -485,13 +510,13 @@ async def _fetch_missing_track_fields_for_sync(
 
 def _update_track_with_cached_fields_for_sync(
     track: TrackDict,
-    tracks_cache: dict[str, dict[str, str]],
+    tracks_cache: dict[str, ParsedTrackFields],
 ) -> None:
     """Update track with cached fields if they were empty for sync operation.
 
-    Uses .get() for safe dictionary access to prevent KeyError if cache structure
-    changes. Currently, last_modified is not populated by _parse_osascript_output(),
-    but this defensive approach ensures future compatibility.
+    Populates date_added, last_modified, track_status, and old_year from
+    AppleScript cache. The last_modified field enables idempotent delta detection
+    by tracking when Music.app metadata was last changed.
     """
     if not track.id or track.id not in tracks_cache:
         return
