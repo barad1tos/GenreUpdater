@@ -180,11 +180,11 @@ class YearDeterminator:
         artist: str,
         album: str,
         force: bool = False,
-    ) -> bool:
-        """Check if the album should be skipped due to existing years.
+    ) -> tuple[bool, str]:
+        """Check pre-conditions BEFORE any API call.
 
+        Guard clauses prevent wasted API calls by checking cheap conditions first.
         Trusts cache (API data) over Music.app data.
-        If cache year differs from library year, we process the album to update from cache.
 
         Args:
             album_tracks: List of tracks in the album
@@ -193,7 +193,7 @@ class YearDeterminator:
             force: If True, never skip - always process the album
 
         Returns:
-            True if the album should be skipped, False otherwise
+            Tuple of (should_skip, reason) where reason is empty if not skipping.
 
         """
         # Force mode bypasses all skip logic
@@ -203,26 +203,67 @@ class YearDeterminator:
                 artist,
                 album,
             )
-            return False
+            return False, ""
 
-        # Check if already processed via new_year tracking
-        # If new_year is set and matches current year, we've already updated this album
+        # Pre-check 1: Already processed via new_year tracking
+        if result := self._check_already_processed(album_tracks, artist, album):
+            return result
+
+        # Pre-check 2: Recently rejected by FALLBACK
+        rejection_reason = await self._check_recent_rejection(artist, album)
+        if rejection_reason:
+            self.console_logger.debug(
+                "[PRE-CHECK] Skip %s - %s: recently rejected (%s)",
+                artist,
+                album,
+                rejection_reason,
+            )
+            return True, f"recently_rejected:{rejection_reason}"
+
+        # Check cache and year consistency - API data is more reliable than Music.app
+        return await self._check_cache_skip(album_tracks, artist, album)
+
+    def _check_already_processed(
+        self,
+        album_tracks: list[TrackDict],
+        artist: str,
+        album: str,
+    ) -> tuple[bool, str] | None:
+        """Check if album was already processed via new_year tracking.
+
+        Returns:
+            Tuple (True, "already_processed") if should skip, None otherwise.
+
+        """
         sample_track = album_tracks[0] if album_tracks else None
-        if sample_track and sample_track.new_year:
-            current_year = sample_track.year or ""
-            if sample_track.new_year == current_year:
-                self.console_logger.debug(
-                    "Skipping '%s - %s': already processed (new_year=%s matches current)",
-                    artist,
-                    album,
-                    current_year,
-                )
-                return True
+        if not sample_track or not sample_track.new_year:
+            return None
 
-        # Check cache first - API data is more reliable than Music.app
+        current_year = str(sample_track.year or "")
+        applied_year = str(sample_track.new_year or "")
+        if applied_year and applied_year == current_year:
+            self.console_logger.debug(
+                "[PRE-CHECK] Skip %s - %s: already processed (new_year=%s)",
+                artist,
+                album,
+                applied_year,
+            )
+            return True, "already_processed"
+        return None
+
+    async def _check_cache_skip(
+        self,
+        album_tracks: list[TrackDict],
+        artist: str,
+        album: str,
+    ) -> tuple[bool, str]:
+        """Check cache and determine if album should be skipped.
+
+        Returns:
+            Tuple of (should_skip, reason).
+
+        """
         cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
-
-        # Collect non-empty years from library
         non_empty_years = [
             str(track.get("year"))
             for track in album_tracks
@@ -230,56 +271,159 @@ class YearDeterminator:
         ]
 
         if cached_year:
-            if non_empty_years:
-                year_counts = Counter(non_empty_years)
-                library_year = year_counts.most_common(1)[0][0]
+            return self._evaluate_cached_year(cached_year, non_empty_years, artist, album)
 
-                if cached_year != library_year:
-                    self.console_logger.info(
-                        "Year mismatch for '%s - %s': cache=%s, library=%s - will update from cache",
-                        artist,
-                        album,
-                        cached_year,
-                        library_year,
-                    )
-                    return False
+        # No cache - need to query API
+        return self._evaluate_no_cache(album_tracks, non_empty_years, artist, album)
 
-                self.console_logger.debug(
-                    "Skipping '%s - %s' (cache=%s matches library)",
+    def _evaluate_cached_year(
+        self,
+        cached_year: str,
+        non_empty_years: list[str],
+        artist: str,
+        album: str,
+    ) -> tuple[bool, str]:
+        """Evaluate skip decision when cache exists."""
+        if non_empty_years:
+            year_counts = Counter(non_empty_years)
+            library_year = year_counts.most_common(1)[0][0]
+
+            if cached_year != library_year:
+                self.console_logger.info(
+                    "Year mismatch for '%s - %s': cache=%s, library=%s - will update from cache",
                     artist,
                     album,
                     cached_year,
+                    library_year,
                 )
-                return True
+                return False, ""
 
-            self.console_logger.info(
-                "Album '%s - %s' has no valid years but cache has %s - will apply from cache",
+            self.console_logger.debug(
+                "Skipping '%s - %s' (cache=%s matches library)",
                 artist,
                 album,
                 cached_year,
             )
-            return False
+            return True, "cache_matches_library"
 
-        # No cache - need to query API to populate cache
-        if tracks_with_empty_year := [track for track in album_tracks if is_empty_year(track.get("year"))]:
+        self.console_logger.info(
+            "Album '%s - %s' has no valid years but cache has %s - will apply from cache",
+            artist,
+            album,
+            cached_year,
+        )
+        return False, ""
+
+    def _evaluate_no_cache(
+        self,
+        album_tracks: list[TrackDict],
+        non_empty_years: list[str],
+        artist: str,
+        album: str,
+    ) -> tuple[bool, str]:
+        """Evaluate skip decision when no cache exists.
+
+        When no cache, check year consistency - if all tracks have the same
+        valid year, we can skip without querying API.
+        """
+        # Check year consistency when no cache - can skip API if years are uniform
+        if self._has_consistent_year(album_tracks):
+            dominant = self._get_dominant_year(album_tracks)
+            self.console_logger.debug(
+                "[PRE-CHECK] Skip %s - %s: year consistent (%s)",
+                artist,
+                album,
+                dominant,
+            )
+            return True, "year_consistent"
+
+        empty_year_count = sum(bool(is_empty_year(track.get("year"))) for track in album_tracks)
+        if empty_year_count > 0:
             self.console_logger.info(
                 "Album '%s - %s' has %d tracks with empty year - will process",
                 artist,
                 album,
-                len(tracks_with_empty_year),
+                empty_year_count,
             )
-            return False
-
-        if not non_empty_years:
+        elif not non_empty_years:
             self.console_logger.debug("Album '%s - %s' has no valid years - will process", artist, album)
+        else:
+            self.console_logger.debug(
+                "Album '%s - %s' not in cache - will query API to verify year",
+                artist,
+                album,
+            )
+        return False, ""
+
+    async def _check_recent_rejection(self, artist: str, album: str) -> str | None:
+        """Check if album was recently rejected by FALLBACK.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Rejection reason if recently rejected, None otherwise.
+
+        """
+        # Rejection reasons that indicate FALLBACK rejected the year update
+        # These match the actual reasons set in year_fallback.py
+        rejection_reasons = {
+            "suspicious_year_change",
+            "implausible_existing_year",
+            "absurd_year_no_existing",
+            "special_album_compilation",  # AlbumType.COMPILATION
+            "special_album_special",  # AlbumType.SPECIAL (B-Sides, Demo, Vault)
+            "special_album_reissue",  # AlbumType.REISSUE (Remastered, Anniversary, Deluxe)
+        }
+
+        pending_entry = await self.pending_verification.get_entry(artist, album)
+        if pending_entry and pending_entry.reason.value in rejection_reasons:
+            verification_needed = await self.pending_verification.is_verification_needed(artist, album)
+            if not verification_needed:
+                return pending_entry.reason.value
+
+        return None
+
+    @staticmethod
+    def _has_consistent_year(tracks: list[TrackDict]) -> bool:
+        """Check if all tracks have the same non-empty valid year.
+
+        Requires at least 2 tracks to avoid skipping single-track albums
+        that need API validation.
+
+        Args:
+            tracks: List of tracks to check
+
+        Returns:
+            True if all tracks have the same valid year, False otherwise.
+
+        """
+        # Single-track albums need API validation, don't skip
+        if len(tracks) < 2:
             return False
 
-        self.console_logger.debug(
-            "Album '%s - %s' not in cache - will query API to verify year",
-            artist,
-            album,
-        )
+        if years := [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]:
+            # All tracks must have year AND all years must be the same
+            return len(years) == len(tracks) and len(set(years)) == 1
         return False
+
+    @staticmethod
+    def _get_dominant_year(tracks: list[TrackDict]) -> str | None:
+        """Get the dominant year from tracks.
+
+        Args:
+            tracks: List of tracks to analyze
+
+        Returns:
+            Most common year string, or None if no valid years found.
+
+        """
+        years = [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]
+        if not years:
+            return None
+        most_common = Counter(years).most_common(1)
+        return most_common[0][0] if most_common else None
 
     async def check_prerelease_status(
         self,

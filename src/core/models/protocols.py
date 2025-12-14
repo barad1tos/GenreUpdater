@@ -488,6 +488,40 @@ class PendingVerificationServiceProtocol(Protocol):
         """
         ...
 
+    async def get_entry(
+        self,
+        artist: str,
+        album: str,
+    ) -> PendingAlbumEntry | None:
+        """Get pending entry for artist/album if exists.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            PendingAlbumEntry if found, None otherwise.
+
+        """
+        ...
+
+    async def is_verification_needed(
+        self,
+        artist: str,
+        album: str,
+    ) -> bool:
+        """Check if an album needs verification now.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            True if the verification period has elapsed, False otherwise.
+
+        """
+        ...
+
     async def get_all_pending_albums(
         self,
     ) -> list[PendingAlbumEntry]:

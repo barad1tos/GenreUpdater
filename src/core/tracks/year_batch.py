@@ -351,8 +351,10 @@ class YearBatchProcessor:
         self._detect_user_year_changes(artist, album, album_tracks)
 
         # Check if we should skip this album (force=True bypasses this)
-        if await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force):
-            self.console_logger.debug("DEBUG: Skipping '%s - %s' - year matches cache", artist, album)
+        # Pre-checks prevent wasted API calls by checking cheap conditions first
+        should_skip, skip_reason = await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force)
+        if should_skip:
+            self.console_logger.info("[SKIP] %s - %s: %s", artist, album, skip_reason)
             return
 
         # Determine the year for this album (handles dominant year, cache, and API)

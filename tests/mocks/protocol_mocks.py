@@ -567,6 +567,21 @@ class MockPendingVerificationService:
         # In tests, assume all pending albums are due for verification
         return any(entry.artist == artist and entry.album == album for entry in self.pending_albums)
 
+    async def get_entry(self, artist: str, album: str) -> PendingAlbumEntry | None:
+        """Get pending entry for artist/album if exists.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            PendingAlbumEntry if found, None otherwise.
+        """
+        for entry in self.pending_albums:
+            if entry.artist == artist and entry.album == album:
+                return entry
+        return None
+
     async def generate_problematic_albums_report(
         self,
         min_attempts: int = 3,

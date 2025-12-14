@@ -269,7 +269,7 @@ class TestYearRetrieverEdgeCases:
             ]
 
         with allure.step("Check if album should be skipped by low-level method"):
-            should_skip = await retriever._year_determinator.should_skip_album(
+            should_skip, _ = await retriever._year_determinator.should_skip_album(
                 album_tracks,
                 "HIM",
                 "And Love Said No - Greatest Hits 1997 - 2004",
@@ -277,7 +277,7 @@ class TestYearRetrieverEdgeCases:
 
         with allure.step("Low-level method returns False (no cache, queries API)"):
             # Without cache, the method returns False to query API
-            assert should_skip is False, "_should_skip_album_due_to_existing_years returns False when no cache exists"
+            assert should_skip is False, "_should_skip_album returns False when no cache exists"
 
             allure.attach(
                 "NOTE: _should_skip_album_due_to_existing_years() now trusts cache (API data).\n"
