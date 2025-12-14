@@ -143,41 +143,39 @@ def _get_processed_albums_from_csv(
     return processed
 
 
-async def _build_current_map(
+async def _build_musicapp_track_map(
     all_tracks: Sequence[TrackDict],
     processed_albums: dict[str, str],
     cache_service: CacheServiceProtocol,
     partial_sync: bool,
     error_logger: logging.Logger,
 ) -> dict[str, TrackDict]:
-    """Return a normalized map id -> track_dict for the current fetch.
+    """Build normalized map {track_id: TrackDict} from Music.app tracks.
 
     Handles partial_sync logic and ensures year consistency with cache & CSV.
     """
-    # Import here to avoid circular imports
-
-    current: dict[str, TrackDict] = {}
-    for tr in all_tracks:
+    track_map: dict[str, TrackDict] = {}
+    for track in all_tracks:
         # Validate track ID
-        tid = (tr.id or "").strip()
-        if not tid:
+        track_id = (track.id or "").strip()
+        if not track_id:
             continue
 
         # Normalize basic fields
-        artist = (tr.artist or "").strip()
-        album = (tr.album or "").strip()
+        artist = (track.artist or "").strip()
+        album = (track.album or "").strip()
         album_key = cache_service.generate_album_key(artist, album)
 
         # Ensure year fields are properly initialized
-        _normalize_track_year_fields(tr)
+        _normalize_track_year_fields(track)
 
         # Handle partial sync with cache coordination
         if partial_sync:
-            await _handle_partial_sync_cache(tr, processed_albums, cache_service, album_key, artist, album, error_logger)
+            await _handle_partial_sync_cache(track, processed_albums, cache_service, album_key, artist, album, error_logger)
 
         # Create normalized track dictionary
-        current[tid] = _create_normalized_track_dict(tr, tid, artist, album)
-    return current
+        track_map[track_id] = _create_normalized_track_dict(track, track_id, artist, album)
+    return track_map
 
 
 def _normalize_track_year_fields(track: TrackDict) -> None:
@@ -235,10 +233,13 @@ def _create_normalized_track_dict(
     )
 
 
-def _get_fields_to_check() -> list[str]:
-    """Get the list of fields that should be checked during track merging.
+def _get_musicapp_syncable_fields() -> list[str]:
+    """Fields that sync FROM Music.app TO CSV during resync.
 
-    Includes year for delta detection and old_year/new_year for change tracking.
+    Note: old_year and new_year are EXCLUDED because:
+    - They are tracking fields managed by year_batch.py, not sync
+    - AppleScript doesn't provide them (only Music.app's current year)
+    - During sync, we preserve CSV's historical tracking data
     """
     return [
         "name",
@@ -248,36 +249,38 @@ def _get_fields_to_check() -> list[str]:
         "year",  # Current year for delta detection
         "date_added",
         "track_status",
-        "old_year",
-        "new_year",
+        # old_year/new_year deliberately excluded - preserved from CSV
     ]
 
 
-def _check_if_track_needs_update(
-    old_data: TrackDict,
-    new_data: TrackDict,
+def _track_fields_differ(
+    csv_track: TrackDict,
+    musicapp_track: TrackDict,
     fields: list[str],
 ) -> bool:
-    """Check if a track needs updating based on field differences."""
-    return any(getattr(old_data, field, "") != getattr(new_data, field, "") for field in fields)
+    """Check if CSV track differs from Music.app track in specified fields."""
+    return any(
+        getattr(csv_track, field, "") != getattr(musicapp_track, field, "")
+        for field in fields
+    )
 
 
-def _update_existing_track_fields(
-    old_data: TrackDict,
-    new_data: TrackDict,
+def _update_csv_track_from_musicapp(
+    csv_track: TrackDict,
+    musicapp_track: TrackDict,
     fields: list[str],
 ) -> None:
-    """Update existing track with new field values.
+    """Update CSV track with values from Music.app track.
 
-    Logs a warning if a field does not exist on TrackDict to catch typos
-    and prevent silent failures.
+    Only updates fields that exist on both tracks and have non-None values
+    in Music.app track. Logs warning for missing fields.
     """
     for field in fields:
         missing_in = []
-        if not hasattr(old_data, field):
-            missing_in.append("old_data")
-        if not hasattr(new_data, field):
-            missing_in.append("new_data")
+        if not hasattr(csv_track, field):
+            missing_in.append("csv_track")
+        if not hasattr(musicapp_track, field):
+            missing_in.append("musicapp_track")
         if missing_in:
             logging.warning(
                 "Field '%s' does not exist on %s. Skipping update for this field.",
@@ -285,30 +288,37 @@ def _update_existing_track_fields(
                 " and ".join(missing_in),
             )
             continue
-        new_value = getattr(new_data, field)
-        if new_value is not None:
-            setattr(old_data, field, new_value)
+        musicapp_value = getattr(musicapp_track, field)
+        if musicapp_value is not None:
+            setattr(csv_track, field, musicapp_value)
 
 
-def _merge_current_into_csv(
-    current_map: dict[str, TrackDict],
-    csv_map: dict[str, TrackDict],
+def _merge_musicapp_into_csv(
+    musicapp_tracks: dict[str, TrackDict],
+    csv_tracks: dict[str, TrackDict],
 ) -> int:
-    """Merge *current_map* into *csv_map* and return count of added/updated items."""
-    updated = 0
-    fields_to_check = _get_fields_to_check()
+    """Merge Music.app tracks into CSV tracks dict.
 
-    for tid, new_data in current_map.items():
-        # Add new track if not exists
-        if tid not in csv_map:
-            csv_map[tid] = new_data
+    - New tracks (in Music.app but not CSV): added to csv_tracks
+    - Existing tracks: CSV updated with Music.app values for syncable fields
+    - Tracking fields (old_year, new_year): preserved from CSV
+
+    Returns count of added/updated tracks.
+    """
+    updated = 0
+    syncable_fields = _get_musicapp_syncable_fields()
+
+    for track_id, musicapp_track in musicapp_tracks.items():
+        # Add new track if not in CSV
+        if track_id not in csv_tracks:
+            csv_tracks[track_id] = musicapp_track
             updated += 1
             continue
 
-        # Update existing track if fields have changed
-        old_data = csv_map[tid]
-        if _check_if_track_needs_update(old_data, new_data, fields_to_check):
-            _update_existing_track_fields(old_data, new_data, fields_to_check)
+        # Update existing CSV track if fields differ
+        csv_track = csv_tracks[track_id]
+        if _track_fields_differ(csv_track, musicapp_track, syncable_fields):
+            _update_csv_track_from_musicapp(csv_track, musicapp_track, syncable_fields)
             updated += 1
     return updated
 
@@ -551,8 +561,8 @@ async def sync_track_list_with_current(
     # 2. Determine albums already processed (for partial sync logic)
     processed_albums = _get_processed_albums_from_csv(csv_map, cache_service)
 
-    # 3. Build normalized map for freshly fetched tracks
-    current_map = await _build_current_map(
+    # 3. Build map of tracks fetched from Music.app
+    musicapp_tracks = await _build_musicapp_track_map(
         all_tracks,
         processed_albums,
         cache_service,
@@ -560,13 +570,13 @@ async def sync_track_list_with_current(
         error_logger,
     )
 
-    # 4. Merge current into CSV map
-    added_or_updated = _merge_current_into_csv(current_map, csv_map)
+    # 4. Merge Music.app tracks into CSV
+    added_or_updated = _merge_musicapp_into_csv(musicapp_tracks, csv_map)
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
 
     # 5. Remove tracks from CSV that no longer exist in Music.app
-    removed_count = len([tid for tid in csv_map if tid not in current_map])
-    csv_map = {tid: track for tid, track in csv_map.items() if tid in current_map}
+    removed_count = len([tid for tid in csv_map if tid not in musicapp_tracks])
+    csv_map = {tid: track for tid, track in csv_map.items() if tid in musicapp_tracks}
 
     if removed_count > 0:
         console_logger.info(

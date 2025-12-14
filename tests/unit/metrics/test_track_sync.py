@@ -8,27 +8,29 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.protocols import CacheServiceProtocol
 from core.models.types import TrackDict
 from metrics.track_sync import (
     _FIELD_COUNT_WITH_ALBUM_ARTIST,
     _FIELD_COUNT_WITHOUT_ALBUM_ARTIST,
     _build_osascript_command,
-    _check_if_track_needs_update,
     _convert_track_to_csv_dict,
     _create_normalized_track_dict,
     _create_track_from_row,
-    _get_fields_to_check,
+    _get_musicapp_syncable_fields,
     _get_processed_albums_from_csv,
     _handle_osascript_error,
-    _merge_current_into_csv,
+    _merge_musicapp_into_csv,
     _normalize_track_year_fields,
     _parse_osascript_output,
     _resolve_field_indices,
-    _update_existing_track_fields,
+    _track_fields_differ,
+    _update_csv_track_from_musicapp,
     _update_track_with_cached_fields_for_sync,
     _validate_csv_header,
     load_track_list,
@@ -77,13 +79,13 @@ def error_logger() -> logging.Logger:
 
 
 @pytest.fixture
-def mock_cache_service() -> MagicMock:
+def mock_cache_service() -> CacheServiceProtocol:
     """Create mock cache service."""
     service = MagicMock()
     service.generate_album_key = MagicMock(side_effect=lambda a, b: f"{a}|{b}")
     service.get_album_year_from_cache = AsyncMock(return_value=None)
     service.store_album_year_in_cache = AsyncMock()
-    return service
+    return cast(CacheServiceProtocol, service)
 
 
 class TestFieldCountConstants:
@@ -265,13 +267,13 @@ class TestLoadTrackList:
 class TestGetProcessedAlbumsFromCsv:
     """Tests for _get_processed_albums_from_csv function."""
 
-    def test_returns_empty_when_no_tracks(self, mock_cache_service: MagicMock) -> None:
+    def test_returns_empty_when_no_tracks(self, mock_cache_service: CacheServiceProtocol) -> None:
         """Should return empty dict when no tracks."""
         result = _get_processed_albums_from_csv({}, mock_cache_service)
 
         assert result == {}
 
-    def test_returns_processed_albums(self, mock_cache_service: MagicMock) -> None:
+    def test_returns_processed_albums(self, mock_cache_service: CacheServiceProtocol) -> None:
         """Should return mapping of album keys to new years."""
         track = _create_test_track("100", new_year="2022")
         csv_map = {"100": track}
@@ -281,7 +283,7 @@ class TestGetProcessedAlbumsFromCsv:
         assert "Artist|Album" in result
         assert result["Artist|Album"] == "2022"
 
-    def test_skips_tracks_without_new_year(self, mock_cache_service: MagicMock) -> None:
+    def test_skips_tracks_without_new_year(self, mock_cache_service: CacheServiceProtocol) -> None:
         """Should skip tracks without new_year value."""
         track = _create_test_track("101", new_year=None)
         csv_map = {"101": track}
@@ -336,119 +338,130 @@ class TestCreateNormalizedTrackDict:
         assert result.genre == "Pop"
 
 
-class TestGetFieldsToCheck:
-    """Tests for _get_fields_to_check function."""
+class TestGetMusicappSyncableFields:
+    """Tests for _get_musicapp_syncable_fields function."""
 
     def test_returns_expected_fields(self) -> None:
-        """Should return list of fields to check during merge."""
-        fields = _get_fields_to_check()
+        """Should return list of fields that sync from Music.app."""
+        fields = _get_musicapp_syncable_fields()
 
         assert "name" in fields
         assert "artist" in fields
         assert "album" in fields
         assert "genre" in fields
-        assert "old_year" in fields
-        assert "new_year" in fields
+        assert "date_added" in fields
+        assert "track_status" in fields
 
     def test_returns_year_field_for_delta_detection(self) -> None:
         """Should return year field for delta detection (Issue #85)."""
-        fields = _get_fields_to_check()
+        fields = _get_musicapp_syncable_fields()
 
         assert "year" in fields
 
+    def test_excludes_tracking_fields(self) -> None:
+        """Should NOT include old_year/new_year - they are preserved from CSV.
 
-class TestCheckIfTrackNeedsUpdate:
-    """Tests for _check_if_track_needs_update function."""
+        These fields are managed by year_batch.py during year updates,
+        not by sync operations. AppleScript doesn't provide them.
+        """
+        fields = _get_musicapp_syncable_fields()
+
+        assert "old_year" not in fields
+        assert "new_year" not in fields
+
+
+class TestTrackFieldsDiffer:
+    """Tests for _track_fields_differ function."""
 
     def test_returns_false_when_identical(self) -> None:
-        """Should return False when tracks are identical."""
-        old_track = _create_test_track("2", genre="Jazz")
-        new_track = _create_test_track("2", genre="Jazz")
+        """Should return False when CSV and Music.app tracks are identical."""
+        csv_track = _create_test_track("2", genre="Jazz")
+        musicapp_track = _create_test_track("2", genre="Jazz")
         fields = ["genre"]
 
-        result = _check_if_track_needs_update(old_track, new_track, fields)
+        result = _track_fields_differ(csv_track, musicapp_track, fields)
 
         assert result is False
 
     def test_returns_true_when_different(self) -> None:
-        """Should return True when tracks differ."""
-        old_track = _create_test_track("2", genre="Jazz")
-        new_track = _create_test_track("2", genre="Blues")
+        """Should return True when CSV and Music.app tracks differ."""
+        csv_track = _create_test_track("2", genre="Jazz")
+        musicapp_track = _create_test_track("2", genre="Blues")
         fields = ["genre"]
 
-        result = _check_if_track_needs_update(old_track, new_track, fields)
+        result = _track_fields_differ(csv_track, musicapp_track, fields)
 
         assert result is True
 
 
-class TestUpdateExistingTrackFields:
-    """Tests for _update_existing_track_fields function."""
+class TestUpdateCsvTrackFromMusicapp:
+    """Tests for _update_csv_track_from_musicapp function."""
 
     def test_updates_fields(self) -> None:
-        """Should update fields from new to old track."""
-        old_track = _create_test_track("3", genre="Jazz")
-        new_track = _create_test_track("3", genre="Blues")
+        """Should update CSV track with Music.app values."""
+        csv_track = _create_test_track("3", genre="Jazz")
+        musicapp_track = _create_test_track("3", genre="Blues")
         fields = ["genre"]
 
-        _update_existing_track_fields(old_track, new_track, fields)
+        _update_csv_track_from_musicapp(csv_track, musicapp_track, fields)
 
-        assert old_track.genre == "Blues"
+        assert csv_track.genre == "Blues"
 
     def test_skips_none_values(self) -> None:
-        """Should not update fields with None values."""
-        old_track = _create_test_track("3", genre="Jazz")
-        new_track = _create_test_track("3", genre=None)
+        """Should not update fields with None values from Music.app."""
+        csv_track = _create_test_track("3", genre="Jazz")
+        musicapp_track = _create_test_track("3", genre=None)
         fields = ["genre"]
 
-        _update_existing_track_fields(old_track, new_track, fields)
+        _update_csv_track_from_musicapp(csv_track, musicapp_track, fields)
 
-        assert old_track.genre == "Jazz"
+        assert csv_track.genre == "Jazz"
 
     def test_logs_warning_for_missing_field(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should log warning when field doesn't exist."""
-        old_track = _create_test_track("3")
-        new_track = _create_test_track("3")
+        csv_track = _create_test_track("3")
+        musicapp_track = _create_test_track("3")
         fields = ["nonexistent_field"]
 
         with caplog.at_level(logging.WARNING):
-            _update_existing_track_fields(old_track, new_track, fields)
+            _update_csv_track_from_musicapp(csv_track, musicapp_track, fields)
 
         assert "does not exist" in caplog.text
 
 
-class TestMergeCurrentIntoCsv:
-    """Tests for _merge_current_into_csv function."""
+class TestMergeMusicappIntoCsv:
+    """Tests for _merge_musicapp_into_csv function."""
 
     def test_adds_new_tracks(self) -> None:
-        """Should add new tracks to CSV map."""
-        track = _create_test_track("4")
-        current_map = {"4": track}
-        csv_map: dict[str, TrackDict] = {}
+        """Should add Music.app tracks not in CSV."""
+        musicapp_track = _create_test_track("4")
+        musicapp_tracks = {"4": musicapp_track}
+        csv_tracks: dict[str, TrackDict] = {}
 
-        updated = _merge_current_into_csv(current_map, csv_map)
+        updated = _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
 
         assert updated == 1
-        assert "4" in csv_map
+        assert "4" in csv_tracks
 
     def test_updates_existing_tracks(self) -> None:
-        """Should update existing tracks when fields differ."""
-        old_track = _create_test_track("4", genre="Country")
-        new_track = _create_test_track("4", genre="Folk")
-        csv_map = {"4": old_track}
-        current_map = {"4": new_track}
+        """Should update CSV tracks when Music.app fields differ."""
+        csv_track = _create_test_track("4", genre="Country")
+        musicapp_track = _create_test_track("4", genre="Folk")
+        csv_tracks = {"4": csv_track}
+        musicapp_tracks = {"4": musicapp_track}
 
-        updated = _merge_current_into_csv(current_map, csv_map)
+        updated = _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
 
         assert updated == 1
-        assert csv_map["4"].genre == "Folk"
+        assert csv_tracks["4"].genre == "Folk"
 
     def test_skips_identical_tracks(self) -> None:
         """Should not count identical tracks as updated."""
-        track = _create_test_track("5", genre="Classical")
-        csv_map = {"5": track}
-        current_map = {"5": _create_test_track("5", genre="Classical")}
+        csv_track = _create_test_track("5", genre="Classical")
+        csv_tracks = {"5": csv_track}
+        musicapp_tracks = {"5": _create_test_track("5", genre="Classical")}
 
-        updated = _merge_current_into_csv(current_map, csv_map)
+        updated = _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
 
         assert updated == 0
 
@@ -649,7 +662,7 @@ class TestConvertTrackToCsvDict:
 
     def test_converts_year_field_to_csv(self) -> None:
         """Should include year field in CSV dict (Issue #85 - delta detection)."""
-        track = _create_test_track("10", year="2020", old_year="2015", new_year="2020")
+        track = _create_test_track("10", old_year="2015", new_year="2020")
 
         result = _convert_track_to_csv_dict(track)
 
@@ -695,22 +708,22 @@ class TestSaveTrackMapToCsv:
             assert track_dicts[1]["id"] == "20"
 
 
-class TestBuildCurrentMap:
-    """Tests for _build_current_map async function."""
+class TestBuildMusicappTrackMap:
+    """Tests for _build_musicapp_track_map async function."""
 
     @pytest.mark.asyncio
     async def test_builds_map_from_tracks(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
         """Should build map from track list."""
-        from metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_musicapp_track_map
 
         tracks = [_create_test_track("11", artist="Test Artist", album="Test Album")]
         processed_albums: dict[str, str] = {}
 
-        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
+        result = await _build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
 
         assert "11" in result
         assert result["11"].artist == "Test Artist"
@@ -718,33 +731,33 @@ class TestBuildCurrentMap:
     @pytest.mark.asyncio
     async def test_skips_tracks_without_id(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
         """Should skip tracks without id."""
-        from metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_musicapp_track_map
 
         track = TrackDict(id="", name="No ID", artist="Artist", album="Album")
         tracks = [track]
         processed_albums: dict[str, str] = {}
 
-        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
+        result = await _build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
 
         assert len(result) == 0
 
     @pytest.mark.asyncio
     async def test_handles_partial_sync(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
         """Should handle partial sync with processed albums."""
-        from metrics.track_sync import _build_current_map
+        from metrics.track_sync import _build_musicapp_track_map
 
         tracks = [_create_test_track("12", artist="Test", album="Album2", new_year=None)]
         processed_albums = {"Test|Album2": "2023"}
 
-        result = await _build_current_map(tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger)
+        result = await _build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger)
 
         assert "12" in result
         assert result["12"].new_year == "2023"
@@ -756,7 +769,7 @@ class TestHandlePartialSyncCache:
     @pytest.mark.asyncio
     async def test_skips_when_album_not_processed(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
         """Should skip when album not in processed albums."""
@@ -772,7 +785,7 @@ class TestHandlePartialSyncCache:
     @pytest.mark.asyncio
     async def test_updates_year_from_processed_albums(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
         """Should update new_year from processed albums."""
@@ -785,12 +798,12 @@ class TestHandlePartialSyncCache:
         await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
         assert track.new_year == "2023"
-        mock_cache_service.store_album_year_in_cache.assert_called_once()
+        cast(AsyncMock, mock_cache_service.store_album_year_in_cache).assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handles_cache_error(
         self,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -901,7 +914,7 @@ class TestSyncTrackListWithCurrent:
     async def test_syncs_tracks_to_csv(
         self,
         tmp_path: Path,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -918,7 +931,7 @@ class TestSyncTrackListWithCurrent:
     async def test_removes_deleted_tracks(
         self,
         tmp_path: Path,
-        mock_cache_service: MagicMock,
+        mock_cache_service: CacheServiceProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
