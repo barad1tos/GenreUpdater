@@ -27,12 +27,12 @@ if TYPE_CHECKING:
 
 
 class Baseline:
-    """Data quality baselines from 2025-12-13 snapshot."""
+    """Data quality baselines from 2025-12-14 snapshot."""
 
     # Snapshot stats
-    TOTAL_TRACKS: int = 13822
-    TOTAL_ALBUMS: int = 1416
-    TOTAL_ARTISTS: int = 358
+    TOTAL_TRACKS: int = 36940
+    TOTAL_ALBUMS: int = 1416  # TODO: verify and update
+    TOTAL_ARTISTS: int = 358  # TODO: verify and update
 
     # Quality thresholds (as percentages)
     MAX_TRACKS_WITHOUT_YEAR_PCT: float = 0.1  # <0.1% tracks without year
