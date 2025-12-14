@@ -12,6 +12,7 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_retriever import YearRetriever
 
@@ -73,7 +74,11 @@ class _MockCacheService:
         """Get album year from cache."""
         return self._cache.get(f"{_artist}|{_album}_year")
 
-    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str) -> None:
+    async def get_album_year_entry_from_cache(self, _artist: str, _album: str) -> None:
+        """Get album year entry from cache (returns None to trigger API call)."""
+        return
+
+    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str, confidence: int = 0) -> None:
         """Store album year in cache."""
 
 
@@ -83,9 +88,9 @@ class _MockExternalApiService:
     def __init__(self) -> None:
         """Initialize mock external API service."""
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
-        self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
+        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
 
-    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool]:
+    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool, int]:
         """Get album year from API."""
         self.get_album_year_calls.append((artist, album, existing_year))
         return self.get_album_year_response
@@ -127,6 +132,18 @@ class TestYearRetrieverAllure:
     """Enhanced tests for YearRetriever with Allure reporting."""
 
     @staticmethod
+    def _create_retry_handler() -> DatabaseRetryHandler:
+        """Create a retry handler for testing."""
+        policy = RetryPolicy(
+            max_retries=2,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_range=0.0,
+            operation_timeout_seconds=30.0,
+        )
+        return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
+
+    @staticmethod
     def create_year_retriever(
         track_processor: Any = None,
         cache_service: Any = None,
@@ -134,6 +151,7 @@ class TestYearRetrieverAllure:
         pending_verification: Any = None,
         config: dict[str, Any] | None = None,
         dry_run: bool = False,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if track_processor is None:
@@ -149,6 +167,9 @@ class TestYearRetrieverAllure:
         if pending_verification is None:
             pending_verification = _MockPendingVerificationService()
 
+        if retry_handler is None:
+            retry_handler = TestYearRetrieverAllure._create_retry_handler()
+
         console_logger = _MockLogger()
         error_logger = _MockLogger()
         mock_analytics = _MockAnalytics()
@@ -160,6 +181,7 @@ class TestYearRetrieverAllure:
             cache_service=cache_service,
             external_api=external_api,
             pending_verification=pending_verification,
+            retry_handler=retry_handler,
             console_logger=cast("logging.Logger", cast(object, console_logger)),
             error_logger=cast("logging.Logger", cast(object, error_logger)),
             analytics=cast("Analytics", cast(object, mock_analytics)),
@@ -240,6 +262,7 @@ class TestYearRetrieverAllure:
             mock_cache_service = cast("CacheServiceProtocol", cast(object, _MockCacheService()))
             mock_external_api = cast("ExternalApiServiceProtocol", cast(object, _MockExternalApiService()))
             mock_pending_verification = cast("PendingVerificationServiceProtocol", cast(object, _MockPendingVerificationService()))
+            mock_retry_handler = self._create_retry_handler()
 
             config = {"year_retrieval": {"api_timeout": 45, "processing": {"batch_size": 100}, "retry_attempts": 5}}
 
@@ -249,6 +272,7 @@ class TestYearRetrieverAllure:
                 cache_service=mock_cache_service,
                 external_api=mock_external_api,
                 pending_verification=mock_pending_verification,
+                retry_handler=mock_retry_handler,
                 console_logger=cast("logging.Logger", cast(object, _MockLogger())),
                 error_logger=cast("logging.Logger", cast(object, _MockLogger())),
                 analytics=cast("Analytics", cast(object, _MockAnalytics())),
@@ -284,7 +308,7 @@ class TestYearRetrieverAllure:
             future_year_2 = current_year + 3
 
             album_tracks = [
-                _DummyTrackData.create(track_id="1", name="Track 1", year=str(current_year)),
+                _DummyTrackData.create(name="Track 1", year=str(current_year)),
                 _DummyTrackData.create(track_id="2", name="Track 2", year=str(future_year_1)),
                 _DummyTrackData.create(track_id="3", name="Track 3", year=str(future_year_2)),
                 _DummyTrackData.create(track_id="4", name="Track 4", year=str(current_year - 1)),
@@ -346,7 +370,7 @@ class TestYearRetrieverAllure:
 
         with allure.step("Create tracks from multiple albums"):
             tracks = [
-                _DummyTrackData.create(track_id="1", name="Song 1", artist="Artist A", album="Album 1"),
+                _DummyTrackData.create(name="Song 1", artist="Artist A", album="Album 1"),
                 _DummyTrackData.create(track_id="2", name="Song 2", artist="Artist A", album="Album 1"),
                 _DummyTrackData.create(track_id="3", name="Song 3", artist="Artist A", album="Album 2"),
                 _DummyTrackData.create(track_id="4", name="Song 4", artist="Artist B", album="Album 1"),
@@ -388,14 +412,14 @@ class TestYearRetrieverAllure:
         with allure.step("Setup mock external API"):
             mock_external_api = _MockExternalApiService()
             expected_year = "1995"
-            mock_external_api.get_album_year_response = (expected_year, True)
+            mock_external_api.get_album_year_response = (expected_year, True, 85)
 
         with allure.step("Create YearRetriever with mock API"):
             retriever = self.create_year_retriever(external_api=mock_external_api)
 
         with allure.step("Create test album tracks"):
             album_tracks = [
-                _DummyTrackData.create(track_id="1", name="Song 1", year=""),
+                _DummyTrackData.create(name="Song 1", year=""),
                 _DummyTrackData.create(track_id="2", name="Song 2", year=""),
             ]
 

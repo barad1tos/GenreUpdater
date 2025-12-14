@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from core.models.track_models import CachedApiResult, TrackDict
+from services.cache.album_cache import AlbumCacheEntry
 from services.pending_verification import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
@@ -37,7 +38,6 @@ class MockAppleScriptClient:
         self.apple_scripts_dir: str | None = "/fake/scripts"
         self.scripts_run: list[tuple[str, list[str] | None]] = []
         self.script_contexts: list[dict[str, Any]] = []
-        self.script_code_calls: list[dict[str, Any]] = []
         self.script_responses: dict[str, str | None] = {}
         self.should_fail = False
         self.failure_message = "AppleScript Error"
@@ -119,33 +119,6 @@ class MockAppleScriptClient:
 
         return None
 
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code.
-
-        Args:
-            script_code: AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout: Optional timeout in seconds
-
-        Returns:
-            Script output or None if no output
-        """
-        self.script_code_calls.append(
-            {
-                "script_code": script_code,
-                "arguments": list(arguments) if arguments is not None else None,
-                "timeout": timeout,
-            }
-        )
-        if self.should_fail:
-            raise MockAppleScriptError(self.failure_message)
-        return None
-
     def set_response(self, script_name: str, response: str | None) -> None:
         """Set a predefined response for a specific script."""
         self.script_responses[script_name] = response
@@ -161,7 +134,7 @@ class MockCacheService:
     def __init__(self) -> None:
         """Initialize the mock cache service."""
         self.storage: dict[str, CacheableValue] = {}
-        self.album_cache: dict[str, str] = {}
+        self.album_cache: dict[str, AlbumCacheEntry] = {}
         self.api_cache: dict[str, CachedApiResult] = {}
         self.last_run_timestamp = datetime(2024, 1, 1, tzinfo=UTC)
         self.ttl_overrides: dict[str, int | None] = {}
@@ -294,6 +267,20 @@ class MockCacheService:
             Cached year string or None if not found
         """
         key = self.generate_album_key(artist, album)
+        entry = self.album_cache.get(key)
+        return entry.year if entry else None
+
+    async def get_album_year_entry_from_cache(self, artist: str, album: str) -> AlbumCacheEntry | None:
+        """Get full album cache entry for an artist/album pair.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Full AlbumCacheEntry or None if not found
+        """
+        key = self.generate_album_key(artist, album)
         return self.album_cache.get(key)
 
     async def store_album_year_in_cache(
@@ -301,6 +288,7 @@ class MockCacheService:
         artist: str,
         album: str,
         year: str,
+        confidence: int = 0,
     ) -> None:
         """Store album year in persistent cache.
 
@@ -308,9 +296,18 @@ class MockCacheService:
             artist: Artist name
             album: Album name
             year: Year to cache
+            confidence: Confidence score 0-100
         """
+        import time
+
         key = self.generate_album_key(artist, album)
-        self.album_cache[key] = year
+        self.album_cache[key] = AlbumCacheEntry(
+            artist=artist,
+            album=album,
+            year=year,
+            timestamp=time.time(),
+            confidence=confidence,
+        )
 
     async def invalidate_album_cache(self, artist: str, album: str) -> None:
         """Invalidate cached data for a specific album.
@@ -406,12 +403,10 @@ class MockExternalApiService:
 
     def __init__(self) -> None:
         """Initialize the mock external API service."""
-        self.get_album_year_response: tuple[str | None, bool] = ("2020", True)
-        self.should_update_response = True
+        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
         self.discogs_year_response: str | None = "2020"
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
-        self.should_update_calls: list[dict[str, Any]] = []
         self.artist_activity_requests: list[str] = []
         self.discogs_requests: list[tuple[str, str]] = []
         self.initialize_calls: list[bool] = []
@@ -425,40 +420,12 @@ class MockExternalApiService:
         """Close all connections and clean up resources."""
         self.close_count += 1
 
-    def should_update_album_year(
-        self,
-        tracks: list[dict[str, str]],
-        artist: str = "",
-        album: str = "",
-        current_library_year: str = "",
-    ) -> bool:
-        """Determine whether to update the year for an album.
-
-        Args:
-            tracks: List of track dictionaries
-            artist: Artist name
-            album: Album name
-            current_library_year: Current year in library
-
-        Returns:
-            True if should update, False otherwise
-        """
-        self.should_update_calls.append(
-            {
-                "tracks": tracks,
-                "artist": artist,
-                "album": album,
-                "current_library_year": current_library_year,
-            }
-        )
-        return self.should_update_response
-
     async def get_album_year(
         self,
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool]:
+    ) -> tuple[str | None, bool, int]:
         """Get album year from external sources.
 
         Args:
@@ -467,7 +434,7 @@ class MockExternalApiService:
             current_library_year: Current year in library
 
         Returns:
-            Tuple of (year, is_definitive)
+            Tuple of (year, is_definitive, confidence_score)
         """
         self.get_album_year_calls.append((artist, album, current_library_year))
         return self.get_album_year_response
@@ -504,6 +471,22 @@ class MockExternalApiService:
         self.discogs_requests.append((artist, album))
         return self.discogs_year_response
 
+    async def get_artist_start_year(
+        self,
+        artist_norm: str,
+    ) -> int | None:
+        """Get artist's career start year.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Artist's start year or None
+
+        """
+        self.artist_activity_requests.append(artist_norm)
+        return self.artist_activity_response[0]
+
 
 class MockPendingVerificationService:
     """Mock implementation of PendingVerificationServiceProtocol for testing."""
@@ -511,7 +494,7 @@ class MockPendingVerificationService:
     def __init__(self) -> None:
         """Initialize the mock pending verification service."""
         self.pending_albums: list[PendingAlbumEntry] = []
-        self.marked_albums: list[tuple[str, str, str, dict[str, Any] | None]] = []
+        self.marked_albums: list[tuple[str, str, str, dict[str, Any] | None, int | None]] = []
         self.year_updates: list[tuple[str, str, str]] = []
         self.is_initialized = False
         self.last_min_attempts = 0
@@ -526,6 +509,7 @@ class MockPendingVerificationService:
         album: str,
         reason: str = "no_year_found",
         metadata: dict[str, Any] | None = None,
+        recheck_days: int | None = None,
     ) -> None:
         """Mark an album for future verification.
 
@@ -534,8 +518,9 @@ class MockPendingVerificationService:
             album: Album name
             reason: Reason for marking
             metadata: Additional metadata
+            recheck_days: Optional override for verification interval in days
         """
-        self.marked_albums.append((artist, album, reason, metadata))
+        self.marked_albums.append((artist, album, reason, metadata, recheck_days))
         self.pending_albums.append(
             PendingAlbumEntry(
                 timestamp=datetime.now(UTC),
@@ -566,6 +551,36 @@ class MockPendingVerificationService:
             List of PendingAlbumEntry objects
         """
         return self.pending_albums
+
+    async def is_verification_needed(self, artist: str, album: str) -> bool:
+        """Check if an album needs verification now.
+
+        For testing, always returns True (all pending albums are due).
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            True if verification is needed
+        """
+        # In tests, assume all pending albums are due for verification
+        return any(entry.artist == artist and entry.album == album for entry in self.pending_albums)
+
+    async def get_entry(self, artist: str, album: str) -> PendingAlbumEntry | None:
+        """Get pending entry for artist/album if exists.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            PendingAlbumEntry if found, None otherwise.
+        """
+        for entry in self.pending_albums:
+            if entry.artist == artist and entry.album == album:
+                return entry
+        return None
 
     async def generate_problematic_albums_report(
         self,

@@ -48,6 +48,13 @@ class Orchestrator:
         # Reset per-run state
         reset_cleaning_exceptions_log()
 
+        # Handle --fresh flag: clear all caches and snapshots
+        if getattr(args, "fresh", False):
+            self.console_logger.info("--fresh flag set: clearing all caches and snapshots...")
+            await self.deps.cache_service.clear()
+            self.deps.library_snapshot_service.clear_snapshot()
+            self.console_logger.info("All caches cleared. Will fetch fresh data from Music.app.")
+
         command = getattr(args, "command", None)
 
         # Check if Music app is running for commands that depend on it

@@ -14,6 +14,9 @@ import time
 import warnings
 from pathlib import Path
 
+# Add src directory to Python path BEFORE imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 from app.cli import CLI
 from app.app_config import Config
 from app.orchestrator import Orchestrator
@@ -23,8 +26,18 @@ from core.logger import SafeQueueListener, get_loggers
 # Suppress Pydantic migration warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._migration")
 
-# Add a project root to a Python path
-sys.path.insert(0, str(Path(__file__).parent))
+
+# Commands that don't require external API access
+_COMMANDS_WITHOUT_API = frozenset(
+    {
+        "verify_database",
+        "verify-db",
+        "rotate_keys",
+        "rotate-keys",
+        "clean_artist",
+        "revert_years",
+    }
+)
 
 
 async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContainer, SafeQueueListener | None, logging.Logger, logging.Logger]:
@@ -52,6 +65,10 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
     # Initialize logging
     logger_console, logger_error, analytics_logger, db_verify_logger, listener = get_loggers(config)
 
+    # Skip API validation for commands that don't need external APIs
+    command = getattr(args, "command", None)
+    skip_api_validation = command in _COMMANDS_WITHOUT_API
+
     # Create dependency container
     deps = DependencyContainer(
         config_path=config_manager.resolved_path,
@@ -61,6 +78,7 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
         db_verify_logger=db_verify_logger,
         logging_listener=listener,
         dry_run=args.dry_run,
+        skip_api_validation=skip_api_validation,
     )
 
     # Initialize all services

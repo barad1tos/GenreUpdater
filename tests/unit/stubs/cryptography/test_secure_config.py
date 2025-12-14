@@ -220,8 +220,8 @@ class TestRotateKey:
         mock_rotate.assert_called_once_with("new_password")
         assert "Encryption key rotated successfully" in caplog.text
 
-    def test_rotates_key_without_password(self, secure_config_with_key: SecureConfig) -> None:
-        """Should rotate key without password (generates random)."""
+    def test_rotates_key_without_passphrase(self, secure_config_with_key: SecureConfig) -> None:
+        """Should rotate key without passphrase (generates random)."""
         with patch.object(secure_config_with_key.crypto_manager, "rotate_key") as mock_rotate:
             secure_config_with_key.rotate_key()
 

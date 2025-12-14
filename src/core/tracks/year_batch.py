@@ -7,7 +7,6 @@ including concurrency control and progress tracking.
 from __future__ import annotations
 
 import asyncio
-import random
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -22,6 +21,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from core.logger import get_shared_console
 from core.models.track_models import ChangeLogEntry
 from core.models.track_status import (
     can_edit_metadata,
@@ -31,13 +31,14 @@ from core.models.track_status import (
 from core.models.validators import is_empty_year
 
 from .year_determination import YearDeterminator
-from .year_utils import normalize_collaboration_artist, resolve_positive_int
+from .year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
     from core.models.track_models import TrackDict
+    from core.retry_handler import DatabaseRetryHandler
     from core.tracks.track_processor import TrackProcessor
     from metrics import Analytics
 
@@ -54,6 +55,7 @@ def _create_album_progress() -> Progress:
         TaskProgressColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
+        console=get_shared_console(),
     )
 
 
@@ -72,6 +74,7 @@ class YearBatchProcessor:
         *,
         year_determinator: YearDeterminator,
         track_processor: TrackProcessor,
+        retry_handler: DatabaseRetryHandler,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: dict[str, Any],
@@ -83,6 +86,7 @@ class YearBatchProcessor:
         Args:
             year_determinator: Component for determining album years
             track_processor: Processor for track updates
+            retry_handler: Retry handler for transient error recovery
             console_logger: Logger for console output
             error_logger: Logger for error messages
             config: Configuration dictionary
@@ -92,6 +96,7 @@ class YearBatchProcessor:
         """
         self.year_determinator = year_determinator
         self.track_processor = track_processor
+        self.retry_handler = retry_handler
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
@@ -341,17 +346,19 @@ class YearBatchProcessor:
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
 
+        # Detect user manual changes (new_year is set but differs from current year)
+        # Behavior: log and re-process (override user's change with API data)
+        self._detect_user_year_changes(artist, album, album_tracks)
+
         # Check if we should skip this album (force=True bypasses this)
-        if await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force):
-            self.console_logger.debug("DEBUG: Skipping '%s - %s' - year matches cache", artist, album)
+        # Pre-checks prevent wasted API calls by checking cheap conditions first
+        should_skip, skip_reason = await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force)
+        if should_skip:
+            self.console_logger.info("[SKIP] %s - %s: %s", artist, album, skip_reason)
             return
 
-        # Try dominant year processing first
-        dominant_year = self.year_determinator.consistency_checker.get_dominant_year(album_tracks)
-        if dominant_year and await self._process_dominant_year(artist, album, album_tracks, dominant_year, updated_tracks, changes_log):
-            return
-
-        # Determine the year for this album
+        # Determine the year for this album (handles dominant year, cache, and API)
+        # Note: determine_album_year already checks dominant year internally - no need to call separately
         year = await self.year_determinator.determine_album_year(artist, album, album_tracks)
 
         if not year:
@@ -569,6 +576,10 @@ class YearBatchProcessor:
                 )
             )
 
+            # Preserve original year in old_year (only if not already set)
+            if not track.old_year:
+                track.old_year = str(old_year_value) if old_year_value else ""
+
             # Keep the in-memory snapshot aligned
             track.year = year
             track.new_year = year
@@ -612,6 +623,31 @@ class YearBatchProcessor:
                 album,
             )
 
+    def _detect_user_year_changes(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
+        """Detect if user manually changed year in Music.app.
+
+        If new_year is set (we previously updated) but current year differs,
+        the user manually changed the year. Log this for visibility.
+        Behavior: log and continue processing (override with API data).
+
+        Args:
+            artist: Artist name
+            album: Album name
+            album_tracks: List of tracks in the album
+
+        """
+        for track in album_tracks:
+            if track.new_year and track.year and track.new_year != track.year:
+                self.console_logger.info(
+                    "User manually changed year for '%s - %s': was %s (we set %s), now %s - will re-process",
+                    artist,
+                    album,
+                    track.old_year or "unknown",
+                    track.new_year,
+                    track.year,
+                )
+                return  # Only log once per album
+
     @staticmethod
     def group_tracks_by_album(
         tracks: list[TrackDict],
@@ -651,27 +687,23 @@ class YearBatchProcessor:
     # Track Update Methods
     # =========================================================================
 
-    # Constants for retry logic
-    MAX_RETRY_DELAY_SECONDS = 10.0
-    DEFAULT_TRACK_RETRY_ATTEMPTS = 3
-    DEFAULT_TRACK_RETRY_DELAY = 1.0
-
     async def _update_track_with_retry(
         self,
         track_id: str,
         new_year: str,
-        max_retries: int | None = None,
         *,
         original_artist: str | None = None,
         original_album: str | None = None,
         original_track: str | None = None,
     ) -> bool:
-        """Update a track's year with exponential backoff retry logic.
+        """Update a track's year with retry logic via DatabaseRetryHandler.
+
+        Uses the injected retry_handler for automatic exponential backoff
+        and transient error detection.
 
         Args:
             track_id: Track ID to update
             new_year: Year to set
-            max_retries: Optional override for retry attempts
             original_artist: Artist name for contextual logging
             original_album: Album name for contextual logging
             original_track: Track name for contextual logging
@@ -680,68 +712,36 @@ class YearBatchProcessor:
             True if successful, False otherwise
 
         """
-        year_config = self.config.get("year_retrieval", {}) if isinstance(self.config, dict) else {}
-        processing_config = year_config.get("processing", {}) if isinstance(year_config, dict) else {}
 
-        track_retry_attempts = resolve_positive_int(
-            processing_config.get("track_retry_attempts"),
-            default=self.DEFAULT_TRACK_RETRY_ATTEMPTS,
-        )
-        track_retry_delay = float(processing_config.get("track_retry_delay", self.DEFAULT_TRACK_RETRY_DELAY))
-
-        attempts = track_retry_attempts if max_retries is None else resolve_positive_int(max_retries, track_retry_attempts)
-        retry_delay = track_retry_delay if track_retry_delay > 0 else 1.0
-        retry_delay = min(retry_delay, self.MAX_RETRY_DELAY_SECONDS)
-        last_exception: Exception | None = None
-
-        for attempt in range(attempts):
-            try:
-                result = await self.track_processor.update_track_async(
-                    track_id=track_id,
-                    new_year=new_year,
-                    original_artist=original_artist,
-                    original_album=original_album,
-                    original_track=original_track,
-                )
-
-                if result:
-                    return True
-
-                # If the result is False but no exception, it might be a no-change scenario
-                self.console_logger.debug(
-                    "Update returned False for track %s (attempt %d/%d)",
-                    track_id,
-                    attempt + 1,
-                    attempts,
-                )
-
-            except (OSError, ValueError, RuntimeError) as e:
-                last_exception = e
-                if attempt < attempts - 1:
-                    # Add jitter to prevent thundering herd
-                    jitter = 0.1 * retry_delay
-                    sleep_time = retry_delay + random.uniform(-jitter, jitter)  # noqa: S311
-                    self.console_logger.warning(
-                        "Failed to update year for track %s (attempt %d/%d): %s. Retrying in %.1fs...",
-                        track_id,
-                        attempt + 1,
-                        attempts,
-                        last_exception,
-                        sleep_time,
-                    )
-                    await asyncio.sleep(sleep_time)
-                retry_delay = min(retry_delay * 2, self.MAX_RETRY_DELAY_SECONDS)  # Exponential backoff with cap
-            else:
-                return False
-
-        # If we reach here, all attempts failed
-        if last_exception:
-            self.error_logger.exception(
-                "Failed to update year for track %s after %d attempts",
-                track_id,
-                attempts,
+        async def _do_update() -> bool:
+            result = await self.track_processor.update_track_async(
+                track_id=track_id,
+                new_year=new_year,
+                original_artist=original_artist,
+                original_album=original_album,
+                original_track=original_track,
             )
-        return False
+            if not result:
+                # False result without exception - treat as permanent failure
+                self.console_logger.debug(
+                    "Update returned False for track %s (no-change or unsupported)",
+                    track_id,
+                )
+                return False
+            return True
+
+        try:
+            return await self.retry_handler.execute_with_retry(
+                _do_update,
+                f"track_update:{track_id}",
+            )
+        except (OSError, ValueError, RuntimeError):
+            # All retries exhausted
+            self.error_logger.exception(
+                "Failed to update year for track %s after all retry attempts",
+                track_id,
+            )
+            return False
 
     async def update_album_tracks_bulk_async(
         self,

@@ -145,20 +145,79 @@ class TestComputeTrackDelta:
         assert delta.updated_ids == []
         assert set(delta.removed_ids) == {"2", "3"}
 
-    def test_identifies_updated_tracks_by_last_modified(self, create_track: type[TrackDict]) -> None:
-        """Test identifying tracks updated based on last_modified timestamp."""
+    def test_ignores_last_modified_changes(self, create_track: type[TrackDict]) -> None:
+        """Test that last_modified changes alone do NOT trigger updates.
+
+        This is intentional: last_modified changes for many reasons unrelated
+        to genre/year updates (playback, ratings, other metadata edits).
+        Issue #76: Prevents false positives (e.g., 36906 unchanged tracks).
+        """
+        current_tracks = [
+            create_track(
+                id="1",
+                name="Track 1",
+                artist="Artist A",
+                album="Album 1",
+                last_modified="2024-01-02 12:00:00",  # Changed
+            ),
+        ]
+        existing_map = {
+            "1": create_track(
+                id="1",
+                name="Track 1",
+                artist="Artist A",
+                album="Album 1",
+                last_modified="2024-01-01 12:00:00",  # Original
+            ),
+        }
+
+        delta = compute_track_delta(current_tracks, existing_map)
+
+        assert delta.updated_ids == []  # Should NOT be updated
+
+    def test_ignores_date_added_changes(self, create_track: type[TrackDict]) -> None:
+        """Test that date_added changes alone do NOT trigger updates.
+
+        Date_added shouldn't change for existing tracks, but if it does,
+        it's not relevant to genre/year processing.
+        """
+        current_tracks = [
+            create_track(
+                id="1",
+                name="Track 1",
+                artist="Artist A",
+                album="Album 1",
+                date_added="2024-01-15 10:00:00",  # Changed
+            ),
+        ]
+        existing_map = {
+            "1": create_track(
+                id="1",
+                name="Track 1",
+                artist="Artist A",
+                album="Album 1",
+                date_added="2024-01-01 10:00:00",  # Original
+            ),
+        }
+
+        delta = compute_track_delta(current_tracks, existing_map)
+
+        assert delta.updated_ids == []  # Should NOT be updated
+
+    def test_identifies_genre_changes(self, create_track: type[TrackDict]) -> None:
+        """Test identifying tracks with changed genre."""
         self._assert_single_track_updated(
             create_track,
-            current_track_kwargs={"last_modified": "2024-01-02 12:00:00"},  # Newer
-            existing_track_kwargs={"last_modified": "2024-01-01 12:00:00"},  # Older
+            current_track_kwargs={"genre": "Progressive Rock"},  # Changed
+            existing_track_kwargs={"genre": "Rock"},  # Original
         )
 
-    def test_identifies_updated_tracks_by_date_added(self, create_track: type[TrackDict]) -> None:
-        """Test identifying tracks with changed date_added."""
+    def test_identifies_year_changes(self, create_track: type[TrackDict]) -> None:
+        """Test identifying tracks with changed year."""
         self._assert_single_track_updated(
             create_track,
-            current_track_kwargs={"date_added": "2024-01-15 10:00:00"},  # Changed
-            existing_track_kwargs={"date_added": "2024-01-01 10:00:00"},  # Original
+            current_track_kwargs={"year": "2020"},  # Changed
+            existing_track_kwargs={"year": "2019"},  # Original
         )
 
     def test_identifies_status_changes(self, create_track: type[TrackDict]) -> None:
@@ -281,12 +340,14 @@ class TestComputeTrackDelta:
         current_tracks = [
             # Unchanged track
             create_track(id="1", name="Track 1", artist="Artist", album="Album", last_modified="2024-01-01 12:00:00"),
-            # Updated track (modified date)
+            # Track with only last_modified change - NOT updated (Issue #76)
             create_track(id="2", name="Track 2", artist="Artist", album="Album", last_modified="2024-01-02 12:00:00"),
             # New track
             create_track(id="3", name="Track 3", artist="Artist", album="Album", last_modified="2024-01-01 12:00:00"),
-            # Status change
+            # Status change - IS updated
             create_track(id="4", name="Track 4", artist="Artist", album="Album", track_status="subscription"),
+            # Genre change - IS updated
+            create_track(id="6", name="Track 6", artist="Artist", album="Album", genre="Metal"),
             # Track 5 removed (not in current)
         ]
 
@@ -295,12 +356,16 @@ class TestComputeTrackDelta:
             "2": create_track(id="2", name="Track 2", artist="Artist", album="Album", last_modified="2024-01-01 12:00:00"),
             "4": create_track(id="4", name="Track 4", artist="Artist", album="Album", track_status="prerelease"),
             "5": create_track(id="5", name="Track 5", artist="Artist", album="Album", last_modified="2024-01-01 12:00:00"),
+            "6": create_track(id="6", name="Track 6", artist="Artist", album="Album", genre="Rock"),
         }
 
         delta = compute_track_delta(current_tracks, existing_map)
 
         assert delta.new_ids == ["3"]
-        assert set(delta.updated_ids) == {"2", "4"}
+        # Track "2" NOT in updated (only last_modified changed)
+        # Track "4" IS updated (status change)
+        # Track "6" IS updated (genre change)
+        assert set(delta.updated_ids) == {"4", "6"}
         assert delta.removed_ids == ["5"]
         assert delta.has_updates() is True
         assert delta.has_removals() is True

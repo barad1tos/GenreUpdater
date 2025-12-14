@@ -423,6 +423,10 @@ class TrackProcessor:
         batch_size = max(batch_size, 1)
         batch_size = min(batch_size, 1000)  # Enforce upper limit to prevent excessive memory/performance issues
 
+        # Use dedicated timeout for ID-based batch fetch (default 120s = 2 min per batch)
+        # This is much shorter than full_library_fetch because we're fetching by specific IDs
+        timeout = int(self.config.get("applescript_timeouts", {}).get("ids_batch_fetch", 120))
+
         collected: list[TrackDict] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size
 
@@ -434,7 +438,7 @@ class TrackProcessor:
             raw_output = await self.ap_client.run_script(
                 "fetch_tracks_by_ids.scpt",
                 [ids_param],
-                timeout=self._get_applescript_timeout(False),
+                timeout=timeout,
                 label=f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]",
             )
 

@@ -56,8 +56,18 @@ class VerificationReason(str, Enum):
     and string-based comparisons.
     """
 
+    # Original reasons
     NO_YEAR_FOUND = "no_year_found"
     PRERELEASE = "prerelease"
+
+    # Rejection reasons from FALLBACK (Issue #75)
+    SUSPICIOUS_YEAR_CHANGE = "suspicious_year_change"
+    IMPLAUSIBLE_EXISTING_YEAR = "implausible_existing_year"
+    ABSURD_YEAR_NO_EXISTING = "absurd_year_no_existing"
+    SPECIAL_ALBUM_COMPILATION = "special_album_compilation"
+    SPECIAL_ALBUM_SPECIAL = "special_album_special"
+    SPECIAL_ALBUM_REISSUE = "special_album_reissue"
+    SUSPICIOUS_ALBUM_NAME = "suspicious_album_name"
 
     @classmethod
     def from_string(cls, value: str) -> "VerificationReason":
@@ -510,6 +520,21 @@ class PendingVerificationService:
 
         # Save asynchronously after modifying the cache
         await self._save_pending_albums()
+
+    async def get_entry(self, artist: str, album: str) -> PendingAlbumEntry | None:
+        """Get pending entry for artist/album if exists.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            PendingAlbumEntry if found, None otherwise.
+
+        """
+        async with self._lock:
+            album_key = self._generate_album_key(artist, album)
+            return self.pending_albums.get(album_key)
 
     # is_verification_needed is now an async method because it acquires the lock
     async def is_verification_needed(self, artist: str, album: str) -> bool:

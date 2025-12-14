@@ -20,6 +20,8 @@ from services.apple.file_validator import AppleScriptFileValidator
 if TYPE_CHECKING:
     import logging
 
+    from core.retry_handler import DatabaseRetryHandler
+
 
 # Constants for script execution
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
@@ -28,6 +30,26 @@ COMPLEX_SCRIPT_THRESHOLD = 1024  # bytes
 COMPLEX_PATTERN_COUNT = 2  # number of complex patterns before using temp file
 MAX_TELL_BLOCKS = 3  # maximum nested tell blocks before using temp file
 DANGEROUS_ARGUMENT_CHARACTERS = [";", "&", "|", "`", "$", ">", "<", "!"]
+
+
+class AppleScriptExecutionError(OSError):
+    """Exception raised when AppleScript execution fails.
+
+    This exception is used to signal transient errors that may be retried
+    by the DatabaseRetryHandler. It extends OSError to leverage the retry
+    handler's transient error detection based on errno codes.
+    """
+
+    def __init__(self, message: str, label: str, errno_code: int | None = None) -> None:
+        """Initialize the execution error.
+
+        Args:
+            message: Error description
+            label: Script label for context
+            errno_code: Optional errno code for transient error detection
+        """
+        super().__init__(errno_code, message)
+        self.label = label
 
 
 class AppleScriptExecutor:
@@ -46,6 +68,7 @@ class AppleScriptExecutor:
         apple_scripts_directory: str | None,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -54,11 +77,13 @@ class AppleScriptExecutor:
             apple_scripts_directory: Directory for temporary script files
             console_logger: Logger for debug/info messages
             error_logger: Logger for error messages
+            retry_handler: Optional retry handler for transient error recovery
         """
         self.semaphore = semaphore
         self.apple_scripts_directory = apple_scripts_directory
         self.console_logger = console_logger
         self.error_logger = error_logger
+        self.retry_handler = retry_handler
 
     def update_semaphore(self, semaphore: asyncio.Semaphore) -> None:
         """Update the semaphore after async initialization.
@@ -161,7 +186,10 @@ class AppleScriptExecutor:
         label: str,
         timeout_seconds: float,
     ) -> str | None:
-        """Handle subprocess execution with timeout and error handling.
+        """Handle subprocess execution with timeout, error handling, and optional retry.
+
+        If a retry_handler is configured, transient errors will be automatically
+        retried with exponential backoff.
 
         Args:
             cmd: Command to execute as a list of strings
@@ -170,6 +198,40 @@ class AppleScriptExecutor:
 
         Returns:
             Command output if successful, None otherwise
+        """
+        try:
+            if not self.retry_handler:
+                return await self._execute_subprocess(cmd, label, timeout_seconds)
+            return await self.retry_handler.execute_with_retry(
+                lambda: self._execute_subprocess(cmd, label, timeout_seconds),
+                f"applescript:{label}",
+            )
+        except OSError:
+            # All retries exhausted, return None for backward compatibility
+            return None
+
+    async def _execute_subprocess(
+        self,
+        cmd: list[str],
+        label: str,
+        timeout_seconds: float,
+    ) -> str:
+        """Execute subprocess and return result or raise exception.
+
+        This internal method raises exceptions on failure to allow the retry
+        handler to catch and retry transient errors.
+
+        Args:
+            cmd: Command to execute as a list of strings
+            label: Label for logging
+            timeout_seconds: Timeout in seconds
+
+        Returns:
+            Command output if successful
+
+        Raises:
+            AppleScriptExecutionError: On execution failure (may be transient)
+            asyncio.CancelledError: If operation was canceled
         """
         try:
             start_time = time.time()
@@ -196,21 +258,22 @@ class AppleScriptExecutor:
                     self.log_script_success(label, script_result, elapsed)
                     return script_result
 
-                self.error_logger.error(
-                    "◁ %s failed with return code %s: %s",
-                    label,
-                    proc.returncode,
-                    stderr.decode().strip() if stderr else "",
-                )
-                return None
+                # Non-zero return code - raise for potential retry
+                error_msg = stderr.decode().strip() if stderr else f"return code {proc.returncode}"
+                self.error_logger.error("◁ %s failed with return code %s: %s", label, proc.returncode, error_msg)
+                # Use errno 61 (connection refused on macOS) to signal transient error
+                raise AppleScriptExecutionError(error_msg, label, errno_code=61)
 
-            except TimeoutError:
+            except TimeoutError as e:
                 self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout_seconds)
-                return None
+                # Timeout is transient - use errno 110 (connection timed out)
+                timeout_msg = f"timeout after {timeout_seconds}s"
+                raise AppleScriptExecutionError(timeout_msg, label, errno_code=110) from e
 
             except (subprocess.SubprocessError, OSError) as e:
                 self.error_logger.exception("⊗ %s error during execution: %s", label, e)
-                return None
+                # Re-raise OSError directly for retry handler's is_transient_error
+                raise
 
             except asyncio.CancelledError:
                 self.console_logger.info("⊗ %s cancelled", label)
@@ -218,14 +281,16 @@ class AppleScriptExecutor:
 
             except (UnicodeDecodeError, MemoryError, RuntimeError) as e:
                 self.error_logger.exception("⊗ %s unexpected error during communicate/wait: %s", label, e)
-                return None
+                # These are not transient - raise without errno
+                raise AppleScriptExecutionError(str(e), label) from e
 
             finally:
                 await self.cleanup_process(proc, label)
 
         except OSError as e:
             self.error_logger.exception("⊗ %s subprocess error: %s", label, e)
-            return None
+            # Re-raise for retry handler
+            raise
 
     async def run_osascript(
         self,

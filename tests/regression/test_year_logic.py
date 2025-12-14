@@ -1,0 +1,216 @@
+"""Regression tests for year determination using real library data.
+
+These tests verify that year-related business logic works correctly
+with real production data from the library snapshot.
+"""
+
+from __future__ import annotations
+
+import datetime
+import logging
+from collections import Counter
+from typing import TYPE_CHECKING
+
+import pytest
+
+from core.tracks.year_consistency import YearConsistencyChecker
+
+if TYPE_CHECKING:
+    from core.models.track_models import TrackDict
+
+
+@pytest.mark.regression
+class TestYearDataValidity:
+    """Test that library data meets basic year requirements."""
+
+    def test_all_tracks_have_year_field(
+        self,
+        library_tracks: list[TrackDict],
+    ) -> None:
+        """Every track should have a year field (may be empty)."""
+        for track in library_tracks:
+            assert hasattr(track, "year"), f"Track {track.id} missing year field"
+
+    def test_year_format_valid(
+        self,
+        library_tracks: list[TrackDict],
+    ) -> None:
+        """All non-empty years should be 4-digit strings."""
+        invalid_years: list[tuple[str, str, str, str]] = []
+
+        for track in library_tracks:
+            year = track.year or ""
+            # Allow empty, "0", or 4-digit year
+            if year and year != "0" and not (year.isdigit() and len(year) == 4):
+                invalid_years.append((track.id, track.artist, track.album, year))
+
+        assert not invalid_years, f"Found {len(invalid_years)} invalid year formats:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - {v[2]} = '{v[3]}'" for v in invalid_years[:10]
+        )
+
+    def test_years_in_reasonable_range(
+        self,
+        library_tracks: list[TrackDict],
+    ) -> None:
+        """Years should be between 1900 and current year + 1."""
+        current_year = datetime.datetime.now(tz=datetime.UTC).year
+        min_year = 1900
+        max_year = current_year + 1  # Allow releases announced for next year
+
+        out_of_range: list[tuple[str, str, str, str]] = []
+
+        for track in library_tracks:
+            year = track.year or ""
+            if year and year != "0" and year.isdigit():
+                year_int = int(year)
+                if not (min_year <= year_int <= max_year):
+                    out_of_range.append((track.id, track.artist, track.album, year))
+
+        assert not out_of_range, f"Found {len(out_of_range)} years outside {min_year}-{max_year}:\n" + "\n".join(
+            f"  {v[0]}: {v[1]} - {v[2]} = {v[3]}" for v in out_of_range[:10]
+        )
+
+
+@pytest.mark.regression
+class TestDominantYearCalculation:
+    """Test dominant year calculation with real data."""
+
+    def test_dominant_year_returns_string_or_none(
+        self,
+        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        console_logger: logging.Logger,
+    ) -> None:
+        """get_dominant_year should return string or None for all albums."""
+        checker = YearConsistencyChecker(console_logger=console_logger)
+
+        for (artist, album), tracks in albums_with_tracks.items():
+            result = checker.get_dominant_year(tracks)
+            assert result is None or isinstance(result, str), f"Album {artist} - {album}: expected str|None, got {type(result)}"
+
+    def test_dominant_year_format_valid(
+        self,
+        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        console_logger: logging.Logger,
+    ) -> None:
+        """Dominant years should be valid 4-digit strings."""
+        checker = YearConsistencyChecker(console_logger=console_logger)
+        invalid: list[tuple[str, str, str]] = []
+
+        for (artist, album), tracks in albums_with_tracks.items():
+            result = checker.get_dominant_year(tracks)
+            if result is not None and not (result.isdigit() and len(result) == 4):
+                invalid.append((artist, album, result))
+
+        assert not invalid, f"Found {len(invalid)} invalid dominant years:\n" + "\n".join(f"  {v[0]} - {v[1]} = '{v[2]}'" for v in invalid[:10])
+
+    def test_albums_with_consistent_years_get_dominant(
+        self,
+        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        console_logger: logging.Logger,
+    ) -> None:
+        """Albums where all tracks have same year should return that year.
+
+        Note: Albums with "suspiciously old" years (release year much older than
+        dateAdded) are expected to return None to trigger API verification.
+        This test only checks albums where the year gap is reasonable.
+        """
+        checker = YearConsistencyChecker(console_logger=console_logger)
+        failures: list[tuple[str, str, str, str | None]] = []
+        suspicion_threshold = 10  # Same as DEFAULT_SUSPICION_THRESHOLD_YEARS
+
+        for (artist, album), tracks in albums_with_tracks.items():
+            years = {t.year for t in tracks if t.year and t.year != "0"}
+
+            # Only test albums with single consistent non-empty year
+            if len(years) != 1:
+                continue
+
+            expected = years.pop()
+
+            # Skip albums that would be flagged as "suspicious"
+            if self._is_suspicious_album(tracks, expected, suspicion_threshold):
+                continue
+
+            result = checker.get_dominant_year(tracks)
+            if result != expected:
+                failures.append((artist, album, expected, result))
+
+        total_testable = self._count_testable_albums(albums_with_tracks, suspicion_threshold)
+        failure_ratio = len(failures) / total_testable if total_testable > 0 else 0
+
+        assert failure_ratio < 0.05, (
+            f"Too many failures for consistent albums: "
+            f"{len(failures)}/{total_testable} ({failure_ratio:.1%})\n"
+            f"First 10:\n" + "\n".join(f"  {f[0]} - {f[1]}: expected {f[2]}, got {f[3]}" for f in failures[:10])
+        )
+
+    @staticmethod
+    def _is_suspicious_album(tracks: list[TrackDict], expected_year: str, threshold: int) -> bool:
+        """Check if album has suspiciously old year relative to dateAdded."""
+        try:
+            expected_int = int(expected_year)
+            added_years = [int(str(t.date_added or "")[:4]) for t in tracks if t.date_added]
+            if not added_years:
+                return False
+            earliest_added = min(added_years)
+            return earliest_added - expected_int > threshold
+        except (ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def _count_testable_albums(
+        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        threshold: int,
+    ) -> int:
+        """Count albums that are testable (consistent year, not suspicious)."""
+        count = 0
+        for tracks in albums_with_tracks.values():
+            years = {t.year for t in tracks if t.year and t.year != "0"}
+            if len(years) != 1:
+                continue
+            expected_year = years.pop()
+            if not TestDominantYearCalculation._is_suspicious_album(tracks, expected_year, threshold):
+                count += 1
+        return count
+
+
+@pytest.mark.regression
+class TestYearDistribution:
+    """Test year distribution characteristics."""
+
+    def test_most_tracks_have_years(
+        self,
+        library_tracks: list[TrackDict],
+    ) -> None:
+        """Majority of tracks should have non-empty years."""
+        tracks_with_year = sum(bool(t.year and t.year != "0") for t in library_tracks)
+        total = len(library_tracks)
+
+        year_ratio = tracks_with_year / total if total > 0 else 0
+
+        # At least 80% of tracks should have years
+        assert year_ratio >= 0.8, f"Too few tracks with years: {tracks_with_year}/{total} ({year_ratio:.1%})"
+
+    def test_year_distribution_reasonable(
+        self,
+        library_tracks: list[TrackDict],
+    ) -> None:
+        """Years should cluster around recent decades (basic sanity check)."""
+        years = [int(t.year) for t in library_tracks if t.year and t.year.isdigit() and t.year != "0"]
+
+        if not years:
+            pytest.skip("No valid years in library")
+
+        decade_counts: Counter[int] = Counter(y // 10 * 10 for y in years)
+
+        # At least some music from 2000s onwards
+        recent_decades = sum(decade_counts.get(d, 0) for d in [2000, 2010, 2020])
+        total = len(years)
+
+        recent_ratio = recent_decades / total if total > 0 else 0
+
+        # At least 50% should be from 2000+
+        assert recent_ratio >= 0.5, (
+            f"Unexpectedly few recent tracks: {recent_decades}/{total} ({recent_ratio:.1%})\n"
+            f"Decade distribution: {dict(decade_counts.most_common(10))}"
+        )

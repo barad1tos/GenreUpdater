@@ -23,11 +23,12 @@ TRACK_FIELDNAMES: list[str] = [
     "artist",
     "album",
     "genre",
+    "year",  # Current year in Music.app (for delta detection)
     "date_added",
     "last_modified",
     "track_status",
-    "old_year",
-    "new_year",
+    "old_year",  # Original year before first update (for rollback/audit)
+    "new_year",  # Year after last update (for skip logic)
 ]
 
 

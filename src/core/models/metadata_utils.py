@@ -34,24 +34,33 @@ def reset_cleaning_exceptions_log() -> None:
     _logged_cleaning_exceptions.clear()
 
 
-class TrackField(IntEnum):
-    """Enumeration of track data field indices with auto-incrementing values."""
+class AppleScriptFieldIndex(IntEnum):
+    """Field positions in AppleScript output.
+
+    These are indices into the field array returned by AppleScript,
+    NOT semantic names for TrackDict fields. The naming reflects
+    what AppleScript actually provides at each position.
+
+    AppleScript field order (from fetch_tracks_by_ids.applescript):
+        {track_id, track_name, track_artist, album_artist, track_album,
+         track_genre, date_added, track_status, track_year, release_year, ""}
+    """
 
     ID = 0
     NAME = auto()
     ARTIST = auto()
-    ALBUM_ARTIST = auto()  # Album artist field from AppleScript
+    ALBUM_ARTIST = auto()
     ALBUM = auto()
     GENRE = auto()
     DATE_ADDED = auto()
     TRACK_STATUS = auto()
-    OLD_YEAR = auto()
-    RELEASE_YEAR = auto()  # Year from release date field in Music.app
-    NEW_YEAR = auto()
+    YEAR = auto()  # Music.app's "year" property (NOT historical!)
+    RELEASE_YEAR = auto()  # Extracted from "release date" property
+    # Position 10 is always empty "" from AppleScript - not mapped
 
 
 # Minimum required fields based on AppleScript output (up to DATE_ADDED)
-MIN_REQUIRED_FIELDS = TrackField.DATE_ADDED + 1
+MIN_REQUIRED_FIELDS = AppleScriptFieldIndex.DATE_ADDED + 1
 
 
 def _extract_optional_field(fields: list[str], field_index: int) -> str:
@@ -82,43 +91,49 @@ def _validate_year_field(raw_year: str) -> str:
 
 
 def _create_track_from_fields(fields: list[str]) -> TrackDict:
-    """Create a TrackDict instance from parsed fields.
+    """Create a TrackDict instance from parsed AppleScript fields.
 
     Args:
-        fields: List of field strings in TrackField order
+        fields: List of field strings in AppleScriptFieldIndex order
 
     Returns:
         TrackDict instance created from the fields
 
+    Note on year fields:
+        - AppleScript provides: year (Music.app property), release_year (from release date)
+        - TrackDict tracking fields (old_year, new_year) are NOT from AppleScript
+        - They are managed by year_batch.py and persisted in CSV only
     """
-    # Extract and validate year fields
-    raw_old_year = _extract_optional_field(fields, TrackField.OLD_YEAR)
-    raw_release_year = _extract_optional_field(fields, TrackField.RELEASE_YEAR)
-    raw_new_year = _extract_optional_field(fields, TrackField.NEW_YEAR)
+    idx = AppleScriptFieldIndex  # Alias for readability
 
-    old_year = _validate_year_field(raw_old_year)
+    # Extract year fields from AppleScript output
+    raw_musicapp_year = _extract_optional_field(fields, idx.YEAR)
+    raw_release_year = _extract_optional_field(fields, idx.RELEASE_YEAR)
+
+    musicapp_year = _validate_year_field(raw_musicapp_year)
     release_year = _validate_year_field(raw_release_year)
-    new_year = _validate_year_field(raw_new_year)
 
     # Extract optional track_status field if available
-    track_status = _extract_optional_field(fields, TrackField.TRACK_STATUS)
+    track_status = _extract_optional_field(fields, idx.TRACK_STATUS)
 
     # Build base TrackDict
+    # Note: old_year/new_year are set to musicapp_year for NEW tracks only.
+    # For existing tracks, these are preserved from CSV during sync.
     track = TrackDict(
-        id=fields[TrackField.ID].strip(),
-        name=fields[TrackField.NAME].strip(),
-        artist=fields[TrackField.ARTIST].strip(),
-        album=fields[TrackField.ALBUM].strip(),
-        genre=fields[TrackField.GENRE].strip(),
-        date_added=fields[TrackField.DATE_ADDED].strip(),
+        id=fields[idx.ID].strip(),
+        name=fields[idx.NAME].strip(),
+        artist=fields[idx.ARTIST].strip(),
+        album=fields[idx.ALBUM].strip(),
+        genre=fields[idx.GENRE].strip(),
+        date_added=fields[idx.DATE_ADDED].strip(),
         track_status=track_status or None,
-        old_year=old_year,
-        release_year=release_year,
-        new_year=new_year,
-        year=old_year,  # Add current year field for year_retriever to access
+        year=musicapp_year,  # Current year in Music.app
+        release_year=release_year,  # From release date metadata
+        old_year=musicapp_year,  # Initial value for new tracks (will be preserved)
+        new_year="",  # Empty until MGU updates this track
     )
 
-    if album_artist_value := _extract_optional_field(fields, TrackField.ALBUM_ARTIST):
+    if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):
         track.__dict__["album_artist"] = album_artist_value
 
     return track

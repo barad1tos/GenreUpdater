@@ -54,16 +54,6 @@ class MockAppleScriptClient:
         return self._run_script_result
 
     @staticmethod
-    async def run_script_code(
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run script code mock."""
-        _ = (script_code, arguments, timeout)
-        return None
-
-    @staticmethod
     async def fetch_tracks_by_ids(
         track_ids: list[str],
         batch_size: int = 1000,

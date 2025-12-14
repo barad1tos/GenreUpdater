@@ -169,58 +169,6 @@ class TestEnsureSessionInitialized:
         orchestrator._ensure_session_initialized()  # Should not raise
 
 
-class TestShouldUpdateAlbumYear:
-    """Tests for should_update_album_year method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_true_for_empty_tracks(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should return True when tracks list is empty."""
-        result = orchestrator.should_update_album_year([])
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_true_when_skip_prerelease_disabled(
-        self, mock_config: dict[str, Any], mock_loggers: tuple[MagicMock, MagicMock], mock_services: tuple[MagicMock, MagicMock, MagicMock]
-    ) -> None:
-        """Should return True when skip_prerelease is disabled."""
-        mock_config["year_retrieval"]["processing"]["skip_prerelease"] = False
-        console_logger, error_logger = mock_loggers
-        analytics, cache_service, pending_verification = mock_services
-
-        orch = ExternalApiOrchestrator(
-            config=mock_config,
-            console_logger=console_logger,
-            error_logger=error_logger,
-            analytics=analytics,
-            cache_service=cache_service,
-            pending_verification_service=cast("PendingVerificationService", pending_verification),
-        )
-
-        tracks = [{"year": "2025"}]
-        result = orch.should_update_album_year(tracks)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_true_for_normal_tracks(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should return True for tracks with normal years."""
-        tracks = [{"year": "2020"}, {"year": "2020"}, {"year": "2020"}]
-        result = orchestrator.should_update_album_year(tracks, artist="Test Artist", album="Test Album")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_false_for_prerelease_album(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should return False for prerelease albums."""
-        current_year = dt.now(tz=UTC).year
-        future_year = current_year + 2
-
-        tracks = [{"year": str(future_year)} for _ in range(5)]
-
-        with patch.object(orchestrator, "_safe_mark_for_verification", new_callable=AsyncMock):
-            result = orchestrator.should_update_album_year(tracks, artist="Test Artist", album="Test Album", current_library_year="2023")
-
-        assert result is False
-
-
 class TestSafeMarkForVerification:
     """Tests for _safe_mark_for_verification method."""
 

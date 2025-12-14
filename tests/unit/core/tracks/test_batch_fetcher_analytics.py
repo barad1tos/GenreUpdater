@@ -252,13 +252,13 @@ class TestFetchTracksRawFallback:
 
         mock_ap_client.run_script = AsyncMock(return_value=None)
 
-        with patch("core.tracks.batch_fetcher.Console") as mock_console_class:
+        with patch("core.tracks.batch_fetcher.get_shared_console") as mock_get_console:
             mock_console = MagicMock()
             mock_status = MagicMock()
             mock_status.__enter__ = MagicMock(return_value=mock_status)
             mock_status.__exit__ = MagicMock(return_value=None)
             mock_console.status.return_value = mock_status
-            mock_console_class.return_value = mock_console
+            mock_get_console.return_value = mock_console
 
             await fetcher._fetch_tracks_in_batches_raw(100)
 

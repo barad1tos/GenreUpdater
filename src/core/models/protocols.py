@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from core.models.track_models import CachedApiResult
+    from services.cache.album_cache import AlbumCacheEntry
     from services.pending_verification import PendingAlbumEntry
 
 # Type variable for generic cached values
@@ -162,11 +163,27 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
+    async def get_album_year_entry_from_cache(self, artist: str, album: str) -> AlbumCacheEntry | None:
+        """Get full album cache entry for an artist/album pair.
+
+        Use this method when you need to check confidence level before trusting cached data.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Full AlbumCacheEntry or None if not found
+
+        """
+        ...
+
     async def store_album_year_in_cache(
         self,
         artist: str,
         album: str,
         year: str,
+        confidence: int = 0,
     ) -> None:
         """Store album year in persistent cache.
 
@@ -174,6 +191,7 @@ class CacheServiceProtocol(Protocol):
             artist: Artist name
             album: Album name
             year: Year to cache
+            confidence: Confidence score 0-100 (higher = more trustworthy)
 
         """
         ...
@@ -278,33 +296,12 @@ class ExternalApiServiceProtocol(Protocol):
         """Close all connections and clean up resources."""
         ...
 
-    def should_update_album_year(
-        self,
-        tracks: list[dict[str, str]],
-        artist: str = "",
-        album: str = "",
-        current_library_year: str = "",
-    ) -> bool:
-        """Determine whether to update the year for an album based on the status of its tracks.
-
-        Args:
-            tracks: List of track dictionaries
-            artist: Artist name (optional)
-            album: Album name (optional)
-            current_library_year: Current year in library (optional)
-
-        Returns:
-            True if you should update, False otherwise
-
-        """
-        ...
-
     async def get_album_year(
         self,
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool]:
+    ) -> tuple[str | None, bool, int]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
         Args:
@@ -313,7 +310,7 @@ class ExternalApiServiceProtocol(Protocol):
             current_library_year: Current year in library (optional)
 
         Returns:
-            Tuple of (year_string, is_definitive) where is_definitive indicates confidence
+            Tuple of (year_string, is_definitive, confidence_score) where is_definitive indicates confidence
 
         """
         ...
@@ -329,6 +326,24 @@ class ExternalApiServiceProtocol(Protocol):
 
         Returns:
             Tuple of (start_year, end_year) as integers or (None, None) if not found
+
+        """
+        ...
+
+    async def get_artist_start_year(
+        self,
+        artist_norm: str,
+    ) -> int | None:
+        """Get artist's career start year with caching and fallback.
+
+        Uses MusicBrainz as primary source, iTunes as fallback.
+        Results are cached for performance.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            Artist's career start year, or None if not found
 
         """
         ...
@@ -385,25 +400,6 @@ class AppleScriptClientProtocol(Protocol):
             context_album: Album name for contextual logging (optional)
             context_track: Track name for contextual logging (optional)
             label: Custom label for logging (defaults to script_name)
-
-        Returns:
-            Script output or None if no output
-
-        """
-        ...
-
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code.
-
-        Args:
-            script_code: AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout: Optional timeout in seconds
 
         Returns:
             Script output or None if no output
@@ -488,6 +484,40 @@ class PendingVerificationServiceProtocol(Protocol):
         Args:
             artist: Artist name
             album: Album name
+
+        """
+        ...
+
+    async def get_entry(
+        self,
+        artist: str,
+        album: str,
+    ) -> PendingAlbumEntry | None:
+        """Get pending entry for artist/album if exists.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            PendingAlbumEntry if found, None otherwise.
+
+        """
+        ...
+
+    async def is_verification_needed(
+        self,
+        artist: str,
+        album: str,
+    ) -> bool:
+        """Check if an album needs verification now.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            True if the verification period has elapsed, False otherwise.
 
         """
         ...

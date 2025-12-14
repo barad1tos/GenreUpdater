@@ -13,20 +13,15 @@ for unit testing internal behavior.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-
-if TYPE_CHECKING:
-    from core.models.protocols import (
-        CacheServiceProtocol,
-        PendingVerificationServiceProtocol,
-    )
 
 import allure
 import pytest
 
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
+from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_retriever import YearRetriever
 
@@ -42,6 +37,20 @@ class TestYearRetrieverEdgeCases:
     """Edge case tests documenting known issues in year retrieval."""
 
     @staticmethod
+    def _create_retry_handler() -> DatabaseRetryHandler:
+        """Create a retry handler for testing."""
+        import logging
+
+        policy = RetryPolicy(
+            max_retries=2,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_range=0.0,
+            operation_timeout_seconds=30.0,
+        )
+        return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
+
+    @staticmethod
     def create_year_retriever(
         track_processor: Any = None,
         cache_service: Any = None,
@@ -49,6 +58,7 @@ class TestYearRetrieverEdgeCases:
         pending_verification: Any = None,
         config: dict[str, Any] | None = None,
         dry_run: bool = False,
+        retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if track_processor is None:
@@ -64,6 +74,9 @@ class TestYearRetrieverEdgeCases:
         if pending_verification is None:
             pending_verification = MockPendingVerificationService()
 
+        if retry_handler is None:
+            retry_handler = TestYearRetrieverEdgeCases._create_retry_handler()
+
         test_config = config or {
             "year_retrieval": {
                 "api_timeout": 30,
@@ -74,9 +87,10 @@ class TestYearRetrieverEdgeCases:
 
         return YearRetriever(
             track_processor=track_processor,
-            cache_service=cast("CacheServiceProtocol", cache_service),
+            cache_service=cache_service,
             external_api=external_api,
-            pending_verification=cast("PendingVerificationServiceProtocol", pending_verification),
+            pending_verification=pending_verification,
+            retry_handler=retry_handler,
             console_logger=MockLogger(),
             error_logger=MockLogger(),
             analytics=MockAnalytics(),
@@ -100,8 +114,8 @@ class TestYearRetrieverEdgeCases:
         """
         with allure.step("Setup: Mock API returns year with low confidence"):
             mock_external_api = MockExternalApiService()
-            # API returns 2013 with LOW confidence (is_definitive=False)
-            mock_external_api.get_album_year_response = ("2013", False)
+            # API returns 2013 with LOW confidence (is_definitive=False, score=40)
+            mock_external_api.get_album_year_response = ("2013", False, 40)
 
             mock_pending = MockPendingVerificationService()
             retriever = self.create_year_retriever(
@@ -255,7 +269,7 @@ class TestYearRetrieverEdgeCases:
             ]
 
         with allure.step("Check if album should be skipped by low-level method"):
-            should_skip = await retriever._year_determinator.should_skip_album(
+            should_skip, _ = await retriever._year_determinator.should_skip_album(
                 album_tracks,
                 "HIM",
                 "And Love Said No - Greatest Hits 1997 - 2004",
@@ -263,7 +277,7 @@ class TestYearRetrieverEdgeCases:
 
         with allure.step("Low-level method returns False (no cache, queries API)"):
             # Without cache, the method returns False to query API
-            assert should_skip is False, "_should_skip_album_due_to_existing_years returns False when no cache exists"
+            assert should_skip is False, "_should_skip_album returns False when no cache exists"
 
             allure.attach(
                 "NOTE: _should_skip_album_due_to_existing_years() now trusts cache (API data).\n"
@@ -630,6 +644,7 @@ class TestYearFallbackLogic:
                 proposed_year="1998",
                 album_tracks=tracks,
                 is_definitive=False,
+                confidence_score=40,  # Low confidence
                 artist="Abney Park",
                 album="Scallywag",
             )
@@ -639,8 +654,8 @@ class TestYearFallbackLogic:
 
         with allure.step("Verify: Album marked for verification"):
             assert len(mock_pending.marked_albums) == 1
-            # marked_albums is list of tuples: (artist, album, reason, metadata)
-            marked_artist, _album, reason, _metadata = mock_pending.marked_albums[0]
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            marked_artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
             assert marked_artist == "Abney Park"
             assert reason == "suspicious_year_change"
 
@@ -679,6 +694,7 @@ class TestYearFallbackLogic:
                 proposed_year="2013",
                 album_tracks=tracks,
                 is_definitive=False,  # Low confidence
+                confidence_score=40,  # Low confidence
                 artist="Blue Stahli",
                 album="B-Sides and Other Things I Forgot",
             )
@@ -688,8 +704,8 @@ class TestYearFallbackLogic:
 
         with allure.step("Verify: Album marked with special type"):
             assert len(mock_pending.marked_albums) == 1
-            # marked_albums is list of tuples: (artist, album, reason, metadata)
-            _artist, _album, reason, _metadata = mock_pending.marked_albums[0]
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            _artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
             assert "special_album" in reason
 
             allure.attach(
@@ -720,6 +736,7 @@ class TestYearFallbackLogic:
             proposed_year="2021",
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=40,  # Low confidence
             artist="Celldweller",
             album="Demo Vault: Wasteland",
         )
@@ -746,6 +763,7 @@ class TestYearFallbackLogic:
             proposed_year="1998",  # Dramatic change!
             album_tracks=tracks,
             is_definitive=True,  # But high confidence
+            confidence_score=90,  # High confidence
             artist="Artist",
             album="Album",
         )
@@ -771,6 +789,7 @@ class TestYearFallbackLogic:
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Artist",
             album="Album",
         )
@@ -797,6 +816,7 @@ class TestYearFallbackLogic:
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Artist",
             album="Album (Remastered)",
         )
@@ -826,6 +846,7 @@ class TestYearFallbackLogic:
             proposed_year="1998",
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=40,  # Low confidence
             artist="Abney Park",
             album="Scallywag",
         )
@@ -833,6 +854,41 @@ class TestYearFallbackLogic:
         assert result == "1998", "Original behavior: apply API year"
         # Still marks for verification (original behavior for low confidence)
         assert len(mock_pending.marked_albums) == 1
+
+    @allure.story("Fallback Decision")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("FIX: Early exit when existing == proposed (Issue #81)")
+    @pytest.mark.asyncio
+    async def test_fallback_skips_when_years_match(self) -> None:
+        """Test that fallback returns early when existing year equals proposed year.
+
+        This is the FIX for Issue #81: Redundant FALLBACK check when existing == proposed.
+        No need to process special album types or log warnings when no change is needed.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        # Special album type (compilation) - would normally log FALLBACK warning
+        tracks = [
+            TrackDict(id="1", name="T1", artist="My Dying Bride", album="34.788%... Complete", year="1998"),
+            TrackDict(id="2", name="T2", artist="My Dying Bride", album="34.788%... Complete", year="1998"),
+        ]
+
+        result = await retriever.year_fallback_handler.apply_year_fallback(
+            proposed_year="1998",  # Same as existing!
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="My Dying Bride",
+            album="34.788%... Complete",
+        )
+
+        # Should return the year (no change needed)
+        assert result == "1998", "Should return proposed year when it matches existing"
+        # Should NOT mark for verification (no change = no need to verify)
+        assert len(mock_pending.marked_albums) == 0, "Should not mark when years match"
 
 
 @allure.epic("Music Genre Updater")
@@ -905,6 +961,7 @@ class TestAbsurdYearDetection:
             proposed_year="1965",  # Before 1970 threshold
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=40,  # Low confidence
             artist="Gorillaz",
             album="The Mountain",
         )
@@ -936,6 +993,7 @@ class TestAbsurdYearDetection:
             proposed_year="1990",  # Above 1970 threshold
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Artist",
             album="Album",
         )
@@ -950,7 +1008,7 @@ class TestAbsurdYearDetection:
     async def test_absurd_year_with_existing_continues(self) -> None:
         """Test that absurd year with existing year continues to dramatic change rule.
 
-        Case: Album with existing year 2000, proposed year 1965
+        Case: Album with existing year 2005, proposed year 1965
         Expected: Skip Rule 2 (has existing), proceed to Rule 5 (dramatic change)
         """
         mock_pending = MockPendingVerificationService()
@@ -959,18 +1017,19 @@ class TestAbsurdYearDetection:
         )
 
         tracks = [
-            TrackDict(id="1", name="Track", artist="Artist", album="Album", year="2000"),  # HAS existing year
+            TrackDict(id="1", name="Track", artist="Artist", album="Album", year="2005"),  # HAS existing year
         ]
 
         result = await retriever.year_fallback_handler.apply_year_fallback(
-            proposed_year="1965",  # Absurd, but has existing year
+            proposed_year="1965",  # Absurd year, but existing year takes precedence
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=40,  # Low confidence
             artist="Artist",
             album="Album",
         )
 
-        # Should be caught by Rule 5 (dramatic change: 2000 → 1965 = 35 years)
+        # Should be caught by Rule 5 (dramatic change: 2005 → 1965 = 40 years)
         assert result is None
         assert len(mock_pending.marked_albums) == 1
         # Reason should be dramatic change, not absurd year
@@ -998,6 +1057,7 @@ class TestAbsurdYearDetection:
             proposed_year="1970",  # Exactly at threshold
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Artist",
             album="Album",
         )
@@ -1027,6 +1087,7 @@ class TestAbsurdYearDetection:
             proposed_year="1960",  # Absurd year
             album_tracks=tracks,
             is_definitive=True,  # But high confidence!
+            confidence_score=90,  # High confidence
             artist="Artist",
             album="Album",
         )
@@ -1067,6 +1128,7 @@ class TestAbsurdYearDetection:
             proposed_year=proposed,
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Artist",
             album="Album",
         )
@@ -1095,6 +1157,7 @@ class TestAbsurdYearDetection:
             proposed_year="1974",  # 1974 > 1970, so not "absurd" by this rule
             album_tracks=tracks,
             is_definitive=False,
+            confidence_score=50,  # Medium confidence
             artist="Gorillaz",
             album="Plastic Beach",
         )
@@ -1138,6 +1201,7 @@ class TestAbsurdYearDetection:
                 proposed_year=absurd_year,
                 album_tracks=tracks,
                 is_definitive=False,
+                confidence_score=40,  # Low confidence
                 artist="Modern Band",
                 album="Album",
             )
@@ -1443,3 +1507,262 @@ class TestSuspiciousOldYearDetection:
         # But 2001 is suspicious (24 year gap from 2025)
         # Should NOT trust this year
         assert dominant is None, "Collaboration pattern should still check for suspicious years"
+
+
+@allure.story("Anomalous Tracks Logging")
+class TestAnomalousTracksLogging:
+    """Tests for _log_anomalous_tracks debug logging."""
+
+    @staticmethod
+    def create_retriever() -> YearRetriever:
+        """Create a basic YearRetriever for testing."""
+        return TestYearRetrieverEdgeCases.create_year_retriever()
+
+    @allure.title("Logs tracks with different years than dominant")
+    def test_logs_anomalous_tracks(self) -> None:
+        """Test that tracks with non-dominant years are logged at DEBUG level."""
+        retriever = self.create_retriever()
+        album_tracks = [
+            {"id": "1", "name": "Track 1", "year": "2020"},
+            {"id": "2", "name": "Track 2", "year": "2020"},
+            {"id": "3", "name": "Track 3", "year": "2020"},
+            {"id": "4", "name": "Track 4", "year": "2020"},
+            {"id": "5", "name": "Track 5", "year": "2020"},
+            {"id": "6", "name": "Track 6", "year": "2020"},
+            {"id": "7", "name": "Bonus Track", "year": "2021"},  # Anomalous
+        ]
+
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
+        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+
+        assert dominant == "2020"
+        assert any("Bonus Track" in msg for msg in debug_logs)
+        assert any("2021" in msg for msg in debug_logs)
+        assert any("2020" in msg for msg in debug_logs)
+
+    @allure.title("No logging when all tracks have same year")
+    def test_no_logging_when_all_same(self) -> None:
+        """Test that no anomaly logging occurs when all tracks have the same year."""
+        retriever = self.create_retriever()
+        album_tracks = [
+            {"id": "1", "name": "Track 1", "year": "2020"},
+            {"id": "2", "name": "Track 2", "year": "2020"},
+            {"id": "3", "name": "Track 3", "year": "2020"},
+        ]
+
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
+        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+
+        assert dominant == "2020"
+        assert all("differs from dominant" not in msg for msg in debug_logs)
+
+    @allure.title("Ignores empty and zero years in anomaly check")
+    def test_ignores_empty_years(self) -> None:
+        """Test that empty/zero years are not reported as anomalies."""
+        retriever = self.create_retriever()
+        album_tracks = [
+            {"id": "1", "name": "Track 1", "year": "2020"},
+            {"id": "2", "name": "Track 2", "year": "2020"},
+            {"id": "3", "name": "Track 3", "year": "2020"},
+            {"id": "4", "name": "Track 4", "year": "2020"},
+            {"id": "5", "name": "Empty Year", "year": ""},  # Should be ignored
+            {"id": "6", "name": "Zero Year", "year": "0"},  # Should be ignored
+        ]
+
+        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
+        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+
+        assert dominant == "2020"
+        assert all("Empty Year" not in msg for msg in debug_logs)
+        assert all("Zero Year" not in msg for msg in debug_logs)
+
+
+@allure.epic("Music Genre Updater")
+@allure.feature("Year Fallback Confidence Scoring")
+class TestYearFallbackConfidenceScoring:
+    """Tests for the confidence score-based FALLBACK logic (Issue #72 fix).
+
+    These tests verify that:
+    1. High confidence API results (>=70%) override dramatic year changes
+    2. Low confidence results preserve existing years for dramatic changes
+    """
+
+    @staticmethod
+    def create_retriever_with_fallback(
+        pending_verification: Any = None,
+        trust_api_score_threshold: int = 70,
+    ) -> YearRetriever:
+        """Create YearRetriever with fallback configuration."""
+        config = {
+            "year_retrieval": {
+                "api_timeout": 30,
+                "processing": {"batch_size": 50},
+                "logic": {
+                    "absurd_year_threshold": 1970,
+                },
+                "fallback": {
+                    "enabled": True,
+                    "year_difference_threshold": 5,
+                    "trust_api_score_threshold": trust_api_score_threshold,
+                },
+            }
+        }
+        return TestYearRetrieverEdgeCases.create_year_retriever(
+            pending_verification=pending_verification or MockPendingVerificationService(),
+            config=config,
+        )
+
+    @allure.story("High Confidence Override")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("FIX #72: High confidence API result overrides dramatic year change")
+    @pytest.mark.asyncio
+    async def test_high_confidence_overrides_dramatic_change(self) -> None:
+        """Test that high confidence API results are applied despite dramatic year change.
+
+        This is the FIX for Issue #72: Children of Bodom - Something Wild
+        Library year: 2005, API year: 1997, API should win with high confidence.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        # Tracks with WRONG library year (2005)
+        tracks = [
+            TrackDict(id="1", name="Deadnight Warrior", artist="Children of Bodom", album="Something Wild", year="2005"),
+            TrackDict(id="2", name="In the Shadows", artist="Children of Bodom", album="Something Wild", year="2005"),
+        ]
+
+        with allure.step("Apply fallback with high confidence API result"):
+            result = await retriever.year_fallback_handler.apply_year_fallback(
+                proposed_year="1997",  # Correct year from API
+                album_tracks=tracks,
+                is_definitive=True,
+                confidence_score=85,  # HIGH confidence (>= 70)
+                artist="Children of Bodom",
+                album="Something Wild",
+            )
+
+        with allure.step("Verify: API year is applied (not skipped)"):
+            assert result == "1997", "High confidence should apply API year"
+
+        with allure.step("Verify: Album NOT marked for verification"):
+            assert len(mock_pending.marked_albums) == 0, "Should not mark for verification"
+
+            allure.attach(
+                "Existing year: 2005\n"
+                "Proposed year: 1997 (correct)\n"
+                "Difference: 8 years (dramatic)\n"
+                "Confidence: 85% (high)\n"
+                "Result: API year APPLIED\n"
+                "Album marked: No",
+                "Fix Verification",
+                allure.attachment_type.TEXT,
+            )
+
+    @allure.story("Low Confidence Preservation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Low confidence preserves valid existing year")
+    @pytest.mark.asyncio
+    async def test_low_confidence_preserves_valid_existing(self) -> None:
+        """Test that low confidence API results preserve valid existing years.
+
+        When the existing year looks valid (not a placeholder, reasonable value)
+        and API confidence is low, preserve the existing year.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        # Tracks with valid existing year (2018)
+        tracks = [
+            TrackDict(id="1", name="Track 1", artist="Blue Stahli", album="Obsidian", year="2018"),
+            TrackDict(id="2", name="Track 2", artist="Blue Stahli", album="Obsidian", year="2018"),
+        ]
+
+        with allure.step("Apply fallback with low confidence dramatic change"):
+            result = await retriever.year_fallback_handler.apply_year_fallback(
+                proposed_year="2010",  # 8 year difference
+                album_tracks=tracks,
+                is_definitive=False,
+                confidence_score=40,  # LOW confidence (< 70)
+                artist="Blue Stahli",
+                album="Obsidian",
+            )
+
+        with allure.step("Verify: Update skipped (preserves existing)"):
+            assert result is None, "Low confidence should preserve valid existing year"
+
+        with allure.step("Verify: Album marked for verification"):
+            assert len(mock_pending.marked_albums) == 1
+            # marked_albums is list of tuples: (artist, album, reason, metadata, confidence)
+            marked_artist, _album, reason, _metadata, _confidence = mock_pending.marked_albums[0]
+            assert marked_artist == "Blue Stahli"
+            assert reason == "suspicious_year_change"
+
+            allure.attach(
+                "Existing year: 2018 (valid)\n"
+                "Proposed year: 2010\n"
+                "Difference: 8 years (dramatic)\n"
+                "Confidence: 40% (low)\n"
+                "Result: Update SKIPPED (preserves existing)\n"
+                "Album marked: Yes (for manual verification)",
+                "Preservation Verification",
+                allure.attachment_type.TEXT,
+            )
+
+    @allure.story("Boundary Conditions")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Exactly 70% confidence threshold allows update")
+    @pytest.mark.asyncio
+    async def test_confidence_threshold_boundary(self) -> None:
+        """Test that exactly 70% confidence (threshold) allows update."""
+        mock_pending = MockPendingVerificationService()
+        # Using default trust_api_score_threshold=70
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track 1", artist="Test", album="Album", year="2015"),
+        ]
+
+        result = await retriever.year_fallback_handler.apply_year_fallback(
+            proposed_year="2005",  # 10 year dramatic change
+            album_tracks=tracks,
+            is_definitive=True,
+            confidence_score=70,  # Exactly at threshold
+            artist="Test",
+            album="Album",
+        )
+
+        assert result == "2005", "Confidence at threshold (70) should allow update"
+
+    @allure.story("Boundary Conditions")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("69% confidence (just below threshold) blocks update")
+    @pytest.mark.asyncio
+    async def test_confidence_below_threshold_blocks(self) -> None:
+        """Test that 69% confidence (just below threshold) blocks update."""
+        mock_pending = MockPendingVerificationService()
+        # Using default trust_api_score_threshold=70
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        tracks = [
+            TrackDict(id="1", name="Track 1", artist="Test", album="Album", year="2015"),
+        ]
+
+        result = await retriever.year_fallback_handler.apply_year_fallback(
+            proposed_year="2005",  # 10 year dramatic change
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=69,  # Just below threshold
+            artist="Test",
+            album="Album",
+        )
+
+        assert result is None, "Confidence below threshold (69) should block update"
+        assert len(mock_pending.marked_albums) == 1

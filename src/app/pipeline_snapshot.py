@@ -151,22 +151,31 @@ class PipelineSnapshotManager:
             fallback should be used.
         """
         removed_ids = {str(track_id) for track_id in delta.removed_ids if track_id}
-        changed_ids = [str(track_id) for track_id in delta.updated_ids if track_id]
+        updated_ids = [str(track_id) for track_id in delta.updated_ids if track_id]
         new_ids = [str(track_id) for track_id in delta.new_ids if track_id]
 
-        fetch_order: list[str] = list(dict.fromkeys(new_ids + changed_ids))
+        # Fetch updated tracks first (these MUST exist - they're in both snapshot and current)
+        # Then fetch new tracks (may have been deleted between ID fetch and now)
+        fetch_order: list[str] = list(dict.fromkeys(updated_ids + new_ids))
 
         fetched_map: dict[str, TrackDict]
         if fetch_order:
             fetched_tracks = await self._track_processor.fetch_tracks_by_ids(fetch_order)
             fetched_map = {str(track.id): track for track in fetched_tracks}
-            if missing_ids := [track_id for track_id in fetch_order if track_id not in fetched_map]:
+
+            if missing_updated := [track_id for track_id in updated_ids if track_id not in fetched_map]:
                 self._console_logger.warning(
-                    "Smart Delta missing %d changed tracks (%s); falling back to batch scan",
-                    len(missing_ids),
-                    ", ".join(missing_ids[:5]),
+                    "Smart Delta missing %d updated tracks (%s); falling back to batch scan",
+                    len(missing_updated),
+                    ", ".join(missing_updated[:5]),
                 )
                 return None
+
+            if missing_new := [track_id for track_id in new_ids if track_id not in fetched_map]:
+                self._console_logger.info(
+                    "Smart Delta: %d new tracks no longer exist (deleted?), skipping them",
+                    len(missing_new),
+                )
         else:
             fetched_map = {}
 
@@ -187,7 +196,7 @@ class PipelineSnapshotManager:
 
         self._console_logger.info(
             "Smart Delta merged: %d updated, %d new, %d removed tracks",
-            len(changed_ids),
+            len(updated_ids),
             len(new_ids),
             len(removed_ids),
         )

@@ -66,7 +66,7 @@ class TestGenrePipelineIntegration:
 
     @staticmethod
     def create_mock_api_orchestrator(
-        fallback_responses: list[tuple[str | None, bool]] | None,
+        fallback_responses: list[tuple[str | None, bool, int]] | None,
     ) -> MagicMock:
         """Create a mock API orchestrator with fallback behavior."""
         mock_orchestrator = MagicMock(spec=ExternalApiOrchestrator)
@@ -75,7 +75,7 @@ class TestGenrePipelineIntegration:
             mock_orchestrator.get_album_year = AsyncMock(side_effect=fallback_responses)
         else:
             # Default successful response
-            mock_orchestrator.get_album_year = AsyncMock(return_value=("2020", True))
+            mock_orchestrator.get_album_year = AsyncMock(return_value=("2020", True, 85))
 
         return mock_orchestrator
 
@@ -167,9 +167,9 @@ class TestGenrePipelineIntegration:
             # Mock API fallback scenario: MB fails, Discogs fails, LastFM succeeds
             mock_orchestrator = TestGenrePipelineIntegration.create_mock_api_orchestrator(
                 [
-                    (None, False),  # MusicBrainz fails
-                    (None, False),  # Discogs fails
-                    ("2019", True),  # LastFM succeeds
+                    (None, False, 0),  # MusicBrainz fails
+                    (None, False, 0),  # Discogs fails
+                    ("2019", True, 85),  # LastFM succeeds
                 ]
             )
             del mock_orchestrator  # Created for demonstration but not used in current test
@@ -379,9 +379,7 @@ class TestGenrePipelineIntegration:
             assert call_count >= 0
 
             # Error logger should have recorded any errors
-            error_logger = genre_manager.error_logger
-            error_messages = getattr(error_logger, "error_messages", [])
-            if error_messages:
+            if error_messages := getattr(genre_manager.error_logger, "error_messages", []):
                 error_count = len(error_messages)
                 allure.attach(f"{error_count}", "Errors Logged", allure.attachment_type.TEXT)
 

@@ -133,7 +133,7 @@ class TestSelectBestYear:
         year_scores["2020"] = [85, 90]
         year_scores["2021"] = [75, 80]
 
-        best_year, _is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
 
@@ -142,7 +142,7 @@ class TestSelectBestYear:
         year_scores: defaultdict[str, list[int]] = defaultdict(list)
         year_scores["2020"] = [90]
 
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
         assert is_definitive is True
@@ -152,7 +152,7 @@ class TestSelectBestYear:
         year_scores: defaultdict[str, list[int]] = defaultdict(list)
         year_scores["2020"] = [50]
 
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
         assert is_definitive is False
@@ -163,7 +163,7 @@ class TestSelectBestYear:
         year_scores["2025"] = [85]  # Future year
         year_scores["2023"] = [80]  # Past year
 
-        best_year, _is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         # Should prefer 2023 (non-future) over 2025 (future) when scores are close
         assert best_year == "2023"
@@ -174,7 +174,7 @@ class TestSelectBestYear:
         year_scores["2025"] = [95]  # Future year with much higher score
         year_scores["2023"] = [50]  # Past year
 
-        best_year, _is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2025"
 
@@ -425,7 +425,7 @@ class TestIntegration:
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)
-        best_year, is_definitive = resolver.select_best_year(year_scores)
+        best_year, is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
         assert is_definitive is True
@@ -438,7 +438,7 @@ class TestIntegration:
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)
-        best_year, _is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         # Should prefer 2005 (original) due to large year gap
         assert best_year == "2005"
@@ -452,6 +452,6 @@ class TestIntegration:
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)
-        best_year, _is_definitive = resolver.select_best_year(year_scores)
+        best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"

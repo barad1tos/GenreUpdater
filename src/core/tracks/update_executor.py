@@ -134,7 +134,7 @@ class TrackUpdateExecutor:
 
             # Check result - distinguish between actual changes and no-ops
             return self._process_update_result(result, property_name, track_id)
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError, KeyError):
             self.error_logger.exception(
                 "Error updating property %s for track %s",
                 property_name,
@@ -338,13 +338,17 @@ class TrackUpdateExecutor:
                 )
         elif original_artist and original_track:
             self.console_logger.warning(
-                "❌ Failed to update %s for '%s' - '%s'",
+                "❌ Failed to update %s for '%s' - '%s' (check error log for details)",
                 property_name,
                 original_artist,
                 original_track,
             )
         else:
-            self.console_logger.warning("❌ Failed to update %s for %s", property_name, sanitized_track_id)
+            self.console_logger.warning(
+                "❌ Failed to update %s for %s (check error log for details)",
+                property_name,
+                sanitized_track_id,
+            )
         return success
 
     async def _perform_property_updates(

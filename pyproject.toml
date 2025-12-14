@@ -31,12 +31,13 @@ dependencies = [
     "rich==14.2.0",
     "pytest==9.0.2",
     "psutil>=7.1.3",
+    "pygithub>=2.8.1",
 ]
 
 [dependency-groups]
 dev = [
     # Linting & formatting
-    "ruff==0.14.8",
+    "ruff>=0.14.9",
     "mypy==1.19.0",
     "ty==0.0.1a32",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
@@ -57,6 +58,7 @@ dev = [
     "cst-lsp==0.1.3",
     "mutmut>=3.3.1",
     "deptry>=0.24.0",
+    "pre-commit>=4.5.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -83,6 +85,7 @@ exclude = [
     "dist",
     "__pycache__",
     "*/__init__.py",
+    "vulture_whitelist.py",
 ]
 
 # Assume Python 3.13+
@@ -241,6 +244,13 @@ module = [
     "pydantic.*",
     "aiohttp",
     "aiohttp.*",
+    "orjson",
+    "cryptography",
+    "cryptography.*",
+    "rich",
+    "rich.*",
+    "dotenv",
+    "certifi",
 ]
 ignore_missing_imports = true
 
@@ -325,6 +335,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "e2e: marks tests as end-to-end tests",
+    "regression: marks tests as regression tests using real library data",
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 # pydocstyle - google docstyle
@@ -432,6 +443,6 @@ skips = ["B101", "B311", "B404", "B603"]
 paths_to_mutate = ["src/"]
 tests_dir = ["tests/"]
 max_stack_depth = 8
-# Disable coverage for all mutmut pytest calls (baseline + mutations)
-pytest_args = ["--no-cov"]
+# Disable coverage plugin entirely for mutmut (--no-cov alone doesn't prevent fail-under check)
+pytest_args = ["-p", "no:pytest_cov"]
 pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e"]

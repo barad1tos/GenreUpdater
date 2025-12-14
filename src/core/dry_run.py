@@ -9,7 +9,6 @@ music library.
 from __future__ import annotations
 
 # Standard library imports
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from core.models.types import AppleScriptClientProtocol
@@ -113,49 +112,6 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         )
         self.actions.append({"script": script_name, "args": arguments or []})
         return str(DRY_RUN_SUCCESS_MESSAGE)
-
-    async def run_script_code(
-        self,
-        script_code: str,
-        arguments: list[str] | None = None,
-        timeout: float | None = None,
-    ) -> str | None:
-        """Run raw AppleScript code in dry run mode.
-
-        Args:
-            script_code: The AppleScript code to execute
-            arguments: Optional list of arguments
-            timeout: Optional timeout in seconds (deprecated, will be removed in future versions)
-
-        Returns:
-            str | None: DRY_RUN_SUCCESS_MESSAGE or None on error
-
-        """
-
-        async def _execute() -> str:
-            await asyncio.sleep(0)
-            self.console_logger.info("DRY-RUN: Would execute inline AppleScript")
-            self.actions.append({"code": script_code, "args": arguments or []})
-            return DRY_RUN_SUCCESS_MESSAGE
-
-        try:
-            if timeout is not None:
-                # Using asyncio.timeout() context manager for Python 3.11+
-                async with asyncio.timeout(timeout):
-                    return await _execute()
-            return await _execute()
-        except TimeoutError:
-            self.error_logger.exception(
-                "Timeout after %s seconds while executing AppleScript",
-                timeout,
-            )
-            return None
-        except (OSError, RuntimeError, ValueError) as e:
-            self.error_logger.exception(
-                "Error executing AppleScript: %s",
-                str(e),
-            )
-            return None
 
     async def fetch_tracks_by_ids(
         self,

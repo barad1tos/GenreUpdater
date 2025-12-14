@@ -100,6 +100,11 @@ Examples:
 
         # Global options
         parser.add_argument(
+            "--fresh",
+            action="store_true",
+            help="Clear all caches and snapshots before running (fetches fresh data from Music.app)",
+        )
+        parser.add_argument(
             "--force",
             action="store_true",
             help="Force run, bypassing incremental checks and cache",

@@ -357,8 +357,8 @@ class TestAlbumCacheService:
         """Test writing CSV data."""
         with allure.step("Prepare test data"):
             items = [
-                AlbumCacheEntry("The Clash", "London Calling", "1979", 123.456),
-                AlbumCacheEntry("Joy Division", "Unknown Pleasures", "1979", 789.012),
+                AlbumCacheEntry("The Clash", "London Calling", "1979", 123.456, 85),
+                AlbumCacheEntry("Joy Division", "Unknown Pleasures", "1979", 789.012, 70),
             ]
 
         with allure.step("Write to temporary file"):
@@ -373,12 +373,12 @@ class TestAlbumCacheService:
                     rows = list(reader)
 
                     # Check header
-                    assert rows[0] == ["artist", "album", "year", "timestamp"]
+                    assert rows[0] == ["artist", "album", "year", "timestamp", "confidence"]
 
                     # Check data rows
                     assert len(rows) == 3  # Header + 2 data rows
-                    assert rows[1] == ["The Clash", "London Calling", "1979", "123.456000"]
-                    assert rows[2] == ["Joy Division", "Unknown Pleasures", "1979", "789.012000"]
+                    assert rows[1] == ["The Clash", "London Calling", "1979", "123.456000", "85"]
+                    assert rows[2] == ["Joy Division", "Unknown Pleasures", "1979", "789.012000", "70"]
             finally:
                 # Cleanup
                 Path(temp_path).unlink(missing_ok=True)

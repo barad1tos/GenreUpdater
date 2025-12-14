@@ -375,6 +375,34 @@ class TestMergeSmartDelta:
         assert len(result) == 2
 
     @pytest.mark.asyncio
+    async def test_continues_when_new_tracks_missing(
+        self,
+        manager: PipelineSnapshotManager,
+        mock_track_processor: MagicMock,
+        sample_tracks: list[TrackDict],
+        mock_delta: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Should continue (not fallback) when new tracks are missing.
+
+        New tracks may have been deleted between ID fetch and track fetch.
+        This is acceptable and should not trigger fallback.
+        Regression test for Issue #74.
+        """
+        mock_delta.new_ids = ["3", "4"]  # Two new tracks
+        mock_track_processor.fetch_tracks_by_ids = AsyncMock(return_value=[])  # None found
+
+        with caplog.at_level(logging.INFO):
+            result = await manager.merge_smart_delta(sample_tracks, mock_delta)
+
+        # Should NOT return None (no fallback)
+        assert result is not None
+        # Should contain original snapshot tracks
+        assert len(result) == 2
+        # Should log info about missing new tracks
+        assert "no longer exist" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_logs_merge_stats(
         self,
         manager: PipelineSnapshotManager,

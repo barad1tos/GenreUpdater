@@ -299,3 +299,288 @@ class TestExternalApiOrchestrator:
 
         assert isinstance(orchestrator.default_api_retry_delay, float)
         assert orchestrator.default_api_retry_delay >= 0
+
+
+class TestGetArtistStartYear:
+    """Tests for ExternalApiOrchestrator.get_artist_start_year method."""
+
+    @pytest.fixture
+    def mock_config(self) -> dict[str, Any]:
+        """Create mock configuration."""
+        return {
+            "year_retrieval": {
+                "api_auth": {
+                    "discogs_token": "test_token",
+                    "lastfm_api_key": "test_key",
+                    "musicbrainz_app_name": "TestApp/1.0",
+                    "contact_email": "test@example.com",
+                },
+                "rate_limits": {
+                    "discogs_requests_per_minute": 25,
+                    "musicbrainz_requests_per_second": 1,
+                    "lastfm_requests_per_second": 5,
+                    "itunes_requests_per_second": 10,
+                },
+                "processing": {
+                    "cache_ttl_days": 30,
+                    "skip_prerelease": True,
+                    "future_year_threshold": 1,
+                    "prerelease_recheck_days": 30,
+                },
+                "logic": {
+                    "min_valid_year": 1900,
+                    "definitive_score_threshold": 85,
+                    "definitive_score_diff": 15,
+                },
+                "scoring": {},
+            }
+        }
+
+    @pytest.fixture
+    def mock_console_logger(self) -> MagicMock:
+        """Create mock console logger."""
+        return MagicMock(spec=["debug", "info", "warning", "error"])
+
+    @pytest.fixture
+    def mock_error_logger(self) -> MagicMock:
+        """Create mock error logger."""
+        return MagicMock(spec=["debug", "info", "warning", "error", "exception"])
+
+    @pytest.fixture
+    def mock_cache_service(self) -> MagicMock:
+        """Create mock cache service."""
+        mock = MagicMock()
+        mock.generic_service = MagicMock()
+        mock.generic_service.get = MagicMock(return_value=None)
+        mock.generic_service.set = MagicMock()
+        return mock
+
+    @pytest.fixture
+    def mock_pending_verification(self) -> MagicMock:
+        """Create mock pending verification service."""
+        return MagicMock()
+
+    @pytest.fixture
+    def mock_analytics(self) -> MagicMock:
+        """Create mock analytics."""
+        mock = MagicMock()
+        mock.track_operation = MagicMock()
+        return mock
+
+    @pytest.mark.asyncio
+    async def test_returns_cached_value(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test returns cached positive value without API call."""
+        mock_cache_service.generic_service.get.return_value = 1981
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        result = await orchestrator.get_artist_start_year("metallica")
+
+        assert result == 1981
+        mock_cache_service.generic_service.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_cached_negative(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test returns None for cached negative (-1) value."""
+        mock_cache_service.generic_service.get.return_value = -1
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        result = await orchestrator.get_artist_start_year("unknown")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_musicbrainz_first(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test uses MusicBrainz as primary source."""
+        mock_cache_service.generic_service.get.return_value = None
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        # Mock musicbrainz client
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=("1981", None))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
+
+        result = await orchestrator.get_artist_start_year("metallica")
+
+        assert result == 1981
+        orchestrator.musicbrainz_client.get_artist_activity_period.assert_called_once()
+        # iTunes should not be called if MusicBrainz found data
+        orchestrator.applemusic_client.get_artist_start_year.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_itunes(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test falls back to iTunes when MusicBrainz has no data."""
+        mock_cache_service.generic_service.get.return_value = None
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        # Mock clients - MusicBrainz returns None
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(None, None))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
+
+        result = await orchestrator.get_artist_start_year("metallica")
+
+        assert result == 1983
+        orchestrator.applemusic_client.get_artist_start_year.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_caches_positive_result(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test caches positive result with 1 year TTL."""
+        mock_cache_service.generic_service.get.return_value = None
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=("1981", None))
+
+        await orchestrator.get_artist_start_year("metallica")
+
+        # Check cache was set with 1 year TTL
+        mock_cache_service.generic_service.set.assert_called_once()
+        call_args = mock_cache_service.generic_service.set.call_args
+        assert call_args[0][1] == 1981  # Value
+        assert call_args[1]["ttl"] == 31536000  # 1 year in seconds
+
+    @pytest.mark.asyncio
+    async def test_caches_negative_result(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test caches negative result with 1 day TTL."""
+        mock_cache_service.generic_service.get.return_value = None
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(None, None))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=None)
+
+        result = await orchestrator.get_artist_start_year("unknown")
+
+        assert result is None
+        # Check cache was set with -1 (sentinel) and 1 day TTL
+        mock_cache_service.generic_service.set.assert_called_once()
+        call_args = mock_cache_service.generic_service.set.call_args
+        assert call_args[0][1] == -1  # Sentinel for "not found"
+        assert call_args[1]["ttl"] == 86400  # 1 day in seconds
+
+    @pytest.mark.asyncio
+    async def test_handles_invalid_cached_type(
+        self,
+        mock_config: dict[str, Any],
+        mock_console_logger: MagicMock,
+        mock_error_logger: MagicMock,
+        mock_cache_service: MagicMock,
+        mock_pending_verification: MagicMock,
+        mock_analytics: MagicMock,
+    ) -> None:
+        """Test handles invalid cached type gracefully."""
+        # Simulate corrupted cache with dict value
+        mock_cache_service.generic_service.get.return_value = {"invalid": "type"}
+
+        orchestrator = ExternalApiOrchestrator(
+            config=mock_config,
+            console_logger=mock_console_logger,
+            error_logger=mock_error_logger,
+            analytics=mock_analytics,
+            cache_service=mock_cache_service,
+            pending_verification_service=mock_pending_verification,
+        )
+
+        result = await orchestrator.get_artist_start_year("artist")
+
+        assert result is None
+        mock_console_logger.warning.assert_called()

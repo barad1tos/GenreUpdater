@@ -34,8 +34,24 @@ class TestTrackFieldnames:
 
     def test_track_fieldnames_has_year_fields(self) -> None:
         """Verify year-related fields are present."""
+        assert "year" in TRACK_FIELDNAMES
         assert "old_year" in TRACK_FIELDNAMES
         assert "new_year" in TRACK_FIELDNAMES
+
+    def test_track_fieldnames_year_field_position(self) -> None:
+        """Verify year field comes before old_year and new_year."""
+        year_idx = TRACK_FIELDNAMES.index("year")
+        old_year_idx = TRACK_FIELDNAMES.index("old_year")
+        new_year_idx = TRACK_FIELDNAMES.index("new_year")
+        # year should be for delta detection (current), old/new for tracking
+        assert year_idx < old_year_idx
+        assert year_idx < new_year_idx
+
+    def test_track_fieldnames_has_all_core_fields(self) -> None:
+        """Verify all core fields for year change tracking are present."""
+        core_fields = ["id", "name", "artist", "album", "genre", "year", "old_year", "new_year"]
+        for field in core_fields:
+            assert field in TRACK_FIELDNAMES, f"Missing field: {field}"
 
     def test_track_fieldnames_is_list(self) -> None:
         """Verify TRACK_FIELDNAMES is a list of strings."""

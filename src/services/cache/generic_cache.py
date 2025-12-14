@@ -280,7 +280,7 @@ class GenericCacheService:
         await self.initialize()
         return self
 
-    async def __aexit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object) -> None:
+    async def __aexit__(self, _exc_type: type[BaseException] | None, _exc: BaseException | None, _tb: object) -> None:
         """Async context manager exit - ensures cleanup task is stopped."""
         await self.stop_cleanup_task()
 

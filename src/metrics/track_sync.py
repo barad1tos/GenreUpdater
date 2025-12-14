@@ -11,7 +11,7 @@ import csv
 import logging
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from core.models.types import TrackDict
 from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
@@ -23,6 +23,22 @@ if TYPE_CHECKING:
         AppleScriptClientProtocol,
         CacheServiceProtocol,
     )
+
+
+class ParsedTrackFields(TypedDict):
+    """Typed dict for parsed AppleScript track fields.
+
+    Contains the 4 fields extracted from AppleScript output that are
+    needed for track synchronization and delta detection.
+
+    Note: 'year' is the CURRENT year in Music.app (position 9 in AppleScript).
+    This may be used to populate TrackDict.old_year for new tracks.
+    """
+
+    date_added: str
+    last_modified: str
+    track_status: str
+    year: str
 
 
 # Note: TRACK_FIELDNAMES is imported from csv_utils for shared fieldname definition
@@ -75,6 +91,7 @@ def _create_track_from_row(
         artist=track_data["artist"],
         album=track_data["album"],
         genre=track_data["genre"] or None,
+        year=track_data.get("year") or None,  # Current year for delta detection
         date_added=track_data["date_added"] or None,
         last_modified=track_data.get("last_modified", "") or None,
         track_status=track_data["track_status"] or None,
@@ -142,41 +159,39 @@ def _get_processed_albums_from_csv(
     return processed
 
 
-async def _build_current_map(
+async def _build_musicapp_track_map(
     all_tracks: Sequence[TrackDict],
     processed_albums: dict[str, str],
     cache_service: CacheServiceProtocol,
     partial_sync: bool,
     error_logger: logging.Logger,
 ) -> dict[str, TrackDict]:
-    """Return a normalized map id -> track_dict for the current fetch.
+    """Build normalized map {track_id: TrackDict} from Music.app tracks.
 
     Handles partial_sync logic and ensures year consistency with cache & CSV.
     """
-    # Import here to avoid circular imports
-
-    current: dict[str, TrackDict] = {}
-    for tr in all_tracks:
+    track_map: dict[str, TrackDict] = {}
+    for track in all_tracks:
         # Validate track ID
-        tid = (tr.id or "").strip()
-        if not tid:
+        track_id = (track.id or "").strip()
+        if not track_id:
             continue
 
         # Normalize basic fields
-        artist = (tr.artist or "").strip()
-        album = (tr.album or "").strip()
+        artist = (track.artist or "").strip()
+        album = (track.album or "").strip()
         album_key = cache_service.generate_album_key(artist, album)
 
         # Ensure year fields are properly initialized
-        _normalize_track_year_fields(tr)
+        _normalize_track_year_fields(track)
 
         # Handle partial sync with cache coordination
         if partial_sync:
-            await _handle_partial_sync_cache(tr, processed_albums, cache_service, album_key, artist, album, error_logger)
+            await _handle_partial_sync_cache(track, processed_albums, cache_service, album_key, artist, album, error_logger)
 
         # Create normalized track dictionary
-        current[tid] = _create_normalized_track_dict(tr, tid, artist, album)
-    return current
+        track_map[track_id] = _create_normalized_track_dict(track, track_id, artist, album)
+    return track_map
 
 
 def _normalize_track_year_fields(track: TrackDict) -> None:
@@ -226,6 +241,7 @@ def _create_normalized_track_dict(
         artist=artist,
         album=album,
         genre=(track.genre or "").strip(),
+        year=(track.year or "").strip(),  # Current year for delta detection
         date_added=(track.date_added or "").strip(),
         track_status=(track.track_status or "").strip(),
         old_year=(track.old_year or "").strip(),
@@ -233,50 +249,51 @@ def _create_normalized_track_dict(
     )
 
 
-def _get_fields_to_check() -> list[str]:
-    """Get the list of fields that should be checked during track merging.
+def _get_musicapp_syncable_fields() -> list[str]:
+    """Fields that sync FROM Music.app TO CSV during resync.
 
-    Note:
-        Uses old_year and new_year for change tracking. The 'year' field exists
-        in TrackDict but is not populated in this context (reports.py sync operations).
+    Note: old_year and new_year are EXCLUDED because:
+    - They are tracking fields managed by year_batch.py, not sync
+    - AppleScript doesn't provide them (only Music.app's current year)
+    - During sync, we preserve CSV's historical tracking data
     """
     return [
         "name",
         "artist",
         "album",
         "genre",
+        "year",  # Current year for delta detection
         "date_added",
         "track_status",
-        "old_year",
-        "new_year",
+        # old_year/new_year deliberately excluded - preserved from CSV
     ]
 
 
-def _check_if_track_needs_update(
-    old_data: TrackDict,
-    new_data: TrackDict,
+def _track_fields_differ(
+    csv_track: TrackDict,
+    musicapp_track: TrackDict,
     fields: list[str],
 ) -> bool:
-    """Check if a track needs updating based on field differences."""
-    return any(getattr(old_data, field, "") != getattr(new_data, field, "") for field in fields)
+    """Check if CSV track differs from Music.app track in specified fields."""
+    return any(getattr(csv_track, field, "") != getattr(musicapp_track, field, "") for field in fields)
 
 
-def _update_existing_track_fields(
-    old_data: TrackDict,
-    new_data: TrackDict,
+def _update_csv_track_from_musicapp(
+    csv_track: TrackDict,
+    musicapp_track: TrackDict,
     fields: list[str],
 ) -> None:
-    """Update existing track with new field values.
+    """Update CSV track with values from Music.app track.
 
-    Logs a warning if a field does not exist on TrackDict to catch typos
-    and prevent silent failures.
+    Only updates fields that exist on both tracks and have non-None values
+    in Music.app track. Logs warning for missing fields.
     """
     for field in fields:
         missing_in = []
-        if not hasattr(old_data, field):
-            missing_in.append("old_data")
-        if not hasattr(new_data, field):
-            missing_in.append("new_data")
+        if not hasattr(csv_track, field):
+            missing_in.append("csv_track")
+        if not hasattr(musicapp_track, field):
+            missing_in.append("musicapp_track")
         if missing_in:
             logging.warning(
                 "Field '%s' does not exist on %s. Skipping update for this field.",
@@ -284,30 +301,37 @@ def _update_existing_track_fields(
                 " and ".join(missing_in),
             )
             continue
-        new_value = getattr(new_data, field)
-        if new_value is not None:
-            setattr(old_data, field, new_value)
+        musicapp_value = getattr(musicapp_track, field)
+        if musicapp_value is not None:
+            setattr(csv_track, field, musicapp_value)
 
 
-def _merge_current_into_csv(
-    current_map: dict[str, TrackDict],
-    csv_map: dict[str, TrackDict],
+def _merge_musicapp_into_csv(
+    musicapp_tracks: dict[str, TrackDict],
+    csv_tracks: dict[str, TrackDict],
 ) -> int:
-    """Merge *current_map* into *csv_map* and return count of added/updated items."""
-    updated = 0
-    fields_to_check = _get_fields_to_check()
+    """Merge Music.app tracks into CSV tracks dict.
 
-    for tid, new_data in current_map.items():
-        # Add new track if not exists
-        if tid not in csv_map:
-            csv_map[tid] = new_data
+    - New tracks (in Music.app but not CSV): added to csv_tracks
+    - Existing tracks: CSV updated with Music.app values for syncable fields
+    - Tracking fields (old_year, new_year): preserved from CSV
+
+    Returns count of added/updated tracks.
+    """
+    updated = 0
+    syncable_fields = _get_musicapp_syncable_fields()
+
+    for track_id, musicapp_track in musicapp_tracks.items():
+        # Add new track if not in CSV
+        if track_id not in csv_tracks:
+            csv_tracks[track_id] = musicapp_track
             updated += 1
             continue
 
-        # Update existing track if fields have changed
-        old_data = csv_map[tid]
-        if _check_if_track_needs_update(old_data, new_data, fields_to_check):
-            _update_existing_track_fields(old_data, new_data, fields_to_check)
+        # Update existing CSV track if fields differ
+        csv_track = csv_tracks[track_id]
+        if _track_fields_differ(csv_track, musicapp_track, syncable_fields):
+            _update_csv_track_from_musicapp(csv_track, musicapp_track, syncable_fields)
             updated += 1
     return updated
 
@@ -321,63 +345,88 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
 
 
 # AppleScript output field count constants
-_FIELD_COUNT_WITH_ALBUM_ARTIST = 11
-_FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 10
+# Format: id, name, artist, album_artist, album, genre, date_added, modification_date, status, year, release_year, new_year
+_FIELD_COUNT_WITH_ALBUM_ARTIST = 12
+_FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 11
 
-# Field indices for format with album_artist (11 fields)
-_DATE_ADDED_IDX_11 = 6
+# Field indices for format with album_artist (12 fields)
+# 0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added, 7:mod_date, 8:status, 9:year, 10:release_year, 11:new_year
+_DATE_ADDED_IDX_12 = 6
+_MODIFICATION_DATE_IDX_12 = 7
+_STATUS_IDX_12 = 8
+_YEAR_IDX_12 = 9
+
+# Field indices for format without album_artist (11 fields)
+# 0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added, 6:mod_date, 7:status, 8:year, 9:release_year, 10:new_year
+_DATE_ADDED_IDX_11 = 5
+_MODIFICATION_DATE_IDX_11 = 6
 _STATUS_IDX_11 = 7
-_OLD_YEAR_IDX_11 = 8
-
-# Field indices for format without album_artist (10 fields)
-_DATE_ADDED_IDX_10 = 5
-_STATUS_IDX_10 = 6
-_OLD_YEAR_IDX_10 = 7
+_YEAR_IDX_11 = 8
 
 
-def _resolve_field_indices(field_count: int) -> tuple[int, int, int] | None:
-    """Return indices for date_added, status, and old_year columns."""
+def _resolve_field_indices(field_count: int) -> tuple[int, int, int, int] | None:
+    """Return indices for date_added, modification_date, status, and year columns."""
     if field_count == _FIELD_COUNT_WITH_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_11, _STATUS_IDX_11, _OLD_YEAR_IDX_11
+        return _DATE_ADDED_IDX_12, _MODIFICATION_DATE_IDX_12, _STATUS_IDX_12, _YEAR_IDX_12
     if field_count == _FIELD_COUNT_WITHOUT_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_10, _STATUS_IDX_10, _OLD_YEAR_IDX_10
+        return _DATE_ADDED_IDX_11, _MODIFICATION_DATE_IDX_11, _STATUS_IDX_11, _YEAR_IDX_11
     return None
 
 
-def _parse_osascript_output(raw_output: str) -> dict[str, dict[str, str]]:
+_MISSING_VALUE_PLACEHOLDER = "missing value"
+
+
+def _sanitize_applescript_field(value: str) -> str:
+    """Convert AppleScript 'missing value' placeholder to empty string."""
+    return "" if value == _MISSING_VALUE_PLACEHOLDER else value
+
+
+def _parse_single_track_line(
+    fields: list[str],
+    indices: tuple[int, int, int, int],
+) -> ParsedTrackFields:
+    """Parse fields into ParsedTrackFields using resolved indices."""
+    date_added_idx, mod_date_idx, status_idx, year_idx = indices
+    return {
+        "date_added": _sanitize_applescript_field(fields[date_added_idx]),
+        "last_modified": _sanitize_applescript_field(fields[mod_date_idx]),
+        "track_status": _sanitize_applescript_field(fields[status_idx]),
+        "year": _sanitize_applescript_field(fields[year_idx]),
+    }
+
+
+def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     """Parse AppleScript output into track cache dictionary.
 
     Validates field count to detect AppleScript output format changes and logs
     warnings for lines with incorrect field counts to aid debugging.
+
+    Returns:
+        Dict mapping track_id to ParsedTrackFields with date_added,
+        last_modified, track_status, and year.
     """
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     line_separator = chr(29) if chr(29) in raw_output else None
     field_separator = chr(30) if chr(30) in raw_output else "\t"
-    tracks_data = raw_output.strip().split(line_separator) if line_separator else raw_output.strip().splitlines()
+    # Use strip('\n\r') instead of strip() to preserve trailing tabs (empty fields)
+    stripped_output = raw_output.strip("\n\r")
+    tracks_data = stripped_output.split(line_separator) if line_separator else stripped_output.splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
-        if not track_line.strip():  # Skip empty lines
+        if not track_line.strip():
             continue
         fields = track_line.split(field_separator)
         indices = _resolve_field_indices(len(fields))
         if indices is None:
             logging.warning(
-                "Track line %d has %d fields, expected 10 or 11. Skipping line: %r",
+                "Track line %d has %d fields, expected 11 or 12. Skipping line: %r",
                 line_num,
                 len(fields),
-                track_line[:100],  # Truncate long lines for readability
+                track_line[:100],
             )
             continue
-        date_added_index, status_index, old_year_index = indices
-        track_id = fields[0]
-        # Fields order: ID, Name, Artist, Album, Genre, DateAdded, TrackStatus, Year, ReleaseYear, NewYear
-        missing_value = "missing value"
-        tracks_cache[track_id] = {
-            "date_added": (fields[date_added_index] if fields[date_added_index] != missing_value else ""),
-            "track_status": (fields[status_index] if fields[status_index] != missing_value else ""),
-            "old_year": (fields[old_year_index] if fields[old_year_index] != missing_value else ""),
-        }
+        tracks_cache[fields[0]] = _parse_single_track_line(fields, indices)
 
     return tracks_cache
 
@@ -406,7 +455,7 @@ async def _execute_osascript_process(
 async def _fetch_track_fields_direct(
     script_path: str,
     artist_filter: str | None,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, ParsedTrackFields]:
     """Fetch track fields using direct osascript call.
 
     Args:
@@ -414,10 +463,10 @@ async def _fetch_track_fields_direct(
         artist_filter: Artist filter to limit query scope
 
     Returns:
-        Dict mapping track_id to dict with date_added, track_status, old_year fields
-
+        Dict mapping track_id to ParsedTrackFields with date_added,
+        last_modified, track_status, year fields.
     """
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     try:
         cmd = _build_osascript_command(script_path, artist_filter)
@@ -441,9 +490,9 @@ async def _fetch_missing_track_fields_for_sync(
     final_list: list[TrackDict],
     applescript_client: AppleScriptClientProtocol | None,
     console_logger: logging.Logger,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, ParsedTrackFields]:
     """Fetch missing track fields via AppleScript if needed for sync operation."""
-    tracks_cache: dict[str, dict[str, str]] = {}
+    tracks_cache: dict[str, ParsedTrackFields] = {}
 
     has_missing_fields = any(not track.date_added or not track.track_status or not track.old_year for track in final_list if track.id)
 
@@ -477,13 +526,17 @@ async def _fetch_missing_track_fields_for_sync(
 
 def _update_track_with_cached_fields_for_sync(
     track: TrackDict,
-    tracks_cache: dict[str, dict[str, str]],
+    tracks_cache: dict[str, ParsedTrackFields],
 ) -> None:
     """Update track with cached fields if they were empty for sync operation.
 
-    Uses .get() for safe dictionary access to prevent KeyError if cache structure
-    changes. Currently, last_modified is not populated by _parse_osascript_output(),
-    but this defensive approach ensures future compatibility.
+    Populates date_added, last_modified, track_status from AppleScript cache.
+    The last_modified field enables idempotent delta detection by tracking
+    when Music.app metadata was last changed.
+
+    For 'year' field: AppleScript returns the CURRENT year in Music.app.
+    - Populates track.year for delta detection
+    - Populates track.old_year ONLY if empty (preserves original value for rollback)
     """
     if not track.id or track.id not in tracks_cache:
         return
@@ -495,8 +548,14 @@ def _update_track_with_cached_fields_for_sync(
         track.last_modified = cached_value
     if not track.track_status and cached_fields.get("track_status"):
         track.track_status = cached_fields["track_status"]
-    if not track.old_year and cached_fields.get("old_year"):
-        track.old_year = cached_fields["old_year"]
+
+    if cached_year := cached_fields.get("year"):
+        # Always update track.year (current state for delta detection)
+        if not track.year:
+            track.year = cached_year
+        # Set old_year only if empty (preserve original for rollback/audit)
+        if not track.old_year:
+            track.old_year = cached_year
 
 
 def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
@@ -507,6 +566,7 @@ def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
         "artist": track.artist or "",
         "album": track.album or "",
         "genre": track.genre or "",
+        "year": track.year or "",  # Current year for delta detection
         "date_added": track.date_added or "",
         "last_modified": getattr(track, "last_modified", "") or "",
         "track_status": track.track_status or "",
@@ -549,8 +609,8 @@ async def sync_track_list_with_current(
     # 2. Determine albums already processed (for partial sync logic)
     processed_albums = _get_processed_albums_from_csv(csv_map, cache_service)
 
-    # 3. Build normalized map for freshly fetched tracks
-    current_map = await _build_current_map(
+    # 3. Build map of tracks fetched from Music.app
+    musicapp_tracks = await _build_musicapp_track_map(
         all_tracks,
         processed_albums,
         cache_service,
@@ -558,13 +618,13 @@ async def sync_track_list_with_current(
         error_logger,
     )
 
-    # 4. Merge current into CSV map
-    added_or_updated = _merge_current_into_csv(current_map, csv_map)
+    # 4. Merge Music.app tracks into CSV
+    added_or_updated = _merge_musicapp_into_csv(musicapp_tracks, csv_map)
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
 
     # 5. Remove tracks from CSV that no longer exist in Music.app
-    removed_count = len([tid for tid in csv_map if tid not in current_map])
-    csv_map = {tid: track for tid, track in csv_map.items() if tid in current_map}
+    removed_count = len([tid for tid in csv_map if tid not in musicapp_tracks])
+    csv_map = {tid: track for tid, track in csv_map.items() if tid in musicapp_tracks}
 
     if removed_count > 0:
         console_logger.info(

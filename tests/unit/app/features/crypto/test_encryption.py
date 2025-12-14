@@ -62,24 +62,24 @@ def crypto_manager_with_key(logger: logging.Logger, temp_key_file: Path) -> Cryp
 class TestKeyGeneration:
     """Tests for key generation."""
 
-    def test_generate_key_from_password(self, crypto_manager: CryptographyManager) -> None:
-        """Test generating key from password."""
-        key = crypto_manager._generate_key_from_password("test_password")
+    def test_generate_key_from_passphrase(self, crypto_manager: CryptographyManager) -> None:
+        """Test generating key from passphrase."""
+        key = crypto_manager._generate_key_from_passphrase("test_passphrase")
 
         assert isinstance(key, bytes)
         assert len(key) == FERNET_KEY_LENGTH  # Base64-encoded 32 bytes
 
-    def test_same_password_same_key(self, crypto_manager: CryptographyManager) -> None:
-        """Test same password produces same key (deterministic)."""
-        key1 = crypto_manager._generate_key_from_password("test_password")
-        key2 = crypto_manager._generate_key_from_password("test_password")
+    def test_same_passphrase_same_key(self, crypto_manager: CryptographyManager) -> None:
+        """Test same passphrase produces same key (deterministic)."""
+        key1 = crypto_manager._generate_key_from_passphrase("test_passphrase")
+        key2 = crypto_manager._generate_key_from_passphrase("test_passphrase")
 
         assert key1 == key2
 
-    def test_different_passwords_different_keys(self, crypto_manager: CryptographyManager) -> None:
-        """Test different passwords produce different keys."""
-        key1 = crypto_manager._generate_key_from_password("password1")
-        key2 = crypto_manager._generate_key_from_password("password2")
+    def test_different_passphrases_different_keys(self, crypto_manager: CryptographyManager) -> None:
+        """Test different passphrases produce different keys."""
+        key1 = crypto_manager._generate_key_from_passphrase("passphrase1")
+        key2 = crypto_manager._generate_key_from_passphrase("passphrase2")
 
         assert key1 != key2
 
@@ -142,9 +142,9 @@ class TestEncryption:
         with pytest.raises(EncryptionError, match="cannot be empty"):
             crypto_manager_with_key.encrypt_token("")
 
-    def test_encrypt_with_password(self, crypto_manager: CryptographyManager) -> None:
-        """Test encryption with password."""
-        encrypted = crypto_manager.encrypt_token(SAMPLE_PLAINTEXT, password=SAMPLE_PHRASE)
+    def test_encrypt_with_passphrase(self, crypto_manager: CryptographyManager) -> None:
+        """Test encryption with passphrase."""
+        encrypted = crypto_manager.encrypt_token(SAMPLE_PLAINTEXT, passphrase=SAMPLE_PHRASE)
 
         assert encrypted != SAMPLE_PLAINTEXT
 
@@ -182,12 +182,12 @@ class TestDecryption:
 
         # Try to decrypt with different key
         with pytest.raises(DecryptionError):
-            crypto_manager.decrypt_token(encrypted, password=SAMPLE_WRONG_PHRASE)
+            crypto_manager.decrypt_token(encrypted, passphrase=SAMPLE_WRONG_PHRASE)
 
-    def test_roundtrip_with_password(self, crypto_manager: CryptographyManager) -> None:
-        """Test encryption/decryption roundtrip with password."""
-        encrypted = crypto_manager.encrypt_token(SAMPLE_API_VALUE, password=SAMPLE_STRONG_PHRASE)
-        decrypted = crypto_manager.decrypt_token(encrypted, password=SAMPLE_STRONG_PHRASE)
+    def test_roundtrip_with_passphrase(self, crypto_manager: CryptographyManager) -> None:
+        """Test encryption/decryption roundtrip with passphrase."""
+        encrypted = crypto_manager.encrypt_token(SAMPLE_API_VALUE, passphrase=SAMPLE_STRONG_PHRASE)
+        decrypted = crypto_manager.decrypt_token(encrypted, passphrase=SAMPLE_STRONG_PHRASE)
 
         assert decrypted == SAMPLE_API_VALUE
 
@@ -243,13 +243,13 @@ class TestKeyRotation:
         backup_path = temp_key_file.with_suffix(".key.backup")
         assert not backup_path.exists()
 
-    def test_rotate_key_with_password(self, crypto_manager_with_key: CryptographyManager) -> None:
-        """Test key rotation with password."""
-        crypto_manager_with_key.rotate_key(new_password=SAMPLE_NEW_PHRASE)
+    def test_rotate_key_with_passphrase(self, crypto_manager_with_key: CryptographyManager) -> None:
+        """Test key rotation with passphrase."""
+        crypto_manager_with_key.rotate_key(new_passphrase=SAMPLE_NEW_PHRASE)
 
-        # Should be able to encrypt with new password-derived key
-        encrypted = crypto_manager_with_key.encrypt_token("test", password=SAMPLE_NEW_PHRASE)
-        decrypted = crypto_manager_with_key.decrypt_token(encrypted, password=SAMPLE_NEW_PHRASE)
+        # Should be able to encrypt with new passphrase-derived key
+        encrypted = crypto_manager_with_key.encrypt_token("test", passphrase=SAMPLE_NEW_PHRASE)
+        decrypted = crypto_manager_with_key.decrypt_token(encrypted, passphrase=SAMPLE_NEW_PHRASE)
 
         assert decrypted == "test"
 

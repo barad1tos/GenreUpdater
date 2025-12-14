@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         PendingVerificationServiceProtocol,
     )
     from core.models.track_models import ChangeLogEntry, TrackDict
+    from core.retry_handler import DatabaseRetryHandler
 
     from .track_processor import TrackProcessor
 
@@ -72,6 +73,7 @@ class YearRetriever:
         cache_service: CacheServiceProtocol,
         external_api: ExternalApiServiceProtocol,
         pending_verification: PendingVerificationServiceProtocol,
+        retry_handler: DatabaseRetryHandler,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: Analytics,
@@ -85,6 +87,7 @@ class YearRetriever:
             cache_service: Cache service for storing years
             external_api: External API service for fetching years
             pending_verification: Service for managing pending verifications
+            retry_handler: Retry handler for transient error recovery
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics: Analytics instance for tracking
@@ -141,6 +144,7 @@ class YearRetriever:
             fallback_enabled=self.fallback_enabled,
             absurd_year_threshold=self.absurd_year_threshold,
             year_difference_threshold=self.year_difference_threshold,
+            api_orchestrator=self.external_api,
         )
 
         # Initialize year determinator
@@ -159,6 +163,7 @@ class YearRetriever:
         self._batch_processor = YearBatchProcessor(
             year_determinator=self._year_determinator,
             track_processor=self.track_processor,
+            retry_handler=retry_handler,
             console_logger=self.console_logger,
             error_logger=self.error_logger,
             config=self.config,
