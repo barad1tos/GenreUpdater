@@ -1513,23 +1513,29 @@ class TestProcessSingleAlbumIntegration:
         self,
         year_retriever: YearRetriever,
     ) -> None:
-        """Test uses dominant year when available."""
+        """Test uses dominant year when available.
+
+        When consistency_checker.get_dominant_year returns a year,
+        determine_album_year should return that year directly.
+        """
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="", track_status="subscription"),
             TrackDict(id="2", name="T2", artist="A", album="Al", genre="R", year="2020", track_status="subscription"),
             TrackDict(id="3", name="T3", artist="A", album="Al", genre="R", year="2020", track_status="subscription"),
         ]
-        mock_process_dominant = AsyncMock(return_value=True)
+        mock_determine_year = AsyncMock(return_value="2020")
+        mock_update_tracks = AsyncMock()
 
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value="2020"),
-            unittest.mock.patch.object(year_retriever._batch_processor, "_process_dominant_year", mock_process_dominant),
+            unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
+            unittest.mock.patch.object(year_retriever._batch_processor, "_update_tracks_for_album", mock_update_tracks),
         ):
             await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
-            mock_process_dominant.assert_called_once()
+            mock_determine_year.assert_called_once()
+            mock_update_tracks.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_determines_year_from_api_when_no_dominant(
