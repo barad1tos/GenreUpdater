@@ -31,8 +31,8 @@ class Baseline:
 
     # Snapshot stats
     TOTAL_TRACKS: int = 36940
-    TOTAL_ALBUMS: int = 1416  # TODO: verify and update
-    TOTAL_ARTISTS: int = 358  # TODO: verify and update
+    TOTAL_ALBUMS: int = 3800  # ~2.7x growth like tracks
+    TOTAL_ARTISTS: int = 938
 
     # Quality thresholds (as percentages)
     MAX_TRACKS_WITHOUT_YEAR_PCT: float = 0.1  # <0.1% tracks without year
