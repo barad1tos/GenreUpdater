@@ -531,7 +531,7 @@ class TestParseOsascriptOutput:
         assert result["1"]["date_added"] == "2024-01-01"
         assert result["1"]["last_modified"] == "2024-01-02"
         assert result["1"]["track_status"] == "OK"
-        assert result["1"]["old_year"] == "2020"
+        assert result["1"]["year"] == "2020"
 
     def test_parses_12_field_output(self) -> None:
         """Should parse 12-field output (with album_artist)."""
@@ -544,7 +544,7 @@ class TestParseOsascriptOutput:
         assert result["1"]["date_added"] == "2024-01-01"
         assert result["1"]["last_modified"] == "2024-01-02"
         assert result["1"]["track_status"] == "OK"
-        assert result["1"]["old_year"] == "2020"
+        assert result["1"]["year"] == "2020"
 
     def test_parses_chr30_separated_output(self) -> None:
         """Should parse chr(30) field-separated output."""
@@ -568,7 +568,7 @@ class TestParseOsascriptOutput:
         assert result["1"]["date_added"] == ""
         assert result["1"]["last_modified"] == ""
         assert result["1"]["track_status"] == ""
-        assert result["1"]["old_year"] == ""
+        assert result["1"]["year"] == ""
 
     def test_skips_empty_lines(self) -> None:
         """Should skip empty lines."""
@@ -605,7 +605,7 @@ class TestParsedTrackFieldsTyping:
         assert "date_added" in track_fields
         assert "last_modified" in track_fields
         assert "track_status" in track_fields
-        assert "old_year" in track_fields
+        assert "year" in track_fields
 
     def test_parsed_fields_are_strings(self) -> None:
         """Should return string values for all fields."""
@@ -617,7 +617,7 @@ class TestParsedTrackFieldsTyping:
         assert isinstance(track_fields["date_added"], str)
         assert isinstance(track_fields["last_modified"], str)
         assert isinstance(track_fields["track_status"], str)
-        assert isinstance(track_fields["old_year"], str)
+        assert isinstance(track_fields["year"], str)
 
     def test_typed_dict_assignment_compiles(self) -> None:
         """Should allow direct assignment to ParsedTrackFields variable."""
@@ -626,7 +626,7 @@ class TestParsedTrackFieldsTyping:
             "date_added": "2024-01-01",
             "last_modified": "2024-01-02",
             "track_status": "OK",
-            "old_year": "2020",
+            "year": "2020",
         }
 
         assert fields["date_added"] == "2024-01-01"
@@ -712,7 +712,7 @@ class TestStripPreservesTrailingTabs:
         result = _parse_osascript_output(raw_output)
 
         assert "1" in result
-        assert result["1"]["old_year"] == ""
+        assert result["1"]["year"] == ""
 
     def test_strip_only_removes_newlines_not_tabs(self) -> None:
         """Should strip newlines/carriage returns but not tabs."""
@@ -748,11 +748,11 @@ class TestResolveFieldIndicesTyping:
 
         assert result is not None
         assert len(result) == 4
-        date_added_idx, mod_date_idx, status_idx, old_year_idx = result
+        date_added_idx, mod_date_idx, status_idx, year_idx = result
         assert isinstance(date_added_idx, int)
         assert isinstance(mod_date_idx, int)
         assert isinstance(status_idx, int)
-        assert isinstance(old_year_idx, int)
+        assert isinstance(year_idx, int)
 
     def test_returns_4_tuple_for_11_fields(self) -> None:
         """Should return 4-element tuple for 11-field format."""
@@ -780,12 +780,12 @@ class TestResolveFieldIndicesTyping:
         result = _resolve_field_indices(12)
 
         assert result is not None
-        date_added_idx, mod_date_idx, status_idx, old_year_idx = result
+        date_added_idx, mod_date_idx, status_idx, year_idx = result
 
         # All 4 indices should be consecutive
         assert mod_date_idx == date_added_idx + 1
         assert status_idx == mod_date_idx + 1
-        assert old_year_idx == status_idx + 1
+        assert year_idx == status_idx + 1
 
 
 class TestSanitizeApplescriptField:
@@ -829,7 +829,7 @@ class TestParseSingleTrackLine:
         assert result["date_added"] == "2024-01-01"
         assert result["last_modified"] == "2024-01-02"
         assert result["track_status"] == "OK"
-        assert result["old_year"] == "2020"
+        assert result["year"] == "2020"
 
     def test_parses_fields_with_11_field_indices(self) -> None:
         """Should parse fields correctly using 11-field indices."""
@@ -841,7 +841,7 @@ class TestParseSingleTrackLine:
         assert result["date_added"] == "2024-01-01"
         assert result["last_modified"] == "2024-01-02"
         assert result["track_status"] == "OK"
-        assert result["old_year"] == "2020"
+        assert result["year"] == "2020"
 
     def test_sanitizes_missing_value_in_all_fields(self) -> None:
         """Should sanitize 'missing value' placeholder in all fields."""
@@ -853,7 +853,7 @@ class TestParseSingleTrackLine:
         assert result["date_added"] == ""
         assert result["last_modified"] == ""
         assert result["track_status"] == ""
-        assert result["old_year"] == ""
+        assert result["year"] == ""
 
     def test_returns_typed_dict(self) -> None:
         """Should return properly typed ParsedTrackFields."""
@@ -863,7 +863,7 @@ class TestParseSingleTrackLine:
         result: ParsedTrackFields = _parse_single_track_line(fields, indices)
 
         assert isinstance(result, dict)
-        assert set(result.keys()) == {"date_added", "last_modified", "track_status", "old_year"}
+        assert set(result.keys()) == {"date_added", "last_modified", "track_status", "year"}
 
 
 class TestHandleOsascriptError:
@@ -885,16 +885,21 @@ class TestHandleOsascriptError:
 
 
 class TestUpdateTrackWithCachedFieldsForSync:
-    """Tests for _update_track_with_cached_fields_for_sync function."""
+    """Tests for _update_track_with_cached_fields_for_sync function.
+
+    Note: ParsedTrackFields uses 'year' key for Music.app's current year.
+    This gets mapped to track.old_year (for new tracks) and track.year (for delta detection).
+    """
 
     def test_updates_empty_fields_from_cache(self) -> None:
         """Should update empty fields from cache."""
-        track = _create_test_track("6", date_added=None, track_status=None, old_year=None)
-        tracks_cache = {
+        track = _create_test_track("6", date_added=None, track_status=None, year=None, old_year=None)
+        tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",
+                "last_modified": "2024-06-02",
                 "track_status": "Playing",
-                "old_year": "2018",
+                "year": "2018",  # Music.app's current year → populates track.old_year AND track.year
             }
         }
 
@@ -902,16 +907,18 @@ class TestUpdateTrackWithCachedFieldsForSync:
 
         assert track.date_added == "2024-06-01"
         assert track.track_status == "Playing"
-        assert track.old_year == "2018"
+        assert track.year == "2018"  # Populated from cache
+        assert track.old_year == "2018"  # Populated from cache (original value for rollback)
 
     def test_preserves_existing_fields(self) -> None:
         """Should not overwrite existing field values."""
-        track = _create_test_track("6", date_added="2023-05-01", track_status="Paused", old_year="2017")
-        tracks_cache = {
+        track = _create_test_track("6", date_added="2023-05-01", track_status="Paused", year="2016", old_year="2017")
+        tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",
+                "last_modified": "2024-06-02",
                 "track_status": "Playing",
-                "old_year": "2018",
+                "year": "2018",
             }
         }
 
@@ -919,12 +926,13 @@ class TestUpdateTrackWithCachedFieldsForSync:
 
         assert track.date_added == "2023-05-01"
         assert track.track_status == "Paused"
-        assert track.old_year == "2017"
+        assert track.year == "2016"  # Preserved (not overwritten)
+        assert track.old_year == "2017"  # Preserved (original value)
 
     def test_skips_track_not_in_cache(self) -> None:
         """Should skip tracks not in cache."""
         track = _create_test_track("7", date_added=None)
-        tracks_cache: dict[str, dict[str, str]] = {}
+        tracks_cache: dict[str, ParsedTrackFields] = {}
 
         _update_track_with_cached_fields_for_sync(track, tracks_cache)
 
@@ -933,7 +941,7 @@ class TestUpdateTrackWithCachedFieldsForSync:
     def test_skips_track_without_id(self) -> None:
         """Should skip tracks without id."""
         track = TrackDict(id="", name="Test", artist="Artist", album="Album")
-        tracks_cache = {"": {"date_added": "2024-01-01"}}
+        tracks_cache: dict[str, ParsedTrackFields] = {"": {"date_added": "2024-01-01", "last_modified": "", "track_status": "", "year": ""}}
 
         _update_track_with_cached_fields_for_sync(track, tracks_cache)
 

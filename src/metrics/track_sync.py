@@ -30,12 +30,15 @@ class ParsedTrackFields(TypedDict):
 
     Contains the 4 fields extracted from AppleScript output that are
     needed for track synchronization and delta detection.
+
+    Note: 'year' is the CURRENT year in Music.app (position 9 in AppleScript).
+    This may be used to populate TrackDict.old_year for new tracks.
     """
 
     date_added: str
     last_modified: str
     track_status: str
-    old_year: str
+    year: str
 
 
 # Note: TRACK_FIELDNAMES is imported from csv_utils for shared fieldname definition
@@ -351,22 +354,22 @@ _FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 11
 _DATE_ADDED_IDX_12 = 6
 _MODIFICATION_DATE_IDX_12 = 7
 _STATUS_IDX_12 = 8
-_OLD_YEAR_IDX_12 = 9
+_YEAR_IDX_12 = 9
 
 # Field indices for format without album_artist (11 fields)
 # 0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added, 6:mod_date, 7:status, 8:year, 9:release_year, 10:new_year
 _DATE_ADDED_IDX_11 = 5
 _MODIFICATION_DATE_IDX_11 = 6
 _STATUS_IDX_11 = 7
-_OLD_YEAR_IDX_11 = 8
+_YEAR_IDX_11 = 8
 
 
 def _resolve_field_indices(field_count: int) -> tuple[int, int, int, int] | None:
-    """Return indices for date_added, modification_date, status, and old_year columns."""
+    """Return indices for date_added, modification_date, status, and year columns."""
     if field_count == _FIELD_COUNT_WITH_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_12, _MODIFICATION_DATE_IDX_12, _STATUS_IDX_12, _OLD_YEAR_IDX_12
+        return _DATE_ADDED_IDX_12, _MODIFICATION_DATE_IDX_12, _STATUS_IDX_12, _YEAR_IDX_12
     if field_count == _FIELD_COUNT_WITHOUT_ALBUM_ARTIST:
-        return _DATE_ADDED_IDX_11, _MODIFICATION_DATE_IDX_11, _STATUS_IDX_11, _OLD_YEAR_IDX_11
+        return _DATE_ADDED_IDX_11, _MODIFICATION_DATE_IDX_11, _STATUS_IDX_11, _YEAR_IDX_11
     return None
 
 
@@ -383,12 +386,12 @@ def _parse_single_track_line(
     indices: tuple[int, int, int, int],
 ) -> ParsedTrackFields:
     """Parse fields into ParsedTrackFields using resolved indices."""
-    date_added_idx, mod_date_idx, status_idx, old_year_idx = indices
+    date_added_idx, mod_date_idx, status_idx, year_idx = indices
     return {
         "date_added": _sanitize_applescript_field(fields[date_added_idx]),
         "last_modified": _sanitize_applescript_field(fields[mod_date_idx]),
         "track_status": _sanitize_applescript_field(fields[status_idx]),
-        "old_year": _sanitize_applescript_field(fields[old_year_idx]),
+        "year": _sanitize_applescript_field(fields[year_idx]),
     }
 
 
@@ -400,7 +403,7 @@ def _parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
 
     Returns:
         Dict mapping track_id to ParsedTrackFields with date_added,
-        last_modified, track_status, and old_year.
+        last_modified, track_status, and year.
     """
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
@@ -461,7 +464,7 @@ async def _fetch_track_fields_direct(
 
     Returns:
         Dict mapping track_id to ParsedTrackFields with date_added,
-        last_modified, track_status, old_year fields.
+        last_modified, track_status, year fields.
     """
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
@@ -527,9 +530,13 @@ def _update_track_with_cached_fields_for_sync(
 ) -> None:
     """Update track with cached fields if they were empty for sync operation.
 
-    Populates date_added, last_modified, track_status, and old_year from
-    AppleScript cache. The last_modified field enables idempotent delta detection
-    by tracking when Music.app metadata was last changed.
+    Populates date_added, last_modified, track_status from AppleScript cache.
+    The last_modified field enables idempotent delta detection by tracking
+    when Music.app metadata was last changed.
+
+    For 'year' field: AppleScript returns the CURRENT year in Music.app.
+    - Populates track.year for delta detection
+    - Populates track.old_year ONLY if empty (preserves original value for rollback)
     """
     if not track.id or track.id not in tracks_cache:
         return
@@ -541,8 +548,16 @@ def _update_track_with_cached_fields_for_sync(
         track.last_modified = cached_value
     if not track.track_status and cached_fields.get("track_status"):
         track.track_status = cached_fields["track_status"]
-    if not track.old_year and cached_fields.get("old_year"):
-        track.old_year = cached_fields["old_year"]
+
+    # Year handling: AppleScript's 'year' = current year in Music.app
+    cached_year = cached_fields.get("year")
+    if cached_year:
+        # Always update track.year (current state for delta detection)
+        if not track.year:
+            track.year = cached_year
+        # Set old_year only if empty (preserve original for rollback/audit)
+        if not track.old_year:
+            track.old_year = cached_year
 
 
 def _convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
