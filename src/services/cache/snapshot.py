@@ -526,9 +526,7 @@ class LibrarySnapshotService:
         updated_ids = [
             track_id
             for track_id in common_ids
-            if track_id in current_map
-            and track_id in snapshot_map
-            and has_track_changed(current_map[track_id], snapshot_map[track_id])
+            if track_id in current_map and track_id in snapshot_map and has_track_changed(current_map[track_id], snapshot_map[track_id])
         ]
         self.logger.info(
             "Force scan found %d updated tracks (checked %d/%d common)",

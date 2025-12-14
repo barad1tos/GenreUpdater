@@ -274,8 +274,7 @@ class YearFallbackHandler:
         if existing_int < artist_start:
             # Existing year is BEFORE artist started → IMPOSSIBLE
             self.console_logger.info(
-                "[PLAUSIBILITY] Existing year %d is before artist '%s' started (%d), "
-                "applying API year %s",
+                "[PLAUSIBILITY] Existing year %d is before artist '%s' started (%d), applying API year %s",
                 existing_int,
                 artist,
                 artist_start,

@@ -14,7 +14,6 @@ The iTunes Search API is particularly valuable for:
 API Reference: https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/
 """
 
-
 import contextlib
 import logging
 import traceback
@@ -393,9 +392,7 @@ class AppleMusicClient:
 
         return response_data
 
-    def _extract_release_years(
-        self, results: list[dict[str, Any]], artist_norm: str
-    ) -> list[int]:
+    def _extract_release_years(self, results: list[dict[str, Any]], artist_norm: str) -> list[int]:
         """Extract valid release years from iTunes search results.
 
         Args:
@@ -417,9 +414,7 @@ class AppleMusicClient:
         return years
 
     @staticmethod
-    def _extract_year_from_result(
-            result: dict[str, Any], artist_norm_lower: str
-    ) -> int | None:
+    def _extract_year_from_result(result: dict[str, Any], artist_norm_lower: str) -> int | None:
         """Extract release year from a single iTunes result if it matches artist.
 
         Args:

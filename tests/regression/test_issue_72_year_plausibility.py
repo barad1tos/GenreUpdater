@@ -137,8 +137,7 @@ class TestIssue72YearPlausibility:
 
         # High confidence = always apply API year
         assert result is False, (
-            "Issue #72 regression: High confidence API year not applied. "
-            "With confidence >= 70%, API year should always be applied."
+            "Issue #72 regression: High confidence API year not applied. With confidence >= 70%, API year should always be applied."
         )
 
     @pytest.mark.asyncio
@@ -166,8 +165,7 @@ class TestIssue72YearPlausibility:
 
         # Should skip (True = preserve existing plausible year)
         assert result is True, (
-            "Plausibility check incorrectly rejected a valid year. "
-            "1986 is plausible for Metallica (formed 1981) and should be preserved."
+            "Plausibility check incorrectly rejected a valid year. 1986 is plausible for Metallica (formed 1981) and should be preserved."
         )
 
         # Should be marked for verification (suspicious change)
@@ -225,8 +223,7 @@ class TestIssue72FullFlow:
 
         # Should return proposed year (2025), not preserve impossible year (2000)
         assert result == "2025", (
-            f"Issue #72 regression: apply_year_fallback returned '{result}' "
-            "instead of '2025'. Impossible year 2000 should NOT be preserved."
+            f"Issue #72 regression: apply_year_fallback returned '{result}' instead of '2025'. Impossible year 2000 should NOT be preserved."
         )
 
 

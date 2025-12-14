@@ -259,10 +259,7 @@ def _track_fields_differ(
     fields: list[str],
 ) -> bool:
     """Check if CSV track differs from Music.app track in specified fields."""
-    return any(
-        getattr(csv_track, field, "") != getattr(musicapp_track, field, "")
-        for field in fields
-    )
+    return any(getattr(csv_track, field, "") != getattr(musicapp_track, field, "") for field in fields)
 
 
 def _update_csv_track_from_musicapp(

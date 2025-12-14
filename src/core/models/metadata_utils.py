@@ -54,7 +54,7 @@ class AppleScriptFieldIndex(IntEnum):
     GENRE = auto()
     DATE_ADDED = auto()
     TRACK_STATUS = auto()
-    YEAR = auto()          # Music.app's "year" property (NOT historical!)
+    YEAR = auto()  # Music.app's "year" property (NOT historical!)
     RELEASE_YEAR = auto()  # Extracted from "release date" property
     # Position 10 is always empty "" from AppleScript - not mapped
 
@@ -127,10 +127,10 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         genre=fields[idx.GENRE].strip(),
         date_added=fields[idx.DATE_ADDED].strip(),
         track_status=track_status or None,
-        year=musicapp_year,           # Current year in Music.app
-        release_year=release_year,    # From release date metadata
-        old_year=musicapp_year,       # Initial value for new tracks (will be preserved)
-        new_year="",                  # Empty until MGU updates this track
+        year=musicapp_year,  # Current year in Music.app
+        release_year=release_year,  # From release date metadata
+        old_year=musicapp_year,  # Initial value for new tracks (will be preserved)
+        new_year="",  # Empty until MGU updates this track
     )
 
     if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):

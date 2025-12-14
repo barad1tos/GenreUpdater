@@ -444,9 +444,7 @@ class TestGetArtistStartYear:
 
         # Mock musicbrainz client
         orchestrator.musicbrainz_client = MagicMock()
-        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(
-            return_value=("1981", None)
-        )
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=("1981", None))
         orchestrator.applemusic_client = MagicMock()
         orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
 
@@ -481,9 +479,7 @@ class TestGetArtistStartYear:
 
         # Mock clients - MusicBrainz returns None
         orchestrator.musicbrainz_client = MagicMock()
-        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(
-            return_value=(None, None)
-        )
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(None, None))
         orchestrator.applemusic_client = MagicMock()
         orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
 
@@ -515,9 +511,7 @@ class TestGetArtistStartYear:
         )
 
         orchestrator.musicbrainz_client = MagicMock()
-        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(
-            return_value=("1981", None)
-        )
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=("1981", None))
 
         await orchestrator.get_artist_start_year("metallica")
 
@@ -550,9 +544,7 @@ class TestGetArtistStartYear:
         )
 
         orchestrator.musicbrainz_client = MagicMock()
-        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(
-            return_value=(None, None)
-        )
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(None, None))
         orchestrator.applemusic_client = MagicMock()
         orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=None)
 

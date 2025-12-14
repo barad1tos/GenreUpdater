@@ -425,9 +425,7 @@ class TrackProcessor:
 
         # Use dedicated timeout for ID-based batch fetch (default 120s = 2 min per batch)
         # This is much shorter than full_library_fetch because we're fetching by specific IDs
-        timeout = int(
-            self.config.get("applescript_timeouts", {}).get("ids_batch_fetch", 120)
-        )
+        timeout = int(self.config.get("applescript_timeouts", {}).get("ids_batch_fetch", 120))
 
         collected: list[TrackDict] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size

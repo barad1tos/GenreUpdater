@@ -144,21 +144,12 @@ class TestGetDominantYearNoMisleadingLog:
         assert result is None
 
         # Check that we DID log about suspicious year (can be WARNING or INFO)
-        suspicious_logs = [
-            msg for level, msg, args in mock_logger.logged_messages
-            if "suspicious" in msg.lower()
-        ]
+        suspicious_logs = [msg for level, msg, args in mock_logger.logged_messages if "suspicious" in msg.lower()]
         assert suspicious_logs, "Should log that year is marked suspicious"
 
         # Check that we did NOT log "No dominant year (below X%)"
-        misleading_logs = [
-            msg for level, msg, args in mock_logger.logged_messages
-            if "No dominant year (below" in msg
-        ]
-        assert not misleading_logs, (
-            f"Should NOT log 'No dominant year (below X%)' for suspicious year. "
-            f"Found: {misleading_logs}"
-        )
+        misleading_logs = [msg for level, msg, args in mock_logger.logged_messages if "No dominant year (below" in msg]
+        assert not misleading_logs, f"Should NOT log 'No dominant year (below X%)' for suspicious year. Found: {misleading_logs}"
 
     def test_genuinely_below_threshold_logs_no_dominant_message(
         self,
@@ -179,13 +170,9 @@ class TestGetDominantYearNoMisleadingLog:
         assert result is None
 
         # Check that we DID log "No dominant year (below X%)"
-        below_threshold_logs = [
-            msg for level, msg, args in mock_logger.logged_messages
-            if "No dominant year (below" in msg
-        ]
+        below_threshold_logs = [msg for level, msg, args in mock_logger.logged_messages if "No dominant year (below" in msg]
         assert len(below_threshold_logs) == 1, (
-            f"Should log 'No dominant year (below X%)' for genuinely low dominance. "
-            f"Logs: {mock_logger.logged_messages}"
+            f"Should log 'No dominant year (below X%)' for genuinely low dominance. Logs: {mock_logger.logged_messages}"
         )
 
 
@@ -219,14 +206,10 @@ class TestSuspiciousYearLogging:
 
         # Find INFO logs about suspicious year (from _check_majority_dominance)
         info_suspicious_logs = [
-            (msg, args) for level, msg, args in mock_logger.logged_messages
-            if level == logging.INFO and "suspicious" in msg.lower()
+            (msg, args) for level, msg, args in mock_logger.logged_messages if level == logging.INFO and "suspicious" in msg.lower()
         ]
 
-        assert info_suspicious_logs, (
-            f"Should log INFO message about suspicious year. "
-            f"All logs: {mock_logger.logged_messages}"
-        )
+        assert info_suspicious_logs, f"Should log INFO message about suspicious year. All logs: {mock_logger.logged_messages}"
 
         # The new message format includes percentage
         log_msg, log_args = info_suspicious_logs[0]
@@ -234,6 +217,4 @@ class TestSuspiciousYearLogging:
 
         assert "2003" in formatted, f"Log should mention year 2003: {formatted}"
         # The new format shows percentage like "100.0%" or track counts like "15/15"
-        assert "100" in formatted or "15/15" in formatted, (
-            f"Log should show 100% or 15/15 in new format: {formatted}"
-        )
+        assert "100" in formatted or "15/15" in formatted, f"Log should show 100% or 15/15 in new format: {formatted}"
