@@ -114,6 +114,16 @@ class YearFallbackHandler:
         # Get existing year from tracks (needed for subsequent rules)
         existing_year = self.get_existing_year_from_tracks(album_tracks)
 
+        # Early exit: No change needed if existing year equals proposed year
+        if existing_year and existing_year == proposed_year:
+            self.console_logger.debug(
+                "[FALLBACK] No change needed for %s - %s (existing year %s matches proposed)",
+                artist,
+                album,
+                existing_year,
+            )
+            return proposed_year
+
         # Rule 2: Absurd year detection (when no existing year to compare)
         if await self._handle_absurd_year(proposed_year, existing_year, artist, album):
             return None

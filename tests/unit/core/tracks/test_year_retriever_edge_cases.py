@@ -855,6 +855,41 @@ class TestYearFallbackLogic:
         # Still marks for verification (original behavior for low confidence)
         assert len(mock_pending.marked_albums) == 1
 
+    @allure.story("Fallback Decision")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("FIX: Early exit when existing == proposed (Issue #81)")
+    @pytest.mark.asyncio
+    async def test_fallback_skips_when_years_match(self) -> None:
+        """Test that fallback returns early when existing year equals proposed year.
+
+        This is the FIX for Issue #81: Redundant FALLBACK check when existing == proposed.
+        No need to process special album types or log warnings when no change is needed.
+        """
+        mock_pending = MockPendingVerificationService()
+        retriever = self.create_retriever_with_fallback(
+            pending_verification=mock_pending,
+        )
+
+        # Special album type (compilation) - would normally log FALLBACK warning
+        tracks = [
+            TrackDict(id="1", name="T1", artist="My Dying Bride", album="34.788%... Complete", year="1998"),
+            TrackDict(id="2", name="T2", artist="My Dying Bride", album="34.788%... Complete", year="1998"),
+        ]
+
+        result = await retriever.year_fallback_handler.apply_year_fallback(
+            proposed_year="1998",  # Same as existing!
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="My Dying Bride",
+            album="34.788%... Complete",
+        )
+
+        # Should return the year (no change needed)
+        assert result == "1998", "Should return proposed year when it matches existing"
+        # Should NOT mark for verification (no change = no need to verify)
+        assert len(mock_pending.marked_albums) == 0, "Should not mark when years match"
+
 
 @allure.epic("Music Genre Updater")
 @allure.feature("Year Retrieval Fallback")
