@@ -461,8 +461,8 @@ class MusicUpdater:
         genre_changes = await self._update_all_genres(tracks, last_run_time, force)
         all_changes.extend(genre_changes)
 
-        # Step 4: Update years (use incremental tracks - the year retriever handles album-level logic)
-        year_changes = await self._update_all_years_with_logs(incremental_tracks, force)
+        # Step 4: Update years (use ALL tracks - YearBatchProcessor handles internal skip logic)
+        year_changes = await self._update_all_years_with_logs(tracks, force)
         all_changes.extend(year_changes)
 
         # Save combined results including all changes
