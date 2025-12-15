@@ -18,10 +18,7 @@ from core.models.protocols import AppleScriptClientProtocol
 from metrics import Analytics
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
-from services.apple.sanitizer import (
-    AppleScriptSanitizer,
-    DANGEROUS_ARGUMENT_CHARACTERS,
-)
+from services.apple.sanitizer import AppleScriptSanitizer
 
 if TYPE_CHECKING:
     from core.retry_handler import DatabaseRetryHandler
@@ -148,7 +145,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
         else:
             self.console_logger.debug("Semaphore already initialized")
 
-    def _build_command_with_args(self, script_path: str, arguments: list[str] | None) -> list[str] | None:
+    @staticmethod
+    def _build_command_with_args(script_path: str, arguments: list[str] | None) -> list[str] | None:
         """Build osascript command with validated arguments.
 
         Args:
@@ -162,14 +160,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
         cmd = ["osascript", script_path]
 
         if arguments:
-            safe_args: list[str] = []
-            for arg in arguments:
-                # Basic safety check for potentially dangerous characters
-                if any(c in arg for c in DANGEROUS_ARGUMENT_CHARACTERS):
-                    self.error_logger.error("Potentially dangerous characters in argument: %s", arg)
-                    return None
-                safe_args.append(arg)
-            cmd.extend(safe_args)
+            # Shell metacharacters are safe - we use create_subprocess_exec (no shell)
+            cmd.extend(arguments)
 
         return cmd
 

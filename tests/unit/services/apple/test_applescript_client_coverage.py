@@ -170,10 +170,10 @@ class TestInitializationErrors:
 class TestBuildCommandWithArgs:
     """Tests for _build_command_with_args method."""
 
-    def test_returns_none_for_dangerous_args(self, client: AppleScriptClient) -> None:
-        """Test returns None when arguments contain dangerous characters."""
-        result = client._build_command_with_args("/path/script.scpt", ["safe", "dangerous;rm -rf /"])
-        assert result is None
+    def test_accepts_shell_metacharacters(self, client: AppleScriptClient) -> None:
+        """Test accepts shell metacharacters - safe with create_subprocess_exec."""
+        result = client._build_command_with_args("/path/script.scpt", ["Seek & Destroy", "Rock & Roll"])
+        assert result == ["osascript", "/path/script.scpt", "Seek & Destroy", "Rock & Roll"]
 
     def test_returns_command_for_safe_args(self, client: AppleScriptClient) -> None:
         """Test returns command list for safe arguments."""
@@ -228,14 +228,19 @@ class TestRunScript:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_for_dangerous_arguments(self, client: AppleScriptClient) -> None:
-        """Test returns None when arguments contain dangerous chars."""
+    async def test_accepts_shell_metacharacters_in_args(self, client: AppleScriptClient) -> None:
+        """Test accepts shell metacharacters - safe with create_subprocess_exec."""
         await client.initialize()
-        result = await client.run_script(
-            "update_property.applescript",
-            arguments=["safe", "dangerous;rm -rf /"],
-        )
-        assert result is None
+        with patch.object(client.executor, "run_osascript", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = "Success"
+            result = await client.run_script(
+                "update_property.applescript",
+                arguments=["track_id", "name", "Seek & Destroy"],
+            )
+            assert result == "Success"
+            # Verify the & character was passed through
+            call_args = mock_run.call_args[0][0]
+            assert "Seek & Destroy" in call_args
 
     @pytest.mark.asyncio
     async def test_logs_context_info_when_provided(self, client: AppleScriptClient) -> None:
@@ -453,7 +458,7 @@ class TestParseTrackOutput:
         raw_output: str,
         expected_count: int,
         first_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, str]]:
         """Parse track output and assert expected count and first track ID."""
         result = AppleScriptClient._parse_track_output(raw_output)
         assert len(result) == expected_count

@@ -576,10 +576,12 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             assert cmd[2] == script
             assert len(cmd) == 5  # osascript, -e, script, arg1, arg2
 
-        with allure.step("Test dangerous characters in arguments"):
-            dangerous_args = ["track; rm -rf /"]
-            with pytest.raises(AppleScriptSanitizationError, match="Dangerous characters"):
-                client.sanitizer.create_safe_command(script, arguments=dangerous_args)
+        with allure.step("Test shell metacharacters are allowed"):
+            # Shell metacharacters are safe with create_subprocess_exec (no shell)
+            args_with_ampersand = ["Seek & Destroy", "Rock & Roll"]
+            cmd = client.sanitizer.create_safe_command(script, arguments=args_with_ampersand)
+            assert "Seek & Destroy" in cmd
+            assert "Rock & Roll" in cmd
 
         allure.attach("Command arguments validated", "Validation Result", allure.attachment_type.TEXT)
 
@@ -722,9 +724,9 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             pytest.raises(AppleScriptSanitizationError, match="delete"),
         ):
             # 'delete' is in APPLESCRIPT_RESERVED_WORDS but doesn't contain 'music'
-            sanitizer.validate_script_code("delete track from playlist", allow_music_app=True)
+            sanitizer.validate_script_code("delete track from playlist")
 
         with allure.step("Test 'move' blocked regardless of allow_music_app"), pytest.raises(AppleScriptSanitizationError, match="move"):
-            sanitizer.validate_script_code("move file to folder", allow_music_app=True)
+            sanitizer.validate_script_code("move file to folder")
 
         allure.attach("allow_music_app parameter verified", "Result", allure.attachment_type.TEXT)
