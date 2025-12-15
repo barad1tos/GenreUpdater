@@ -39,7 +39,7 @@ dev = [
     # Linting & formatting
     "ruff>=0.14.9",
     "mypy==1.19.0",
-    "ty==0.0.1a32",
+    "ty==0.0.1a34",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
     "vulture>=2.14",
     "bandit>=1.8.0",
