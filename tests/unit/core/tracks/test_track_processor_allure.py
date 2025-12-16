@@ -127,8 +127,8 @@ class _MockAppleScriptClient:
             msg = self.failure_message
             raise RuntimeError(msg)
 
-        # Handle batch processing for fetch_tracks.scpt
-        if script_name == "fetch_tracks.scpt" and arguments and len(arguments) >= 3:
+        # Handle batch processing for fetch_tracks.applescript
+        if script_name == "fetch_tracks.applescript" and arguments and len(arguments) >= 3:
             with contextlib.suppress(ValueError, IndexError):
                 offset = int(arguments[1]) if arguments[1] else 1
                 limit = int(arguments[2]) if arguments[2] else 1000
@@ -469,7 +469,7 @@ class TestTrackProcessorAllure:
             track1 = "1\x1eTrack 1\x1eArtist 1\x1eAlbum Artist 1\x1eAlbum 1\x1eRock\x1e2024-01-01 12:00:00"
             track2 = "2\x1eTrack 2\x1eArtist 2\x1eAlbum Artist 2\x1eAlbum 2\x1ePop\x1e2024-01-02 13:00:00"
             mock_raw_output = f"{track1}\x1d{track2}"
-            mock_ap_client.set_response("fetch_tracks.scpt", mock_raw_output)
+            mock_ap_client.set_response("fetch_tracks.applescript", mock_raw_output)
 
         with allure.step("Create processor with mock client"):
             processor = self.create_processor(ap_client=mock_ap_client)
@@ -499,7 +499,7 @@ class TestTrackProcessorAllure:
         """Test that min_date_added is converted to Unix timestamp."""
         with allure.step("Setup mock AppleScript client with response"):
             mock_ap_client = _MockAppleScriptClient()
-            mock_ap_client.set_response("fetch_tracks.scpt", "")
+            mock_ap_client.set_response("fetch_tracks.applescript", "")
 
         with allure.step("Create processor"):
             processor = self.create_processor(ap_client=mock_ap_client)
@@ -631,7 +631,7 @@ class TestTrackProcessorAllure:
             # Create mock track data for 15 tracks (simulating 3 batches of 5)
             track_data = [f"{i}\x1eTrack {i}\x1eArtist {i}\x1eAlbum Artist {i}\x1eAlbum {i}\x1eGenre {i}\x1e2024-01-01 12:00:00" for i in range(15)]
             mock_raw_output = "\x1d".join(track_data)
-            mock_ap_client.set_response("fetch_tracks.scpt", mock_raw_output)
+            mock_ap_client.set_response("fetch_tracks.applescript", mock_raw_output)
 
         with allure.step("Create processor with batch configuration"):
             processor = self.create_processor(ap_client=mock_ap_client)

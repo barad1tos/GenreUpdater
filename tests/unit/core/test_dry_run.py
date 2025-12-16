@@ -96,7 +96,7 @@ class TestDryRunClientRunScript:
     @pytest.mark.asyncio
     async def test_fetch_script_delegates_to_real_client(self, dry_run_client: DryRunAppleScriptClient, mock_real_client: Any) -> None:
         """Fetch operations should delegate to real client."""
-        result = await dry_run_client.run_script("fetch_tracks.scpt", arguments=["Artist Name"])
+        result = await dry_run_client.run_script("fetch_tracks.applescript", arguments=["Artist Name"])
 
         mock_real_client.run_script.assert_called_once()
         assert result == "real_output"

@@ -27,7 +27,7 @@ def applescript_test_dir(tmp_path: Path) -> Path:
     scripts_dir = tmp_path / "applescripts"
     scripts_dir.mkdir()
     (scripts_dir / "update_property.applescript").write_text("-- test script")
-    (scripts_dir / "fetch_tracks.scpt").write_bytes(b"-- test script")
+    (scripts_dir / "fetch_tracks.applescript").write_bytes(b"-- test script")
     return scripts_dir
 
 
@@ -262,7 +262,7 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
             with allure.step("Execute track fetching"):
                 # AppleScriptClient doesn't have fetch_tracks_async, it has run_script
-                result = await client.run_script("fetch_tracks.scpt")
+                result = await client.run_script("fetch_tracks.applescript")
 
         with allure.step("Verify track fetching results"):
             assert result is not None

@@ -210,7 +210,7 @@ class TestMusicUpdaterAllure:
             )
 
             # Mock track fetching
-            deps.ap_client.set_response("fetch_tracks.scpt", "")  # Will use cache
+            deps.ap_client.set_response("fetch_tracks.applescript", "")  # Will use cache
             await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
             # Mock track updating to succeed

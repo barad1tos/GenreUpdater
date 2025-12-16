@@ -113,7 +113,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             # Check for required scripts
             required_scripts: list[str] = [
                 "update_property.applescript",
-                "fetch_tracks.scpt",
+                "fetch_tracks.applescript",
             ]
             if missing_scripts := [script for script in required_scripts if not (Path(self.apple_scripts_dir) / script).exists()]:
                 self.error_logger.warning("Missing required AppleScripts: %s", "', '".join(missing_scripts))

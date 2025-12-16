@@ -361,14 +361,14 @@ class TrackProcessor:
                 args.append(str(timestamp))
 
             self.console_logger.info(
-                "Running AppleScript: fetch_tracks.scpt with args: %s",
+                "Running AppleScript: fetch_tracks.applescript with args: %s",
                 ", ".join(arg for arg in args if arg),
             )
 
             # Execute AppleScript with appropriate timeout based on operation type
             timeout = self._get_applescript_timeout(original_artist_provided)
 
-            raw_output = await self.ap_client.run_script("fetch_tracks.scpt", args, timeout=timeout)
+            raw_output = await self.ap_client.run_script("fetch_tracks.applescript", args, timeout=timeout)
 
             # DEBUG: Log raw output details
             self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
@@ -401,7 +401,7 @@ class TrackProcessor:
             await self._apply_artist_renames(validated_tracks)
 
             self.console_logger.info(
-                "AppleScript fetch_tracks.scpt executed successfully, got %d bytes, validated %d/%d tracks",
+                "AppleScript fetch_tracks.applescript executed successfully, got %d bytes, validated %d/%d tracks",
                 len(raw_output),
                 len(validated_tracks),
                 len(tracks),

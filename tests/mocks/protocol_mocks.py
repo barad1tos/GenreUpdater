@@ -84,8 +84,8 @@ class MockAppleScriptClient:
         if self.should_fail:
             raise MockAppleScriptError(self.failure_message)
 
-        # Handle batch processing for fetch_tracks.scpt
-        if script_name == "fetch_tracks.scpt" and arguments and len(arguments) >= 3:
+        # Handle batch processing for fetch_tracks.applescript
+        if script_name == "fetch_tracks.applescript" and arguments and len(arguments) >= 3:
             # Check if this is a batch request (has offset and limit)
             with contextlib.suppress(ValueError, IndexError):
                 offset = int(arguments[1]) if arguments[1] else 1

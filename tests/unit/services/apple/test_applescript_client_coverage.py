@@ -31,7 +31,7 @@ def base_config(tmp_path: Path) -> dict[str, Any]:
     scripts_dir.mkdir()
     # Create required scripts
     (scripts_dir / "update_property.applescript").write_text("-- test script")
-    (scripts_dir / "fetch_tracks.scpt").write_bytes(b"-- test script")
+    (scripts_dir / "fetch_tracks.applescript").write_bytes(b"-- test script")
 
     return {
         "apple_scripts_dir": str(scripts_dir),
@@ -290,7 +290,7 @@ class TestInitializeOSError:
         scripts_dir.mkdir()
         # Create the required scripts so we pass the main validation
         (scripts_dir / "update_property.applescript").write_text("-- test")
-        (scripts_dir / "fetch_tracks.scpt").write_bytes(b"-- test")
+        (scripts_dir / "fetch_tracks.applescript").write_bytes(b"-- test")
 
         config = {
             "apple_scripts_dir": str(scripts_dir),

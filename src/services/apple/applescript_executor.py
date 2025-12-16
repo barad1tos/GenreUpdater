@@ -105,7 +105,7 @@ class AppleScriptExecutor:
             self.console_logger.debug("◁ %s completed in %.1fs", label, elapsed)
             return
 
-        if label.startswith(("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt")):
+        if label.startswith(("fetch_tracks.applescript", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
             size_kb = len(script_result.encode()) / 1024

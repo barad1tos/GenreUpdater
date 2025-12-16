@@ -502,10 +502,10 @@ async def _fetch_missing_track_fields_for_sync(
 
             # Use applescript_client's configured directory instead of hardcoded path
             if applescript_client.apple_scripts_dir:
-                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.scpt")
+                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.applescript")
             else:
                 # Fallback to relative path if apple_scripts_dir is not available
-                script_path = str(Path("applescripts") / "fetch_tracks.scpt")
+                script_path = str(Path("applescripts") / "fetch_tracks.applescript")
 
             artist_filter = None  # None means fetch ALL tracks
             console_logger.info(
