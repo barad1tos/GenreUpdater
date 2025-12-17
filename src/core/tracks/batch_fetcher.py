@@ -81,7 +81,7 @@ class BatchTrackFetcher:
 
     async def fetch_all_tracks(
         self,
-        batch_size: int = 1000,
+        batch_size: int = 500,
         *,
         skip_snapshot_check: bool = False,
     ) -> list[TrackDict]:
