@@ -515,7 +515,7 @@ class TrackProcessor:
     @Analytics.track_instance_method("track_fetch_batches")
     async def fetch_tracks_in_batches(
         self,
-        batch_size: int = 1000,
+        batch_size: int = 500,
         *,
         skip_snapshot_check: bool = False,
     ) -> list[TrackDict]:
