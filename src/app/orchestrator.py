@@ -130,7 +130,7 @@ class Orchestrator:
             await self._run_test_mode(args)
         else:
             # Run the main pipeline
-            await self.music_updater.run_main_pipeline(force=args.force)
+            await self.music_updater.run_main_pipeline(force=args.force, fresh=args.fresh)
 
     async def _maybe_auto_verify(self) -> None:
         """Run automatic database verification if threshold days have passed."""
@@ -147,7 +147,7 @@ class Orchestrator:
         )
 
         # Run pipeline for test artists only
-        await self.music_updater.run_main_pipeline(force=args.force)
+        await self.music_updater.run_main_pipeline(force=args.force, fresh=args.fresh)
 
     async def _run_batch(self, args: argparse.Namespace) -> None:
         """Run batch processing from a file."""

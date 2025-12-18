@@ -410,13 +410,17 @@ class MusicUpdater:
         )
 
     # noinspection PyUnusedLocal
-    async def run_main_pipeline(self, force: bool = False) -> None:
+    async def run_main_pipeline(self, force: bool = False, fresh: bool = False) -> None:
         """Run the main update pipeline: clean names, update genres, update years.
 
         Args:
-            force: Force all operations
+            force: Force all operations (bypass incremental filtering)
+            fresh: Fresh mode - implies force, also invalidates caches
 
         """
+        # fresh implies force
+        if fresh:
+            force = True
         self.console_logger.info("Starting main update pipeline")
         self.snapshot_manager.reset()
 
@@ -458,7 +462,7 @@ class MusicUpdater:
             self.console_logger.debug("No artist rename mappings configured, skipping rename step")
 
         # Step 3: Update genres (use ALL tracks - GenreManager handles incremental logic internally)
-        genre_changes = await self._update_all_genres(tracks, last_run_time, force)
+        genre_changes = await self._update_all_genres(tracks, last_run_time, force, fresh)
         all_changes.extend(genre_changes)
 
         # Step 4: Update years (use ALL tracks - YearBatchProcessor handles internal skip logic)
@@ -626,7 +630,9 @@ class MusicUpdater:
         tracker = IncrementalRunTracker(self.config)
         return await tracker.get_last_run_timestamp()
 
-    async def _update_all_genres(self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool) -> list[ChangeLogEntry]:
+    async def _update_all_genres(
+        self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool, fresh: bool = False
+    ) -> list[ChangeLogEntry]:
         """Update genres for all tracks (Step 2 of pipeline).
 
         Note: This method receives ALL tracks, not just incremental ones.
@@ -638,13 +644,16 @@ class MusicUpdater:
             tracks: List of ALL tracks (for accurate genre calculation)
             last_run_time: Last run time for incremental updates
             force: Force all operations
+            fresh: Fresh mode - recalculate all genres
 
         Returns:
             List of genre change log entries
 
         """
         self.console_logger.info("Step 3/4: Updating genres")
-        updated_genre_tracks, genre_changes = await self.genre_manager.update_genres_by_artist_async(tracks, last_run_time=last_run_time, force=force)
+        updated_genre_tracks, genre_changes = await self.genre_manager.update_genres_by_artist_async(
+            tracks, last_run_time=last_run_time, force=force, fresh=fresh
+        )
         self.snapshot_manager.update_tracks(updated_genre_tracks)
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
