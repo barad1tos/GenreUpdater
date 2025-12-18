@@ -112,12 +112,12 @@ class TestCheckYearPlausibility:
         assert result is None  # Continue to next rule
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_no_artist_data(
+    async def test_returns_none_when_no_artist_data(
         self,
         fallback_handler: YearFallbackHandler,
         mock_api_orchestrator: MockExternalApiService,
     ) -> None:
-        """Test returns False (apply API) when artist data not found."""
+        """Test returns None (continue to next rule) when artist data not found."""
         mock_api_orchestrator.artist_activity_response = (None, None)
 
         result = await fallback_handler._check_year_plausibility(
@@ -126,7 +126,7 @@ class TestCheckYearPlausibility:
             artist="Unknown Artist",
         )
 
-        assert result is False  # Apply API year (safer)
+        assert result is None  # Can't verify, continue to next rule (safer than blindly applying)
 
     @pytest.mark.asyncio
     async def test_returns_none_when_no_orchestrator(
@@ -252,13 +252,13 @@ class TestHandleDramaticYearChangeWithPlausibility:
         assert marked[2] == "suspicious_year_change"
 
     @pytest.mark.asyncio
-    async def test_no_artist_data_applies_api_year(
+    async def test_no_artist_data_preserves_existing_year(
         self,
         fallback_handler: YearFallbackHandler,
         mock_api_orchestrator: MockExternalApiService,
         mock_pending_verification: MockPendingVerificationService,
     ) -> None:
-        """Test when artist data not found, applies API year."""
+        """Test when artist data not found, preserves existing year (safer than blindly applying)."""
         mock_api_orchestrator.artist_activity_response = (None, None)
 
         result = await fallback_handler._handle_dramatic_year_change(
@@ -269,8 +269,11 @@ class TestHandleDramaticYearChangeWithPlausibility:
             album="Unknown Album",
         )
 
-        assert result is False  # Apply API year (safer)
+        # Can't verify plausibility, so preserve existing year and mark for verification
+        assert result is True  # Preserve existing year (safer)
         assert len(mock_pending_verification.marked_albums) == 1
+        marked = mock_pending_verification.marked_albums[0]
+        assert marked[2] == "suspicious_year_change"
 
     @pytest.mark.asyncio
     async def test_non_dramatic_change_applies_immediately(

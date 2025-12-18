@@ -268,12 +268,17 @@ class TestIssue72EdgeCases:
         assert result is False, "Year before artist start should be implausible"
 
     @pytest.mark.asyncio
-    async def test_unknown_artist_defaults_to_api_year(
+    async def test_unknown_artist_continues_to_next_rule(
         self,
         fallback_handler: YearFallbackHandler,
         mock_api_orchestrator: MockExternalApiService,
     ) -> None:
-        """When artist start year is unknown, should apply API year (safer)."""
+        """When artist start year is unknown, should continue to next rule (safer).
+
+        Without artist data, we can't verify plausibility. Rather than blindly
+        applying API year, we continue to the next rule which may preserve
+        existing year if the change is dramatic and confidence is low.
+        """
         mock_api_orchestrator.artist_activity_response = (None, None)
 
         result = await fallback_handler._check_year_plausibility(
@@ -282,8 +287,8 @@ class TestIssue72EdgeCases:
             artist="Unknown Artist",
         )
 
-        # False = no data, safer to apply API year
-        assert result is False, "Unknown artist should default to API year"
+        # None = no data, continue to next rule (safer than blindly applying)
+        assert result is None, "Unknown artist should continue to next rule"
 
     @pytest.mark.asyncio
     async def test_invalid_existing_year_applies_api(

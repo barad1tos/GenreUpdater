@@ -95,15 +95,18 @@ class YearDeterminator:
         artist: str,
         album: str,
         album_tracks: list[TrackDict],
+        force: bool = False,
     ) -> str | None:
         """Determine year for album using simplified Linus approach.
 
         Order: dominant year -> consensus release_year -> cache -> API -> None
+        When force=True, skips dominant year and cache checks - always queries API.
 
         Args:
             artist: Artist name
             album: Album name
             album_tracks: List of tracks in the album
+            force: If True, bypass local data and always query API
 
         Returns:
             Year string if found, None otherwise
@@ -111,37 +114,40 @@ class YearDeterminator:
         """
         if debug.year:
             self.console_logger.info(
-                "determine_album_year called: artist='%s' album='%s'",
+                "determine_album_year called: artist='%s' album='%s' force=%s",
                 artist,
                 album,
+                force,
             )
 
-        # 1. Check for dominant year from track metadata
-        if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
-            return dominant_year
+        # Force mode: skip local checks, go directly to API
+        if not force:
+            # 1. Check for dominant year from track metadata
+            if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
+                return dominant_year
 
-        # 2. Check cache — BUT only trust if high confidence
-        cached_entry = await self.cache_service.get_album_year_entry_from_cache(artist, album)
-        if cached_entry and cached_entry.confidence >= CACHE_TRUST_THRESHOLD:
-            if debug.year:
-                self.console_logger.debug(
-                    "Using cached year %s for %s - %s (confidence %d%%)",
-                    cached_entry.year,
+            # 2. Check cache — BUT only trust if high confidence
+            cached_entry = await self.cache_service.get_album_year_entry_from_cache(artist, album)
+            if cached_entry and cached_entry.confidence >= CACHE_TRUST_THRESHOLD:
+                if debug.year:
+                    self.console_logger.debug(
+                        "Using cached year %s for %s - %s (confidence %d%%)",
+                        cached_entry.year,
+                        artist,
+                        album,
+                        cached_entry.confidence,
+                    )
+                return cached_entry.year
+
+            # 3. Check for consensus release_year
+            if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
+                await self.cache_service.store_album_year_in_cache(
                     artist,
                     album,
-                    cached_entry.confidence,
+                    consensus_year,
+                    confidence=CONSENSUS_YEAR_CONFIDENCE,
                 )
-            return cached_entry.year
-
-        # 3. Check for consensus release_year
-        if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
-            await self.cache_service.store_album_year_in_cache(
-                artist,
-                album,
-                consensus_year,
-                confidence=CONSENSUS_YEAR_CONFIDENCE,
-            )
-            return consensus_year
+                return consensus_year
 
         # 4. API as last resort
         try:

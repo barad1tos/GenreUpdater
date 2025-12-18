@@ -244,10 +244,10 @@ class YearFallbackHandler:
         proposed_year: str,
         artist: str,
     ) -> bool | None:
-        """Check if existing year is plausible for the artist.
+        """Check if years are plausible for the artist.
 
-        Uses artist's career start year to determine if existing library year
-        is even possible. If artist formed in 2015, a year of 2000 is impossible.
+        Uses artist's career start year to determine if years are possible.
+        If artist formed in 2015, a year of 2000 is impossible.
 
         Args:
             existing_year: Current year in library
@@ -255,8 +255,9 @@ class YearFallbackHandler:
             artist: Artist name (for API lookup)
 
         Returns:
+            True: proposed year is implausible → preserve existing year (skip update)
             False: existing year is implausible → apply API year
-            None: can't determine or existing is plausible → continue to next rule
+            None: can't determine or both are plausible → continue to next rule
 
         """
         if self.api_orchestrator is None:
@@ -269,20 +270,36 @@ class YearFallbackHandler:
             # Invalid existing year, apply API year
             return False
 
+        try:
+            proposed_int = int(proposed_year)
+        except (ValueError, TypeError):
+            # Invalid proposed year, preserve existing
+            return True
+
         # Get artist's career start year
         artist_start = await self.api_orchestrator.get_artist_start_year(artist)
 
         if artist_start is None:
-            # Can't verify artist data → safer to apply API year
-            self.console_logger.info(
-                "[PLAUSIBILITY] No artist data found for '%s', applying API year %s",
+            # Can't verify artist data → continue to next rule (don't blindly apply)
+            self.console_logger.debug(
+                "[PLAUSIBILITY] No artist data found for '%s', continuing to next rule",
                 artist,
-                proposed_year,
             )
-            return False
+            return None
 
+        # Check if PROPOSED year is before artist started → IMPOSSIBLE → preserve existing
+        if proposed_int < artist_start:
+            self.console_logger.info(
+                "[PLAUSIBILITY] Proposed year %d is before artist '%s' started (%d), preserving existing %s",
+                proposed_int,
+                artist,
+                artist_start,
+                existing_year,
+            )
+            return True  # Skip update, preserve existing
+
+        # Check if EXISTING year is before artist started → IMPOSSIBLE → apply API year
         if existing_int < artist_start:
-            # Existing year is BEFORE artist started → IMPOSSIBLE
             self.console_logger.info(
                 "[PLAUSIBILITY] Existing year %d is before artist '%s' started (%d), applying API year %s",
                 existing_int,
@@ -292,12 +309,13 @@ class YearFallbackHandler:
             )
             return False
 
-        # Existing year is plausible (after artist started)
+        # Both years are plausible (after artist started)
         self.console_logger.debug(
-            "[PLAUSIBILITY] Existing year %d is plausible for '%s' (started %d)",
-            existing_int,
+            "[PLAUSIBILITY] Both years plausible for '%s' (started %d): existing=%d, proposed=%d",
             artist,
             artist_start,
+            existing_int,
+            proposed_int,
         )
         return None
 
@@ -332,12 +350,27 @@ class YearFallbackHandler:
             )
             return False  # Don't skip - apply the year
 
-        # NEW: Check if existing year is plausible for the artist
+        # Check if years are plausible for the artist
         plausibility_result = await self._check_year_plausibility(
             existing_year=existing_year,
             proposed_year=proposed_year,
             artist=artist,
         )
+        if plausibility_result is True:
+            # Proposed year is implausible (before artist started) → preserve existing
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="implausible_proposed_year",
+                metadata={
+                    "existing_year": existing_year,
+                    "proposed_year": proposed_year,
+                    "confidence_score": confidence_score,
+                    "plausibility": "proposed_year_before_artist_start",
+                },
+            )
+            return True  # Skip update - preserve existing year
+
         if plausibility_result is False:
             # Existing year is implausible → apply API year
             await self.pending_verification.mark_for_verification(
@@ -353,7 +386,7 @@ class YearFallbackHandler:
             )
             return False  # Don't skip - apply the year
 
-        # Low confidence + dramatic change + plausible existing → preserve existing year
+        # Low confidence + dramatic change + both years plausible → preserve existing year
         await self.pending_verification.mark_for_verification(
             artist=artist,
             album=album,
