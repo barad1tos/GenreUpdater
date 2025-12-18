@@ -1519,10 +1519,17 @@ class TestAnomalousTracksLogging:
         """Create a basic YearRetriever for testing."""
         return TestYearRetrieverEdgeCases.create_year_retriever()
 
+    @staticmethod
+    def get_debug_logs(retriever: YearRetriever) -> list[str]:
+        """Extract debug logs from retriever's consistency checker."""
+        logs: list[str] = retriever.year_consistency_checker.console_logger.debug_messages
+        return logs
+
     @allure.title("Logs tracks with different years than dominant")
     def test_logs_anomalous_tracks(self) -> None:
         """Test that tracks with non-dominant years are logged at DEBUG level."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
@@ -1533,8 +1540,8 @@ class TestAnomalousTracksLogging:
             {"id": "7", "name": "Bonus Track", "year": "2021"},  # Anomalous
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert any("Bonus Track" in msg for msg in debug_logs)
@@ -1545,14 +1552,15 @@ class TestAnomalousTracksLogging:
     def test_no_logging_when_all_same(self) -> None:
         """Test that no anomaly logging occurs when all tracks have the same year."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
             {"id": "3", "name": "Track 3", "year": "2020"},
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert all("differs from dominant" not in msg for msg in debug_logs)
@@ -1561,6 +1569,7 @@ class TestAnomalousTracksLogging:
     def test_ignores_empty_years(self) -> None:
         """Test that empty/zero years are not reported as anomalies."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
@@ -1570,8 +1579,8 @@ class TestAnomalousTracksLogging:
             {"id": "6", "name": "Zero Year", "year": "0"},  # Should be ignored
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert all("Empty Year" not in msg for msg in debug_logs)
