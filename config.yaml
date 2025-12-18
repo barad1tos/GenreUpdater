@@ -1,15 +1,13 @@
-# config.yaml - Minimal configuration for CI and development
-# For full configuration, copy my-config.yaml.example to my-config.yaml
+# config.yaml - Configuration for CI and development
 # Environment variables like ${VAR_NAME} are resolved at runtime
 
 # -----------------------------------------------------------------------
-# 1. MAIN PATHS (use /tmp for CI, user home for local dev)
+# 1. MAIN PATHS
 # -----------------------------------------------------------------------
 music_library_path: ${HOME}/Music/Music/Music Library.musiclibrary
 apple_scripts_dir: applescripts
 logs_base_dir: /tmp/mgu-logs
 
-# Python settings
 python_settings:
   prevent_bytecode: true
 
@@ -47,13 +45,40 @@ artist_renamer:
 
 exceptions:
   track_cleaning: []
-  artist_cleaning: []
+
+database_verification:
+  auto_verify_days: 7
+  batch_size: 10
+
+development:
+  test_artists: []
+
+reporting:
+  problematic_albums_path: reports/albums_without_year.csv
+  min_attempts_for_report: 3
+  change_display_mode: compact
+
+caching:
+  default_ttl_seconds: 900
+  album_cache_sync_interval: 300
+  cleanup_error_retry_delay: 60
+  cleanup_interval_seconds: 300
+  negative_result_ttl: 2592000
+  library_snapshot:
+    enabled: true
+    delta_enabled: true
+    cache_file: cache/library_snapshot.json
+    max_age_hours: 24
+    compress: true
+    compress_level: 6
+
+api_cache_file: cache/cache.json
+album_years_cache_file: cache/album_years.csv
 
 # -----------------------------------------------------------------------
-# 4. LOGGING & OUTPUT FILES
+# 4. LOGGING AND ANALYTICS
 # -----------------------------------------------------------------------
 logging:
-  enabled: true
   max_runs: 3
   main_log_file: main/main.log
   analytics_log_file: analytics/analytics.log
@@ -119,6 +144,47 @@ year_retrieval:
       - de
       - fr
       - jp
+    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"]
+
+  reissue_detection:
+    reissue_keywords:
+      - reissue
+      - remaster
+      - remastered
+
+  script_api_priorities:
+    default:
+      primary: ["musicbrainz", "discogs"]
+      fallback: ["lastfm", "itunes"]
+
+  scoring:
+    base_score: 10
+    artist_exact_match_bonus: 20
+    album_exact_match_bonus: 25
+    perfect_match_bonus: 10
+    album_variation_bonus: 10
+    album_substring_penalty: -5
+    album_unrelated_penalty: -40
+    mb_release_group_match_bonus: 50
+    type_album_bonus: 15
+    type_ep_single_penalty: -10
+    type_compilation_live_penalty: -35
+    status_official_bonus: 10
+    status_bootleg_penalty: -50
+    status_promo_penalty: -20
+    reissue_penalty: -30
+    year_diff_penalty_scale: -5
+    year_diff_max_penalty: -40
+    year_before_start_penalty: -35
+    year_after_end_penalty: -25
+    year_near_start_bonus: 20
+    country_artist_match_bonus: 10
+    country_major_market_bonus: 5
+    source_mb_bonus: 25
+    source_discogs_bonus: 2
+    source_lastfm_penalty: -5
+    source_itunes_penalty: -10
+    future_year_penalty: -10
 
   fallback:
     enabled: true
@@ -126,41 +192,31 @@ year_retrieval:
     trust_api_score_threshold: 70
 
 # -----------------------------------------------------------------------
-# 6. BATCH PROCESSING
+# 6. ALBUM TYPE DETECTION
 # -----------------------------------------------------------------------
-batch_processing:
-  enabled: true
-  fetch_batch_size: 3000
-  ids_batch_size: 200
-  save_interval: 500
-  auto_save: true
+album_type_detection:
+  special_patterns:
+    - b-sides
+    - demo
+    - demos
+  compilation_patterns:
+    - greatest hits
+    - best of
+    - compilation
+  reissue_patterns:
+    - remaster
+    - remastered
+    - anniversary
 
 # -----------------------------------------------------------------------
-# 7. LIBRARY SNAPSHOT
+# 7. GENRE UPDATE CONFIGURATION
 # -----------------------------------------------------------------------
-library_snapshot:
-  enabled: true
-  snapshot_dir: cache/snapshots
-  max_snapshots: 5
-  compression: gzip
-  delta_enabled: true
-  checksum_algorithm: sha256
-  debounce_seconds: 300
-  min_age_seconds: 60
-  max_memory_mb: 500
+genre_update:
+  batch_size: 50
+  concurrent_limit: 5
 
 # -----------------------------------------------------------------------
-# 8. API CACHING
-# -----------------------------------------------------------------------
-api_cache:
-  enabled: true
-  cache_dir: cache/api
-  ttl_seconds: 1200
-  max_size_mb: 100
-  cleanup_interval_seconds: 3600
-
-# -----------------------------------------------------------------------
-# 9. TEST MODE
+# 8. TEST MODE
 # -----------------------------------------------------------------------
 test_artists:
   - Amon Amarth
