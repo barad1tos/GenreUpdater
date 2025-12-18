@@ -725,6 +725,118 @@ class TestGetArtistStartYear:
         assert call_kwargs["params"]["limit"] == "200"
 
 
+class TestScoreFiltering:
+    """Tests for score filtering - releases with score <= 0 should be filtered out.
+
+    This was a bug fix: AppleMusicClient was returning releases with score=0,
+    unlike MusicBrainz, Discogs, and Last.fm which all filter score <= 0.
+    This caused albums with only iTunes results (score=0) to appear with 0% confidence.
+    """
+
+    def test_filters_out_zero_score(
+        self,
+        client: AppleMusicClient,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test that releases with score=0 are filtered out."""
+        mock_score_func.return_value = 0.0
+        result_data = {
+            "artistName": "Artist",
+            "collectionName": "Album",
+            "releaseDate": "2020-01-01T00:00:00Z",
+        }
+
+        result = client._process_itunes_result(result_data, "artist", "album")
+
+        assert result is None
+
+    def test_filters_out_negative_score(
+        self,
+        client: AppleMusicClient,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test that releases with negative score are filtered out."""
+        mock_score_func.return_value = -5.0
+        result_data = {
+            "artistName": "Artist",
+            "collectionName": "Album",
+            "releaseDate": "2020-01-01T00:00:00Z",
+        }
+
+        result = client._process_itunes_result(result_data, "artist", "album")
+
+        assert result is None
+
+    def test_allows_positive_score(
+        self,
+        client: AppleMusicClient,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test that releases with positive score are returned."""
+        mock_score_func.return_value = 50.0
+        result_data = {
+            "artistName": "Artist",
+            "collectionName": "Album",
+            "releaseDate": "2020-01-01T00:00:00Z",
+        }
+
+        result = client._process_itunes_result(result_data, "artist", "album")
+
+        assert result is not None
+        assert result["score"] == 50.0
+
+    def test_allows_small_positive_score(
+        self,
+        client: AppleMusicClient,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test that even very small positive scores are allowed."""
+        mock_score_func.return_value = 0.01
+        result_data = {
+            "artistName": "Artist",
+            "collectionName": "Album",
+            "releaseDate": "2020-01-01T00:00:00Z",
+        }
+
+        result = client._process_itunes_result(result_data, "artist", "album")
+
+        assert result is not None
+        assert result["score"] == 0.01
+
+    @pytest.mark.asyncio
+    async def test_get_scored_releases_filters_zero_scores(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test that get_scored_releases filters out zero-score results."""
+        # Two results: one with score 50, one with score 0
+        results = [
+            {
+                "artistName": "Good Artist",
+                "collectionName": "Good Album",
+                "releaseDate": "2020-01-01T00:00:00Z",
+            },
+            {
+                "artistName": "Bad Match",
+                "collectionName": "Wrong Album",
+                "releaseDate": "2020-01-01T00:00:00Z",
+            },
+        ]
+        mock_api_request_func.return_value = {"results": results}
+
+        # First call returns 50, second returns 0
+        mock_score_func.side_effect = [50.0, 0.0]
+
+        result = await client.get_scored_releases("good artist", "good album")
+
+        # Only the first result should be returned
+        assert len(result) == 1
+        assert result[0]["title"] == "Good Album"
+        assert result[0]["score"] == 50.0
+
+
 class TestExtractYearFromResult:
     """Tests for _extract_year_from_result helper method."""
 
