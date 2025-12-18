@@ -546,6 +546,9 @@ class ExternalApiOrchestrator:
         cleaning_config = self.config.get("cleaning", {})
         remaster_keywords = cleaning_config.get("remaster_keywords", [])
 
+        # Store for use in scoring (ReleaseScorer uses these for edition normalization)
+        self.remaster_keywords: list[str] = remaster_keywords
+
         self.release_scorer = create_release_scorer(
             scoring_config=self.scoring_config,
             min_valid_year=self.min_valid_year,
@@ -1002,9 +1005,19 @@ class ExternalApiOrchestrator:
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
-        """Prepare normalized and display names for API search."""
+        """Prepare normalized and display names for API search.
+
+        Strips ALL parenthetical content from album name for cleaner API queries.
+        APIs don't search for "(Deluxe Edition)" or "(Bonus Track Version)" -
+        these are metadata, not album names.
+        """
         artist_norm = normalize_name(artist)
-        album_norm = normalize_name(album)
+
+        # Remove all parenthetical content from album for API queries
+        # "(Deluxe Edition)", "(Bonus Track Version)", "(Remastered)" → removed
+        album_clean = re.sub(r"\s*\([^)]*\)", "", album).strip()
+        album_norm = normalize_name(album_clean)
+
         log_artist = artist if artist != artist_norm else artist_norm
         log_album = album if album != album_norm else album_norm
         return artist_norm, album_norm, log_artist, log_album
