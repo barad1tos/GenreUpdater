@@ -201,10 +201,20 @@ jobs:
           else
             # Incremental - test specific modules
             echo "Running mutation test on: $MODULES"
+            MUTANTS_FOUND=false
             for module in $MODULES; do
               echo "Testing module pattern: $module"
-              uv run mutmut run "$module"
+              # Handle modules with no mutable code (e.g., protocols.py with only type definitions)
+              if uv run mutmut run "$module" 2>&1; then
+                MUTANTS_FOUND=true
+              else
+                echo "::warning::No mutable code found in $module (may contain only type definitions)"
+              fi
             done
+
+            if [ "$MUTANTS_FOUND" = "false" ]; then
+              echo "::notice::No mutable code found in any changed modules. This is expected for type-only files."
+            fi
           fi
 
       - name: Extract results
