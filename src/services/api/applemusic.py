@@ -299,7 +299,7 @@ class AppleMusicClient:
                 )
                 return None
 
-            self.console_logger.info(
+            self.console_logger.debug(
                 "Scored iTunes Release: '%s' (%s) Score: %.2f",
                 collection_name,
                 release_year,

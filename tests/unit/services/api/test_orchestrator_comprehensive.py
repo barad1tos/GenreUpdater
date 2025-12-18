@@ -44,9 +44,12 @@ class TestNormalizeFunction:
         assert normalize_name("Solanaceae / King Dude") == "Solanaceae"
 
     def test_normalize_strips_plus_compilation_markers(self) -> None:
-        """Test that trailing '+ ...' compilation markers are stripped."""
+        """Test that trailing '+ <digit>' compilation markers are stripped (conservative)."""
+        # Only strip when + is followed by digits (bonus track counts)
         assert normalize_name("Not for Want of Trying + 4") == "Not for Want of Trying"
-        assert normalize_name("Nebularium + the Restless Memoirs") == "Nebularium"
+        assert normalize_name("Album + 10 Bonus Tracks") == "Album"
+        # Preserve legitimate titles where + is followed by text
+        assert normalize_name("Nebularium + the Restless Memoirs") == "Nebularium + the Restless Memoirs"
         assert normalize_name("The Singles Plus") == "The Singles Plus"  # No ' + '
 
     def test_normalize_w_slash_to_with(self) -> None:

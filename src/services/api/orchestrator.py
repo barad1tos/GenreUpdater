@@ -76,9 +76,10 @@ def normalize_name(name: str) -> str:
     for old, new in substitutions.items():
         result = result.replace(old, new)
 
-    # Strip trailing compilation markers: "+ 4", "+ the Restless Memoirs"
-    # Pattern: " + " followed by anything at end of string
-    result = re.sub(r"\s*\+\s+.*$", "", result)
+    # Strip trailing compilation markers: "+ 4", "+ 10" (number = # bonus tracks)
+    # Pattern: " + " followed by digit(s) at end of string
+    # More conservative than ".*" to preserve legitimate titles like "Album + Bonus Tracks"
+    result = re.sub(r"\s*\+\s+\d+.*$", "", result)
 
     # Strip content after " / " (split albums - keep first part only)
     # "Robot Hive / Exodus" → "Robot Hive"
