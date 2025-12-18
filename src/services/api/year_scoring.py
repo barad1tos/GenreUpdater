@@ -298,50 +298,111 @@ class ReleaseScorer:
             Match score adjustment
 
         """
+        # Normalize target names using same method as release names
+        # This ensures consistent comparison (both lowercased, punctuation removed)
+        target_artist_norm = self._normalize_name(artist_norm)
+        target_album_norm = self._normalize_name(album_norm)
+
+        # Calculate artist match score
+        artist_match_bonus, artist_score = self._calculate_artist_match(release_artist_norm, target_artist_norm, score_components)
+
+        # Calculate album match score
+        album_score = self._calculate_album_match(release_title_norm, target_album_norm, artist_match_bonus, score_components)
+
+        return artist_score + album_score
+
+    def _calculate_artist_match(
+        self,
+        release_artist_norm: str,
+        target_artist_norm: str,
+        score_components: list[str],
+    ) -> tuple[int, int]:
+        """Calculate artist match score.
+
+        Args:
+            release_artist_norm: Normalized release artist name
+            target_artist_norm: Normalized target artist name
+            score_components: List to append score messages to
+
+        Returns:
+            Tuple of (artist_match_bonus, score_adjustment)
+
+        """
         scoring_cfg = self.scoring_config
-        match_score = 0
 
-        # Artist Match Bonus
-        artist_match_bonus = 0
-        if release_artist_norm and release_artist_norm == artist_norm:
-            artist_match_bonus = int(scoring_cfg.get("artist_exact_match_bonus", 20))
-            match_score += artist_match_bonus
-            score_components.append(f"Artist Exact Match: +{artist_match_bonus}")
+        if release_artist_norm and release_artist_norm == target_artist_norm:
+            bonus = int(scoring_cfg.get("artist_exact_match_bonus", 20))
+            score_components.append(f"Artist Exact Match: +{bonus}")
+            return bonus, bonus
 
-        # Album Title Match using simple normalization
-        def simple_norm(text: str) -> str:
-            """Apply simple normalization - lowercase and strip whitespace."""
-            return re.sub(r"[^\w\s]", "", text.lower()).strip()
+        if not (release_artist_norm and target_artist_norm):
+            return 0, 0
 
-        comp_release_title = simple_norm(release_title_norm)
-        comp_album_norm = simple_norm(album_norm)
+        # Artist doesn't match - apply penalties
+        if target_artist_norm in release_artist_norm or release_artist_norm in target_artist_norm:
+            # Partial match (substring) - moderate penalty
+            penalty = int(scoring_cfg.get("artist_substring_penalty", -20))
+            score_components.append(f"Artist Substring Mismatch: {penalty}")
+            return 0, penalty
+
+        # Completely different artist - LARGE penalty
+        # This prevents "Scorn - Evanescence" from matching "Evanescence - Evanescence"
+        penalty = int(scoring_cfg.get("artist_mismatch_penalty", -60))
+        score_components.append(f"Artist Mismatch: {penalty}")
+        return 0, penalty
+
+    def _calculate_album_match(
+        self,
+        release_title_norm: str,
+        target_album_norm: str,
+        artist_match_bonus: int,
+        score_components: list[str],
+    ) -> int:
+        """Calculate album title match score.
+
+        Args:
+            release_title_norm: Normalized release title
+            target_album_norm: Normalized target album name
+            artist_match_bonus: Bonus from artist matching (for perfect match calculation)
+            score_components: List to append score messages to
+
+        Returns:
+            Score adjustment
+
+        """
+        scoring_cfg = self.scoring_config
+
+        # Simple normalization for comparison
+        comp_release_title = re.sub(r"[^\w\s]", "", release_title_norm.lower()).strip()
+        comp_album_norm = re.sub(r"[^\w\s]", "", target_album_norm.lower()).strip()
 
         if comp_release_title == comp_album_norm:
-            title_match_bonus = int(scoring_cfg.get("album_exact_match_bonus", 25))
-            match_score += title_match_bonus
-            score_components.append(f"Album Exact Match: +{title_match_bonus}")
+            bonus = int(scoring_cfg.get("album_exact_match_bonus", 25))
+            score_components.append(f"Album Exact Match: +{bonus}")
             if artist_match_bonus > 0:
-                perfect_match_bonus = int(scoring_cfg.get("perfect_match_bonus", 10))
-                match_score += perfect_match_bonus
-                score_components.append(f"Perfect Artist+Album Match: +{perfect_match_bonus}")
-        elif self._is_album_variation(comp_release_title, comp_album_norm):
-            title_variation_bonus = int(scoring_cfg.get("album_variation_bonus", 10))
-            match_score += title_variation_bonus
-            score_components.append(f"Album Variation (Suffix): +{title_variation_bonus}")
-        elif self._is_album_variation(comp_album_norm, comp_release_title):
-            title_search_bonus = int(scoring_cfg.get("album_variation_bonus", 10))
-            match_score += title_search_bonus
-            score_components.append(f"Album Variation (Search Suffix): +{title_search_bonus}")
-        elif comp_album_norm in comp_release_title or comp_release_title in comp_album_norm:
-            title_penalty: int = int(scoring_cfg.get("album_substring_penalty", -15))
-            match_score += title_penalty
-            score_components.append(f"Album Substring Mismatch: {title_penalty}")
-        else:
-            title_penalty = int(scoring_cfg.get("album_unrelated_penalty", -40))
-            match_score += title_penalty
-            score_components.append(f"Album Unrelated: {title_penalty}")
+                perfect_bonus = int(scoring_cfg.get("perfect_match_bonus", 10))
+                score_components.append(f"Perfect Artist+Album Match: +{perfect_bonus}")
+                return bonus + perfect_bonus
+            return bonus
 
-        return match_score
+        if self._is_album_variation(comp_release_title, comp_album_norm):
+            bonus = int(scoring_cfg.get("album_variation_bonus", 10))
+            score_components.append(f"Album Variation (Suffix): +{bonus}")
+            return bonus
+
+        if self._is_album_variation(comp_album_norm, comp_release_title):
+            bonus = int(scoring_cfg.get("album_variation_bonus", 10))
+            score_components.append(f"Album Variation (Search Suffix): +{bonus}")
+            return bonus
+
+        if comp_album_norm in comp_release_title or comp_release_title in comp_album_norm:
+            penalty = int(scoring_cfg.get("album_substring_penalty", -15))
+            score_components.append(f"Album Substring Mismatch: {penalty}")
+            return penalty
+
+        penalty = int(scoring_cfg.get("album_unrelated_penalty", -40))
+        score_components.append(f"Album Unrelated: {penalty}")
+        return penalty
 
     @staticmethod
     def _is_album_variation(title1: str, title2: str) -> bool:
