@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "music-genre-updater"
-version = "2.0.0"
+version = "3.0.0"
 description = "Automated music genre updater for Apple Music"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.13"
@@ -38,8 +38,8 @@ dependencies = [
 dev = [
     # Linting & formatting
     "ruff>=0.14.9",
-    "mypy==1.19.0",
-    "ty==0.0.1a32",
+    "mypy==1.19.1",
+    "ty>=0.0.3",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
     "vulture>=2.14",
     "bandit>=1.8.0",

@@ -134,7 +134,7 @@ class TestMusicAppConnection:
         scripts_dir = Path(applescript_client.apple_scripts_dir)
 
         required_scripts = [
-            "fetch_tracks.scpt",
+            "fetch_tracks.applescript",
             "update_property.applescript",
         ]
 
@@ -151,15 +151,15 @@ class TestRunScriptFile:
         self,
         applescript_client: AppleScriptClient,
     ) -> None:
-        """Test running the fetch_tracks.scpt file."""
+        """Test running the fetch_tracks.applescript file."""
         await applescript_client.initialize()
 
         assert applescript_client.apple_scripts_dir is not None
         scripts_dir = Path(applescript_client.apple_scripts_dir)
-        fetch_script = scripts_dir / "fetch_tracks.scpt"
+        fetch_script = scripts_dir / "fetch_tracks.applescript"
 
         if not fetch_script.exists():
-            pytest.skip("fetch_tracks.scpt not found")
+            pytest.skip("fetch_tracks.applescript not found")
 
         # Run with test artist filter to limit results
         # The script takes artist name as argument

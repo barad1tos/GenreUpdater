@@ -13,16 +13,63 @@ from services.api.orchestrator import (
 
 
 class TestNormalizeFunction:
-    """Test the normalize_name function."""
+    """Test the normalize_name function for API query normalization."""
 
-    def test_normalize_returns_unchanged(self) -> None:
-        """Test that normalize_name is currently a stub that returns unchanged."""
-        # The current implementation just returns the name unchanged
+    def test_normalize_preserves_simple_names(self) -> None:
+        """Test that simple names without special patterns are preserved."""
         assert normalize_name("The Beatles") == "The Beatles"
-        assert normalize_name("AC/DC") == "AC/DC"
         assert normalize_name("Björk") == "Björk"
+        assert normalize_name("Плач Єремії") == "Плач Єремії"
+
+    def test_normalize_handles_empty_and_whitespace(self) -> None:
+        """Test handling of empty strings and whitespace."""
         assert normalize_name("") == ""
-        assert normalize_name("   ") == "   "
+        assert normalize_name("   ") == ""  # Whitespace is normalized/stripped
+
+    def test_normalize_ampersand_to_and(self) -> None:
+        """Test that & is converted to 'and' for better API matching."""
+        assert normalize_name("Karma & Effect") == "Karma and Effect"
+        assert normalize_name("Blessed & Cursed") == "Blessed and Cursed"
+        assert normalize_name("Pt. 1 & 2") == "Pt. 1 and 2"
+        assert normalize_name("Fire&Water") == "Fire and Water"  # No spaces
+
+    def test_normalize_preserves_slash_in_artist_names(self) -> None:
+        """Test that slash without spaces (like AC/DC) is preserved."""
+        assert normalize_name("AC/DC") == "AC/DC"
+
+    def test_normalize_splits_on_slash_with_spaces(self) -> None:
+        """Test that ' / ' splits albums and keeps first part (split albums)."""
+        assert normalize_name("Robot Hive / Exodus") == "Robot Hive"
+        assert normalize_name("House By the Cemetery / Mortal Massacre") == "House By the Cemetery"
+        assert normalize_name("Solanaceae / King Dude") == "Solanaceae"
+
+    def test_normalize_strips_plus_compilation_markers(self) -> None:
+        """Test that trailing '+ <digit>' compilation markers are stripped (conservative)."""
+        # Only strip when + is followed by digits (bonus track counts)
+        assert normalize_name("Not for Want of Trying + 4") == "Not for Want of Trying"
+        assert normalize_name("Album + 10 Bonus Tracks") == "Album"
+        # Preserve legitimate titles where + is followed by text
+        assert normalize_name("Nebularium + the Restless Memoirs") == "Nebularium + the Restless Memoirs"
+        assert normalize_name("The Singles Plus") == "The Singles Plus"  # No ' + '
+
+    def test_normalize_w_slash_to_with(self) -> None:
+        """Test that 'w/' is converted to 'with'."""
+        assert normalize_name("Split w/ East Of The Wall") == "Split with East Of The Wall"
+        assert normalize_name("Collab w/Artist") == "Collab with Artist"
+
+    def test_normalize_equals_sign(self) -> None:
+        """Test that ' = ' is converted to space."""
+        assert normalize_name("Liberation = Termination") == "Liberation Termination"
+
+    def test_normalize_whitespace(self) -> None:
+        """Test that multiple spaces are normalized to single space."""
+        assert normalize_name("Too   Many    Spaces") == "Too Many Spaces"
+
+    def test_normalize_complex_album_names(self) -> None:
+        """Test complex album names with multiple patterns."""
+        # Real problematic album from logs
+        assert normalize_name("The Alchemy Index, Vols. 1 & 2: Fire & Water") == "The Alchemy Index, Vols. 1 and 2: Fire and Water"
+        assert normalize_name("Make Love & War - The Wedlock") == "Make Love and War - The Wedlock"
 
 
 class TestExternalApiOrchestrator:

@@ -145,7 +145,7 @@ class YearDeterminator:
 
         # 4. API as last resort
         try:
-            year_result, is_definitive, confidence_score = await self.external_api.get_album_year(artist, album)
+            year_result, is_definitive, confidence_score, _year_scores = await self.external_api.get_album_year(artist, album)
         except (OSError, ValueError, RuntimeError) as e:
             if debug.year:
                 self.console_logger.exception("Exception in get_album_year: %s", e)

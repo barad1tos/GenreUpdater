@@ -29,7 +29,6 @@ LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
 COMPLEX_SCRIPT_THRESHOLD = 1024  # bytes
 COMPLEX_PATTERN_COUNT = 2  # number of complex patterns before using temp file
 MAX_TELL_BLOCKS = 3  # maximum nested tell blocks before using temp file
-DANGEROUS_ARGUMENT_CHARACTERS = [";", "&", "|", "`", "$", ">", "<", "!"]
 
 
 class AppleScriptExecutionError(OSError):
@@ -106,7 +105,7 @@ class AppleScriptExecutor:
             self.console_logger.debug("◁ %s completed in %.1fs", label, elapsed)
             return
 
-        if label.startswith(("fetch_tracks.scpt", "fetch_tracks_by_ids.scpt")):
+        if label.startswith(("fetch_tracks.applescript", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count("\x1d")
             size_kb = len(script_result.encode()) / 1024
@@ -406,11 +405,7 @@ class AppleScriptExecutor:
             # Build command with the temp file
             cmd = ["osascript", temp_file_path]
             if arguments:
-                # Validate arguments
-                for arg in arguments:
-                    if any(c in arg for c in DANGEROUS_ARGUMENT_CHARACTERS):
-                        self.error_logger.error("Potentially dangerous characters in argument: %s", arg)
-                        return None
+                # Shell metacharacters are safe - we use create_subprocess_exec (no shell)
                 cmd.extend(arguments)
 
             return await self.run_osascript(

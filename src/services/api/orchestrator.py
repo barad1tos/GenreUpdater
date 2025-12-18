@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import ssl
 from collections.abc import Coroutine
 from datetime import UTC
@@ -32,14 +33,14 @@ from core.logger import LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from metrics import Analytics
-from services.api.applemusic import AppleMusicClient
 from services.api.api_base import EnhancedRateLimiter, ScoredRelease
+from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.lastfm import LastFmClient
 from services.api.musicbrainz import MusicBrainzClient
 from services.api.request_executor import ApiRequestExecutor
-from services.api.year_scoring import ArtistPeriodContext, create_release_scorer
 from services.api.year_score_resolver import YearScoreResolver
+from services.api.year_scoring import ArtistPeriodContext, create_release_scorer
 from services.api.year_search_coordinator import YearSearchCoordinator
 from services.cache.orchestrator import CacheOrchestrator
 from services.pending_verification import PendingVerificationService
@@ -47,11 +48,47 @@ from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 
 def normalize_name(name: str) -> str:
-    """Normalize artist/album name for matching. Currently returns unchanged.
+    """Normalize artist/album name for API queries.
 
-    TODO: Implement normalization when needed (lowercase, & → and, remove punctuation).
+    Performs substitutions that improve API matching:
+    - & → and (Karma & Effect → Karma and Effect)
+    - w/ → with (Split w/ Band → Split with Band)
+    - Strips trailing compilation markers (Album + 4 → Album)
+    - Normalizes whitespace
+
+    Note: This is for API QUERIES, not for scoring/matching.
+    Scoring uses ReleaseScorer._normalize_name which is more aggressive.
     """
-    return name
+    if not name:
+        return name
+
+    result = name
+
+    # Common substitutions for better API matching
+    substitutions = {
+        " & ": " and ",
+        "&": " and ",  # Handle no-space cases like "Fire&Water"
+        " w/ ": " with ",
+        " w/": " with ",
+        " = ": " ",  # Liberation = Termination → Liberation Termination
+    }
+
+    for old, new in substitutions.items():
+        result = result.replace(old, new)
+
+    # Strip trailing compilation markers: "+ 4", "+ 10" (number = # bonus tracks)
+    # Pattern: " + " followed by digit(s) at end of string
+    # More conservative than ".*" to preserve legitimate titles like "Album + Bonus Tracks"
+    result = re.sub(r"\s*\+\s+\d+.*$", "", result)
+
+    # Strip content after " / " (split albums - keep first part only)
+    # "Robot Hive / Exodus" → "Robot Hive"
+    # "House By the Cemetery / Mortal Massacre" → "House By the Cemetery"
+    if " / " in result:
+        result = result.split(" / ")[0].strip()
+
+    # Normalize whitespace (multiple spaces to single)
+    return re.sub(r"\s+", " ", result).strip()
 
 
 # Constants
@@ -827,21 +864,22 @@ class ExternalApiOrchestrator:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool, int]:
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score)
+            Tuple of (year, is_definitive, confidence_score, year_scores)
+            year_scores: dict mapping each year found by APIs to its max score
         """
         # Initialize and prepare inputs
         try:
             inputs = await self._initialize_year_search(artist, album, current_library_year)
             if not inputs:
-                return None, False, 0
+                return None, False, 0, {}
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             if debug.year:
                 self.error_logger.exception("Error in get_album_year initialization: %s", e)
-            return None, False, 0
+            return None, False, 0, {}
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
 
@@ -926,11 +964,16 @@ class ExternalApiOrchestrator:
             current_library_year or "none",
         )
 
-    def _handle_year_search_error(self, log_artist: str, log_album: str, current_library_year: str | None) -> tuple[str | None, bool, int]:
+    def _handle_year_search_error(
+        self,
+        log_artist: str,
+        log_album: str,
+        current_library_year: str | None,
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle errors during year search and return fallback year.
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score)
+            Tuple of (year, is_definitive, confidence_score, year_scores)
         """
         self.error_logger.exception(
             "Unexpected error in get_album_year for '%s - %s'",
@@ -947,10 +990,10 @@ class ExternalApiOrchestrator:
                     log_artist,
                     log_album,
                 )
-                return None, False, 0
+                return None, False, 0, {}
 
-            return current_library_year, False, 0
-        return None, False, 0
+            return current_library_year, False, 0, {}
+        return None, False, 0, {}
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
@@ -1022,11 +1065,11 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
-    ) -> tuple[str | None, bool, int]:
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle case when no API results are found.
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score)
+            Tuple of (year, is_definitive, confidence_score, year_scores)
         """
         self.console_logger.warning("No release data found from any API for '%s - %s'", log_artist, log_album)
         await self._safe_mark_for_verification(artist, album)
@@ -1045,7 +1088,7 @@ class ExternalApiOrchestrator:
                 result_year = current_library_year
         else:
             result_year = None
-        return result_year, False, 0
+        return result_year, False, 0, {}
 
     async def _process_api_results(
         self,
@@ -1055,11 +1098,12 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
-    ) -> tuple[str | None, bool, int]:
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Process API results and determine the best release year.
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score)
+            Tuple of (year, is_definitive, confidence_score, year_scores)
+            year_scores: dict mapping each year found by APIs to its max score
         """
         # Aggregate scores by year using YearScoreResolver
         year_scores = self.year_score_resolver.aggregate_year_scores(all_releases)
@@ -1073,7 +1117,7 @@ class ExternalApiOrchestrator:
             )
             await self._safe_mark_for_verification(artist, album)
             fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album)
-            return fallback_year, False, 0
+            return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
         best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores)
@@ -1085,7 +1129,9 @@ class ExternalApiOrchestrator:
         else:
             await self._safe_remove_from_pending(artist, album)
 
-        return best_year, is_definitive, confidence_score
+        # Convert year_scores from list of scores to max score per year
+        max_year_scores: dict[str, int] = {year: max(scores) for year, scores in year_scores.items()}
+        return best_year, is_definitive, confidence_score, max_year_scores
 
     def _get_fallback_year_when_no_api_results(self, current_library_year: str | None, log_artist: str, log_album: str) -> str | None:
         """Apply defensive fix to prevent current year contamination when no API results found."""

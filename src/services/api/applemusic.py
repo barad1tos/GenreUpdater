@@ -288,9 +288,19 @@ class AppleMusicClient:
                 "source": "itunes",
             }
 
+            # Filter out releases with zero or negative scores (same as MusicBrainz, Discogs, Last.fm)
+            if score <= 0:
+                self.console_logger.debug(
+                    "[itunes] Filtered out '%s - %s' (%s): score %.2f <= 0",
+                    artist_name,
+                    collection_name,
+                    release_year,
+                    score,
+                )
+                return None
+
             self.console_logger.debug(
-                "[itunes] Scored release: '%s - %s' (%s) Score: %.2f",
-                artist_name,
+                "Scored iTunes Release: '%s' (%s) Score: %.2f",
                 collection_name,
                 release_year,
                 score,

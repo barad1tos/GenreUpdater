@@ -115,7 +115,7 @@ class TestYearRetrieverEdgeCases:
         with allure.step("Setup: Mock API returns year with low confidence"):
             mock_external_api = MockExternalApiService()
             # API returns 2013 with LOW confidence (is_definitive=False, score=40)
-            mock_external_api.get_album_year_response = ("2013", False, 40)
+            mock_external_api.get_album_year_response = ("2013", False, 40, {"2013": 40})
 
             mock_pending = MockPendingVerificationService()
             retriever = self.create_year_retriever(

@@ -44,8 +44,6 @@ DANGEROUS_APPLESCRIPT_PATTERNS = [
     r"system\s+attribute",  # System information access
 ]
 
-DANGEROUS_ARGUMENT_CHARACTERS = [";", "&", "|", "`", "$", ">", "<", "!"]
-
 # Security limits
 MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
 
@@ -196,15 +194,8 @@ class AppleScriptSanitizer:
 
         # Add arguments if provided
         if arguments:
-            sanitized_args: list[str] = []
-            for arg in arguments:
-                # Validate and sanitize each argument
-                if any(char in arg for char in DANGEROUS_ARGUMENT_CHARACTERS):
-                    msg = f"Dangerous characters in argument: {arg}"
-                    raise AppleScriptSanitizationError(msg, arg)
-
-                sanitized_args.append(self.sanitize_string(arg))
-
+            # Shell metacharacters are safe - we use create_subprocess_exec (no shell)
+            sanitized_args = [self.sanitize_string(arg) for arg in arguments]
             cmd.extend(sanitized_args)
 
         self.logger.debug("Created safe AppleScript command with %d components", len(cmd))

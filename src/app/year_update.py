@@ -64,8 +64,13 @@ class YearUpdateService:
         Returns:
             List of tracks or None if not found.
         """
-        # Fetch tracks - AppleScript handles artist filtering directly for performance
-        fetched_tracks: list[TrackDict] = await self._track_processor.fetch_tracks_async(artist=artist)
+        # For full library (no artist filter), use batch fetcher to avoid AppleScript timeout
+        # For specific artist, use direct fetch which is more efficient
+        fetched_tracks: list[TrackDict]
+        if artist is None:
+            fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
+        else:
+            fetched_tracks = await self._track_processor.fetch_tracks_async(artist=artist)
         if not fetched_tracks:
             self._console_logger.warning("No tracks found")
             return None

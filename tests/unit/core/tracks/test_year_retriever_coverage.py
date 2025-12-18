@@ -49,7 +49,7 @@ def mock_cache_service() -> AsyncMock:
 def mock_external_api() -> AsyncMock:
     """Create mock external API."""
     api = AsyncMock()
-    api.get_album_year = AsyncMock(return_value=("2020", True, 85))
+    api.get_album_year = AsyncMock(return_value=("2020", True, 85, {"2020": 85}))
     return api
 
 
@@ -563,7 +563,7 @@ class TestProcessSingleAlbum:
         tracks = [
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="", track_status="Apple Music"),
         ]
-        mock_external_api.get_album_year.return_value = ("2020", True, 85)  # 3-tuple with confidence
+        mock_external_api.get_album_year.return_value = ("2020", True, 85, {"2020": 85})  # 4-tuple with year_scores
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
         await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
@@ -791,7 +791,7 @@ class TestDetermineAlbumYear:
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year=""),
         ]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_external_api.get_album_year.return_value = ("2020", True, 85)  # 3-tuple with confidence score
+        mock_external_api.get_album_year.return_value = ("2020", True, 85, {"2020": 85})  # 4-tuple with year_scores score
 
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
@@ -813,7 +813,7 @@ class TestDetermineAlbumYear:
             TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year=""),
         ]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_external_api.get_album_year.return_value = (None, False, 0)  # 3-tuple
+        mock_external_api.get_album_year.return_value = (None, False, 0, {})  # 4-tuple
 
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
@@ -1030,7 +1030,7 @@ class TestProcessBatchesConcurrently:
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0)),
+            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0, {})),
         ):
             await year_retriever._batch_processor._process_batches_concurrently(
                 album_items=album_items,
@@ -1069,7 +1069,7 @@ class TestProcessAlbumEntry:
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0)),
+            unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0, {})),
         ):
             await year_retriever._batch_processor._process_album_entry(
                 album_entry=album_entry,

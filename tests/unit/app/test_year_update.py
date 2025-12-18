@@ -156,12 +156,12 @@ class TestGetTracksForYearUpdate:
         mock_track_processor: MagicMock,
         sample_tracks: list[TrackDict],
     ) -> None:
-        """Should fetch all artists when artist is None."""
-        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=sample_tracks)
+        """Should fetch all artists when artist is None using batch fetcher."""
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=sample_tracks)
 
         await service.get_tracks_for_year_update(artist=None)
 
-        mock_track_processor.fetch_tracks_async.assert_called_once_with(artist=None)
+        mock_track_processor.fetch_tracks_in_batches.assert_called_once()
 
 
 class TestRunUpdateYears:
@@ -177,7 +177,7 @@ class TestRunUpdateYears:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Should log success when update completes."""
-        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=sample_tracks)
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=sample_tracks)
         mock_year_retriever.process_album_years = AsyncMock(return_value=True)
 
         with caplog.at_level(logging.INFO):
@@ -195,7 +195,7 @@ class TestRunUpdateYears:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Should log error when update fails."""
-        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=sample_tracks)
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=sample_tracks)
         mock_year_retriever.process_album_years = AsyncMock(return_value=False)
 
         with caplog.at_level(logging.ERROR):
@@ -210,7 +210,7 @@ class TestRunUpdateYears:
         mock_track_processor: MagicMock,
         mock_year_retriever: MagicMock,
     ) -> None:
-        """Should return early when no tracks found."""
+        """Should return early when no tracks found (specific artist)."""
         mock_track_processor.fetch_tracks_async = AsyncMock(return_value=[])
 
         await service.run_update_years(artist="Unknown", force=False)
@@ -226,7 +226,7 @@ class TestRunUpdateYears:
         sample_tracks: list[TrackDict],
     ) -> None:
         """Should pass force flag to year retriever."""
-        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=sample_tracks)
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=sample_tracks)
         mock_year_retriever.process_album_years = AsyncMock(return_value=True)
 
         await service.run_update_years(artist=None, force=True)

@@ -81,7 +81,7 @@ class BatchTrackFetcher:
 
     async def fetch_all_tracks(
         self,
-        batch_size: int = 1000,
+        batch_size: int = 500,
         *,
         skip_snapshot_check: bool = False,
     ) -> list[TrackDict]:
@@ -251,7 +251,7 @@ class BatchTrackFetcher:
         args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
 
         raw_output = await self.ap_client.run_script(
-            "fetch_tracks.scpt",
+            "fetch_tracks.applescript",
             args,
             timeout=300,  # 5 minutes per batch
         )

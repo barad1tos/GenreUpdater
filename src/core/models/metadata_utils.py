@@ -41,9 +41,9 @@ class AppleScriptFieldIndex(IntEnum):
     NOT semantic names for TrackDict fields. The naming reflects
     what AppleScript actually provides at each position.
 
-    AppleScript field order (from fetch_tracks_by_ids.applescript):
+    AppleScript field order (from fetch_tracks.applescript):
         {track_id, track_name, track_artist, album_artist, track_album,
-         track_genre, date_added, track_status, track_year, release_year, ""}
+         track_genre, date_added, modification_date, track_status, track_year, release_year, ""}
     """
 
     ID = 0
@@ -53,10 +53,11 @@ class AppleScriptFieldIndex(IntEnum):
     ALBUM = auto()
     GENRE = auto()
     DATE_ADDED = auto()
+    MODIFICATION_DATE = auto()  # Last modified timestamp
     TRACK_STATUS = auto()
     YEAR = auto()  # Music.app's "year" property (NOT historical!)
     RELEASE_YEAR = auto()  # Extracted from "release date" property
-    # Position 10 is always empty "" from AppleScript - not mapped
+    # Position 11 is always empty "" from AppleScript - not mapped
 
 
 # Minimum required fields based on AppleScript output (up to DATE_ADDED)

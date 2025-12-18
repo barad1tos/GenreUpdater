@@ -324,7 +324,7 @@ class LibrarySnapshotService:
         )
 
     def _parse_fetch_tracks_output(self, raw_output: str) -> list[dict[str, str]]:
-        """Parse AppleScript fetch_tracks.scpt output into track dictionaries.
+        """Parse AppleScript fetch_tracks.applescript output into track dictionaries.
 
         Args:
             raw_output: Raw AppleScript output with ASCII 30/29 separators

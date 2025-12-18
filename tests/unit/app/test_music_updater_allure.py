@@ -210,7 +210,7 @@ class TestMusicUpdaterAllure:
             )
 
             # Mock track fetching
-            deps.ap_client.set_response("fetch_tracks.scpt", "")  # Will use cache
+            deps.ap_client.set_response("fetch_tracks.applescript", "")  # Will use cache
             await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
             # Mock track updating to succeed
@@ -282,7 +282,7 @@ class TestMusicUpdaterAllure:
                 await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
                 # Mock API year retrieval
-                deps.external_api_service.get_album_year_response = ("2021", True, 85)
+                deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
 
         with (
             allure.step("Execute year update operation"),
@@ -326,7 +326,7 @@ class TestMusicUpdaterAllure:
                 await deps.cache_service.set_async("tracks_all", [track1, track2, track3])
 
                 # Mock API responses
-                deps.external_api_service.get_album_year_response = ("2021", True, 85)
+                deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
                 deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
 
         with (
@@ -429,7 +429,7 @@ class TestMusicUpdaterAllure:
             ),
         ):
             # Mock successful year retrieval
-            deps.external_api_service.get_album_year_response = ("2022", True, 85)
+            deps.external_api_service.get_album_year_response = ("2022", True, 85, {"2022": 85})
 
             # Mock track fetching for verification
             test_track = DummyTrackData.create(
