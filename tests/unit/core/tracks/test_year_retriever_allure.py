@@ -88,9 +88,9 @@ class _MockExternalApiService:
     def __init__(self) -> None:
         """Initialize mock external API service."""
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
-        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
+        self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
 
-    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool, int]:
+    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from API."""
         self.get_album_year_calls.append((artist, album, existing_year))
         return self.get_album_year_response
@@ -412,7 +412,7 @@ class TestYearRetrieverAllure:
         with allure.step("Setup mock external API"):
             mock_external_api = _MockExternalApiService()
             expected_year = "1995"
-            mock_external_api.get_album_year_response = (expected_year, True, 85)
+            mock_external_api.get_album_year_response = (expected_year, True, 85, {expected_year: 85})
 
         with allure.step("Create YearRetriever with mock API"):
             retriever = self.create_year_retriever(external_api=mock_external_api)

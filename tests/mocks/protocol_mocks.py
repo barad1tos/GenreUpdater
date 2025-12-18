@@ -403,7 +403,7 @@ class MockExternalApiService:
 
     def __init__(self) -> None:
         """Initialize the mock external API service."""
-        self.get_album_year_response: tuple[str | None, bool, int] = ("2020", True, 85)
+        self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
         self.discogs_year_response: str | None = "2020"
         self.get_album_year_calls: list[tuple[str, str, str | None]] = []
@@ -425,7 +425,7 @@ class MockExternalApiService:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-    ) -> tuple[str | None, bool, int]:
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from external sources.
 
         Args:
@@ -434,7 +434,7 @@ class MockExternalApiService:
             current_library_year: Current year in library
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score)
+            Tuple of (year, is_definitive, confidence_score, year_scores)
         """
         self.get_album_year_calls.append((artist, album, current_library_year))
         return self.get_album_year_response
