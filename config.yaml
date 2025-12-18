@@ -1,0 +1,224 @@
+# config.yaml - Configuration for CI and development
+# Environment variables like ${VAR_NAME} are resolved at runtime
+
+# -----------------------------------------------------------------------
+# 1. MAIN PATHS
+# -----------------------------------------------------------------------
+music_library_path: ${HOME}/Music/Music/Music Library.musiclibrary
+apple_scripts_dir: applescripts
+logs_base_dir: /tmp/mgu-logs
+
+python_settings:
+  prevent_bytecode: true
+
+# -----------------------------------------------------------------------
+# 2. EXECUTION AND PERFORMANCE
+# -----------------------------------------------------------------------
+apple_script_concurrency: 2
+applescript_timeout_seconds: 3600
+
+applescript_timeouts:
+  default: 3600
+  full_library_fetch: 3600
+  single_artist_fetch: 600
+  batch_update: 1800
+
+max_retries: 2
+retry_delay_seconds: 1
+cache_ttl_seconds: 1800
+incremental_interval_minutes: 1
+
+# -----------------------------------------------------------------------
+# 3. FEATURE TOGGLES AND SETTINGS
+# -----------------------------------------------------------------------
+cleaning:
+  remaster_keywords:
+    - remaster
+    - remastered
+    - reissue
+  album_suffixes_to_remove:
+    - Remaster
+    - Remastered
+
+artist_renamer:
+  config_path: artist-renames.yaml
+
+exceptions:
+  track_cleaning: []
+
+database_verification:
+  auto_verify_days: 7
+  batch_size: 10
+
+development:
+  test_artists: []
+
+reporting:
+  problematic_albums_path: reports/albums_without_year.csv
+  min_attempts_for_report: 3
+  change_display_mode: compact
+
+caching:
+  default_ttl_seconds: 900
+  album_cache_sync_interval: 300
+  cleanup_error_retry_delay: 60
+  cleanup_interval_seconds: 300
+  negative_result_ttl: 2592000
+  library_snapshot:
+    enabled: true
+    delta_enabled: true
+    cache_file: cache/library_snapshot.json
+    max_age_hours: 24
+    compress: true
+    compress_level: 6
+
+api_cache_file: cache/cache.json
+album_years_cache_file: cache/album_years.csv
+
+# -----------------------------------------------------------------------
+# 4. LOGGING AND ANALYTICS
+# -----------------------------------------------------------------------
+logging:
+  max_runs: 3
+  main_log_file: main/main.log
+  analytics_log_file: analytics/analytics.log
+  csv_output_file: csv/track_list.csv
+  changes_report_file: csv/changes_report.csv
+  dry_run_report_file: reports/dry_run_report.html
+  last_incremental_run_file: last_incremental_run.log
+  pending_verification_file: csv/pending_year_verification.csv
+  last_db_verify_log: main/last_db_verify.log
+  levels:
+    console: INFO
+    main_file: DEBUG
+    analytics_file: INFO
+
+analytics:
+  enabled: false
+  duration_thresholds:
+    short_max: 5
+    medium_max: 20
+    long_max: 50
+  max_events: 10000
+  compact_time: true
+
+# -----------------------------------------------------------------------
+# 5. YEAR RETRIEVAL CONFIGURATION
+# -----------------------------------------------------------------------
+year_retrieval:
+  enabled: true
+  preferred_api: musicbrainz
+
+  api_auth:
+    discogs_token: ${DISCOGS_TOKEN}
+    musicbrainz_app_name: MusicGenreUpdater/2.0
+    contact_email: ${CONTACT_EMAIL}
+    use_lastfm: true
+    lastfm_api_key: ${LASTFM_API_KEY}
+
+  rate_limits:
+    discogs_requests_per_minute: 55
+    musicbrainz_requests_per_second: 1
+    lastfm_requests_per_second: 5
+    concurrent_api_calls: 2
+
+  processing:
+    batch_size: 25
+    delay_between_batches: 20
+    adaptive_delay: true
+    cache_ttl_days: 36500
+    pending_verification_interval_days: 30
+    skip_prerelease: true
+    future_year_threshold: 1
+    prerelease_recheck_days: 30
+
+  logic:
+    min_valid_year: 1900
+    absurd_year_threshold: 1970
+    suspicion_threshold_years: 10
+    definitive_score_threshold: 50
+    definitive_score_diff: 15
+    preferred_countries:
+      - us
+      - gb
+      - de
+      - fr
+      - jp
+    major_market_codes: ["us", "gb", "uk", "de", "jp", "fr", "ca", "au"]
+
+  reissue_detection:
+    reissue_keywords:
+      - reissue
+      - remaster
+      - remastered
+
+  script_api_priorities:
+    default:
+      primary: ["musicbrainz", "discogs"]
+      fallback: ["lastfm", "itunes"]
+
+  scoring:
+    base_score: 10
+    artist_exact_match_bonus: 20
+    album_exact_match_bonus: 25
+    perfect_match_bonus: 10
+    album_variation_bonus: 10
+    album_substring_penalty: -5
+    album_unrelated_penalty: -40
+    mb_release_group_match_bonus: 50
+    type_album_bonus: 15
+    type_ep_single_penalty: -10
+    type_compilation_live_penalty: -35
+    status_official_bonus: 10
+    status_bootleg_penalty: -50
+    status_promo_penalty: -20
+    reissue_penalty: -30
+    year_diff_penalty_scale: -5
+    year_diff_max_penalty: -40
+    year_before_start_penalty: -35
+    year_after_end_penalty: -25
+    year_near_start_bonus: 20
+    country_artist_match_bonus: 10
+    country_major_market_bonus: 5
+    source_mb_bonus: 25
+    source_discogs_bonus: 2
+    source_lastfm_penalty: -5
+    source_itunes_penalty: -10
+    future_year_penalty: -10
+
+  fallback:
+    enabled: true
+    year_difference_threshold: 5
+    trust_api_score_threshold: 70
+
+# -----------------------------------------------------------------------
+# 6. ALBUM TYPE DETECTION
+# -----------------------------------------------------------------------
+album_type_detection:
+  special_patterns:
+    - b-sides
+    - demo
+    - demos
+  compilation_patterns:
+    - greatest hits
+    - best of
+    - compilation
+  reissue_patterns:
+    - remaster
+    - remastered
+    - anniversary
+
+# -----------------------------------------------------------------------
+# 7. GENRE UPDATE CONFIGURATION
+# -----------------------------------------------------------------------
+genre_update:
+  batch_size: 50
+  concurrent_limit: 5
+
+# -----------------------------------------------------------------------
+# 8. TEST MODE
+# -----------------------------------------------------------------------
+test_artists:
+  - Amon Amarth
+  - Children of Bodom
+  - Metallica
