@@ -16,6 +16,11 @@ from datetime import UTC
 from datetime import datetime as dt
 from typing import Any, TypedDict
 
+from core.models.metadata_utils import remove_parentheses_with_keywords
+
+# Module-level constant for name normalization
+_NON_ALPHANUM_PATTERN = r"[^\w\s]"
+
 
 # Type definitions for scoring context
 class ArtistPeriodContext(TypedDict, total=False):
@@ -98,6 +103,7 @@ class ReleaseScorer:
         min_valid_year: int = 1900,
         definitive_score_threshold: int = 85,
         console_logger: logging.Logger | None = None,
+        remaster_keywords: list[str] | None = None,
     ) -> None:
         """Initialize the release scorer.
 
@@ -106,6 +112,7 @@ class ReleaseScorer:
             min_valid_year: Minimum valid year for releases
             definitive_score_threshold: Threshold for definitive scoring
             console_logger: Optional logger for debug output
+            remaster_keywords: Keywords to identify edition suffixes (e.g., "deluxe", "remaster")
 
         """
         self.scoring_config = scoring_config or self._get_default_scoring_config()
@@ -114,6 +121,7 @@ class ReleaseScorer:
         self.definitive_score_threshold = definitive_score_threshold
         self.artist_period_context: ArtistPeriodContext | None = None
         self.console_logger = console_logger or logging.getLogger(__name__)
+        self.remaster_keywords = remaster_keywords or []
 
         # Constants from the original implementation
         self.YEAR_LENGTH = 4
@@ -204,7 +212,7 @@ class ReleaseScorer:
         normalized = normalized.replace("&", "and")
 
         # Remove common punctuation and special characters
-        normalized = re.sub(r"[^\w\s]", "", normalized)
+        normalized = re.sub(_NON_ALPHANUM_PATTERN, "", normalized)
 
         # Normalize whitespace (multiple spaces to single space)
         normalized = re.sub(r"\s+", " ", normalized)
@@ -351,6 +359,29 @@ class ReleaseScorer:
         score_components.append(f"Artist Mismatch: {penalty}")
         return 0, penalty
 
+    def _strip_edition_suffix(self, album_name: str) -> str:
+        """Strip edition suffixes like (Deluxe), (Remastered) for fairer comparison.
+
+        Uses remaster_keywords from config to identify edition suffix patterns.
+        Only strips content in parentheses/brackets containing keywords.
+
+        Args:
+            album_name: Album name that may contain edition suffixes
+
+        Returns:
+            Album name with edition suffixes removed
+
+        """
+        if not self.remaster_keywords or not album_name:
+            return album_name
+
+        return remove_parentheses_with_keywords(
+            album_name,
+            self.remaster_keywords,
+            self.console_logger,
+            self.console_logger,  # Use same logger for errors
+        )
+
     def _calculate_album_match(
         self,
         release_title_norm: str,
@@ -372,9 +403,9 @@ class ReleaseScorer:
         """
         scoring_cfg = self.scoring_config
 
-        # Simple normalization for comparison
-        comp_release_title = re.sub(r"[^\w\s]", "", release_title_norm.lower()).strip()
-        comp_album_norm = re.sub(r"[^\w\s]", "", target_album_norm.lower()).strip()
+        # Simple normalization for comparison (edition stripping happens earlier in pipeline)
+        comp_release_title = re.sub(_NON_ALPHANUM_PATTERN, "", release_title_norm.lower()).strip()
+        comp_album_norm = re.sub(_NON_ALPHANUM_PATTERN, "", target_album_norm.lower()).strip()
 
         if comp_release_title == comp_album_norm:
             bonus = int(scoring_cfg.get("album_exact_match_bonus", 25))
@@ -649,6 +680,7 @@ class ReleaseScorer:
         *,
         artist_region: str | None,
         source: str = "unknown",
+        album_orig: str | None = None,
     ) -> int:
         """REVISED scoring function prioritizing original release indicators (v3).
 
@@ -667,6 +699,7 @@ class ReleaseScorer:
             album_norm: Normalized album name for matching
             artist_region: Artist's region/country for bonus scoring
             source: Source of the release data (musicbrainz, discogs, lastfm)
+            album_orig: Original album name with parentheses for edition stripping
 
         Returns:
             Integer score (0-100+) indicating release quality/originality
@@ -681,8 +714,16 @@ class ReleaseScorer:
         release_artist_orig = release.get("artist", "") or ""
         year_str = release.get("year", "") or ""
         source = release.get("source", source)
-        release_title_norm = self._normalize_name(release_title_orig)
+
+        # Strip edition suffixes BEFORE normalization (preserves parentheses for stripping)
+        release_title_stripped = self._strip_edition_suffix(release_title_orig)
+        release_title_norm = self._normalize_name(release_title_stripped)
         release_artist_norm = self._normalize_name(release_artist_orig)
+
+        # If original album name provided, strip editions from it too
+        if album_orig:
+            album_stripped = self._strip_edition_suffix(album_orig)
+            album_norm = self._normalize_name(album_stripped)
 
         # Validate year first (early return if invalid)
         validated_year, is_valid = self._validate_year(year_str, score_components)
@@ -739,6 +780,7 @@ def create_release_scorer(
     min_valid_year: int = 1900,
     definitive_score_threshold: int = 85,
     console_logger: logging.Logger | None = None,
+    remaster_keywords: list[str] | None = None,
 ) -> ReleaseScorer:
     """Create a configured ReleaseScorer instance.
 
@@ -747,6 +789,7 @@ def create_release_scorer(
         min_valid_year: Minimum valid year for releases
         definitive_score_threshold: Threshold for definitive scoring
         console_logger: Optional logger for debug output
+        remaster_keywords: Keywords to identify edition suffixes (e.g., "deluxe", "remaster")
 
     Returns:
         Configured ReleaseScorer instance
@@ -757,4 +800,5 @@ def create_release_scorer(
         min_valid_year=min_valid_year,
         definitive_score_threshold=definitive_score_threshold,
         console_logger=console_logger,
+        remaster_keywords=remaster_keywords,
     )

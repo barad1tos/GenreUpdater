@@ -542,11 +542,16 @@ class ExternalApiOrchestrator:
 
     def _initialize_scoring_system(self) -> None:
         """Initialize the release scoring system."""
+        # Extract remaster keywords from config for edition normalization
+        cleaning_config = self.config.get("cleaning", {})
+        remaster_keywords = cleaning_config.get("remaster_keywords", [])
+
         self.release_scorer = create_release_scorer(
             scoring_config=self.scoring_config,
             min_valid_year=self.min_valid_year,
             definitive_score_threshold=self.definitive_score_threshold,
             console_logger=self.console_logger,
+            remaster_keywords=remaster_keywords,
         )
         self.year_score_resolver = YearScoreResolver(
             console_logger=self.console_logger,
