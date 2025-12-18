@@ -358,8 +358,8 @@ class YearBatchProcessor:
             return
 
         # Determine the year for this album (handles dominant year, cache, and API)
-        # Note: determine_album_year already checks dominant year internally - no need to call separately
-        year = await self.year_determinator.determine_album_year(artist, album, album_tracks)
+        # Note: force=True bypasses dominant year and cache checks, always queries API
+        year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force)
 
         if not year:
             self._handle_no_year_found(artist, album, album_tracks)

@@ -1003,13 +1003,14 @@ class TestAbsurdYearDetection:
         assert len(mock_pending.marked_albums) == 0
 
     @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Rule 2: Absurd year WITH existing → continues (handled by Rule 5)")
+    @allure.title("Rule 2: Absurd year WITH existing → plausibility check catches")
     @pytest.mark.asyncio
     async def test_absurd_year_with_existing_continues(self) -> None:
-        """Test that absurd year with existing year continues to dramatic change rule.
+        """Test that absurd year with existing year is caught by plausibility check.
 
         Case: Album with existing year 2005, proposed year 1965
         Expected: Skip Rule 2 (has existing), proceed to Rule 5 (dramatic change)
+        → Plausibility check catches proposed_year < artist_start_year
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(
@@ -1029,12 +1030,12 @@ class TestAbsurdYearDetection:
             album="Album",
         )
 
-        # Should be caught by Rule 5 (dramatic change: 2005 → 1965 = 40 years)
+        # Should be caught by plausibility check (proposed 1965 is before artist started)
         assert result is None
         assert len(mock_pending.marked_albums) == 1
-        # Reason should be dramatic change, not absurd year
+        # Reason is now implausible_proposed_year (more specific than suspicious_year_change)
         # marked_albums is a tuple: (artist, album, reason, metadata)
-        assert mock_pending.marked_albums[0][2] == "suspicious_year_change"
+        assert mock_pending.marked_albums[0][2] == "implausible_proposed_year"
 
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Rule 2: Edge case - year exactly at threshold")
