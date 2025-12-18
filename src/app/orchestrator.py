@@ -102,7 +102,11 @@ class Orchestrator:
 
     async def _run_update_years(self, args: argparse.Namespace) -> None:
         """Run the update years command."""
-        await self.music_updater.run_update_years(artist=getattr(args, "artist", None), force=args.force)
+        await self.music_updater.run_update_years(
+            artist=getattr(args, "artist", None),
+            force=args.force,
+            fresh=getattr(args, "fresh", False),
+        )
 
     async def _run_revert_years(self, args: argparse.Namespace) -> None:
         """Run the revert years command."""

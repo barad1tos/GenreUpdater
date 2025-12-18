@@ -179,12 +179,14 @@ class YearRetriever:
         self,
         tracks: list[TrackDict],
         force: bool = False,
+        fresh: bool = False,
     ) -> bool:
         """Process and update album years for given tracks.
 
         Args:
             tracks: Tracks to process
             force: Force update even if year exists (bypasses cache/skip checks)
+            fresh: Fresh mode - invalidate cache before processing, implies force
 
         Returns:
             True if successful, False otherwise
@@ -194,9 +196,18 @@ class YearRetriever:
             self.console_logger.info("Year retrieval is disabled in config")
             return True
 
+        # fresh implies force
+        if fresh:
+            force = True
+
         try:
-            self.console_logger.info("Starting album year updates (force=%s)", force)
+            self.console_logger.info("Starting album year updates (force=%s, fresh=%s)", force, fresh)
             self._last_updated_tracks = []
+
+            # FRESH mode: invalidate album years cache before processing
+            if fresh:
+                self.console_logger.info("Fresh mode: invalidating album years cache")
+                await self.cache_service.invalidate_all_albums()
 
             # Initialize external API service if not already initialized
             # Note: initialize() is idempotent - safe to call multiple times

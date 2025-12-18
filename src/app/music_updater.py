@@ -274,14 +274,15 @@ class MusicUpdater:
                 compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
             )
 
-    async def run_update_years(self, artist: str | None, force: bool) -> None:
+    async def run_update_years(self, artist: str | None, force: bool, fresh: bool = False) -> None:
         """Update album years for all or specific artist.
 
         Args:
             artist: Optional artist filter
             force: Force update even if year exists
+            fresh: Fresh mode - invalidate cache before processing, implies force
         """
-        await self.year_service.run_update_years(artist, force)
+        await self.year_service.run_update_years(artist, force, fresh)
 
     async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
         """Verify and update a single pending album.
@@ -466,7 +467,7 @@ class MusicUpdater:
         all_changes.extend(genre_changes)
 
         # Step 4: Update years (use ALL tracks - YearBatchProcessor handles internal skip logic)
-        year_changes = await self._update_all_years_with_logs(tracks, force)
+        year_changes = await self._update_all_years_with_logs(tracks, force, fresh)
         all_changes.extend(year_changes)
 
         # Save combined results including all changes
@@ -658,26 +659,28 @@ class MusicUpdater:
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
 
-    async def _update_all_years(self, tracks: list["TrackDict"], force: bool) -> None:
+    async def _update_all_years(self, tracks: list["TrackDict"], force: bool, fresh: bool = False) -> None:
         """Update years for all tracks (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process
             force: Force all operations
+            fresh: Fresh mode - invalidate cache before processing, implies force
         """
-        await self.year_service.update_all_years(tracks, force)
+        await self.year_service.update_all_years(tracks, force, fresh)
 
-    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool) -> list[ChangeLogEntry]:
+    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process
             force: Force update - bypass cache/skip checks and re-query API for all albums
+            fresh: Fresh mode - invalidate cache before processing, implies force
 
         Returns:
             List of change log entries
         """
-        return await self.year_service.update_all_years_with_logs(tracks, force)
+        return await self.year_service.update_all_years_with_logs(tracks, force, fresh)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.
