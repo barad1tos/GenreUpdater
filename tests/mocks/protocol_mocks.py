@@ -425,6 +425,7 @@ class MockExternalApiService:
         artist: str,
         album: str,
         current_library_year: str | None = None,
+        _earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from external sources.
 
@@ -432,6 +433,7 @@ class MockExternalApiService:
             artist: Artist name
             album: Album name
             current_library_year: Current year in library
+            _earliest_track_added_year: Earliest year any track was added (for contamination detection)
 
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
