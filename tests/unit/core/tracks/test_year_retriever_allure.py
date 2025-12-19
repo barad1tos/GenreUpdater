@@ -437,7 +437,7 @@ class TestYearRetrieverAllure:
 
             # Verify API was called correctly
             assert len(mock_external_api.get_album_year_calls) == 1
-            assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None)
+            assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None, None)
 
             allure.attach(expected_year, "Determined Year", allure.attachment_type.TEXT)
             allure.attach("Test Artist", "Artist", allure.attachment_type.TEXT)
