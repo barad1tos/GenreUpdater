@@ -87,18 +87,21 @@ on normalize_cloud_status(statusValue)
         set statusText to statusValue as text
 
         -- Check if it's a raw constant (contains "constant" keyword)
-        if statusText contains "constant" then
-            -- Map 4-char codes to status strings
-            if statusText contains "kSub" then return "subscription"
-            if statusText contains "kPre" then return "prerelease"
-            if statusText contains "kLoc" then return "local only"
-            if statusText contains "kPur" then return "purchased"
-            if statusText contains "kMat" then return "matched"
-            if statusText contains "kUpl" then return "uploaded"
-            if statusText contains "kDwn" then return "downloaded"
-            -- Unknown constant
-            return "unknown"
-        end if
+        -- Use ignoring case for robustness across macOS versions
+        ignoring case
+            if statusText contains "constant" then
+                -- Map 4-char codes to status strings
+                if statusText contains "kSub" then return "subscription"
+                if statusText contains "kPre" then return "prerelease"
+                if statusText contains "kLoc" then return "local only"
+                if statusText contains "kPur" then return "purchased"
+                if statusText contains "kMat" then return "matched"
+                if statusText contains "kUpl" then return "uploaded"
+                if statusText contains "kDwn" then return "downloaded"
+                -- Unknown constant
+                return "unknown"
+            end if
+        end ignoring
 
         -- Return the text as-is (already a proper string)
         return statusText
