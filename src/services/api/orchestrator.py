@@ -1007,15 +1007,18 @@ class ExternalApiOrchestrator:
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
         """Prepare normalized and display names for API search.
 
-        Strips ALL parenthetical content from album name for cleaner API queries.
+        Strips quotes and parenthetical content from album name for cleaner API queries.
         APIs don't search for "(Deluxe Edition)" or "(Bonus Track Version)" -
         these are metadata, not album names.
         """
         artist_norm = normalize_name(artist)
 
+        # Remove quotes from album name (e.g., "Survival of the Sickest" → Survival of the Sickest)
+        album_clean = album.replace('"', "").replace("'", "")
+
         # Remove all parenthetical content from album for API queries
         # "(Deluxe Edition)", "(Bonus Track Version)", "(Remastered)" → removed
-        album_clean = re.sub(r"\s*\([^)]*\)", "", album).strip()
+        album_clean = re.sub(r"\s*\([^)]*\)", "", album_clean).strip()
         album_norm = normalize_name(album_clean)
 
         log_artist = artist if artist != artist_norm else artist_norm
