@@ -1,7 +1,11 @@
 (*
     Fetch detailed track metadata for a list of track IDs.
-    Outputs the same field structure as fetch_tracks.scpt using
+    Outputs the same field structure as fetch_tracks.applescript using
     ASCII 30 (field) and ASCII 29 (line) separators.
+
+    FEATURES:
+    - Handles AppleScript raw enum constants (e.g., «constant ****kSub»)
+    - Per-track fetch (required for ID-based lookup)
 
     Expected argument 1: comma-separated list of track IDs.
 *)
@@ -43,6 +47,7 @@ on run argv
     return my joinLines(finalResult, lineSeparator)
 end run
 
+
 on serializeTrack(trackRef, fieldSeparator)
     try
         tell application "Music"
@@ -56,7 +61,8 @@ on serializeTrack(trackRef, fieldSeparator)
             set track_genre to my safeText(genre of trackRef)
             set date_added to my formatDate(date added of trackRef)
             set modification_date to my formatDate(modification date of trackRef)
-            set track_status to my safeText(cloud status of trackRef)
+            -- Use normalize_cloud_status to handle raw enum constants
+            set track_status to my normalize_cloud_status(cloud status of trackRef)
             set track_year to my normalizeYear(year of trackRef)
             set release_year to my extractReleaseYear(trackRef)
             set new_year to "" -- maintained for compatibility
@@ -69,6 +75,42 @@ on serializeTrack(trackRef, fieldSeparator)
     end try
 end serializeTrack
 
+
+on normalize_cloud_status(statusValue)
+    -- Normalize cloud status, handling both normal strings and raw AppleScript constants
+    -- Raw constants look like: «constant ****kSub» where kSub is the 4-char code
+    if statusValue is missing value then
+        return ""
+    end if
+
+    try
+        set statusText to statusValue as text
+
+        -- Check if it's a raw constant (contains "constant" keyword)
+        -- Use ignoring case for robustness across macOS versions
+        ignoring case
+            if statusText contains "constant" then
+                -- Map 4-char codes to status strings
+                if statusText contains "kSub" then return "subscription"
+                if statusText contains "kPre" then return "prerelease"
+                if statusText contains "kLoc" then return "local only"
+                if statusText contains "kPur" then return "purchased"
+                if statusText contains "kMat" then return "matched"
+                if statusText contains "kUpl" then return "uploaded"
+                if statusText contains "kDwn" then return "downloaded"
+                -- Unknown constant
+                return "unknown"
+            end if
+        end ignoring
+
+        -- Return the text as-is (already a proper string)
+        return statusText
+    on error
+        return "unknown"
+    end try
+end normalize_cloud_status
+
+
 on extractReleaseYear(trackRef)
     try
         tell application "Music"
@@ -79,6 +121,7 @@ on extractReleaseYear(trackRef)
         return ""
     end try
 end extractReleaseYear
+
 
 on safeText(value)
     if value is missing value then
@@ -91,6 +134,7 @@ on safeText(value)
     end try
 end safeText
 
+
 on normalizeYear(yearValue)
     try
         if yearValue is missing value then return ""
@@ -100,6 +144,7 @@ on normalizeYear(yearValue)
         return ""
     end try
 end normalizeYear
+
 
 on formatDate(dateValue)
     if dateValue is missing value then return ""
@@ -116,6 +161,7 @@ on formatDate(dateValue)
     end try
 end formatDate
 
+
 on zeroPad(numValue)
     try
         if numValue < 10 then
@@ -128,6 +174,7 @@ on zeroPad(numValue)
     end try
 end zeroPad
 
+
 on joinFields(fieldList, fieldSeparator)
     set oldDelims to AppleScript's text item delimiters
     set AppleScript's text item delimiters to fieldSeparator
@@ -135,6 +182,7 @@ on joinFields(fieldList, fieldSeparator)
     set AppleScript's text item delimiters to oldDelims
     return joined
 end joinFields
+
 
 on joinLines(lineList, lineSeparator)
     set oldDelims to AppleScript's text item delimiters
