@@ -87,7 +87,7 @@ class _MockExternalApiService:
 
     def __init__(self) -> None:
         """Initialize mock external API service."""
-        self.get_album_year_calls: list[tuple[str, str, str | None]] = []
+        self.get_album_year_calls: list[tuple[str, str, str | None, int | None]] = []
         self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
 
     async def get_album_year(
@@ -95,10 +95,10 @@ class _MockExternalApiService:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-        _earliest_track_added_year: int | None = None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from API."""
-        self.get_album_year_calls.append((artist, album, current_library_year))
+        self.get_album_year_calls.append((artist, album, current_library_year, earliest_track_added_year))
         return self.get_album_year_response
 
 
