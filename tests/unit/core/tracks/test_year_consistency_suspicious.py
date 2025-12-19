@@ -218,3 +218,50 @@ class TestSuspiciousYearLogging:
         assert "2003" in formatted, f"Log should mention year 2003: {formatted}"
         # The new format shows percentage like "100.0%" or track counts like "15/15"
         assert "100" in formatted or "15/15" in formatted, f"Log should show 100% or 15/15 in new format: {formatted}"
+
+
+@pytest.mark.unit
+class TestGetEarliestTrackAddedYear:
+    """Tests for get_earliest_track_added_year static method."""
+
+    def test_returns_earliest_year_from_tracks(self) -> None:
+        """Should return the earliest year any track was added."""
+        tracks: list[TrackDict] = [
+            TrackDict(id="1", name="T1", artist="A", album="B", genre="G", year="2020", date_added="2023-05-15"),
+            TrackDict(id="2", name="T2", artist="A", album="B", genre="G", year="2020", date_added="2021-03-10"),
+            TrackDict(id="3", name="T3", artist="A", album="B", genre="G", year="2020", date_added="2024-01-01"),
+        ]
+        result = YearConsistencyChecker.get_earliest_track_added_year(tracks)
+        assert result == 2021
+
+    def test_returns_none_for_empty_tracks(self) -> None:
+        """Should return None when no tracks provided."""
+        result = YearConsistencyChecker.get_earliest_track_added_year([])
+        assert result is None
+
+    def test_returns_none_when_no_date_added(self) -> None:
+        """Should return None when tracks have no date_added."""
+        tracks: list[TrackDict] = [
+            TrackDict(id="1", name="T1", artist="A", album="B", genre="G", year="2020", date_added=""),
+            TrackDict(id="2", name="T2", artist="A", album="B", genre="G", year="2020", date_added=None),
+        ]
+        result = YearConsistencyChecker.get_earliest_track_added_year(tracks)
+        assert result is None
+
+    def test_handles_mixed_valid_invalid_dates(self) -> None:
+        """Should handle mix of valid and invalid date_added values."""
+        tracks: list[TrackDict] = [
+            TrackDict(id="1", name="T1", artist="A", album="B", genre="G", year="2020", date_added="invalid"),
+            TrackDict(id="2", name="T2", artist="A", album="B", genre="G", year="2020", date_added="2022-06-01"),
+            TrackDict(id="3", name="T3", artist="A", album="B", genre="G", year="2020", date_added=""),
+        ]
+        result = YearConsistencyChecker.get_earliest_track_added_year(tracks)
+        assert result == 2022
+
+    def test_handles_datetime_format(self) -> None:
+        """Should handle datetime format like '2025-10-01 00:19:04'."""
+        tracks: list[TrackDict] = [
+            TrackDict(id="1", name="T1", artist="A", album="B", genre="G", year="2020", date_added="2025-10-01 00:19:04"),
+        ]
+        result = YearConsistencyChecker.get_earliest_track_added_year(tracks)
+        assert result == 2025

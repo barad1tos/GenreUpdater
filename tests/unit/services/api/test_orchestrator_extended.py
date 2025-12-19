@@ -514,3 +514,72 @@ class TestCoercionMethods:
         assert orchestrator._coerce_non_negative_float(5.5, 0.0) == 5.5
         assert orchestrator._coerce_non_negative_float(-5.5, 0.0) == 0.0
         assert orchestrator._coerce_non_negative_float(None, 1.5) == 1.5
+
+
+class TestCurrentYearContamination:
+    """Tests for current year contamination detection logic."""
+
+    @pytest.mark.asyncio
+    async def test_current_year_rejected_when_tracks_added_long_ago(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Tracks added years ago with current year should be rejected as contamination."""
+        current_year = orchestrator.current_year
+        # Tracks added 5 years ago, but library year is current year → contamination
+        result = orchestrator._get_fallback_year_when_no_api_results(
+            current_library_year=str(current_year),
+            log_artist="Test Artist",
+            log_album="Test Album",
+            earliest_track_added_year=current_year - 5,
+        )
+        assert result is None, "Current year should be rejected when tracks were added long ago"
+
+    @pytest.mark.asyncio
+    async def test_current_year_rejected_when_no_track_added_info(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Current year should be rejected when no track added date is available."""
+        current_year = orchestrator.current_year
+        result = orchestrator._get_fallback_year_when_no_api_results(
+            current_library_year=str(current_year),
+            log_artist="Test Artist",
+            log_album="Test Album",
+            earliest_track_added_year=None,
+        )
+        assert result is None, "Current year should be rejected when track added date is unknown"
+
+    @pytest.mark.asyncio
+    async def test_current_year_accepted_when_tracks_added_this_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Tracks added this year with current year should be accepted as legitimate."""
+        current_year = orchestrator.current_year
+        result = orchestrator._get_fallback_year_when_no_api_results(
+            current_library_year=str(current_year),
+            log_artist="Test Artist",
+            log_album="Test Album",
+            earliest_track_added_year=current_year,
+        )
+        assert result == str(current_year), "Current year should be accepted when tracks were added this year"
+
+    @pytest.mark.asyncio
+    async def test_non_current_year_always_accepted(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Non-current years should always be accepted regardless of track added date."""
+        current_year = orchestrator.current_year
+        # Test with a past year - should always be accepted
+        result = orchestrator._get_fallback_year_when_no_api_results(
+            current_library_year=str(current_year - 1),
+            log_artist="Test Artist",
+            log_album="Test Album",
+            earliest_track_added_year=current_year - 10,
+        )
+        assert result == str(current_year - 1), "Past years should always be accepted"
+
+    @pytest.mark.asyncio
+    async def test_handle_year_search_error_respects_track_added_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """_handle_year_search_error should use earliest_track_added_year for contamination check."""
+        current_year = orchestrator.current_year
+        # Tracks added this year → accept current year
+        result, is_def, conf, scores = orchestrator._handle_year_search_error(
+            log_artist="Test Artist",
+            log_album="Test Album",
+            current_library_year=str(current_year),
+            earliest_track_added_year=current_year,
+        )
+        assert result == str(current_year), "Should accept current year when tracks added this year"
+        assert is_def is False
+        assert conf == 0

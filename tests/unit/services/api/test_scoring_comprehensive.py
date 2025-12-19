@@ -283,3 +283,341 @@ class TestCreateFunction:
         assert scorer.min_valid_year == 1950
         assert scorer.definitive_score_threshold == 90
         assert scorer.console_logger == mock_logger
+
+
+class TestCrossScriptMatching:
+    """Test cross-script artist matching for iTunes/Apple Music results.
+
+    iTunes returns Latinized artist names for non-Latin artists (e.g., Cyrillic),
+    but preserves original script for album titles. This tests that cross-script
+    comparisons (Cyrillic target vs Latin result) don't get heavily penalized.
+    """
+
+    @pytest.fixture
+    def scorer(self) -> ReleaseScorer:
+        """Create a scorer instance for testing."""
+        return create_release_scorer()
+
+    def test_cross_script_cyrillic_vs_latin_gets_reduced_penalty(self, scorer: ReleaseScorer) -> None:
+        """Test Cyrillic vs Latin artist comparison gets reduced penalty.
+
+        iTunes returns 'Druha Rika' for 'Друга Ріка' but album titles in Cyrillic.
+        This should not be penalized as heavily as unrelated artists.
+        """
+        # iTunes result: Latin artist, Cyrillic album (matches)
+        itunes_release = {
+            "title": "Два",  # Cyrillic album (exact match)
+            "artist": "Druha Rika",  # Latin (transliterated)
+            "year": "2003",
+            "album_type": "Album",
+            "source": "itunes",
+        }
+
+        # Target: Cyrillic artist, Cyrillic album
+        cross_script_score = scorer.score_original_release(
+            itunes_release,
+            artist_norm="друга ріка",  # Cyrillic target
+            album_norm="два",  # Matches
+            artist_region=None,
+        )
+
+        # Score should be positive (not filtered out)
+        assert cross_script_score > 0, "Cross-script match should have positive score"
+
+    def test_cross_script_detection_method(self, scorer: ReleaseScorer) -> None:
+        """Test the _is_cross_script_comparison method directly."""
+        # Cyrillic vs Latin should be cross-script
+        assert scorer._is_cross_script_comparison("друга ріка", "druha rika") is True
+
+        # Same script (both Latin) should not be cross-script
+        assert scorer._is_cross_script_comparison("pink floyd", "the beatles") is False
+
+        # Same script (both Cyrillic) should not be cross-script
+        assert scorer._is_cross_script_comparison("друга ріка", "океан ельзи") is False
+
+    def test_cross_script_vs_same_script_mismatch(self, scorer: ReleaseScorer) -> None:
+        """Test cross-script gets smaller penalty than same-script mismatch.
+
+        Cross-script (Cyrillic vs Latin) should be penalized less because
+        it's likely a transliteration, not a completely wrong artist.
+        """
+        release = {"title": "Album", "artist": "Artist", "year": "2020", "source": "test"}
+
+        # Same-script mismatch (both Latin, unrelated)
+        same_script_score = scorer.score_original_release(
+            release,
+            artist_norm="completely different",  # Latin, unrelated
+            album_norm="album",
+            artist_region=None,
+        )
+
+        # Cross-script (Cyrillic target, Latin result)
+        release_latin = {"title": "Album", "artist": "Druha Rika", "year": "2020", "source": "test"}
+        cross_script_score = scorer.score_original_release(
+            release_latin,
+            artist_norm="друга ріка",  # Cyrillic target
+            album_norm="album",
+            artist_region=None,
+        )
+
+        # Cross-script should score higher (smaller penalty)
+        assert cross_script_score > same_script_score, (
+            f"Cross-script ({cross_script_score}) should score higher than same-script mismatch ({same_script_score})"
+        )
+
+    def test_japanese_vs_latin_is_cross_script(self, scorer: ReleaseScorer) -> None:
+        """Test Japanese vs Latin is detected as cross-script."""
+        assert scorer._is_cross_script_comparison("音楽", "ongaku") is True
+
+    def test_arabic_vs_latin_is_cross_script(self, scorer: ReleaseScorer) -> None:
+        """Test Arabic vs Latin is detected as cross-script."""
+        assert scorer._is_cross_script_comparison("موسيقى", "musica") is True
+
+
+class TestSoundtrackCompensation:
+    """Test soundtrack compensation for exact album matches.
+
+    When target artist is "Various Artists", "OST", etc., APIs return the actual
+    composer (e.g., "Hans Zimmer" for Interstellar). This tests that exact album
+    matches with confirmed soundtrack genre get compensated properly.
+    """
+
+    @pytest.fixture
+    def scorer(self) -> ReleaseScorer:
+        """Create a scorer instance for testing."""
+        return create_release_scorer()
+
+    def test_soundtrack_compensation_all_conditions_met(self, scorer: ReleaseScorer) -> None:
+        """Test compensation when all conditions are met.
+
+        1. Target artist is "Various Artists" (soundtrack pattern)
+        2. Album matches EXACTLY
+        3. Genre confirms "Soundtrack"
+        """
+        release = {
+            "title": "Interstellar",
+            "artist": "Hans Zimmer",
+            "year": "2014",
+            "genre": "Soundtrack",
+            "album_type": "Album",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="interstellar",
+            artist_region=None,
+        )
+
+        # Score should be positive (compensation offsets artist mismatch)
+        assert score > 30, f"Soundtrack with exact match should score well, got {score}"
+
+    def test_soundtrack_no_compensation_without_exact_album_match(self, scorer: ReleaseScorer) -> None:
+        """Test no compensation when album doesn't match exactly."""
+        release = {
+            "title": "Interstellar (Original Motion Picture Soundtrack)",
+            "artist": "Hans Zimmer",
+            "year": "2014",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="interstellar",  # Not exact match
+            artist_region=None,
+        )
+
+        # May still score positive due to album variation bonus,
+        # but should be lower than exact match
+        exact_release = {
+            "title": "Interstellar",
+            "artist": "Hans Zimmer",
+            "year": "2014",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+        exact_score = scorer.score_original_release(
+            exact_release,
+            artist_norm="various artists",
+            album_norm="interstellar",
+            artist_region=None,
+        )
+
+        assert exact_score > score, "Exact match should score higher than variation"
+
+    def test_soundtrack_no_compensation_without_genre(self, scorer: ReleaseScorer) -> None:
+        """Test no compensation when genre doesn't confirm soundtrack."""
+        release = {
+            "title": "Interstellar",
+            "artist": "Hans Zimmer",
+            "year": "2014",
+            "genre": "Electronic",  # Not soundtrack!
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="interstellar",
+            artist_region=None,
+        )
+
+        # Without genre confirmation, no compensation
+        # Score should be much lower due to artist mismatch
+        assert score < 30, f"Without soundtrack genre, score should be low, got {score}"
+
+    def test_soundtrack_no_compensation_for_regular_artist(self, scorer: ReleaseScorer) -> None:
+        """Test no compensation when target artist isn't a soundtrack pattern."""
+        release = {
+            "title": "Album Name",
+            "artist": "Different Artist",
+            "year": "2020",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="pink floyd",  # Regular artist, not soundtrack pattern
+            album_norm="album name",
+            artist_region=None,
+        )
+
+        # Regular artist mismatch should get full penalty
+        assert score < 20, f"Regular artist mismatch should score low, got {score}"
+
+    def test_is_soundtrack_artist_patterns(self, scorer: ReleaseScorer) -> None:
+        """Test _is_soundtrack_artist detects various patterns."""
+        # Positive cases
+        assert scorer._is_soundtrack_artist("various artists") is True
+        assert scorer._is_soundtrack_artist("Various Artists") is True
+        assert scorer._is_soundtrack_artist("OST") is True
+        assert scorer._is_soundtrack_artist("ost") is True
+        assert scorer._is_soundtrack_artist("original soundtrack") is True
+        assert scorer._is_soundtrack_artist("Original Motion Picture Soundtrack") is True
+        assert scorer._is_soundtrack_artist("Soundtrack") is True
+        assert scorer._is_soundtrack_artist("film soundtrack") is True
+        assert scorer._is_soundtrack_artist("game soundtrack") is True
+        assert scorer._is_soundtrack_artist("VA") is True
+
+        # Negative cases
+        assert scorer._is_soundtrack_artist("Hans Zimmer") is False
+        assert scorer._is_soundtrack_artist("Pink Floyd") is False
+        assert scorer._is_soundtrack_artist("The Beatles") is False
+        assert scorer._is_soundtrack_artist("") is False
+
+    def test_soundtrack_genre_variations(self, scorer: ReleaseScorer) -> None:
+        """Test various soundtrack genre strings are recognized."""
+        base_release = {
+            "title": "Test Album",
+            "artist": "Hans Zimmer",
+            "year": "2020",
+            "source": "itunes",
+        }
+
+        # Test various genre variations
+        for genre in ["Soundtrack", "soundtrack", "Film Score", "film score", "OST", "ost"]:
+            release = {**base_release, "genre": genre}
+            score = scorer.score_original_release(
+                release,
+                artist_norm="various artists",
+                album_norm="test album",
+                artist_region=None,
+            )
+            assert score > 20, f"Genre '{genre}' should trigger compensation, got {score}"
+
+    def test_interstellar_example(self, scorer: ReleaseScorer) -> None:
+        """Test the Interstellar example from the original issue.
+
+        User has: "Various Artists - Interstellar"
+        iTunes returns: "Hans Zimmer - Interstellar (Original Motion Picture Soundtrack)"
+
+        With edition stripping and exact match + genre, this should score well.
+        """
+        release = {
+            "title": "Interstellar (Original Motion Picture Soundtrack)",
+            "artist": "Hans Zimmer",
+            "year": "2014",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        # Note: album_orig is used for edition stripping
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="interstellar",  # Normalized target
+            artist_region=None,
+            album_orig="Interstellar (Original Motion Picture Soundtrack)",  # For stripping
+        )
+
+        # With edition stripping, titles should match
+        # Album variation bonus should apply even without full compensation
+        assert score > 0, f"Interstellar soundtrack should score positively, got {score}"
+
+    def test_soundtrack_substring_match_with_dash_suffix(self, scorer: ReleaseScorer) -> None:
+        """Test 'Aladdin' matches 'Aladdin - Original Soundtrack'.
+
+        Soundtrack suffixes without parentheses should still match via substring.
+        """
+        release = {
+            "title": "Aladdin - Original Soundtrack",
+            "artist": "Alan Menken",
+            "year": "1992",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="aladdin",
+            artist_region=None,
+        )
+
+        # Substring match + genre confirmation should trigger compensation
+        # Score is positive (compensates for artist mismatch + album substring penalties)
+        assert score > 0, f"Aladdin soundtrack should have positive score with substring match, got {score}"
+
+    def test_soundtrack_substring_match_api_has_longer_title(self, scorer: ReleaseScorer) -> None:
+        """Test target contained in API result (longer API title)."""
+        release = {
+            "title": "Dune Part Two Original Motion Picture Soundtrack",
+            "artist": "Hans Zimmer",
+            "year": "2024",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="ost",
+            album_norm="dune part two",
+            artist_region=None,
+        )
+
+        # Score is positive (compensates for artist mismatch + album substring penalties)
+        assert score > 0, f"Dune soundtrack should have positive score via substring, got {score}"
+
+    def test_soundtrack_no_substring_match_unrelated_albums(self, scorer: ReleaseScorer) -> None:
+        """Test unrelated albums don't get compensation even with soundtrack genre."""
+        release = {
+            "title": "Disney Hits Collection",
+            "artist": "Various Artists",
+            "year": "2020",
+            "genre": "Soundtrack",
+            "source": "itunes",
+        }
+
+        score = scorer.score_original_release(
+            release,
+            artist_norm="various artists",
+            album_norm="aladdin",  # Not in "Disney Hits Collection"
+            artist_region=None,
+        )
+
+        # No substring match → no compensation
+        assert score < 30, f"Unrelated album should not get compensation, got {score}"

@@ -17,6 +17,7 @@ from datetime import datetime as dt
 from typing import Any, TypedDict
 
 from core.models.metadata_utils import remove_parentheses_with_keywords
+from core.models.script_detection import ScriptType, detect_primary_script
 
 # Module-level constant for name normalization
 _NON_ALPHANUM_PATTERN = r"[^\w\s]"
@@ -155,6 +156,9 @@ class ReleaseScorer:
             "album_exact_match_bonus": 25,
             "album_variation_bonus": 10,
             "perfect_match_bonus": 10,
+            # Soundtrack compensation (when artist is "Various Artists" etc.)
+            # Needs to cover artist mismatch (-60) + album substring (-15) = 75
+            "soundtrack_compensation_bonus": 75,
             # Match penalties
             "album_substring_penalty": -15,
             "album_unrelated_penalty": -40,
@@ -353,11 +357,171 @@ class ReleaseScorer:
             score_components.append(f"Artist Substring Mismatch: {penalty}")
             return 0, penalty
 
+        # Check for cross-script comparison (e.g., Cyrillic target vs Latin result from iTunes)
+        # iTunes returns Latinized artist names for non-Latin artists, but Cyrillic album titles
+        # In this case, reduce penalty to allow album matching to carry the score
+        if self._is_cross_script_comparison(target_artist_norm, release_artist_norm):
+            penalty = int(scoring_cfg.get("artist_cross_script_penalty", -10))
+            score_components.append(f"Artist Cross-Script (transliteration likely): {penalty}")
+            return 0, penalty
+
         # Completely different artist - LARGE penalty
         # This prevents "Scorn - Evanescence" from matching "Evanescence - Evanescence"
         penalty = int(scoring_cfg.get("artist_mismatch_penalty", -60))
         score_components.append(f"Artist Mismatch: {penalty}")
         return 0, penalty
+
+    @staticmethod
+    def _is_cross_script_comparison(text1: str, text2: str) -> bool:
+        """Check if two texts use different writing scripts.
+
+        This detects cases like Cyrillic vs Latin comparison, which often indicates
+        a transliteration (e.g., "Ляпис Трубецкой" vs "Lyapis Trubetskoy" from iTunes).
+
+        Args:
+            text1: First text to compare
+            text2: Second text to compare
+
+        Returns:
+            True if texts use different scripts (one Latin, one non-Latin)
+
+        """
+        script1 = detect_primary_script(text1)
+        script2 = detect_primary_script(text2)
+
+        # Cross-script if one is Latin and the other is a non-Latin script
+        non_latin_scripts = {
+            ScriptType.CYRILLIC,
+            ScriptType.CHINESE,
+            ScriptType.JAPANESE,
+            ScriptType.KOREAN,
+            ScriptType.ARABIC,
+            ScriptType.HEBREW,
+            ScriptType.GREEK,
+            ScriptType.THAI,
+            ScriptType.DEVANAGARI,
+        }
+
+        is_text1_latin = script1 == ScriptType.LATIN
+        is_text2_latin = script2 == ScriptType.LATIN
+        is_text1_non_latin = script1 in non_latin_scripts
+        is_text2_non_latin = script2 in non_latin_scripts
+
+        return (is_text1_latin and is_text2_non_latin) or (is_text1_non_latin and is_text2_latin)
+
+    @staticmethod
+    def _is_soundtrack_artist(artist_norm: str) -> bool:
+        """Check if artist name indicates a soundtrack or compilation.
+
+        Soundtrack albums often have generic artist names like "Various Artists",
+        "Original Soundtrack", "OST", etc. When searching APIs, the actual composer
+        is returned (e.g., "Hans Zimmer" for Interstellar), so artist matching
+        should be relaxed to rely on album name matching.
+
+        Args:
+            artist_norm: Normalized artist name to check
+
+        Returns:
+            True if artist name matches soundtrack/compilation patterns
+
+        """
+        if not artist_norm:
+            return False
+
+        # Exact matches (normalized, lowercase)
+        soundtrack_artists = {
+            "various artists",
+            "various",
+            "va",
+            "ost",
+            "original soundtrack",
+            "original motion picture soundtrack",
+            "original score",
+            "soundtrack",
+            "film soundtrack",
+            "movie soundtrack",
+            "game soundtrack",
+            "video game soundtrack",
+            "tv soundtrack",
+            "television soundtrack",
+            "compilation",
+            "various performers",
+        }
+
+        artist_lower = artist_norm.lower().strip()
+
+        # Check exact match
+        if artist_lower in soundtrack_artists:
+            return True
+
+        # Check if starts with common patterns
+        soundtrack_prefixes = ("various ", "original ", "ost ", "soundtrack ")
+        if any(artist_lower.startswith(prefix) for prefix in soundtrack_prefixes):
+            return True
+
+        # Check if contains definitive soundtrack indicators
+        return "soundtrack" in artist_lower or "original score" in artist_lower
+
+    def _calculate_soundtrack_compensation(
+        self,
+        target_artist_norm: str,
+        release_title_norm: str,
+        target_album_norm: str,
+        release_genre: str,
+        score_components: list[str],
+    ) -> int:
+        """Calculate compensation bonus for soundtrack albums.
+
+        When searching for soundtracks (artist = "Various Artists", "OST", etc.),
+        APIs return the actual composer (e.g., "Hans Zimmer" for Interstellar).
+        This causes a heavy artist mismatch penalty.
+
+        This method compensates for that penalty ONLY when:
+        1. Target artist is a soundtrack pattern (Various Artists, OST, etc.)
+        2. Album names match (substring matching - handles suffixes like "- Original Soundtrack")
+        3. API confirms the genre is "Soundtrack"
+
+        Without all 3 conditions, we risk false positives like matching
+        "Various Artists - Chill Vibes" with unrelated "John Smith - Chill Vibes".
+
+        Args:
+            target_artist_norm: Normalized target artist name
+            release_title_norm: Normalized release title from API
+            target_album_norm: Normalized target album name
+            release_genre: Genre string from API response
+            score_components: List to append score explanations
+
+        Returns:
+            Compensation bonus (positive int) if all conditions met, else 0
+
+        """
+        # Condition 1: Target artist must be a soundtrack pattern
+        if not self._is_soundtrack_artist(target_artist_norm):
+            return 0
+
+        # Condition 2: Album names must match (substring matching)
+        # Use same normalization/substring pattern as _calculate_album_match
+        # This handles "Aladdin" matching "Aladdin - Original Soundtrack"
+        comp_release = re.sub(_NON_ALPHANUM_PATTERN, "", release_title_norm.lower()).strip()
+        comp_target = re.sub(_NON_ALPHANUM_PATTERN, "", target_album_norm.lower()).strip()
+
+        if comp_target not in comp_release and comp_release not in comp_target:
+            return 0
+
+        # Condition 3: API must confirm this is a soundtrack
+        # Genre field may contain multiple genres or variations
+        genre_lower = (release_genre or "").lower()
+        is_soundtrack_genre = any(keyword in genre_lower for keyword in ("soundtrack", "score", "film music", "ost"))
+
+        if not is_soundtrack_genre:
+            return 0
+
+        # All conditions met - apply compensation
+        # This should offset the artist mismatch penalty (~-60) to allow
+        # the album match and other factors to determine the final score
+        compensation: int = int(self.scoring_config.get("soundtrack_compensation_bonus", 75))
+        score_components.append(f"Soundtrack Compensation (album match + genre confirmed): +{compensation}")
+        return compensation
 
     def _strip_edition_suffix(self, album_name: str) -> str:
         """Strip edition suffixes like (Deluxe), (Remastered) for fairer comparison.
@@ -752,6 +916,16 @@ class ReleaseScorer:
             artist_norm,
             release_title_norm,
             album_norm,
+            score_components=score_components,
+        )
+
+        # Soundtrack compensation: if target is "Various Artists" etc., but album matches exactly
+        # and API confirms it's a soundtrack, compensate for the artist mismatch penalty
+        score += self._calculate_soundtrack_compensation(
+            target_artist_norm=artist_norm,
+            release_title_norm=release_title_norm,
+            target_album_norm=album_norm,
+            release_genre=release.get("genre", ""),
             score_components=score_components,
         )
 

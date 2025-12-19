@@ -36,6 +36,13 @@ cleaning:
     - remaster
     - remastered
     - reissue
+    # Soundtrack edition suffixes - strip from album names for matching
+    - soundtrack
+    - original motion picture
+    - original score
+    - motion picture
+    - film score
+    - expanded edition
   album_suffixes_to_remove:
     - Remaster
     - Remastered
@@ -156,6 +163,22 @@ year_retrieval:
     default:
       primary: ["musicbrainz", "discogs"]
       fallback: ["lastfm", "itunes"]
+    # Cyrillic scripts (Ukrainian, Russian, etc.) - iTunes handles well with transliterated artists
+    cyrillic:
+      primary: ["itunes", "musicbrainz"]
+      fallback: ["discogs", "lastfm"]
+    # Japanese - iTunes has good coverage
+    japanese:
+      primary: ["itunes", "musicbrainz"]
+      fallback: ["discogs", "lastfm"]
+    # Korean - iTunes has good coverage
+    korean:
+      primary: ["itunes", "musicbrainz"]
+      fallback: ["discogs", "lastfm"]
+    # Chinese - iTunes has good coverage
+    chinese:
+      primary: ["itunes", "musicbrainz"]
+      fallback: ["discogs", "lastfm"]
 
   scoring:
     base_score: 10
@@ -165,6 +188,13 @@ year_retrieval:
     album_variation_bonus: 10
     album_substring_penalty: -5
     album_unrelated_penalty: -40
+    # Cross-script penalty: when comparing different scripts (e.g., Cyrillic vs Latin)
+    # Used for iTunes results where artist is Latinized but album is in original script
+    artist_cross_script_penalty: -10
+    # Soundtrack compensation: when target artist is "Various Artists", "OST", etc.
+    # APIs return actual composer (Hans Zimmer) - if album matches (substring) and
+    # genre confirms "Soundtrack", we compensate for artist mismatch + album substring penalties
+    soundtrack_compensation_bonus: 75
     mb_release_group_match_bonus: 50
     type_album_bonus: 15
     type_ep_single_penalty: -10

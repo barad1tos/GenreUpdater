@@ -87,12 +87,18 @@ class _MockExternalApiService:
 
     def __init__(self) -> None:
         """Initialize mock external API service."""
-        self.get_album_year_calls: list[tuple[str, str, str | None]] = []
+        self.get_album_year_calls: list[tuple[str, str, str | None, int | None]] = []
         self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
 
-    async def get_album_year(self, artist: str, album: str, existing_year: str | None = None) -> tuple[str | None, bool, int, dict[str, int]]:
+    async def get_album_year(
+        self,
+        artist: str,
+        album: str,
+        current_library_year: str | None = None,
+        earliest_track_added_year: int | None = None,
+    ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from API."""
-        self.get_album_year_calls.append((artist, album, existing_year))
+        self.get_album_year_calls.append((artist, album, current_library_year, earliest_track_added_year))
         return self.get_album_year_response
 
 
@@ -431,7 +437,7 @@ class TestYearRetrieverAllure:
 
             # Verify API was called correctly
             assert len(mock_external_api.get_album_year_calls) == 1
-            assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None)
+            assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None, None)
 
             allure.attach(expected_year, "Determined Year", allure.attachment_type.TEXT)
             allure.attach("Test Artist", "Artist", allure.attachment_type.TEXT)

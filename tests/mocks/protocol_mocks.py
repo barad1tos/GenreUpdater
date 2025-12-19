@@ -406,7 +406,7 @@ class MockExternalApiService:
         self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
         self.discogs_year_response: str | None = "2020"
-        self.get_album_year_calls: list[tuple[str, str, str | None]] = []
+        self.get_album_year_calls: list[tuple[str, str, str | None, int | None]] = []
         self.artist_activity_requests: list[str] = []
         self.discogs_requests: list[tuple[str, str]] = []
         self.initialize_calls: list[bool] = []
@@ -425,6 +425,7 @@ class MockExternalApiService:
         artist: str,
         album: str,
         current_library_year: str | None = None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Get album year from external sources.
 
@@ -432,11 +433,12 @@ class MockExternalApiService:
             artist: Artist name
             album: Album name
             current_library_year: Current year in library
+            earliest_track_added_year: Earliest year any track was added (for contamination detection)
 
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
         """
-        self.get_album_year_calls.append((artist, album, current_library_year))
+        self.get_album_year_calls.append((artist, album, current_library_year, earliest_track_added_year))
         return self.get_album_year_response
 
     async def get_artist_activity_period(

@@ -872,6 +872,7 @@ class ExternalApiOrchestrator:
         artist: str,
         album: str,
         current_library_year: str | None = None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
@@ -897,12 +898,14 @@ class ExternalApiOrchestrator:
             all_releases = await self._fetch_all_api_results(artist_norm, album_norm, artist_region, log_artist, log_album)
 
             if not all_releases:
-                return await self._handle_no_results(artist, album, log_artist, log_album, current_library_year)
+                return await self._handle_no_results(artist, album, log_artist, log_album, current_library_year, earliest_track_added_year)
 
-            return await self._process_api_results(all_releases, artist, album, log_artist, log_album, current_library_year)
+            return await self._process_api_results(
+                all_releases, artist, album, log_artist, log_album, current_library_year, earliest_track_added_year
+            )
 
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError):
-            return self._handle_year_search_error(log_artist, log_album, current_library_year)
+            return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
         finally:
             self.release_scorer.clear_artist_period_context()
 
@@ -977,6 +980,7 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle errors during year search and return fallback year.
 
@@ -990,8 +994,10 @@ class ExternalApiOrchestrator:
         )
         # Apply defensive fix to prevent current year contamination
         if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            # Explicitly reject the current system year as suspicious
-            if current_library_year == str(self.current_year):
+            # Reject current year only if tracks were NOT added recently (real contamination)
+            is_current_year = current_library_year == str(self.current_year)
+            is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
+            if is_current_year and is_contamination:
                 self.console_logger.warning(
                     self._SUSPICIOUS_CURRENT_YEAR_MSG,
                     current_library_year,
@@ -999,7 +1005,7 @@ class ExternalApiOrchestrator:
                     log_album,
                 )
                 return None, False, 0, {}
-
+            # Either not current year, or current year with recent tracks - both valid
             return current_library_year, False, 0, {}
         return None, False, 0, {}
 
@@ -1007,15 +1013,18 @@ class ExternalApiOrchestrator:
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
         """Prepare normalized and display names for API search.
 
-        Strips ALL parenthetical content from album name for cleaner API queries.
+        Strips quotes and parenthetical content from album name for cleaner API queries.
         APIs don't search for "(Deluxe Edition)" or "(Bonus Track Version)" -
         these are metadata, not album names.
         """
         artist_norm = normalize_name(artist)
 
+        # Remove quotes from album name (e.g., "Survival of the Sickest" → Survival of the Sickest)
+        album_clean = album.replace('"', "").replace("'", "")
+
         # Remove all parenthetical content from album for API queries
         # "(Deluxe Edition)", "(Bonus Track Version)", "(Remastered)" → removed
-        album_clean = re.sub(r"\s*\([^)]*\)", "", album).strip()
+        album_clean = re.sub(r"\s*\([^)]*\)", "", album_clean).strip()
         album_norm = normalize_name(album_clean)
 
         log_artist = artist if artist != artist_norm else artist_norm
@@ -1083,6 +1092,7 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle case when no API results are found.
 
@@ -1092,21 +1102,22 @@ class ExternalApiOrchestrator:
         self.console_logger.warning("No release data found from any API for '%s - %s'", log_artist, log_album)
         await self._safe_mark_for_verification(artist, album)
         # Apply defensive fix to prevent current year contamination
-        if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            # Explicitly reject the current system year as suspicious
-            if current_library_year == str(self.current_year):
-                self.console_logger.warning(
-                    self._SUSPICIOUS_CURRENT_YEAR_MSG,
-                    current_library_year,
-                    log_artist,
-                    log_album,
-                )
-                result_year = None
-            else:
-                result_year = current_library_year
-        else:
-            result_year = None
-        return result_year, False, 0, {}
+        if not (current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year)):
+            return None, False, 0, {}
+
+        # Reject current year only if tracks were NOT added recently (real contamination)
+        is_current_year = current_library_year == str(self.current_year)
+        is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
+        if is_current_year and is_contamination:
+            self.console_logger.warning(
+                self._SUSPICIOUS_CURRENT_YEAR_MSG,
+                current_library_year,
+                log_artist,
+                log_album,
+            )
+            return None, False, 0, {}
+        # Either not current year, or current year with recent tracks - both valid
+        return current_library_year, False, 0, {}
 
     async def _process_api_results(
         self,
@@ -1116,6 +1127,7 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Process API results and determine the best release year.
 
@@ -1134,7 +1146,7 @@ class ExternalApiOrchestrator:
                 len(all_releases) if all_releases else 0,
             )
             await self._safe_mark_for_verification(artist, album)
-            fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album)
+            fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album, earliest_track_added_year)
             return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
@@ -1151,11 +1163,19 @@ class ExternalApiOrchestrator:
         max_year_scores: dict[str, int] = {year: max(scores) for year, scores in year_scores.items()}
         return best_year, is_definitive, confidence_score, max_year_scores
 
-    def _get_fallback_year_when_no_api_results(self, current_library_year: str | None, log_artist: str, log_album: str) -> str | None:
+    def _get_fallback_year_when_no_api_results(
+        self,
+        current_library_year: str | None,
+        log_artist: str,
+        log_album: str,
+        earliest_track_added_year: int | None = None,
+    ) -> str | None:
         """Apply defensive fix to prevent current year contamination when no API results found."""
         if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            # Explicitly reject the current system year as suspicious
-            if current_library_year == str(self.current_year):
+            # Reject current year only if tracks were NOT added recently (real contamination)
+            is_current_year = current_library_year == str(self.current_year)
+            is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
+            if is_current_year and is_contamination:
                 self.console_logger.warning(
                     self._SUSPICIOUS_CURRENT_YEAR_MSG,
                     current_library_year,
@@ -1163,6 +1183,7 @@ class ExternalApiOrchestrator:
                     log_album,
                 )
                 return None
+            # Either not current year, or current year with recent tracks - both valid
             return current_library_year
         return None
 
