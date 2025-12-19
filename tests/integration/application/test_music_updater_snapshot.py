@@ -118,11 +118,12 @@ class FakeGenreManager:
         tracks: list[TrackDict],
         last_run_time: datetime | None = None,
         force: bool = False,
-        _fresh: bool = False,
+        fresh: bool = False,
     ) -> tuple[list[TrackDict], list[dict[str, Any]]]:
         """Mock update_genres_by_artist_async method."""
         assert last_run_time is None
         assert force
+        assert not fresh  # Test uses force=True but not fresh mode
         updated_tracks = [track.copy(genre="UpdatedGenre") for track in tracks]
         return updated_tracks, []
 
@@ -134,9 +135,10 @@ class FakeYearService:
         """Initialize fake year service."""
         self._snapshot_manager = snapshot_manager
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool = False, _fresh: bool = False) -> list[dict[str, Any]]:
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool = False, fresh: bool = False) -> list[dict[str, Any]]:
         """Mock update_all_years_with_logs method."""
         assert force
+        assert not fresh  # Test uses force=True but not fresh mode
         updated_tracks = [track.copy(year="2024") for track in tracks]
         self._snapshot_manager.update_tracks(updated_tracks)
         return []
