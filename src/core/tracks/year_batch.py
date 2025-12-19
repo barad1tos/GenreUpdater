@@ -26,7 +26,6 @@ from core.models.track_models import ChangeLogEntry
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
-    is_subscription_status,
 )
 from core.models.validators import is_empty_year
 
@@ -316,20 +315,18 @@ class YearBatchProcessor:
             force: If True, bypass skip checks and re-query API
 
         """
-        # Filter to only subscription tracks
-        subscription_tracks = [
-            track for track in album_tracks if is_subscription_status(track.track_status if isinstance(track.track_status, str) else None)
-        ]
+        # Filter to only editable tracks (excludes read-only prerelease tracks)
+        editable_tracks = [track for track in album_tracks if can_edit_metadata(track.track_status)]
 
-        if not subscription_tracks:
+        if not editable_tracks:
             self.console_logger.debug(
-                "Skipping album '%s - %s': no subscription tracks (all tracks have non-subscription status)",
+                "Skipping album '%s - %s': no editable tracks (all tracks are read-only)",
                 artist,
                 album,
             )
             return
 
-        album_tracks = subscription_tracks
+        album_tracks = editable_tracks
 
         self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 

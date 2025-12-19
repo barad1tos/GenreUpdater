@@ -7,7 +7,6 @@ from core.models.track_status import (
     filter_available_tracks,
     is_available_status,
     is_prerelease_status,
-    is_subscription_status,
     normalize_track_status,
 )
 from tests.mocks.track_data import DummyTrackData
@@ -21,14 +20,26 @@ def test_normalize_track_status() -> None:
     assert normalize_track_status(" ") == ""
 
 
+def test_normalize_applescript_raw_constants() -> None:
+    """Normalization should handle AppleScript raw enum constants."""
+
+    # AppleScript sometimes returns raw constants like «constant ****kSub»
+    assert normalize_track_status("«constant ****kSub»") == "subscription"
+    assert normalize_track_status("«constant ****kPre»") == "prerelease"
+    assert normalize_track_status("«constant ****kLoc»") == "local only"
+    assert normalize_track_status("«constant ****kPur»") == "purchased"
+    assert normalize_track_status("«constant ****kMat»") == "matched"
+    assert normalize_track_status("«constant ****kUpl»") == "uploaded"
+    assert normalize_track_status("«constant ****kDwn»") == "downloaded"
+
+
 def test_status_classification_helpers() -> None:
     """Track status helpers should classify statuses consistently."""
 
     assert is_prerelease_status("prerelease") is True
     assert is_prerelease_status("Subscription") is False
-    assert is_subscription_status("subscription") is True
-    assert is_subscription_status("matched") is False
     assert can_edit_metadata("prerelease") is False
+    assert can_edit_metadata("subscription") is True
     assert can_edit_metadata(None) is True
 
 
