@@ -500,7 +500,7 @@ class ReleaseScorer:
             return 0
 
         # Condition 2: Album names must match (substring matching)
-        # Use same pattern as _calculate_album_match (line 595)
+        # Use same normalization/substring pattern as _calculate_album_match
         # This handles "Aladdin" matching "Aladdin - Original Soundtrack"
         comp_release = re.sub(_NON_ALPHANUM_PATTERN, "", release_title_norm.lower()).strip()
         comp_target = re.sub(_NON_ALPHANUM_PATTERN, "", target_album_norm.lower()).strip()
