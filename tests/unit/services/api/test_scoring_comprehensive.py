@@ -283,3 +283,92 @@ class TestCreateFunction:
         assert scorer.min_valid_year == 1950
         assert scorer.definitive_score_threshold == 90
         assert scorer.console_logger == mock_logger
+
+
+class TestCrossScriptMatching:
+    """Test cross-script artist matching for iTunes/Apple Music results.
+
+    iTunes returns Latinized artist names for non-Latin artists (e.g., Cyrillic),
+    but preserves original script for album titles. This tests that cross-script
+    comparisons (Cyrillic target vs Latin result) don't get heavily penalized.
+    """
+
+    @pytest.fixture
+    def scorer(self) -> ReleaseScorer:
+        """Create a scorer instance for testing."""
+        return create_release_scorer()
+
+    def test_cross_script_cyrillic_vs_latin_gets_reduced_penalty(self, scorer: ReleaseScorer) -> None:
+        """Test Cyrillic vs Latin artist comparison gets reduced penalty.
+
+        iTunes returns 'Druha Rika' for 'Друга Ріка' but album titles in Cyrillic.
+        This should not be penalized as heavily as unrelated artists.
+        """
+        # iTunes result: Latin artist, Cyrillic album (matches)
+        itunes_release = {
+            "title": "Два",  # Cyrillic album (exact match)
+            "artist": "Druha Rika",  # Latin (transliterated)
+            "year": "2003",
+            "album_type": "Album",
+            "source": "itunes",
+        }
+
+        # Target: Cyrillic artist, Cyrillic album
+        cross_script_score = scorer.score_original_release(
+            itunes_release,
+            artist_norm="друга ріка",  # Cyrillic target
+            album_norm="два",  # Matches
+            artist_region=None,
+        )
+
+        # Score should be positive (not filtered out)
+        assert cross_script_score > 0, "Cross-script match should have positive score"
+
+    def test_cross_script_detection_method(self, scorer: ReleaseScorer) -> None:
+        """Test the _is_cross_script_comparison method directly."""
+        # Cyrillic vs Latin should be cross-script
+        assert scorer._is_cross_script_comparison("друга ріка", "druha rika") is True
+
+        # Same script (both Latin) should not be cross-script
+        assert scorer._is_cross_script_comparison("pink floyd", "the beatles") is False
+
+        # Same script (both Cyrillic) should not be cross-script
+        assert scorer._is_cross_script_comparison("друга ріка", "океан ельзи") is False
+
+    def test_cross_script_vs_same_script_mismatch(self, scorer: ReleaseScorer) -> None:
+        """Test cross-script gets smaller penalty than same-script mismatch.
+
+        Cross-script (Cyrillic vs Latin) should be penalized less because
+        it's likely a transliteration, not a completely wrong artist.
+        """
+        release = {"title": "Album", "artist": "Artist", "year": "2020", "source": "test"}
+
+        # Same-script mismatch (both Latin, unrelated)
+        same_script_score = scorer.score_original_release(
+            release,
+            artist_norm="completely different",  # Latin, unrelated
+            album_norm="album",
+            artist_region=None,
+        )
+
+        # Cross-script (Cyrillic target, Latin result)
+        release_latin = {"title": "Album", "artist": "Druha Rika", "year": "2020", "source": "test"}
+        cross_script_score = scorer.score_original_release(
+            release_latin,
+            artist_norm="друга ріка",  # Cyrillic target
+            album_norm="album",
+            artist_region=None,
+        )
+
+        # Cross-script should score higher (smaller penalty)
+        assert cross_script_score > same_script_score, (
+            f"Cross-script ({cross_script_score}) should score higher than same-script mismatch ({same_script_score})"
+        )
+
+    def test_japanese_vs_latin_is_cross_script(self, scorer: ReleaseScorer) -> None:
+        """Test Japanese vs Latin is detected as cross-script."""
+        assert scorer._is_cross_script_comparison("音楽", "ongaku") is True
+
+    def test_arabic_vs_latin_is_cross_script(self, scorer: ReleaseScorer) -> None:
+        """Test Arabic vs Latin is detected as cross-script."""
+        assert scorer._is_cross_script_comparison("موسيقى", "musica") is True

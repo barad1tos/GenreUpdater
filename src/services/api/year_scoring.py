@@ -17,6 +17,7 @@ from datetime import datetime as dt
 from typing import Any, TypedDict
 
 from core.models.metadata_utils import remove_parentheses_with_keywords
+from core.models.script_detection import ScriptType, detect_primary_script
 
 # Module-level constant for name normalization
 _NON_ALPHANUM_PATTERN = r"[^\w\s]"
@@ -353,11 +354,56 @@ class ReleaseScorer:
             score_components.append(f"Artist Substring Mismatch: {penalty}")
             return 0, penalty
 
+        # Check for cross-script comparison (e.g., Cyrillic target vs Latin result from iTunes)
+        # iTunes returns Latinized artist names for non-Latin artists, but Cyrillic album titles
+        # In this case, reduce penalty to allow album matching to carry the score
+        if self._is_cross_script_comparison(target_artist_norm, release_artist_norm):
+            penalty = int(scoring_cfg.get("artist_cross_script_penalty", -10))
+            score_components.append(f"Artist Cross-Script (transliteration likely): {penalty}")
+            return 0, penalty
+
         # Completely different artist - LARGE penalty
         # This prevents "Scorn - Evanescence" from matching "Evanescence - Evanescence"
         penalty = int(scoring_cfg.get("artist_mismatch_penalty", -60))
         score_components.append(f"Artist Mismatch: {penalty}")
         return 0, penalty
+
+    def _is_cross_script_comparison(self, text1: str, text2: str) -> bool:
+        """Check if two texts use different writing scripts.
+
+        This detects cases like Cyrillic vs Latin comparison, which often indicates
+        a transliteration (e.g., "Ляпис Трубецкой" vs "Lyapis Trubetskoy" from iTunes).
+
+        Args:
+            text1: First text to compare
+            text2: Second text to compare
+
+        Returns:
+            True if texts use different scripts (one Latin, one non-Latin)
+
+        """
+        script1 = detect_primary_script(text1)
+        script2 = detect_primary_script(text2)
+
+        # Cross-script if one is Latin and the other is a non-Latin script
+        non_latin_scripts = {
+            ScriptType.CYRILLIC,
+            ScriptType.CHINESE,
+            ScriptType.JAPANESE,
+            ScriptType.KOREAN,
+            ScriptType.ARABIC,
+            ScriptType.HEBREW,
+            ScriptType.GREEK,
+            ScriptType.THAI,
+            ScriptType.DEVANAGARI,
+        }
+
+        is_text1_latin = script1 == ScriptType.LATIN
+        is_text2_latin = script2 == ScriptType.LATIN
+        is_text1_non_latin = script1 in non_latin_scripts
+        is_text2_non_latin = script2 in non_latin_scripts
+
+        return (is_text1_latin and is_text2_non_latin) or (is_text1_non_latin and is_text2_latin)
 
     def _strip_edition_suffix(self, album_name: str) -> str:
         """Strip edition suffixes like (Deluxe), (Remastered) for fairer comparison.
