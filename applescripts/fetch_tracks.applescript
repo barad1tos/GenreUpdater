@@ -94,7 +94,11 @@ on run argv
 		set modificationDateList to modification date of trackRef
 		set statusList to cloud status of trackRef
 		set yearList to year of trackRef
-		set releaseDateList to release date of trackRef
+		try
+			set releaseDateList to release date of trackRef
+		on error
+			set releaseDateList to {}
+		end try
 
 		-- Loop through each track index and filter by status
 		repeat with idx from 1 to trackCount
