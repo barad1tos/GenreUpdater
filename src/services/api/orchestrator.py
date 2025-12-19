@@ -975,6 +975,32 @@ class ExternalApiOrchestrator:
             current_library_year or "none",
         )
 
+    def _is_current_year_contamination(
+        self,
+        current_library_year: str | None,
+        earliest_track_added_year: int | None,
+    ) -> bool:
+        """Check if current library year is likely contamination from auto-populated metadata.
+
+        Contamination occurs when:
+        - Library year equals current year AND
+        - Track was NOT added recently (added in previous years or date unknown)
+        - OR track date is in the future (impossible, indicates bad data)
+        """
+        if current_library_year != str(self.current_year):
+            return False
+
+        # Missing track date → can't verify, treat as contamination
+        if earliest_track_added_year is None:
+            return True
+
+        # Future track date → bad data, treat as contamination
+        if earliest_track_added_year > self.current_year:
+            return True
+
+        # Track added in previous year but has current year → contamination
+        return earliest_track_added_year < self.current_year
+
     def _handle_year_search_error(
         self,
         log_artist: str,
@@ -994,10 +1020,7 @@ class ExternalApiOrchestrator:
         )
         # Apply defensive fix to prevent current year contamination
         if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            # Reject current year only if tracks were NOT added recently (real contamination)
-            is_current_year = current_library_year == str(self.current_year)
-            is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
-            if is_current_year and is_contamination:
+            if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
                 self.console_logger.warning(
                     self._SUSPICIOUS_CURRENT_YEAR_MSG,
                     current_library_year,
@@ -1005,7 +1028,6 @@ class ExternalApiOrchestrator:
                     log_album,
                 )
                 return None, False, 0, {}
-            # Either not current year, or current year with recent tracks - both valid
             return current_library_year, False, 0, {}
         return None, False, 0, {}
 
@@ -1105,10 +1127,7 @@ class ExternalApiOrchestrator:
         if not (current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year)):
             return None, False, 0, {}
 
-        # Reject current year only if tracks were NOT added recently (real contamination)
-        is_current_year = current_library_year == str(self.current_year)
-        is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
-        if is_current_year and is_contamination:
+        if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
             self.console_logger.warning(
                 self._SUSPICIOUS_CURRENT_YEAR_MSG,
                 current_library_year,
@@ -1116,7 +1135,6 @@ class ExternalApiOrchestrator:
                 log_album,
             )
             return None, False, 0, {}
-        # Either not current year, or current year with recent tracks - both valid
         return current_library_year, False, 0, {}
 
     async def _process_api_results(
@@ -1172,10 +1190,7 @@ class ExternalApiOrchestrator:
     ) -> str | None:
         """Apply defensive fix to prevent current year contamination when no API results found."""
         if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            # Reject current year only if tracks were NOT added recently (real contamination)
-            is_current_year = current_library_year == str(self.current_year)
-            is_contamination = earliest_track_added_year is None or earliest_track_added_year < self.current_year
-            if is_current_year and is_contamination:
+            if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
                 self.console_logger.warning(
                     self._SUSPICIOUS_CURRENT_YEAR_MSG,
                     current_library_year,
@@ -1183,7 +1198,6 @@ class ExternalApiOrchestrator:
                     log_album,
                 )
                 return None
-            # Either not current year, or current year with recent tracks - both valid
             return current_library_year
         return None
 

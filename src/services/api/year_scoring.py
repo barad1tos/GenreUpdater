@@ -23,6 +23,39 @@ from core.models.script_detection import ScriptType, detect_primary_script
 _NON_ALPHANUM_PATTERN = r"[^\w\s]"
 
 
+def _normalize_for_comparison(text: str) -> str:
+    """Normalize text for comparison by removing non-alphanumeric chars and lowercasing.
+
+    Args:
+        text: Text to normalize
+
+    Returns:
+        Normalized text suitable for comparison
+
+    """
+    return re.sub(_NON_ALPHANUM_PATTERN, "", text.lower()).strip()
+
+
+def _is_album_substring_match(album1: str, album2: str) -> bool:
+    """Check if two album names match via substring comparison.
+
+    Uses normalized comparison to handle variations like:
+    - "Aladdin" matching "Aladdin - Original Soundtrack"
+    - "Album" matching "Album (Deluxe Edition)"
+
+    Args:
+        album1: First album name (raw, will be normalized internally)
+        album2: Second album name (raw, will be normalized internally)
+
+    Returns:
+        True if one album name contains the other
+
+    """
+    comp1 = _normalize_for_comparison(album1)
+    comp2 = _normalize_for_comparison(album2)
+    return comp1 in comp2 or comp2 in comp1
+
+
 # Type definitions for scoring context
 class ArtistPeriodContext(TypedDict, total=False):
     """Context about an artist's active period."""
@@ -495,17 +528,15 @@ class ReleaseScorer:
             Compensation bonus (positive int) if all conditions met, else 0
 
         """
+        scoring_cfg = self.scoring_config
+
         # Condition 1: Target artist must be a soundtrack pattern
         if not self._is_soundtrack_artist(target_artist_norm):
             return 0
 
         # Condition 2: Album names must match (substring matching)
-        # Use same normalization/substring pattern as _calculate_album_match
-        # This handles "Aladdin" matching "Aladdin - Original Soundtrack"
-        comp_release = re.sub(_NON_ALPHANUM_PATTERN, "", release_title_norm.lower()).strip()
-        comp_target = re.sub(_NON_ALPHANUM_PATTERN, "", target_album_norm.lower()).strip()
-
-        if comp_target not in comp_release and comp_release not in comp_target:
+        # Uses shared helper to avoid duplication with _calculate_album_match
+        if not _is_album_substring_match(release_title_norm, target_album_norm):
             return 0
 
         # Condition 3: API must confirm this is a soundtrack
@@ -519,7 +550,7 @@ class ReleaseScorer:
         # All conditions met - apply compensation
         # This should offset the artist mismatch penalty (~-60) to allow
         # the album match and other factors to determine the final score
-        compensation: int = int(self.scoring_config.get("soundtrack_compensation_bonus", 75))
+        compensation: int = int(scoring_cfg.get("soundtrack_compensation_bonus", 75))
         score_components.append(f"Soundtrack Compensation (album match + genre confirmed): +{compensation}")
         return compensation
 
@@ -567,9 +598,9 @@ class ReleaseScorer:
         """
         scoring_cfg = self.scoring_config
 
-        # Simple normalization for comparison (edition stripping happens earlier in pipeline)
-        comp_release_title = re.sub(_NON_ALPHANUM_PATTERN, "", release_title_norm.lower()).strip()
-        comp_album_norm = re.sub(_NON_ALPHANUM_PATTERN, "", target_album_norm.lower()).strip()
+        # Use shared normalization helper (edition stripping happens earlier in pipeline)
+        comp_release_title = _normalize_for_comparison(release_title_norm)
+        comp_album_norm = _normalize_for_comparison(target_album_norm)
 
         if comp_release_title == comp_album_norm:
             bonus = int(scoring_cfg.get("album_exact_match_bonus", 25))

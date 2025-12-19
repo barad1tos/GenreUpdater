@@ -277,20 +277,8 @@ class YearConsistencyChecker:
         except (ValueError, TypeError):
             return False
 
-        # Find earliest track added date
-        earliest_added_year: int | None = None
-        for track in tracks:
-            date_added = track.get("date_added")
-            if not date_added:
-                continue
-            try:
-                # Parse date_added format: "2025-10-01 00:19:04"
-                added_year = int(str(date_added)[:4])
-                if earliest_added_year is None or added_year < earliest_added_year:
-                    earliest_added_year = added_year
-            except (ValueError, TypeError, IndexError):
-                continue
-
+        # Use shared helper to avoid code duplication
+        earliest_added_year = self.get_earliest_track_added_year(tracks)
         if earliest_added_year is None:
             return False
 

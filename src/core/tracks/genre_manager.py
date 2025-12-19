@@ -18,6 +18,8 @@ from core.models.track_models import ChangeLogEntry, TrackDict
 from core.models.track_status import can_edit_metadata, normalize_track_status
 
 from .track_base import BaseProcessor
+from .track_utils import is_missing_or_unknown_genre as _is_missing_or_unknown_genre
+from .track_utils import parse_track_date_added as _parse_track_date_added
 
 if TYPE_CHECKING:
     from metrics import Analytics
@@ -60,15 +62,9 @@ class GenreManager(BaseProcessor):
 
         Returns:
             True if genre is missing, empty, or 'unknown'
+
         """
-        genre_val = track.genre
-
-        # Check type before applying string operations
-        if not isinstance(genre_val, str):
-            return True
-
-        genre_stripped = genre_val.strip()
-        return not genre_stripped or genre_stripped.lower() in {"unknown", ""}
+        return _is_missing_or_unknown_genre(track)
 
     @staticmethod
     def parse_date_added(track: TrackDict) -> datetime | None:
@@ -79,14 +75,9 @@ class GenreManager(BaseProcessor):
 
         Returns:
             Parsed datetime with UTC timezone, or None if parsing fails
+
         """
-        try:
-            date_added_str = track.date_added or ""
-            if isinstance(date_added_str, str) and date_added_str:
-                return datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-        except (ValueError, TypeError):
-            return None
-        return None
+        return _parse_track_date_added(track)
 
     def filter_tracks_for_incremental_update(
         self,
