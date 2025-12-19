@@ -25,6 +25,10 @@ MIN_YEAR_GAP_FOR_REISSUE_DETECTION = 4  # Minimum year gap to detect reissue sce
 MAX_SUSPICIOUS_YEAR_DIFFERENCE = 3  # Maximum years difference before suspicious
 MIN_CONFIDENT_SCORE_THRESHOLD = 85  # Minimum score to consider result confident
 
+# Constants for ORIGINAL_RELEASE_FIX validation (Issue #72 plausibility)
+# Filter failed API lookups (score 0 or very low) - these are noise, not valid candidates
+MIN_VALID_SCORE_FOR_CANDIDATE = 10
+
 
 class YearScoreResolver:
     """Resolves the best release year from scored API responses.
@@ -227,13 +231,30 @@ class YearScoreResolver:
         best_score: int,
         effective_score_threshold: int,
     ) -> list[tuple[str, int]]:
-        """Find earlier years that might be the original release."""
+        """Find earlier years that might be the original release.
+
+        Applies score-based validation to filter failed API lookups.
+        Does NOT filter by year gap - legitimate reissues can span 30+ years
+        (e.g., Pink Floyd 1973→2023). Year plausibility (vs artist career)
+        is checked separately in YearFallbackHandler.
+        """
         valid_candidates: list[tuple[str, int]] = []
 
         for candidate_year, candidate_score in sorted_years[1:]:
             candidate_year_int = int(candidate_year)
             score_difference = best_score - candidate_score
             year_difference = best_year_int - candidate_year_int
+
+            # Skip candidates with invalid/failed scores (score 0 or very low)
+            # These are typically failed API lookups that shouldn't influence selection
+            if candidate_score < MIN_VALID_SCORE_FOR_CANDIDATE:
+                self.console_logger.debug(
+                    "[ORIGINAL_RELEASE_FIX] Skipping candidate year %s with low score %d (< %d threshold)",
+                    candidate_year,
+                    candidate_score,
+                    MIN_VALID_SCORE_FOR_CANDIDATE,
+                )
+                continue
 
             # If we find an earlier year within the score threshold, and it's at least
             # a few years earlier, add it as a candidate for the likely original release

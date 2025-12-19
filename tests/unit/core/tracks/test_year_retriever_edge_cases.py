@@ -178,15 +178,15 @@ class TestYearRetrieverEdgeCases:
                 allure.attachment_type.TEXT,
             )
 
-        with allure.step("FIXED: B-Sides album update is now blocked"):
-            # After the fix: B-Sides albums return None to skip update
-            assert determined_year is None, "FIXED: B-Sides albums now return None to preserve existing year"
+        with allure.step("FIXED: B-Sides album now propagates existing year"):
+            # After the fix: B-Sides albums return existing year to propagate to all tracks
+            assert determined_year == "2011", "FIXED: B-Sides albums now propagate existing year to all tracks"
 
             allure.attach(
                 f"Existing year: 2011\n"
                 f"API returned: 2013 (is_definitive=False)\n"
                 f"Determined year: {determined_year}\n"
-                f"FIXED: Year update blocked, existing year preserved",
+                f"FIXED: Existing year propagated to all tracks",
                 "Fix Verification",
                 allure.attachment_type.TEXT,
             )
@@ -649,8 +649,8 @@ class TestYearFallbackLogic:
                 album="Scallywag",
             )
 
-        with allure.step("Verify: Update skipped"):
-            assert result is None, "Should return None to skip update"
+        with allure.step("Verify: Existing year propagated"):
+            assert result == "2018", "Should return existing year to propagate to all tracks"
 
         with allure.step("Verify: Album marked for verification"):
             assert len(mock_pending.marked_albums) == 1
@@ -663,7 +663,7 @@ class TestYearFallbackLogic:
                 f"Existing year: 2018\n"
                 f"Proposed year: 1998\n"
                 f"Difference: 20 years\n"
-                f"Result: Update BLOCKED (None returned)\n"
+                f"Result: Existing year propagated (2018 returned)\n"
                 f"Album marked for verification: Yes\n"
                 f"Reason: {reason}",
                 "Fix Verification",
@@ -699,8 +699,8 @@ class TestYearFallbackLogic:
                 album="B-Sides and Other Things I Forgot",
             )
 
-        with allure.step("Verify: Update skipped due to special album type"):
-            assert result is None, "Should return None to skip update"
+        with allure.step("Verify: Existing year propagated for special album"):
+            assert result == "2011", "Should return existing year to propagate to all tracks"
 
         with allure.step("Verify: Album marked with special type"):
             assert len(mock_pending.marked_albums) == 1
@@ -709,7 +709,7 @@ class TestYearFallbackLogic:
             assert "special_album" in reason
 
             allure.attach(
-                f"Album type: B-Sides (special)\nExisting year: 2011\nProposed year: 2013\nResult: Update BLOCKED\nReason: {reason}",
+                f"Album type: B-Sides (special)\nExisting year: 2011\nProposed year: 2013\nResult: Existing year propagated\nReason: {reason}",
                 "Fix Verification",
                 allure.attachment_type.TEXT,
             )
@@ -741,7 +741,7 @@ class TestYearFallbackLogic:
             album="Demo Vault: Wasteland",
         )
 
-        assert result is None, "Demo Vault update should be blocked"
+        assert result == "2003", "Demo Vault should propagate existing year to all tracks"
         assert len(mock_pending.marked_albums) == 1
 
     @allure.story("Fallback Decision")
@@ -1031,7 +1031,8 @@ class TestAbsurdYearDetection:
         )
 
         # Should be caught by plausibility check (proposed 1965 is before artist started)
-        assert result is None
+        # Now returns existing year to propagate to all tracks
+        assert result == "2005"
         assert len(mock_pending.marked_albums) == 1
         # Reason is now implausible_proposed_year (more specific than suspicious_year_change)
         # marked_albums is a tuple: (artist, album, reason, metadata)
@@ -1519,10 +1520,17 @@ class TestAnomalousTracksLogging:
         """Create a basic YearRetriever for testing."""
         return TestYearRetrieverEdgeCases.create_year_retriever()
 
+    @staticmethod
+    def get_debug_logs(retriever: YearRetriever) -> list[str]:
+        """Extract debug logs from retriever's consistency checker."""
+        logs: list[str] = retriever.year_consistency_checker.console_logger.debug_messages
+        return logs
+
     @allure.title("Logs tracks with different years than dominant")
     def test_logs_anomalous_tracks(self) -> None:
         """Test that tracks with non-dominant years are logged at DEBUG level."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
@@ -1533,8 +1541,8 @@ class TestAnomalousTracksLogging:
             {"id": "7", "name": "Bonus Track", "year": "2021"},  # Anomalous
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert any("Bonus Track" in msg for msg in debug_logs)
@@ -1545,14 +1553,15 @@ class TestAnomalousTracksLogging:
     def test_no_logging_when_all_same(self) -> None:
         """Test that no anomaly logging occurs when all tracks have the same year."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
             {"id": "3", "name": "Track 3", "year": "2020"},
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert all("differs from dominant" not in msg for msg in debug_logs)
@@ -1561,6 +1570,7 @@ class TestAnomalousTracksLogging:
     def test_ignores_empty_years(self) -> None:
         """Test that empty/zero years are not reported as anomalies."""
         retriever = self.create_retriever()
+        checker = retriever.year_consistency_checker
         album_tracks = [
             {"id": "1", "name": "Track 1", "year": "2020"},
             {"id": "2", "name": "Track 2", "year": "2020"},
@@ -1570,8 +1580,8 @@ class TestAnomalousTracksLogging:
             {"id": "6", "name": "Zero Year", "year": "0"},  # Should be ignored
         ]
 
-        dominant = retriever.year_consistency_checker.get_dominant_year(album_tracks)
-        debug_logs = retriever.year_consistency_checker.console_logger.debug_messages
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
 
         assert dominant == "2020"
         assert all("Empty Year" not in msg for msg in debug_logs)
@@ -1692,8 +1702,8 @@ class TestYearFallbackConfidenceScoring:
                 album="Obsidian",
             )
 
-        with allure.step("Verify: Update skipped (preserves existing)"):
-            assert result is None, "Low confidence should preserve valid existing year"
+        with allure.step("Verify: Existing year propagated"):
+            assert result == "2018", "Low confidence should propagate existing year to all tracks"
 
         with allure.step("Verify: Album marked for verification"):
             assert len(mock_pending.marked_albums) == 1
@@ -1707,7 +1717,7 @@ class TestYearFallbackConfidenceScoring:
                 "Proposed year: 2010\n"
                 "Difference: 8 years (dramatic)\n"
                 "Confidence: 40% (low)\n"
-                "Result: Update SKIPPED (preserves existing)\n"
+                "Result: Existing year propagated to all tracks\n"
                 "Album marked: Yes (for manual verification)",
                 "Preservation Verification",
                 allure.attachment_type.TEXT,
@@ -1765,5 +1775,5 @@ class TestYearFallbackConfidenceScoring:
             album="Album",
         )
 
-        assert result is None, "Confidence below threshold (69) should block update"
+        assert result == "2015", "Confidence below threshold (69) should propagate existing year"
         assert len(mock_pending.marked_albums) == 1

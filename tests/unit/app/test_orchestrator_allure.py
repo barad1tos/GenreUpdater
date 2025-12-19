@@ -48,6 +48,7 @@ class TestOrchestratorAllure:
         dry_run: bool = False,
         force: bool = False,
         test_mode: bool = False,
+        fresh: bool = False,
         **kwargs: Any,
     ) -> argparse.Namespace:
         """Create mock command-line arguments."""
@@ -56,6 +57,7 @@ class TestOrchestratorAllure:
         args.dry_run = dry_run
         args.force = force
         args.test_mode = test_mode
+        args.fresh = fresh
 
         # Add any additional keyword arguments
         for key, value in kwargs.items():

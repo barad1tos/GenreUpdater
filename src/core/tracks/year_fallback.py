@@ -33,12 +33,15 @@ class YearFallbackHandler:
     """Handles fallback logic for year decisions.
 
     Decision Tree:
-    1. IF is_definitive=True → APPLY year (high confidence from API)
+    1. IF is_definitive=True → APPLY proposed year (high confidence from API)
     2. IF proposed_year < absurd_threshold AND no existing year → MARK + SKIP
-    3. IF existing year is EMPTY → APPLY year (nothing to preserve)
-    4. IF is_special_album_type → MARK for verification + SKIP/UPDATE
-    5. IF |proposed - existing| > THRESHOLD → MARK + PRESERVE existing
-    6. ELSE → APPLY year
+    3. IF existing year is EMPTY → APPLY proposed year (nothing to preserve)
+    4. IF is_special_album_type → MARK + PROPAGATE existing year to all tracks
+    5. IF |proposed - existing| > THRESHOLD → MARK + PROPAGATE existing year to all tracks
+    6. ELSE → APPLY proposed year
+
+    Key principle: When we trust existing year over proposed year, we PROPAGATE
+    the existing year to ALL tracks (including empty ones), not just preserve it.
     """
 
     def __init__(
@@ -115,7 +118,18 @@ class YearFallbackHandler:
         existing_year = self.get_existing_year_from_tracks(album_tracks)
 
         # Early exit: No change needed if existing year equals proposed year
+        # BUT: still check plausibility - both could be wrong (e.g., year before artist started)
         if existing_year and existing_year == proposed_year:
+            # Check if this matching year is plausible for the artist
+            is_implausible = await self._check_matching_year_plausibility(
+                year=existing_year,
+                artist=artist,
+                album=album,
+            )
+            if is_implausible:
+                # Both existing and proposed years are implausible - mark for verification, skip update
+                return None
+
             self.console_logger.debug(
                 "[FALLBACK] No change needed for %s - %s (existing year %s matches proposed)",
                 artist,
@@ -138,14 +152,42 @@ class YearFallbackHandler:
             )
             return proposed_year
 
+        # Delegate remaining rules to helper method
+        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album)
+
+    async def _apply_existing_year_rules(
+        self,
+        proposed_year: str,
+        existing_year: str,
+        confidence_score: int,
+        artist: str,
+        album: str,
+    ) -> str:
+        """Apply rules when existing year is present.
+
+        Handles special album types and dramatic year changes.
+
+        Args:
+            proposed_year: Year from API
+            existing_year: Existing year from tracks
+            confidence_score: API confidence score (0-100)
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Year to apply (proposed or existing)
+
+        """
         # Rule 4: Check for special album types
         special_result = await self._handle_special_album_type(proposed_year, existing_year, artist, album)
         if special_result is not None:
-            return special_result if special_result != "" else None
+            # If special album handler says "skip" (empty string), propagate existing year to all tracks
+            return special_result if special_result != "" else existing_year
 
         # Rule 5: Check for dramatic year change (now considers confidence score and suspicious years)
         if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album):
-            return None
+            # Propagate existing year to all tracks instead of skipping entirely
+            return existing_year
 
         # Rule 6: Apply year (low confidence but reasonable change)
         self.console_logger.debug(
@@ -219,15 +261,15 @@ class YearFallbackHandler:
 
         if album_info.strategy == YearHandlingStrategy.MARK_AND_SKIP:
             self.console_logger.warning(
-                "[FALLBACK] Skipping year update for %s - %s (special album type: %s, pattern: '%s'). Existing: %s, Proposed: %s",
+                "[FALLBACK] Propagating existing year %s to all tracks for %s - %s (special album type: %s, pattern: '%s', rejected proposed: %s)",
+                existing_year,
                 artist,
                 album,
                 album_info.album_type.value,
                 album_info.detected_pattern,
-                existing_year,
                 proposed_year,
             )
-            return ""  # Signal to skip
+            return ""  # Signal to propagate existing_year (handled by caller)
 
         # MARK_AND_UPDATE: continue with proposed year
         self.console_logger.info(
@@ -319,6 +361,67 @@ class YearFallbackHandler:
         )
         return None
 
+    async def _check_matching_year_plausibility(
+        self,
+        year: str,
+        artist: str,
+        album: str,
+    ) -> bool:
+        """Check if a single year (when existing == proposed) is plausible for the artist.
+
+        This handles the case where both library and API agree on the same wrong year.
+        For example: Evanescence (formed 1995) with year 1994 - both sources are wrong.
+
+        Args:
+            year: The year to check (same for both existing and proposed)
+            artist: Artist name (for API lookup)
+            album: Album name (for marking verification)
+
+        Returns:
+            True: year is implausible (before artist started) - should skip and mark for verification
+            False: year is plausible or can't determine - proceed normally
+
+        """
+        if self.api_orchestrator is None:
+            return False
+
+        try:
+            year_int = int(year)
+        except (ValueError, TypeError):
+            return False
+
+        # Get artist's career start year
+        artist_start = await self.api_orchestrator.get_artist_start_year(artist)
+
+        if artist_start is None:
+            return False
+
+        # Check if the year is before artist started → IMPOSSIBLE
+        if year_int < artist_start:
+            self.console_logger.warning(
+                "[PLAUSIBILITY] Year %d is before artist '%s' started (%d) for album '%s' - "
+                "both library and API agree on impossible year, marking for verification",
+                year_int,
+                artist,
+                artist_start,
+                album,
+            )
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="implausible_matching_year",
+                metadata={
+                    "year": year,
+                    "artist_start_year": artist_start,
+                    "plausibility": "year_before_artist_start",
+                    "note": "Both library and API returned same impossible year",
+                },
+            )
+            return True
+
+        return False
+
+    # noinspection PySimplifyBooleanCheck
     async def _handle_dramatic_year_change(
         self,
         proposed_year: str,
@@ -357,7 +460,7 @@ class YearFallbackHandler:
             artist=artist,
         )
         if plausibility_result is True:
-            # Proposed year is implausible (before artist started) → preserve existing
+            # Proposed year is implausible (before artist started) → propagate existing
             await self.pending_verification.mark_for_verification(
                 artist=artist,
                 album=album,
@@ -369,7 +472,7 @@ class YearFallbackHandler:
                     "plausibility": "proposed_year_before_artist_start",
                 },
             )
-            return True  # Skip update - preserve existing year
+            return True  # Signals caller to propagate existing_year
 
         if plausibility_result is False:
             # Existing year is implausible → apply API year
@@ -400,7 +503,7 @@ class YearFallbackHandler:
             },
         )
         self.console_logger.warning(
-            "[FALLBACK] Preserving existing year %s for %s - %s (dramatic change to %s, diff > %d years, confidence %d%%)",
+            "[FALLBACK] Propagating existing year %s to all tracks for %s - %s (rejected dramatic change to %s, diff > %d years, confidence %d%%)",
             existing_year,
             artist,
             album,
@@ -408,7 +511,7 @@ class YearFallbackHandler:
             self.year_difference_threshold,
             confidence_score,
         )
-        return True
+        return True  # Signals caller to propagate existing_year
 
     @staticmethod
     def get_existing_year_from_tracks(tracks: list[TrackDict]) -> str | None:

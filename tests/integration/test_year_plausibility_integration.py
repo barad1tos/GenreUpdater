@@ -232,15 +232,15 @@ class TestYearPlausibilityIntegration:
                 album="Master of Puppets",
             )
 
-        with allure.step("Verify: None returned (preserve existing)"):
-            # None means "don't update, preserve existing year"
-            assert result is None, f"Expected None (preserve existing), got '{result}'"
+        with allure.step("Verify: Existing year returned for propagation"):
+            # Existing year is returned to propagate to all tracks (including empty ones)
+            assert result == "1986", f"Expected '1986' (propagate existing), got '{result}'"
 
             # Should be marked for verification (suspicious change)
             assert len(mock_pending_service.marked_albums) >= 1
 
             allure.attach(
-                f"Result: {result}\nExisting preserved: True (via None return)",
+                f"Result: {result}\nExisting propagated: True (via returning existing year)",
                 "Test Results",
                 allure.attachment_type.TEXT,
             )

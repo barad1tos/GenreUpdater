@@ -231,7 +231,7 @@ class TestRunUpdateYears:
 
         await service.run_update_years(artist=None, force=True)
 
-        mock_year_retriever.process_album_years.assert_called_once_with(sample_tracks, force=True)
+        mock_year_retriever.process_album_years.assert_called_once_with(sample_tracks, force=True, fresh=False)
 
 
 class TestRunRevertYears:
@@ -334,7 +334,7 @@ class TestUpdateAllYears:
 
         await service.update_all_years(tracks=sample_tracks, force=False)
 
-        mock_year_retriever.process_album_years.assert_called_once_with(sample_tracks, force=False)
+        mock_year_retriever.process_album_years.assert_called_once_with(sample_tracks, force=False, fresh=False)
 
     @pytest.mark.asyncio
     async def test_updates_snapshot(

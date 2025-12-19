@@ -451,7 +451,7 @@ class MusicBrainzClient(BaseApiClient):
             release_search_url = "https://musicbrainz.org/ws/2/release/"
             release_params: dict[str, str] = {
                 "release-group": rg_id,
-                "inc": "media",
+                "inc": "media+artist-credits",  # Include artist-credits for scoring
                 "fmt": "json",
                 "limit": "100",
             }
@@ -514,8 +514,13 @@ class MusicBrainzClient(BaseApiClient):
                     continue
                 processed_release_ids.add(release_id)
 
+                # Extract artist name from artist-credit (MusicBrainz format)
+                # Try release first, then fall back to release group
+                artist_name = self._extract_artist_from_credit(release) or self._extract_artist_from_credit(rg_info)
+
                 # Combine release and release group info for scoring
-                release_to_score: MBApiData = {**release, "release_group": rg_info}
+                # Add 'artist' field so scoring function can match artist names
+                release_to_score: MBApiData = {**release, "release_group": rg_info, "artist": artist_name}
 
                 score = self._score_original_release(
                     release_to_score,
@@ -530,6 +535,35 @@ class MusicBrainzClient(BaseApiClient):
                     scored_releases.append(release_info)
 
         return scored_releases
+
+    @staticmethod
+    def _extract_artist_from_credit(data: dict[str, Any]) -> str:
+        """Extract artist name from MusicBrainz artist-credit field.
+
+        MusicBrainz uses artist-credit array instead of simple artist field.
+        This extracts the primary artist name for scoring purposes.
+
+        Args:
+            data: Dictionary containing 'artist-credit' field
+
+        Returns:
+            Artist name string, or empty string if not found
+
+        """
+        artist_credits = data.get("artist-credit", [])
+        if not artist_credits:
+            return ""
+
+        # Get the first (primary) artist from credit list
+        first_credit = artist_credits[0]
+
+        # artist-credit format: [{"name": "Artist Name", "artist": {"name": "Artist Name", ...}}]
+        # Use 'name' from the credit first (respects credited-as), fall back to artist.name
+        if name := first_credit.get("name"):
+            return str(name)
+
+        artist_info = first_credit.get("artist", {})
+        return str(artist_info.get("name", ""))
 
     def _create_scored_release(
         self,
@@ -657,7 +691,7 @@ class MusicBrainzClient(BaseApiClient):
         for info in label_info:
             label = info.get("label")
             if label and "name" in label and label["name"]:
-                return cast(str, label["name"])
+                return label["name"]
 
         return None
 

@@ -76,12 +76,13 @@ class YearUpdateService:
             return None
         return fetched_tracks
 
-    async def run_update_years(self, artist: str | None, force: bool) -> None:
+    async def run_update_years(self, artist: str | None, force: bool, fresh: bool = False) -> None:
         """Update album years for all or specific artist.
 
         Args:
             artist: Optional artist filter.
             force: Force update even if year exists.
+            fresh: Fresh mode - invalidate cache before processing, implies force.
         """
         self._console_logger.info(
             "Starting year update operation%s",
@@ -93,7 +94,7 @@ class YearUpdateService:
             return
 
         # Process album years
-        success = await self._year_retriever.process_album_years(tracks, force=force)
+        success = await self._year_retriever.process_album_years(tracks, force=force, fresh=fresh)
 
         if success:
             self._console_logger.info("Year update operation completed successfully")
@@ -144,29 +145,31 @@ class YearUpdateService:
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
 
-    async def update_all_years(self, tracks: list[TrackDict], force: bool) -> None:
+    async def update_all_years(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> None:
         """Update years for all tracks (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
             force: Force all operations.
+            fresh: Fresh mode - invalidate cache before processing, implies force.
         """
         self._console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
         self._console_logger.info("Step 4/4: Updating album years")
         try:
-            await self._year_retriever.process_album_years(tracks, force=force)
+            await self._year_retriever.process_album_years(tracks, force=force, fresh=fresh)
             self._snapshot_manager.update_tracks(self._year_retriever.get_last_updated_tracks())
             self._console_logger.info("=== AFTER Step 4 completed successfully ===")
         except Exception:
             self._error_logger.exception("=== ERROR in Step 4 ===")
             raise
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool) -> list[ChangeLogEntry]:
+    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
             force: Force update - bypass cache/skip checks and re-query API for all albums.
+            fresh: Fresh mode - invalidate cache before processing, implies force.
 
         Returns:
             List of change log entries.
@@ -174,6 +177,12 @@ class YearUpdateService:
         self._console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
         self._console_logger.info("Step 4/4: Updating album years")
         changes_log: list[ChangeLogEntry] = []
+
+        # fresh implies force
+        if fresh:
+            force = True
+            self._console_logger.info("Fresh mode: invalidating album years cache")
+            await self._track_processor.cache_service.invalidate_all_albums()
 
         try:
             updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)

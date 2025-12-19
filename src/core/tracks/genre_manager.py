@@ -409,18 +409,26 @@ class GenreManager(BaseProcessor):
         tracks: list[TrackDict],
         last_run_time: datetime | None = None,
         force: bool = False,
+        fresh: bool = False,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Update genres for all tracks, grouped by artist.
 
         Args:
             tracks: All tracks to process
             last_run_time: Time of last run for incremental updates
-            force: Force update all tracks
+            force: Force update all tracks (bypass incremental filtering)
+            fresh: Fresh mode - implies force=True. For genres, equivalent to force
+                since there's no cache to invalidate (included for API consistency)
 
         Returns:
             Tuple of (all_updated_tracks, all_change_logs)
 
         """
+        # fresh implies force (no cache to invalidate for genres)
+        if fresh:
+            force = True
+            self.console_logger.info("Fresh mode: forcing genre recalculation for all tracks")
+
         # Group all tracks by artist (we will compute per-artist dominant on full set,
         # and then choose per-track updates incrementally)
         grouped_tracks = group_tracks_by_artist(tracks)
