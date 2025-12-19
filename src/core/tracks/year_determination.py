@@ -16,6 +16,8 @@ from core.models.validators import is_empty_year, is_valid_year
 
 from .year_utils import resolve_non_negative_int, resolve_positive_int
 
+from .year_consistency import YearConsistencyChecker
+
 if TYPE_CHECKING:
     import logging
 
@@ -26,7 +28,6 @@ if TYPE_CHECKING:
     )
     from core.models.track_models import TrackDict
 
-    from .year_consistency import YearConsistencyChecker
     from .year_fallback import YearFallbackHandler
 
 
@@ -120,10 +121,13 @@ class YearDeterminator:
                 force,
             )
 
+        # Extract dominant year early - needed for both local checks and API fallback
+        dominant_year: str | None = None if force else self.consistency_checker.get_dominant_year(album_tracks)
+
         # Force mode: skip local checks, go directly to API
         if not force:
             # 1. Check for dominant year from track metadata
-            if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
+            if dominant_year:
                 return dominant_year
 
             # 2. Check cache — BUT only trust if high confidence
@@ -150,8 +154,16 @@ class YearDeterminator:
                 return consensus_year
 
         # 4. API as last resort
+        # Extract metadata for contamination detection
+        earliest_added = YearConsistencyChecker.get_earliest_track_added_year(album_tracks)
+
         try:
-            year_result, is_definitive, confidence_score, _year_scores = await self.external_api.get_album_year(artist, album)
+            year_result, is_definitive, confidence_score, _year_scores = await self.external_api.get_album_year(
+                artist,
+                album,
+                current_library_year=dominant_year,
+                earliest_track_added_year=earliest_added,
+            )
         except (OSError, ValueError, RuntimeError) as e:
             if debug.year:
                 self.console_logger.exception("Exception in get_album_year: %s", e)

@@ -36,6 +36,13 @@ cleaning:
     - remaster
     - remastered
     - reissue
+    # Soundtrack edition suffixes - strip from album names for matching
+    - soundtrack
+    - original motion picture
+    - original score
+    - motion picture
+    - film score
+    - expanded edition
   album_suffixes_to_remove:
     - Remaster
     - Remastered
@@ -184,6 +191,10 @@ year_retrieval:
     # Cross-script penalty: when comparing different scripts (e.g., Cyrillic vs Latin)
     # Used for iTunes results where artist is Latinized but album is in original script
     artist_cross_script_penalty: -10
+    # Soundtrack compensation: when target artist is "Various Artists", "OST", etc.
+    # APIs return actual composer (Hans Zimmer) - if album matches (substring) and
+    # genre confirms "Soundtrack", we compensate for artist mismatch + album substring penalties
+    soundtrack_compensation_bonus: 75
     mb_release_group_match_bonus: 50
     type_album_bonus: 15
     type_ep_single_penalty: -10

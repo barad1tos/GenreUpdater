@@ -354,3 +354,31 @@ class YearConsistencyChecker:
                     track_year,
                     dominant_year,
                 )
+
+    @staticmethod
+    def get_earliest_track_added_year(tracks: list[TrackDict]) -> int | None:
+        """Extract earliest year any track was added to library.
+
+        Useful for detecting current year contamination - if tracks were added
+        this year and library year is current year, it's likely legitimate.
+
+        Args:
+            tracks: List of tracks to analyze
+
+        Returns:
+            Earliest year a track was added, or None if no dates found
+
+        """
+        earliest: int | None = None
+        for track in tracks:
+            date_added = track.get("date_added")
+            if not date_added:
+                continue
+            try:
+                # Parse date_added format: "2025-10-01 00:19:04"
+                year = int(str(date_added)[:4])
+                if earliest is None or year < earliest:
+                    earliest = year
+            except (ValueError, TypeError, IndexError):
+                continue
+        return earliest

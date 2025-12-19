@@ -301,6 +301,7 @@ class ExternalApiServiceProtocol(Protocol):
         artist: str,
         album: str,
         current_library_year: str | None = None,
+        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
@@ -308,6 +309,7 @@ class ExternalApiServiceProtocol(Protocol):
             artist: Artist name
             album: Album name
             current_library_year: Current year in library (optional)
+            earliest_track_added_year: Earliest year any track was added to library (optional)
 
         Returns:
             Tuple of (year_string, is_definitive, confidence_score, year_scores) where:
