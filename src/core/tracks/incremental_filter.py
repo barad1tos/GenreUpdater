@@ -7,16 +7,17 @@ responsibility separate from genre-specific logic.
 from __future__ import annotations
 
 import itertools
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from core.tracks.track_base import BaseProcessor
 from core.tracks.track_delta import compute_track_delta
+from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
 from core.logger import get_full_log_path
 from metrics.change_reports import load_track_list
 
 if TYPE_CHECKING:
     import logging
+    from datetime import datetime
 
     from core.models.track_models import TrackDict
     from metrics import Analytics
@@ -56,10 +57,10 @@ class IncrementalFilterService(BaseProcessor):
         missing_genre_tracks: list[TrackDict] = []
 
         for track in tracks:
-            if self._is_missing_or_unknown_genre(track):
+            if is_missing_or_unknown_genre(track):
                 missing_genre_tracks.append(track)
 
-            date_added = self._parse_date_added(track)
+            date_added = parse_track_date_added(track)
             if date_added and date_added > last_run_time:
                 new_tracks.append(track)
 
@@ -85,23 +86,6 @@ class IncrementalFilterService(BaseProcessor):
             len(combined),
         )
         return combined
-
-    @staticmethod
-    def _is_missing_or_unknown_genre(track: TrackDict) -> bool:
-        genre_val = track.get("genre", "")
-        if not isinstance(genre_val, str):
-            return True
-        return not genre_val.strip() or genre_val.strip().lower() in {"unknown", ""}
-
-    @staticmethod
-    def _parse_date_added(track: TrackDict) -> datetime | None:
-        try:
-            date_added_str = track.get("date_added", "")
-            if isinstance(date_added_str, str) and date_added_str:
-                return datetime.strptime(date_added_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-        except ValueError:
-            return None
-        return None
 
     def _find_status_changed_tracks(
         self,

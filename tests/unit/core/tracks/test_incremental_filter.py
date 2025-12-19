@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
+from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -260,7 +261,7 @@ class TestIncrementalFilterService:
         # Test with proper TrackDict format (uses default date_added)
         track = _create_track()
 
-        result = IncrementalFilterService._parse_date_added(track)
+        result = parse_track_date_added(track)
 
         expected = datetime(2024, 1, 1, 12, tzinfo=UTC)
         assert result == expected
@@ -275,34 +276,34 @@ class TestIncrementalFilterService:
     def _test_invalid_date_parsing(date_added: str | None) -> None:
         """Helper to test invalid date parsing."""
         track_invalid = _create_track(date_added=date_added)
-        result = IncrementalFilterService._parse_date_added(track_invalid)
+        result = parse_track_date_added(track_invalid)
         assert result is None
 
     def test_is_missing_or_unknown_genre(self) -> None:
         """Test genre validation logic."""
         # Missing genre (empty string)
         track_empty = _create_track(genre="")
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_empty) is True
+        assert is_missing_or_unknown_genre(track_empty) is True
 
         # Unknown genre
         track_unknown = _create_track(genre="Unknown")
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_unknown) is True
+        assert is_missing_or_unknown_genre(track_unknown) is True
 
         # Case insensitive unknown
         track_unknown_case = _create_track(genre="UNKNOWN")
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_unknown_case) is True
+        assert is_missing_or_unknown_genre(track_unknown_case) is True
 
         # Whitespace only
         track_whitespace = _create_track(genre="   ")
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_whitespace) is True
+        assert is_missing_or_unknown_genre(track_whitespace) is True
 
         # Valid genre (not using default to be explicit)
         track_valid = _create_track(genre="Jazz")
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_valid) is False
+        assert is_missing_or_unknown_genre(track_valid) is False
 
         # None value (if genre field can be None)
         track_none = _create_track(genre=None)
-        assert IncrementalFilterService._is_missing_or_unknown_genre(track_none) is True
+        assert is_missing_or_unknown_genre(track_none) is True
 
     def test_get_dry_run_actions(self) -> None:
         """Test dry run actions tracking."""

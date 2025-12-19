@@ -13,6 +13,7 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
+from core.tracks.track_utils import parse_track_date_added
 from core.tracks.track_delta import TrackDelta
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
@@ -544,7 +545,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach(date_string, "Input Date String", allure.attachment_type.TEXT)
 
         with allure.step("Parse date"):
-            result = IncrementalFilterService._parse_date_added(track)
+            result = parse_track_date_added(track)
 
         with allure.step("Verify parsed date"):
             assert result is not None
@@ -578,7 +579,7 @@ class TestIncrementalFilterServiceAllure:
             allure.attach(str(invalid_date), "Invalid Date Input", allure.attachment_type.TEXT)
 
         with allure.step("Attempt to parse invalid date"):
-            result = IncrementalFilterService._parse_date_added(track)
+            result = parse_track_date_added(track)
 
         with allure.step("Verify graceful handling"):
             assert result is None
