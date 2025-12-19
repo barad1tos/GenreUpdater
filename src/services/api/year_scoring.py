@@ -44,8 +44,8 @@ def _is_album_substring_match(album1: str, album2: str) -> bool:
     - "Album" matching "Album (Deluxe Edition)"
 
     Args:
-        album1: First album name (normalized)
-        album2: Second album name (normalized)
+        album1: First album name (raw, will be normalized internally)
+        album2: Second album name (raw, will be normalized internally)
 
     Returns:
         True if one album name contains the other

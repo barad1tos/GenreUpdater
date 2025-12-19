@@ -273,11 +273,24 @@ class TestIncrementalFilterService:
             self._test_invalid_date_parsing(invalid_date)
 
     @staticmethod
-    def _test_invalid_date_parsing(date_added: str | None) -> None:
+    def _test_invalid_date_parsing(date_added: object) -> None:
         """Helper to test invalid date parsing."""
         track_invalid = _create_track(date_added=date_added)
         result = parse_track_date_added(track_invalid)
         assert result is None
+
+    def test_parse_date_added_non_string_values(self) -> None:
+        """Test parse_track_date_added returns None for non-string date_added values.
+
+        Uses raw dicts to bypass Pydantic validation and test function resilience.
+        """
+        # Test with raw dicts containing non-string date_added values
+        non_string_values: list[object] = [123, {"date": "2024-01-01"}, ["2024-01-01"], True]
+        for value in non_string_values:
+            # Use raw dict to bypass Pydantic type validation
+            raw_track: Any = {"id": "1", "name": "Test", "artist": "Artist", "album": "Album", "date_added": value}
+            result = parse_track_date_added(raw_track)
+            assert result is None, f"Expected None for date_added={value!r}"
 
     def test_is_missing_or_unknown_genre(self) -> None:
         """Test genre validation logic."""
@@ -304,6 +317,19 @@ class TestIncrementalFilterService:
         # None value (if genre field can be None)
         track_none = _create_track(genre=None)
         assert is_missing_or_unknown_genre(track_none) is True
+
+    def test_is_missing_or_unknown_genre_non_string_values(self) -> None:
+        """Test is_missing_or_unknown_genre returns True for non-string genre values.
+
+        Uses raw dicts to bypass Pydantic validation and test function resilience.
+        """
+        # Test with raw dicts containing non-string genre values
+        non_string_values: list[object] = [123, ["Rock", "Pop"], {"name": "Rock"}, True]
+        for value in non_string_values:
+            # Use raw dict to bypass Pydantic type validation
+            raw_track: Any = {"id": "1", "name": "Test", "artist": "Artist", "album": "Album", "genre": value}
+            result = is_missing_or_unknown_genre(raw_track)
+            assert result is True, f"Expected True for genre={value!r}"
 
     def test_get_dry_run_actions(self) -> None:
         """Test dry run actions tracking."""
