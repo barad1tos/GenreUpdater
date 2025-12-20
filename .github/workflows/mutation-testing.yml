@@ -57,7 +57,7 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.4.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          check-regexp: '^(Lint & Type Check|Tests)$'
+          check-regexp: '^(Quality|Security|Test|Gate)$'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
           allowed-conclusions: success
