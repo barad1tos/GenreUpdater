@@ -46,3 +46,11 @@ repos:
         types: [python]
         files: ^src/
         pass_filenames: false  # ty checks whole project, not individual files
+
+      - id: bandit
+        name: bandit (security)
+        entry: uv run bandit -r src/ -c pyproject.toml
+        language: system
+        types: [python]
+        files: ^src/
+        pass_filenames: false

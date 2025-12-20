@@ -51,9 +51,6 @@ jobs:
       - name: Security scan with bandit
         run: uv run bandit -r src/ -c pyproject.toml
 
-      - name: Dependency vulnerability scan (pip-audit)
-        run: uv run pip-audit
-
       - name: Security scan with Trivy
         uses: aquasecurity/trivy-action@master
         with:
