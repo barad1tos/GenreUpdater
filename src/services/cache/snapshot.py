@@ -118,7 +118,7 @@ class LibraryDeltaCache:
             self.processed_track_ids.clear()
             self.tracked_since = current_time
 
-        self.processed_track_ids.update(map(str, track_ids))
+        self.processed_track_ids.update(track_ids)
         if self.tracked_since is None:
             self.tracked_since = current_time
 

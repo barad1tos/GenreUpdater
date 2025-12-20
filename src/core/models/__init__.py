@@ -5,9 +5,9 @@ from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict, Track
 
 __all__ = [
     "AppConfig",
+    "AppleScriptClientProtocol",
+    "CacheServiceProtocol",
     "ChangeLogEntry",
     "TrackDict",
     "TrackFieldValue",
-    "CacheServiceProtocol",
-    "AppleScriptClientProtocol",
 ]

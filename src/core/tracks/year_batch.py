@@ -711,14 +711,14 @@ class YearBatchProcessor:
         """
 
         async def _do_update() -> bool:
-            result = await self.track_processor.update_track_async(
+            update_success = await self.track_processor.update_track_async(
                 track_id=track_id,
                 new_year=new_year,
                 original_artist=original_artist,
                 original_album=original_album,
                 original_track=original_track,
             )
-            if not result:
+            if not update_success:
                 # False result without exception - treat as permanent failure
                 self.console_logger.debug(
                     "Update returned False for track %s (no-change or unsupported)",
@@ -728,10 +728,13 @@ class YearBatchProcessor:
             return True
 
         try:
-            return await self.retry_handler.execute_with_retry(
+            retry_result = await self.retry_handler.execute_with_retry(
                 _do_update,
                 f"track_update:{track_id}",
             )
+            # Type narrowing for ty (can't infer TypeVar from callable return type)
+            assert isinstance(retry_result, bool)
+            return retry_result
         except (OSError, ValueError, RuntimeError):
             # All retries exhausted
             self.error_logger.exception(

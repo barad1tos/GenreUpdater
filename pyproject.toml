@@ -38,10 +38,8 @@ dependencies = [
 dev = [
     # Linting & formatting
     "ruff>=0.14.9",
-    "mypy==1.19.1",
     "ty>=0.0.3",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
-    "vulture>=2.14",
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
     # Testing
@@ -85,7 +83,6 @@ exclude = [
     "dist",
     "__pycache__",
     "*/__init__.py",
-    "vulture_whitelist.py",
 ]
 
 # Assume Python 3.13+
@@ -217,57 +214,25 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "RUF003", # Allow ambiguous Unicode in comments
 ]
 
-[tool.mypy]
-python_version = "3.13"
-# Note: mypy_path is set via MYPYPATH env var in CI to avoid path conflicts
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = false
-warn_unused_ignores = false
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
+# ─────────────────────────────────────────────────────────────────────────────
+# ty configuration - Fast type checker from Astral (Ruff/uv team)
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ty.environment]
+python-version = "3.13"
+python = ".venv"
+extra-paths = ["src"]
 
-# Module-specific configurations
-[[tool.mypy.overrides]]
-module = [
-    "allure",
-    "allure.*",
-    "pytest",
-    "pytest.*",
-    "pydantic",
-    "pydantic.*",
-    "aiohttp",
-    "aiohttp.*",
-    "orjson",
-    "cryptography",
-    "cryptography.*",
-    "rich",
-    "rich.*",
-    "dotenv",
-    "certifi",
+[tool.ty.src]
+exclude = [
+    "**/tests/**",
+    "**/.venv/**",
+    "**/venv/**",
+    "**/__pycache__/**",
 ]
-ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_decorators = false
-
-# Internal modules - proper src-layout imports
-[[tool.mypy.overrides]]
-module = [
-    "app.*",
-    "core.*",
-    "metrics.*",
-    "services.*",
-    "stubs.*",
-]
-ignore_missing_imports = true
+[tool.ty.rules]
+# Ignore unresolved imports for external packages without type stubs
+unresolved-import = "ignore"
 
 [tool.pyright]
 include = ["src", "main.py"]
@@ -385,17 +350,6 @@ exclude_lines = [
 
 [tool.sourcery]
 python_version = "3.13"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Vulture configuration - Dead code detection
-# ─────────────────────────────────────────────────────────────────────────────
-[tool.vulture]
-min_confidence = 80
-paths = ["src"]
-sort_by_size = true
-exclude = ["tests/", ".venv/", "venv/", ".trunk/"]
-ignore_names = ["_*"]                                              # Ignore names starting with underscore
-ignore_decorators = ["@app.route", "@pytest.fixture", "@property"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pylint configuration

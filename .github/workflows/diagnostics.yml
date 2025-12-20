@@ -31,6 +31,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Check fixture exists
         id: check-fixture
@@ -79,9 +81,9 @@ jobs:
           DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
           # Last.fm API key
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          # Input passed as env to avoid template injection
+          MAX_ALBUMS: ${{ inputs.max_albums || 10 }}
         run: |
-          MAX_ALBUMS="${{ inputs.max_albums || '10' }}"
-
           echo "=== Running diagnostics ==="
           echo "Max albums: $MAX_ALBUMS"
 

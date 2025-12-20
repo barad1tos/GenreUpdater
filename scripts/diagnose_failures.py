@@ -74,9 +74,7 @@ class DiagnosisResult:
     suggested_actions: list[str] = field(default_factory=list)
 
     # Metadata
-    diagnosis_timestamp: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    diagnosis_timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 # =============================================================================
@@ -140,9 +138,7 @@ class MusicBrainzDiagnostic:
     """Lightweight MusicBrainz client for diagnostics."""
 
     BASE_URL = "https://musicbrainz.org/ws/2"
-    USER_AGENT = os.environ.get(
-        "MUSICBRAINZ_USER_AGENT", "GenreUpdater/2.0 (diagnostic)"
-    )
+    USER_AGENT = os.environ.get("MUSICBRAINZ_USER_AGENT", "GenreUpdater/2.0 (diagnostic)")
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self.session = session
@@ -223,9 +219,7 @@ class MusicBrainzDiagnostic:
 
         await asyncio.sleep(1.1)  # MusicBrainz rate limit: 1 req/sec
 
-        async with self.session.get(
-            url, params=params, headers=self.headers
-        ) as response:
+        async with self.session.get(url, params=params, headers=self.headers) as response:
             response.raise_for_status()
             data: dict[str, Any] = await response.json()
             result = data.get("artists")
@@ -242,9 +236,7 @@ class MusicBrainzDiagnostic:
 
         await asyncio.sleep(1.1)
 
-        async with self.session.get(
-            url, params=params, headers=self.headers
-        ) as response:
+        async with self.session.get(url, params=params, headers=self.headers) as response:
             response.raise_for_status()
             data: dict[str, Any] = await response.json()
             result = data.get("release-groups")
@@ -322,9 +314,7 @@ class DiscogsDiagnostic:
                 details=str(e),
             )
 
-    async def _search_release(
-        self, artist: str, album: str
-    ) -> list[dict[str, Any]]:
+    async def _search_release(self, artist: str, album: str) -> list[dict[str, Any]]:
         """Search for a release."""
         url = f"{self.BASE_URL}/database/search"
         params = {
@@ -336,9 +326,7 @@ class DiscogsDiagnostic:
 
         await asyncio.sleep(1.0)  # Discogs rate limit
 
-        async with self.session.get(
-            url, params=params, headers=self.headers
-        ) as response:
+        async with self.session.get(url, params=params, headers=self.headers) as response:
             response.raise_for_status()
             data: dict[str, Any] = await response.json()
             result = data.get("results")
@@ -355,9 +343,7 @@ class DiscogsDiagnostic:
 
         await asyncio.sleep(1.0)
 
-        async with self.session.get(
-            url, params=params, headers=self.headers
-        ) as response:
+        async with self.session.get(url, params=params, headers=self.headers) as response:
             response.raise_for_status()
             data: dict[str, Any] = await response.json()
             result = data.get("results")
@@ -425,9 +411,7 @@ class LastFmDiagnostic:
                 details=str(e),
             )
 
-    async def _get_album_info(
-        self, artist: str, album: str
-    ) -> dict[str, Any] | None:
+    async def _get_album_info(self, artist: str, album: str) -> dict[str, Any] | None:
         """Get album info from Last.fm."""
         params: dict[str, str] = {
             "method": "album.getinfo",
@@ -467,18 +451,16 @@ def _check_artist_not_found(
     actions: list[str],
 ) -> None:
     """Check if artist was not found in any database."""
-    if all(
-        not d.artist_found
-        for d in diagnoses
-        if d.status not in ("error", "rate_limited")
-    ):
+    if all(not d.artist_found for d in diagnoses if d.status not in ("error", "rate_limited")):
         causes.append("Artist not found in any database")
         if has_special_characters(artist):
             causes.append("Artist name contains special characters that may cause search issues")
-        actions.extend([
-            "Verify artist name spelling and try variants",
-            f"Search manually: https://musicbrainz.org/search?query={artist.replace(' ', '+')}&type=artist",
-        ])
+        actions.extend(
+            [
+                "Verify artist name spelling and try variants",
+                f"Search manually: https://musicbrainz.org/search?query={artist.replace(' ', '+')}&type=artist",
+            ]
+        )
 
 
 def _check_album_not_found(
@@ -493,14 +475,14 @@ def _check_album_not_found(
         causes.append("Artist exists but album not found")
         if has_special_characters(album):
             causes.append("Album name contains special characters: check apostrophes, quotes")
-        if all_matches := [
-            match for d in diagnoses for match in d.close_matches
-        ]:
+        if all_matches := [match for d in diagnoses for match in d.close_matches]:
             causes.append(f"Potential matches found: {list(set(all_matches))[:3]}")
-        actions.extend([
-            "Check album name variants (remastered, deluxe, etc.)",
-            f"Search manually: https://musicbrainz.org/search?query={album.replace(' ', '+')}+{artist.replace(' ', '+')}&type=release",
-        ])
+        actions.extend(
+            [
+                "Check album name variants (remastered, deluxe, etc.)",
+                f"Search manually: https://musicbrainz.org/search?query={album.replace(' ', '+')}+{artist.replace(' ', '+')}&type=release",
+            ]
+        )
 
 
 def _check_album_obscure(
@@ -509,16 +491,14 @@ def _check_album_obscure(
     actions: list[str],
 ) -> None:
     """Check if album is too new or obscure."""
-    if all(
-        d.status in ("album_not_found", "artist_not_found")
-        for d in diagnoses
-        if d.status not in ("error", "rate_limited")
-    ):
+    if all(d.status in ("album_not_found", "artist_not_found") for d in diagnoses if d.status not in ("error", "rate_limited")):
         causes.append("Album may be too new or too obscure for databases")
-        actions.extend([
-            "Consider adding manual year override in config.yaml",
-            "Report missing album to MusicBrainz",
-        ])
+        actions.extend(
+            [
+                "Consider adding manual year override in config.yaml",
+                "Report missing album to MusicBrainz",
+            ]
+        )
 
 
 def _check_rate_limiting(
@@ -538,6 +518,8 @@ def _check_rate_limiting(
         if d.status == "rate_limited"
     ]:
         causes.append(f"Rate limited by: {', '.join(rate_limited)}")
+
+
 def _check_api_errors(
     mb: ApiDiagnosis,
     discogs: ApiDiagnosis,
@@ -611,9 +593,7 @@ async def diagnose_album(
     lastfm_result = await lastfm_client.diagnose(artist, album)
 
     # Analyze patterns
-    causes, actions = analyze_failure_patterns(
-        artist, album, mb_result, discogs_result, lastfm_result
-    )
+    causes, actions = analyze_failure_patterns(artist, album, mb_result, discogs_result, lastfm_result)
 
     return DiagnosisResult(
         artist=artist,
@@ -719,13 +699,7 @@ def main(
     logger.info("Wrote %d diagnosis results to %s", len(results), output_file)
 
     # Summary
-    found_count = sum(
-        any(
-            getattr(r, api).status == "found"
-            for api in ["musicbrainz", "discogs", "lastfm"]
-        )
-        for r in results
-    )
+    found_count = sum(any(getattr(r, api).status == "found" for api in ["musicbrainz", "discogs", "lastfm"]) for r in results)
     logger.info("Summary: %d/%d albums found in at least one API", found_count, len(results))
 
 

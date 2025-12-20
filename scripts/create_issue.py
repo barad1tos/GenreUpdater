@@ -179,11 +179,7 @@ def find_existing_issue(repo: Repository, artist: str, album: str) -> Issue | No
     search_term = f"{artist} - {album}"
 
     return next(
-        (
-            issue
-            for issue in repo.get_issues(state="all")
-            if search_term in issue.title and "Year Lookup Failed" in issue.title
-        ),
+        (issue for issue in repo.get_issues(state="all") if search_term in issue.title and "Year Lookup Failed" in issue.title),
         None,
     )
 
