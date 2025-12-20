@@ -21,10 +21,10 @@ from services.apple.sanitizer import (
 )
 
 __all__ = [
+    "MAX_SCRIPT_SIZE",
     "AppleScriptClient",
     "AppleScriptExecutionError",
-    "AppleScriptSanitizer",
     "AppleScriptSanitizationError",
+    "AppleScriptSanitizer",
     "EnhancedRateLimiter",
-    "MAX_SCRIPT_SIZE",
 ]

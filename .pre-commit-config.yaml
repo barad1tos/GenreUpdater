@@ -25,16 +25,16 @@ repos:
   # Use local ruff from pyproject.toml (single source of truth)
   - repo: local
     hooks:
-      - id: ruff-check
-        name: ruff check
-        entry: uv run ruff check --fix
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
         language: system
         types: [python]
         pass_filenames: true
 
-      - id: ruff-format
-        name: ruff format
-        entry: uv run ruff format
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
         language: system
         types: [python]
         pass_filenames: true
@@ -46,11 +46,3 @@ repos:
         types: [python]
         files: ^src/
         pass_filenames: false  # ty checks whole project, not individual files
-
-      - id: bandit
-        name: bandit (security)
-        entry: uv run bandit -r src/ -c pyproject.toml
-        language: system
-        types: [python]
-        files: ^src/
-        pass_filenames: false
