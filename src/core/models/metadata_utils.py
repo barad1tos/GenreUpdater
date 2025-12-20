@@ -530,7 +530,8 @@ def _is_cleaning_exception(artist: str, album_name: str, exceptions: list[dict[s
 def _compile_suffix_patterns(album_suffixes_raw: list[str]) -> list[tuple[str, re.Pattern[str]]]:
     """Compile configured album suffixes into ordered regex patterns."""
     deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
-    suffixes = sorted(deduped_suffixes, key=len, reverse=True)
+    # Lambda preserves str type (key=len makes ty infer Sized)
+    suffixes = sorted(deduped_suffixes, key=lambda s: len(s), reverse=True)
 
     compiled: list[tuple[str, re.Pattern[str]]] = []
     for suffix in suffixes:

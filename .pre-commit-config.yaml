@@ -39,10 +39,10 @@ repos:
         types: [python]
         pass_filenames: true
 
-      - id: mypy
-        name: mypy
-        entry: bash -c 'MYPYPATH=src uv run mypy --config-file=pyproject.toml "$@"' --
+      - id: ty
+        name: ty (type checker)
+        entry: uv run ty check --python .venv
         language: system
         types: [python]
         files: ^src/
-        pass_filenames: true
+        pass_filenames: false  # ty checks whole project, not individual files

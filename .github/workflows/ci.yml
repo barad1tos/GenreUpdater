@@ -45,19 +45,23 @@ jobs:
       - name: Format check
         run: uv run ruff format --check src/ tests/ main.py
 
-      - name: Type check with mypy
-        env:
-          MYPYPATH: ${{ github.workspace }}/src
-        run: uv run mypy src/ main.py
+      - name: Type check with ty
+        run: uv run ty check src/ main.py --python .venv
 
       - name: Security scan with bandit
         run: uv run bandit -r src/ -c pyproject.toml
 
-      - name: Dead code check with vulture
-        run: uv run vulture src/ vulture_whitelist.py --min-confidence 80
-
-      - name: Dependency vulnerability scan
+      - name: Dependency vulnerability scan (pip-audit)
         run: uv run pip-audit
+
+      - name: Security scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
 
   test:
     name: Tests
