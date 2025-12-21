@@ -37,8 +37,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     # Linting & formatting
-    "ruff>=0.14.9",
-    "ty>=0.0.3",
+    "ruff==0.14.10",
+    "ty==0.0.5",
+    "basedpyright>=1.36.1",
+    "librt==0.7.4",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
