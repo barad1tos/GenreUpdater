@@ -29,7 +29,6 @@ dependencies = [
     "cryptography==46.0.3",
     "orjson==3.11.5",
     "rich==14.2.0",
-    "pytest==9.0.2",
     "psutil>=7.1.3",
     "pygithub>=2.8.1",
 ]
@@ -40,13 +39,13 @@ dev = [
     "ruff==0.14.10",
     "ty==0.0.5",
     "basedpyright>=1.36.1",
-    "librt==0.7.4",
     "sourcery>=1.41.1; sys_platform == 'darwin'", # macOS only
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
     # Testing
     "pytest==9.0.2",
     "pytest-asyncio==1.3.0",
+    "pytest-xdist>=3.5.0",
     "pytest-cov>=7.0.0",
     "coverage==7.13.0",
     "allure-pytest==2.15.2",
@@ -54,7 +53,6 @@ dev = [
     "pytest-sugar>=1.1.1",
     # Type stubs
     "types-pyyaml==6.0.12.20250915",
-    "types-aiofiles==25.1.0.20251011",
     "cst-lsp==0.1.3",
     "mutmut>=3.3.1",
     "deptry>=0.24.0",
@@ -147,7 +145,6 @@ ignore = [
     "T201", # Allow print statements (for CLI output)
     "FIX002", # Allow TODO comments
     "BLE001", # Allow broad exception catching in some cases
-    "B006", # Allow mutable default arguments (a common pattern in some cases)
     "C901", # Ignore complexity warnings for now (refactor later)
     "PLR0912", # Allow too-many-branches (refactor later)
     "PLR0913", # Allow too-many-arguments (refactor later)
@@ -237,7 +234,8 @@ exclude = [
 unresolved-import = "ignore"
 
 [tool.pyright]
-include = ["src", "main.py"]
+include = ["src", "main.py", "tests"]
+extraPaths = ["src"]
 exclude = ["venv", "**/__pycache__", "**/node_modules"]
 venvPath = "."
 venv = ".venv"
@@ -279,6 +277,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "-ra",
+    "-n", "auto", # Parallel test execution (pytest-xdist)
     "--strict-markers",
     "--ignore=venv",
     "--ignore=.venv",
@@ -304,30 +303,14 @@ markers = [
     "e2e: marks tests as end-to-end tests",
     "regression: marks tests as regression tests using real library data",
 ]
-# ─────────────────────────────────────────────────────────────────────────────
-# pydocstyle - google docstyle
-# ─────────────────────────────────────────────────────────────────────────────
-[tool.pydocstyle]
-convention = "google"
-add_ignore = [
-    "D203",
-    "D213",
-    "D215",
-    "D400",
-    "D401",
-    "D404",
-    "D406",
-    "D407",
-    "D408",
-    "D409",
-    "D413",
-]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Coverage configuration
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.coverage.run]
 source = ["src"]
+parallel = true  # Required for pytest-xdist + coverage
+branch = true    # Measure branch coverage
 omit = [
     "**/tests/*",
     "**/test_*.py",
@@ -352,35 +335,6 @@ exclude_lines = [
 
 [tool.sourcery]
 python_version = "3.13"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pylint configuration
-# ─────────────────────────────────────────────────────────────────────────────
-[tool.pylint.format]
-max-line-length = 150
-
-[tool.pylint.main]
-py-version = "3.13"
-init-hook = "import sys; import os; sys.path.insert(0, os.getcwd())"
-
-[tool.pylint."messages control"]
-disable = [
-    "C0103", # invalid-name (allow short variable names)
-    "R0903", # too-few-public-methods
-    "W0613", # unused-argument (handled by ruff)
-    "C0301", # line-too-long (handled by format section)
-    "R0913", # too-many-arguments
-    "R0917", # too-many-positional-arguments
-    "W0718", # broad-exception-caught
-    "W2301", # unnecessary-ellipsis (valid in Protocol definitions)
-    "E0611", # no-name-in-module (UTC is available in Python 3.13+ datetime)
-    "R0914", # too-many-locals (complex reporting function)
-    "R0801", # duplicate-code (shared patterns in processing modules)
-    "R0401", # cyclic-import (resolved with exceptions module)
-    "R0902", # too-many-instance-attributes (orchestrator classes naturally need many components)
-    "C0302", # too-many-lines (complex processing modules)
-    "W0212", # protected-access (tests intentionally access private members)
-]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Bandit configuration - Security linting
