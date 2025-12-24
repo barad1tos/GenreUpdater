@@ -20,6 +20,7 @@ import traceback
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from core.models.normalization import normalize_for_matching
 from services.api.api_base import ScoredRelease
 
 # Constants for data validation
@@ -414,32 +415,32 @@ class AppleMusicClient:
 
         """
         years: list[int] = []
-        artist_norm_lower = artist_norm.lower()
+        artist_normalized = normalize_for_matching(artist_norm)
 
         for result in results:
-            year = self._extract_year_from_result(result, artist_norm_lower)
+            year = self._extract_year_from_result(result, artist_normalized)
             if year is not None:
                 years.append(year)
 
         return years
 
     @staticmethod
-    def _extract_year_from_result(result: dict[str, Any], artist_norm_lower: str) -> int | None:
+    def _extract_year_from_result(result: dict[str, Any], artist_normalized: str) -> int | None:
         """Extract release year from a single iTunes result if it matches artist.
 
         Args:
             result: Single iTunes API result dictionary
-            artist_norm_lower: Lowercased normalized artist name
+            artist_normalized: Normalized artist name for matching
 
         Returns:
             Release year as int, or None if not valid/matching
 
         """
-        artist_name = result.get("artistName", "").strip().lower()
+        artist_name = normalize_for_matching(result.get("artistName", ""))
         release_date = result.get("releaseDate", "").strip()
 
         # Filter by artist name (fuzzy match)
-        if artist_norm_lower not in artist_name and artist_name not in artist_norm_lower:
+        if artist_normalized not in artist_name and artist_name not in artist_normalized:
             return None
 
         if not release_date:

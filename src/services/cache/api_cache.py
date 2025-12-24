@@ -17,10 +17,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.logger import LogFormat, ensure_directory, get_full_log_path
+from core.models.normalization import are_names_equal
+from core.models.track_models import CachedApiResult
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
-from core.logger import LogFormat, ensure_directory, get_full_log_path
-from core.models.track_models import CachedApiResult
 
 
 class ApiCacheService:
@@ -206,7 +207,7 @@ class ApiCacheService:
         keys_to_remove.extend(
             key
             for key, cached_result in self.api_cache.items()
-            if (cached_result.artist.lower().strip() == artist.lower().strip() and cached_result.album.lower().strip() == album.lower().strip())
+            if are_names_equal(cached_result.artist, artist) and are_names_equal(cached_result.album, album)
         )
         # Remove found entries
         for key in keys_to_remove:
