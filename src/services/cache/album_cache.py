@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.models.normalization import are_names_equal
 from services.cache.cache_config import CacheContentType, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
 from core.logger import LogFormat, ensure_directory, get_full_log_path
@@ -77,7 +78,9 @@ class AlbumCacheService:
             entry = self.album_years_cache[key]
 
             # Validate cache entry consistency (detect true hash collision)
-            if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
+            artist_mismatch = not are_names_equal(entry.artist, artist)
+            album_mismatch = not are_names_equal(entry.album, album)
+            if artist_mismatch or album_mismatch:
                 self.logger.warning(
                     "Hash collision detected: requested '%s - %s', found '%s - %s'",
                     artist,
@@ -118,7 +121,9 @@ class AlbumCacheService:
             entry = self.album_years_cache[key]
 
             # Validate cache entry consistency (detect true hash collision)
-            if entry.artist.lower().strip() != artist.lower().strip() or entry.album.lower().strip() != album.lower().strip():
+            artist_mismatch = not are_names_equal(entry.artist, artist)
+            album_mismatch = not are_names_equal(entry.album, album)
+            if artist_mismatch or album_mismatch:
                 self.logger.warning(
                     "Hash collision detected: requested '%s - %s', found '%s - %s'",
                     artist,

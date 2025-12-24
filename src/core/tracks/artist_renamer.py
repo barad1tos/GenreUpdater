@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from core.models.normalization import normalize_for_matching
 from core.models.track_status import can_edit_metadata
 from core.models.validators import SecurityValidationError
 
@@ -48,7 +49,8 @@ def _load_mapping(path: Path, error_logger: logging.Logger) -> dict[str, str]:
             )
             continue
 
-        key = raw_key.strip()
+        # Normalize key for case-insensitive matching, preserve value as-is for display
+        key = normalize_for_matching(raw_key)
         value = raw_value.strip()
         if not key or not value:
             error_logger.debug("Artist rename entry with empty key/value skipped: %r -> %r", raw_key, raw_value)
@@ -92,18 +94,22 @@ class ArtistRenamer:
 
         updated_tracks: list[TrackDict] = []
         for track in tracks:
-            current_artist = self._normalize_artist(track.artist)
-            if current_artist is None:
+            # Get normalized key for matching, but preserve original for display
+            normalized_key = self._normalize_artist(track.artist)
+            if normalized_key is None:
                 continue
 
-            new_artist = self._mapping.get(current_artist)
-            if not new_artist or new_artist == current_artist:
+            # Original artist (stripped but case-preserved) for display/logging
+            display_artist = track.artist.strip() if track.artist else ""
+
+            new_artist = self._mapping.get(normalized_key)
+            if not new_artist or normalize_for_matching(new_artist) == normalized_key:
                 continue
 
-            if not self._can_rename_track(track, current_artist, new_artist):
+            if not self._can_rename_track(track, display_artist, new_artist):
                 continue
 
-            if await self._apply_rename(track, current_artist, new_artist):
+            if await self._apply_rename(track, display_artist, new_artist):
                 updated_tracks.append(track)
 
         return updated_tracks
@@ -112,7 +118,7 @@ class ArtistRenamer:
     def _normalize_artist(artist: str | None) -> str | None:
         if not artist:
             return None
-        normalized = artist.strip()
+        normalized = normalize_for_matching(artist)
         return normalized or None
 
     def _can_rename_track(self, track: TrackDict, current_artist: str, new_artist: str) -> bool:
@@ -145,8 +151,9 @@ class ArtistRenamer:
         # Note: album_artist is stored as extra field (TrackDict uses extra="allow")
         album_artist_raw = track.get("album_artist")
         album_artist_str = album_artist_raw if isinstance(album_artist_raw, str) else None
-        album_artist = self._normalize_artist(album_artist_str)
-        should_update_album_artist = album_artist is None or album_artist == current_artist
+        album_artist_normalized = self._normalize_artist(album_artist_str)
+        current_artist_normalized = normalize_for_matching(current_artist)
+        should_update_album_artist = album_artist_normalized is None or album_artist_normalized == current_artist_normalized
 
         try:
             try:

@@ -13,6 +13,8 @@ import hashlib
 import json
 from typing import Any
 
+from core.models.normalization import normalize_for_matching
+
 
 class UnifiedHashService:
     """Unified service for all cache hash operations using SHA256."""
@@ -30,9 +32,8 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        # Normalize inputs to handle variations
-        normalized_artist = artist.strip().lower()
-        normalized_album = album.strip().lower()
+        normalized_artist = normalize_for_matching(artist)
+        normalized_album = normalize_for_matching(album)
         key_string = f"{normalized_artist}|{normalized_album}"
 
         return hashlib.sha256(key_string.encode()).hexdigest()
@@ -49,10 +50,9 @@ class UnifiedHashService:
         Returns:
             SHA256 hash string
         """
-        # Normalize components individually before concatenation (consistent with hash_album_key)
-        normalized_source = source.strip().lower()
-        normalized_artist = artist.strip().lower()
-        normalized_album = album.strip().lower()
+        normalized_source = normalize_for_matching(source)
+        normalized_artist = normalize_for_matching(artist)
+        normalized_album = normalize_for_matching(album)
         key_string = f"{normalized_source}:{normalized_artist}|{normalized_album}"
 
         return hashlib.sha256(key_string.encode()).hexdigest()
@@ -98,7 +98,8 @@ class UnifiedHashService:
         args_string = "|".join(safe_serialize(arg) for arg in args)
 
         # Build kwargs string from sorted key-value pairs
-        kwargs_string = "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs.items())) if kwargs else ""
+        kwargs_dict: dict[str, Any] = kwargs
+        kwargs_string = "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs_dict.items())) if kwargs else ""
 
         combined_string = f"{args_string}|{kwargs_string}".strip("|")
 
