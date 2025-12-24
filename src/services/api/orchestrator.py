@@ -562,6 +562,7 @@ class ExternalApiOrchestrator:
             current_year=self.current_year,
             definitive_score_threshold=self.definitive_score_threshold,
             definitive_score_diff=self.definitive_score_diff,
+            remaster_keywords=remaster_keywords,
         )
 
     def _initialize_year_search_coordinator(self) -> None:
@@ -1168,7 +1169,7 @@ class ExternalApiOrchestrator:
             return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
-        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores)
+        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores, all_releases=all_releases)
 
         self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 

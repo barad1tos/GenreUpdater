@@ -186,7 +186,7 @@ class ApiCacheService:
             source=source.strip(),
             timestamp=datetime.now(UTC).timestamp(),
             metadata=metadata or {},
-            api_response=data or {},
+            api_response=data,  # None is valid, don't convert to empty dict
         )
 
         self.api_cache[key] = cached_result
@@ -284,9 +284,8 @@ class ApiCacheService:
                 self.logger.exception("Failed to save API cache: %s", e)
                 raise
 
-        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, blocking_save)
+        # Run in thread to avoid blocking
+        await asyncio.to_thread(blocking_save)
 
     async def _load_api_cache(self) -> None:
         """Load API cache from JSON file."""
@@ -328,9 +327,8 @@ class ApiCacheService:
                 self.logger.exception("Error loading API cache file %s: %s", self.api_cache_file, e)
                 return {}
 
-        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
-        loop = asyncio.get_running_loop()
-        loaded_cache = await loop.run_in_executor(None, blocking_load)
+        # Run in thread to avoid blocking
+        loaded_cache = await asyncio.to_thread(blocking_load)
         self.api_cache.update(loaded_cache)
 
     def emit_track_removed(self, track_id: str, artist: str, album: str) -> None:
