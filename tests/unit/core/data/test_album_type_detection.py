@@ -7,8 +7,6 @@ This module tests the pattern-based detection of special album types
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-
-import allure
 import pytest
 
 if TYPE_CHECKING:
@@ -27,13 +25,9 @@ from core.models.album_type import (
 )
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Album Type Detection")
 class TestAlbumTypeDetection:
     """Tests for album type detection logic."""
 
-    @allure.story("Special Album Detection")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.parametrize(
         "album_name",
         [
@@ -53,22 +47,11 @@ class TestAlbumTypeDetection:
     )
     def test_special_album_detection(self, album_name: str) -> None:
         """Test detection of special albums (B-Sides, Demo, Vault, etc.)."""
-        with allure.step(f"Detect type for: {album_name}"):
-            info = detect_album_type(album_name)
+        info = detect_album_type(album_name)
+        assert info.album_type == AlbumType.SPECIAL
+        assert info.detected_pattern is not None  # Some pattern detected
+        assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
 
-        with allure.step("Verify detection"):
-            assert info.album_type == AlbumType.SPECIAL
-            assert info.detected_pattern is not None  # Some pattern detected
-            assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
-
-            allure.attach(
-                f"Album: {album_name}\nType: {info.album_type.value}\nPattern: {info.detected_pattern}\nStrategy: {info.strategy.value}",
-                "Detection Result",
-                allure.attachment_type.TEXT,
-            )
-
-    @allure.story("Compilation Album Detection")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.parametrize(
         "album_name",
         [
@@ -83,16 +66,11 @@ class TestAlbumTypeDetection:
     )
     def test_compilation_album_detection(self, album_name: str) -> None:
         """Test detection of compilation albums."""
-        with allure.step(f"Detect type for: {album_name}"):
-            info = detect_album_type(album_name)
+        info = detect_album_type(album_name)
+        assert info.album_type == AlbumType.COMPILATION
+        assert info.detected_pattern is not None  # Some pattern detected
+        assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
 
-        with allure.step("Verify compilation detection"):
-            assert info.album_type == AlbumType.COMPILATION
-            assert info.detected_pattern is not None  # Some pattern detected
-            assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
-
-    @allure.story("Reissue Album Detection")
-    @allure.severity(allure.severity_level.NORMAL)
     @pytest.mark.parametrize(
         ("album_name", "expected_pattern"),
         [
@@ -106,17 +84,12 @@ class TestAlbumTypeDetection:
     )
     def test_reissue_album_detection(self, album_name: str, expected_pattern: str) -> None:
         """Test detection of reissue albums (MARK_AND_UPDATE strategy)."""
-        with allure.step(f"Detect type for: {album_name}"):
-            info = detect_album_type(album_name)
+        info = detect_album_type(album_name)
+        assert info.album_type == AlbumType.REISSUE
+        assert info.detected_pattern == expected_pattern
+        # Reissues use MARK_AND_UPDATE (still update, but mark for verification)
+        assert info.strategy == YearHandlingStrategy.MARK_AND_UPDATE
 
-        with allure.step("Verify reissue detection"):
-            assert info.album_type == AlbumType.REISSUE
-            assert info.detected_pattern == expected_pattern
-            # Reissues use MARK_AND_UPDATE (still update, but mark for verification)
-            assert info.strategy == YearHandlingStrategy.MARK_AND_UPDATE
-
-    @allure.story("Normal Album Detection")
-    @allure.severity(allure.severity_level.NORMAL)
     @pytest.mark.parametrize(
         "album_name",
         [
@@ -132,16 +105,11 @@ class TestAlbumTypeDetection:
     )
     def test_normal_album_detection(self, album_name: str) -> None:
         """Test that normal albums are correctly identified."""
-        with allure.step(f"Detect type for: '{album_name}'"):
-            info = detect_album_type(album_name)
+        info = detect_album_type(album_name)
+        assert info.album_type == AlbumType.NORMAL
+        assert info.detected_pattern is None
+        assert info.strategy == YearHandlingStrategy.NORMAL
 
-        with allure.step("Verify normal album"):
-            assert info.album_type == AlbumType.NORMAL
-            assert info.detected_pattern is None
-            assert info.strategy == YearHandlingStrategy.NORMAL
-
-    @allure.story("Convenience Functions")
-    @allure.severity(allure.severity_level.NORMAL)
     def test_is_special_album_function(self) -> None:
         """Test is_special_album convenience function."""
         # Special album
@@ -160,8 +128,6 @@ class TestAlbumTypeDetection:
         assert is_special is True
         assert pattern == "remastered"
 
-    @allure.story("Convenience Functions")
-    @allure.severity(allure.severity_level.NORMAL)
     def test_get_year_handling_strategy_function(self) -> None:
         """Test get_year_handling_strategy convenience function."""
         # Special/Compilation albums use MARK_AND_SKIP strategy
@@ -175,14 +141,9 @@ class TestAlbumTypeDetection:
         assert get_year_handling_strategy("Normal Album") == YearHandlingStrategy.NORMAL
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Album Type Detection")
-@allure.story("Real World Cases")
 class TestRealWorldAlbumCases:
     """Test detection with real album names from user's library."""
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Blue Stahli - B-Sides and Other Things I Forgot")
     def test_blue_stahli_bsides(self) -> None:
         """Test detection for real case: Blue Stahli B-Sides album."""
         album = "B-Sides and Other Things I Forgot"
@@ -190,14 +151,7 @@ class TestRealWorldAlbumCases:
 
         assert info.album_type == AlbumType.SPECIAL
         assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
-        allure.attach(
-            "This album would have its year preserved (2011) instead of being updated to API result (2013).",
-            "Fix Verification",
-            allure.attachment_type.TEXT,
-        )
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("Celldweller - Demo Vault: Wasteland")
     def test_celldweller_demo_vault(self) -> None:
         """Test detection for real case: Celldweller Demo Vault."""
         album = "Demo Vault: Wasteland"
@@ -208,8 +162,6 @@ class TestRealWorldAlbumCases:
         assert info.detected_pattern in {"demo", "vault"}
         assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("HIM - And Love Said No - Greatest Hits")
     def test_him_greatest_hits(self) -> None:
         """Test detection for real case: HIM Greatest Hits."""
         album = "And Love Said No - Greatest Hits 1997 - 2004"
@@ -220,9 +172,6 @@ class TestRealWorldAlbumCases:
         assert info.strategy == YearHandlingStrategy.MARK_AND_SKIP
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Album Type Detection")
-@allure.story("Configuration System")
 class TestAlbumTypePatternConfiguration:
     """Tests for configurable album type patterns.
 
@@ -236,8 +185,6 @@ class TestAlbumTypePatternConfiguration:
         yield
         reset_patterns()
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("AlbumTypePatterns.from_defaults() returns default patterns")
     def test_from_defaults_returns_defaults(self) -> None:
         """Test that from_defaults() returns hardcoded default patterns."""
         patterns = AlbumTypePatterns.from_defaults()
@@ -258,8 +205,6 @@ class TestAlbumTypePatternConfiguration:
         assert "anniversary" in patterns.reissue
         assert "deluxe" in patterns.reissue
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("AlbumTypePatterns.from_config() loads patterns from config")
     def test_from_config_loads_custom_patterns(self) -> None:
         """Test that from_config() loads patterns from YAML config."""
         config = {
@@ -282,8 +227,6 @@ class TestAlbumTypePatternConfiguration:
         assert "b-sides" not in patterns.special
         assert "greatest hits" not in patterns.compilation
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("AlbumTypePatterns.from_config() falls back to defaults")
     def test_from_config_falls_back_to_defaults(self) -> None:
         """Test that missing config sections fall back to defaults."""
         # Empty config - all defaults
@@ -305,8 +248,6 @@ class TestAlbumTypePatternConfiguration:
         assert "greatest hits" in patterns.compilation  # Default
         assert "remaster" in patterns.reissue  # Default
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("configure_patterns() sets module-level singleton")
     def test_configure_patterns_sets_singleton(self) -> None:
         """Test that configure_patterns() configures the module singleton."""
         config = {
@@ -330,8 +271,6 @@ class TestAlbumTypePatternConfiguration:
         assert "configured-pattern" in patterns_after.special
         assert "b-sides" not in patterns_after.special
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("reset_patterns() clears configured patterns")
     def test_reset_patterns_clears_config(self) -> None:
         """Test that reset_patterns() clears the singleton and returns to defaults."""
         config = {
@@ -350,8 +289,6 @@ class TestAlbumTypePatternConfiguration:
         assert "test-pattern" not in patterns.special
         assert "b-sides" in patterns.special
 
-    @allure.severity(allure.severity_level.CRITICAL)
-    @allure.title("detect_album_type() uses configured patterns")
     def test_detect_uses_configured_patterns(self) -> None:
         """Test that detection uses configured patterns instead of defaults."""
         # Configure custom patterns
@@ -374,8 +311,6 @@ class TestAlbumTypePatternConfiguration:
         assert info_custom.album_type == AlbumType.SPECIAL
         assert info_custom.detected_pattern == "my-custom-special"
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Pattern normalization works with hyphens and spaces")
     def test_pattern_normalization(self) -> None:
         """Test that patterns with hyphens match text with spaces and vice versa."""
         # Reset to defaults (which include hyphenated patterns like "b-sides")
@@ -391,8 +326,6 @@ class TestAlbumTypePatternConfiguration:
         assert info2.album_type == AlbumType.SPECIAL
         assert info2.detected_pattern == "b-sides"
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Ukrainian patterns work correctly")
     def test_ukrainian_patterns(self) -> None:
         """Test detection with Ukrainian patterns (хіти, хіт)."""
         reset_patterns()
@@ -407,8 +340,6 @@ class TestAlbumTypePatternConfiguration:
         assert info2.album_type == AlbumType.COMPILATION
         assert info2.detected_pattern == "хіт"
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("New patterns from config: d-sides, remixes, remanufacture")
     def test_new_patterns_from_issue_381(self) -> None:
         """Test patterns added based on 381 year update cases analysis.
 
@@ -441,9 +372,6 @@ class TestAlbumTypePatternConfiguration:
         assert info.detected_pattern == "rerelease"
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Album Type Detection")
-@allure.story("Edge Cases")
 class TestAlbumTypeDetectionEdgeCases:
     """Edge case tests for album type detection."""
 
@@ -453,16 +381,12 @@ class TestAlbumTypeDetectionEdgeCases:
         yield
         reset_patterns()
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Seether - Disclaimer II should be NORMAL (not reissue)")
     def test_disclaimer_ii_is_normal(self) -> None:
         """Test that album suffixes like 'II' don't trigger reissue detection."""
         info = detect_album_type("Disclaimer II")
         assert info.album_type == AlbumType.NORMAL
         assert info.detected_pattern is None
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Case insensitivity in pattern matching")
     def test_case_insensitive_matching(self) -> None:
         """Test that pattern matching is case-insensitive."""
         # Uppercase
@@ -477,8 +401,6 @@ class TestAlbumTypeDetectionEdgeCases:
         info = detect_album_type("greatest hits")
         assert info.album_type == AlbumType.COMPILATION
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Patterns in parentheses are detected")
     def test_patterns_in_parentheses(self) -> None:
         """Test that patterns inside parentheses are detected."""
         info = detect_album_type("Album (Remastered)")
@@ -489,8 +411,6 @@ class TestAlbumTypeDetectionEdgeCases:
         assert info.album_type == AlbumType.REISSUE
         assert info.detected_pattern == "deluxe"
 
-    @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Word boundary matching prevents false positives")
     def test_word_boundary_matching(self) -> None:
         """Test that patterns only match at word boundaries."""
         # "demo" should match "Demo" but not "Demonstration"

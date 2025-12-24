@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import allure
 import pytest
 
 from core.models.track_models import TrackDict
@@ -20,8 +18,6 @@ if TYPE_CHECKING:
     from core.models.protocols import CacheableValue
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Cache Infrastructure")
 class TestCacheOrchestrator:
     """Comprehensive tests for CacheOrchestrator."""
 
@@ -49,8 +45,6 @@ class TestCacheOrchestrator:
 
     # =========================== INITIALIZATION TESTS ===========================
 
-    @allure.story("Initialization")
-    @allure.title("Should initialize with all services")
     @pytest.mark.asyncio
     async def test_initialization_creates_services(self) -> None:
         """Test that initialization creates all required services."""
@@ -61,8 +55,6 @@ class TestCacheOrchestrator:
         assert orchestrator.generic_service is not None
         assert len(orchestrator._services) == 3
 
-    @allure.story("Initialization")
-    @allure.title("Should initialize all services successfully")
     @pytest.mark.asyncio
     async def test_initialize_calls_all_services(self) -> None:
         """Test that initialize() calls initialize on all services."""
@@ -79,8 +71,6 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
-    @allure.story("Initialization")
-    @allure.title("Should raise error when service initialization fails")
     @pytest.mark.asyncio
     async def test_initialize_handles_service_failure(self) -> None:
         """Test that initialization raises RuntimeError when a service fails."""
@@ -94,8 +84,6 @@ class TestCacheOrchestrator:
         ):
             await orchestrator.initialize()
 
-    @allure.story("Initialization")
-    @allure.title("Should skip iCloud cleanup when disabled")
     @pytest.mark.asyncio
     async def test_icloud_cleanup_disabled(self) -> None:
         """Test that iCloud cleanup is skipped when disabled in config."""
@@ -105,8 +93,6 @@ class TestCacheOrchestrator:
             orchestrator._cleanup_icloud_conflicts()
             mock_cleanup.assert_not_called()
 
-    @allure.story("Initialization")
-    @allure.title("Should run iCloud cleanup when enabled")
     @pytest.mark.asyncio
     async def test_icloud_cleanup_enabled(self) -> None:
         """Test that iCloud cleanup runs when enabled."""
@@ -131,8 +117,6 @@ class TestCacheOrchestrator:
 
     # =========================== ALBUM CACHE TESTS ===========================
 
-    @allure.story("Album Cache Operations")
-    @allure.title("Should delegate get_album_year to album service")
     @pytest.mark.asyncio
     async def test_get_album_year_delegates(self) -> None:
         """Test that get_album_year delegates to album service."""
@@ -144,8 +128,6 @@ class TestCacheOrchestrator:
             assert result == "1999"
             mock_get.assert_called_once_with("Artist", "Album")
 
-    @allure.story("Album Cache Operations")
-    @allure.title("Should delegate store_album_year to album service")
     @pytest.mark.asyncio
     async def test_store_album_year_delegates(self) -> None:
         """Test that store_album_year delegates to album service."""
@@ -158,8 +140,6 @@ class TestCacheOrchestrator:
 
     # =========================== API CACHE TESTS ===========================
 
-    @allure.story("API Cache Operations")
-    @allure.title("Should delegate get_api_result to api service")
     @pytest.mark.asyncio
     async def test_get_api_result_delegates(self) -> None:
         """Test that get_api_result delegates to api service."""
@@ -173,8 +153,6 @@ class TestCacheOrchestrator:
             assert result == {"year": "2020"}
             mock_get.assert_called_once_with("Artist", "Album", "musicbrainz")
 
-    @allure.story("API Cache Operations")
-    @allure.title("Should return None when no cached API result")
     @pytest.mark.asyncio
     async def test_get_api_result_returns_none(self) -> None:
         """Test that get_api_result returns None when not cached."""
@@ -185,8 +163,6 @@ class TestCacheOrchestrator:
 
             assert result is None
 
-    @allure.story("API Cache Operations")
-    @allure.title("Should delegate store_api_result to api service")
     @pytest.mark.asyncio
     async def test_store_api_result_delegates(self) -> None:
         """Test that store_api_result delegates to api service."""
@@ -199,8 +175,6 @@ class TestCacheOrchestrator:
 
     # =========================== GENERIC CACHE TESTS ===========================
 
-    @allure.story("Generic Cache Operations")
-    @allure.title("Should get value from generic cache")
     @pytest.mark.asyncio
     async def test_get_returns_cached_value(self) -> None:
         """Test that get() returns cached value."""
@@ -212,8 +186,6 @@ class TestCacheOrchestrator:
             assert result == "cached_value"
             mock_get.assert_called_once_with("test_key")
 
-    @allure.story("Generic Cache Operations")
-    @allure.title("Should set value in generic cache")
     @pytest.mark.asyncio
     async def test_set_delegates_to_generic_service(self) -> None:
         """Test that set() delegates to generic service."""
@@ -224,8 +196,6 @@ class TestCacheOrchestrator:
 
             mock_set.assert_called_once_with("test_key", "test_value", 60)
 
-    @allure.story("Generic Cache Operations")
-    @allure.title("Should get async with compute function on miss")
     @pytest.mark.asyncio
     async def test_get_async_computes_on_miss(self) -> None:
         """Test that get_async computes value when not cached."""
@@ -246,8 +216,6 @@ class TestCacheOrchestrator:
             assert result == "computed"
             mock_set.assert_called_once()
 
-    @allure.story("Generic Cache Operations")
-    @allure.title("Should return cached value without computing")
     @pytest.mark.asyncio
     async def test_get_async_returns_cached_without_computing(self) -> None:
         """Test that get_async returns cached value without calling compute."""
@@ -272,8 +240,6 @@ class TestCacheOrchestrator:
             assert result == "cached"
             assert not compute_called
 
-    @allure.story("Generic Cache Operations")
-    @allure.title("Should set async delegates to generic service")
     @pytest.mark.asyncio
     async def test_set_async_delegates(self) -> None:
         """Test that set_async delegates to generic service."""
@@ -286,8 +252,6 @@ class TestCacheOrchestrator:
 
     # =========================== INVALIDATION TESTS ===========================
 
-    @allure.story("Invalidation Operations")
-    @allure.title("Should invalidate cache for track")
     @pytest.mark.asyncio
     async def test_invalidate_for_track(self) -> None:
         """Test that invalidate_for_track invalidates all related caches."""
@@ -315,8 +279,6 @@ class TestCacheOrchestrator:
             mock_album.assert_called_once_with("Test Artist", "Test Album")
             mock_api.assert_called_once_with("Test Artist", "Test Album")
 
-    @allure.story("Invalidation Operations")
-    @allure.title("Should invalidate single key")
     @pytest.mark.asyncio
     async def test_invalidate_single_key(self) -> None:
         """Test that invalidate() invalidates a single key."""
@@ -327,8 +289,6 @@ class TestCacheOrchestrator:
 
             mock_invalidate.assert_called_once_with("test_key")
 
-    @allure.story("Invalidation Operations")
-    @allure.title("Should invalidate all caches")
     @pytest.mark.asyncio
     async def test_invalidate_all(self) -> None:
         """Test that invalidate_all clears all caches."""
@@ -345,8 +305,6 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
-    @allure.story("Invalidation Operations")
-    @allure.title("Should save all caches to disk")
     @pytest.mark.asyncio
     async def test_save_all_to_disk(self) -> None:
         """Test that save_all_to_disk saves all services."""
@@ -365,8 +323,6 @@ class TestCacheOrchestrator:
 
     # =========================== STATISTICS TESTS ===========================
 
-    @allure.story("Statistics")
-    @allure.title("Should get comprehensive stats from all services")
     @pytest.mark.asyncio
     async def test_get_comprehensive_stats(self) -> None:
         """Test that get_comprehensive_stats aggregates stats from all services."""
@@ -387,8 +343,6 @@ class TestCacheOrchestrator:
             assert stats["api_cache"]["total_entries"] == 20
             assert stats["generic_cache"]["total_entries"] == 30
 
-    @allure.story("Statistics")
-    @allure.title("Should get cache health status")
     @pytest.mark.asyncio
     async def test_get_cache_health(self) -> None:
         """Test that get_cache_health returns health status for all services."""
@@ -407,8 +361,6 @@ class TestCacheOrchestrator:
             for service_health in health.values():
                 assert service_health["status"] == "healthy"
 
-    @allure.story("Statistics")
-    @allure.title("Should report error status when service fails")
     @pytest.mark.asyncio
     async def test_get_cache_health_handles_errors(self) -> None:
         """Test that get_cache_health reports errors correctly."""
@@ -427,8 +379,6 @@ class TestCacheOrchestrator:
 
     # =========================== BACKWARD COMPATIBILITY TESTS ===========================
 
-    @allure.story("Backward Compatibility")
-    @allure.title("Should expose cache property")
     @pytest.mark.asyncio
     async def test_cache_property(self) -> None:
         """Test that cache property returns generic service cache."""
@@ -440,8 +390,6 @@ class TestCacheOrchestrator:
         assert "key" in orchestrator.cache
         assert orchestrator.cache["key"] == ("value", 0.0)
 
-    @allure.story("Backward Compatibility")
-    @allure.title("Should expose album_years_cache property")
     @pytest.mark.asyncio
     async def test_album_years_cache_property(self) -> None:
         """Test that album_years_cache property returns transformed data."""
@@ -459,8 +407,6 @@ class TestCacheOrchestrator:
 
     # =========================== PROTOCOL METHODS TESTS ===========================
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should implement load_cache as no-op")
     @pytest.mark.asyncio
     async def test_load_cache_noop(self) -> None:
         """Test that load_cache is a no-op (services load during init)."""
@@ -469,8 +415,6 @@ class TestCacheOrchestrator:
         # Should not raise
         await orchestrator.load_cache()
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should implement save_cache")
     @pytest.mark.asyncio
     async def test_save_cache_delegates(self) -> None:
         """Test that save_cache delegates to save_all_to_disk."""
@@ -485,8 +429,6 @@ class TestCacheOrchestrator:
 
             mock_album.assert_called_once()
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should get last run timestamp")
     @pytest.mark.asyncio
     async def test_get_last_run_timestamp(self) -> None:
         """Test that get_last_run_timestamp returns datetime."""
@@ -501,8 +443,6 @@ class TestCacheOrchestrator:
 
             assert result == datetime(2024, 1, 1, tzinfo=UTC)
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should return epoch when never run")
     @pytest.mark.asyncio
     async def test_get_last_run_timestamp_never_run(self) -> None:
         """Test that get_last_run_timestamp returns epoch when never run."""
@@ -517,8 +457,6 @@ class TestCacheOrchestrator:
 
             assert result == datetime(1970, 1, 1, tzinfo=UTC)
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should generate album key")
     @pytest.mark.asyncio
     async def test_generate_album_key(self) -> None:
         """Test that generate_album_key creates consistent keys."""
@@ -529,8 +467,6 @@ class TestCacheOrchestrator:
         assert key1 == key2  # Same input -> same key
         assert key1 != key3  # Different input -> different key
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should clear all caches")
     @pytest.mark.asyncio
     async def test_clear(self) -> None:
         """Test that clear() clears all caches."""
@@ -547,8 +483,6 @@ class TestCacheOrchestrator:
             mock_album.assert_called_once()
             mock_api.assert_called_once()
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should shutdown gracefully")
     @pytest.mark.asyncio
     async def test_shutdown(self) -> None:
         """Test that shutdown stops cleanup tasks."""
@@ -559,8 +493,6 @@ class TestCacheOrchestrator:
 
             mock_stop.assert_called_once()
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should delegate get_cached_api_result")
     @pytest.mark.asyncio
     async def test_get_cached_api_result(self) -> None:
         """Test that get_cached_api_result delegates to api service."""
@@ -573,8 +505,6 @@ class TestCacheOrchestrator:
             assert result == mock_result
             mock_get.assert_called_once_with("Artist", "Album", "source")
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should delegate set_cached_api_result")
     @pytest.mark.asyncio
     async def test_set_cached_api_result(self) -> None:
         """Test that set_cached_api_result delegates to api service."""
@@ -589,8 +519,6 @@ class TestCacheOrchestrator:
             assert call_args[0][1] == "Album"
             assert call_args[0][2] == "source"
 
-    @allure.story("Protocol Methods")
-    @allure.title("Should handle negative cache result")
     @pytest.mark.asyncio
     async def test_set_cached_api_result_negative(self) -> None:
         """Test that set_cached_api_result handles negative results."""
