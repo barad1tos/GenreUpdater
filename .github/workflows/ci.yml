@@ -122,6 +122,8 @@ jobs:
             --cov=src \
             --cov-report=term-missing \
             --cov-report=xml \
+            --reruns 2 --reruns-delay 5 \
+            --only-rerun "ConnectionError|ClientConnectorError|Connection reset" \
             -x
 
       - name: Upload coverage

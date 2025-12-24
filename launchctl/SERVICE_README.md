@@ -10,15 +10,18 @@ launchctl/                              # In git repo (version controlled)
 │   ├── install.sh                      # Deploys everything
 │   ├── run-daemon.sh                   # Main wrapper script
 │   ├── update.sh                       # Manual git pull trigger
-│   └── notify.sh                       # macOS notifications
+│   ├── notify.sh                       # macOS notifications
+│   └── sync-fixtures.sh                # Sync library snapshot to repo
 ├── com.music.genreautoupdater.plist    # TEMPLATE (edit this!)
 └── SERVICE_README.md
 
-~/Library/Application Support/GenreUpdater/   # LOCAL state (not synced)
+~/Library/Application Support/GenreUpdater/   # LOCAL installation
+├── app/                                # Git clone of repo (main branch)
+│   └── [full repo clone]
 ├── state/
-│   ├── last_run.timestamp
-│   ├── run.lock
-│   └── cooldown_override
+│   ├── last_track_count                # Track count for delta detection
+│   ├── run.lock                        # PID lock file
+│   └── force_run                       # Touch to force next run
 ├── logs/
 │   ├── daemon.log
 │   ├── stdout.log
@@ -35,34 +38,33 @@ launchctl/                              # In git repo (version controlled)
 
 ```
 iCloud/.../Genres Autoupdater v2.0/           # DEV (your development work)
-iCloud/.../Genres Autoupdater v2.0-daemon/    # DAEMON (production, main branch)
+~/Library/Application Support/GenreUpdater/app/  # DAEMON (production, main branch)
 ```
 
-### Why Two Directories?
+### Why This Structure?
 
-- **Development (v2.0/)**: Work on `dev` branch freely
-- **Daemon (v2.0-daemon/)**: Always on `main` branch, runs automatically
-- Both sync via iCloud, but are independent git clones
-- State files are local (not synced) to avoid iCloud conflicts
+- **Development (v2.0/)**: Work on `dev` branch in iCloud, syncs across devices
+- **Daemon (app/)**: Isolated git clone in Application Support, always on `main`
+- **Isolation**: Daemon code is NOT synced via iCloud (prevents race conditions)
+- **Auto-update**: Daemon pulls from `origin/main` on each trigger
+- **State files**: Local only, never synced
 
 ## Quick Start
 
 ### First-Time Setup
 
 ```bash
-# 1. Clone the daemon repo (if not done)
-cd "~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python"
-git clone https://github.com/barad1tos/GenreUpdater.git "Genres Autoupdater v2.0-daemon"
-
-# 2. Set up daemon venv
-cd "Genres Autoupdater v2.0-daemon"
-git checkout main
-uv sync
-
-# 3. Run the installer FROM THE REPO
-cd "../Genres Autoupdater v2.0"
+# Just run the installer - it handles everything
+cd "~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0"
 ./launchctl/bin/install.sh
 ```
+
+The installer automatically:
+
+1. Clones the repo to `~/Library/Application Support/GenreUpdater/app/`
+2. Copies scripts to `bin/`
+3. Deploys the LaunchAgent plist
+4. Loads the service
 
 ### Verify Installation
 
@@ -102,10 +104,9 @@ Then redeploy:
 
 ### Edit Wrapper Script
 
-For cooldown and other runtime settings, edit `launchctl/bin/run-daemon.sh`:
+For runtime settings, edit `launchctl/bin/run-daemon.sh`:
 
 ```bash
-COOLDOWN_SECONDS=7200   # 2 hours between runs
 TIMEOUT_SECONDS=14400   # 4 hour max runtime
 ```
 
@@ -129,18 +130,19 @@ Edit the plist template, find WatchPaths:
 
 ## Commands
 
-| Script          | Description                            |
-|-----------------|----------------------------------------|
-| `install.sh`    | Deploy scripts + plist, load service   |
-| `run-daemon.sh` | Main wrapper (called by launchctl)     |
-| `update.sh`     | Manually pull latest changes from main |
-| `notify.sh`     | macOS notification helper              |
+| Script             | Description                             |
+|--------------------|-----------------------------------------|
+| `install.sh`       | Deploy scripts + plist, load service    |
+| `run-daemon.sh`    | Main wrapper (called by launchctl)      |
+| `update.sh`        | Manually pull latest changes from main  |
+| `notify.sh`        | macOS notification helper               |
+| `sync-fixtures.sh` | Sync library snapshot to repo for tests |
 
 ### Manual Operations
 
 ```bash
-# Force run now (ignoring cooldown)
-touch ~/Library/Application\ Support/GenreUpdater/state/cooldown_override
+# Force run now (ignoring track count check)
+touch ~/Library/Application\ Support/GenreUpdater/state/force_run
 launchctl kickstart -k gui/$(id -u)/com.music.genreautoupdater
 
 # Manual run without kickstart
@@ -173,7 +175,7 @@ The daemon watches:
 
 Any change to this file triggers the daemon.
 
-### Cooldown Logic
+### Track Count Check
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -185,39 +187,39 @@ Any change to this file triggers the daemon.
 │  └────────┬───────-─┘                                │
 │           │ No                                       │
 │           ▼                                          │
-│  ┌───────────────-──┐                                │
-│  │ Cooldown active? │──Yes──▶ Exit (2h not passed)   │
-│  └────────┬──────-──┘                                │
-│           │ No (or override exists)                  │
+│  ┌────────────────────┐                              │
+│  │ Track count same?  │──Yes──▶ Exit (~0.2 sec)      │
+│  └────────┬───────────┘                              │
+│           │ No (or force_run exists)                 │
 │           ▼                                          │
 │  ┌────────────────-─┐                                │
-│  │  Create symlinks │  (.env, my-config.yaml)        │
-│  │   git pull       │                                │
-│  │   uv sync        │                                │
-│  │   run script     │                                │
+│  │  git pull        │                                │
+│  │  uv sync         │                                │
+│  │  run script      │                                │
 │  └────────┬──────-──┘                                │
 │           │                                          │
 │           ▼                                          │
-│  Update timestamp / Send notification                │
+│  Save track count / Send notification                │
 └──────────────────────────────────────────────────────┘
 ```
 
 **Timings:**
 
 - LaunchAgent ThrottleInterval: 5 minutes (minimum between triggers)
-- Wrapper cooldown: 2 hours (minimum between actual runs)
+- Track count check: ~0.2 seconds (fast exit if unchanged)
 - Max runtime: 4 hours (timeout)
 
 ## Development Workflow
 
 ```
-┌─────────────────┐     PR/MR    ┌────────────────-─┐
-│   dev branch    │ ───────────► │   main branch    │
-│   (v2.0/)       │              │   (v2.0-daemon/) │
-└─────────────────┘              └─────────────────-┘
+┌─────────────────┐     PR/MR    ┌────────────────────┐
+│   dev branch    │ ───────────► │   main branch      │
+│   (v2.0/)       │              │   (app/)           │
+└─────────────────┘              └────────────────────┘
         │                                  │
         ▼                                  ▼
    You develop                     Daemon auto-pulls
+   in iCloud                       from origin/main
 ```
 
 1. Work in `v2.0/` on any branch
@@ -237,12 +239,13 @@ If you don't want to wait for a trigger:
 
 Each machine has:
 
-- Shared code via iCloud (both v2.0/ and v2.0-daemon/)
-- Local state (lock, timestamp, logs) - NOT synced
+- Shared dev code via iCloud (v2.0/)
+- Independent daemon clone (app/) - NOT synced
+- Local state (lock, track count, logs) - NOT synced
 
 This means:
 
-- Each machine has independent cooldown
+- Each machine has independent track count state
 - Each machine can run daemon independently
 - No conflict between machines
 
@@ -290,15 +293,18 @@ launchctl load ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 # Verify WatchPaths target exists
 ls -la ~/Music/Music/Music\ Library.musiclibrary
 
-# Check daemon.log for cooldown messages
-grep -i cooldown ~/Library/Application\ Support/GenreUpdater/logs/daemon.log
+# Check daemon.log for track count messages
+grep -i "track count" ~/Library/Application\ Support/GenreUpdater/logs/daemon.log
+
+# Force a run (bypasses track count check)
+touch ~/Library/Application\ Support/GenreUpdater/state/force_run
 ```
 
 ### Git Pull Fails
 
 ```bash
 # Check daemon directory
-cd "~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0-daemon"
+cd ~/Library/Application\ Support/GenreUpdater/app
 git status
 git remote -v
 
@@ -313,22 +319,13 @@ If you see "Missing required environment variables" error:
 
 ```bash
 # Check .env symlink
-ls -la "~/Library/.../Genres Autoupdater v2.0-daemon/.env"
+ls -la ~/Library/Application\ Support/GenreUpdater/app/.env
 
 # If missing, recreate manually or re-run daemon script
 # (it creates symlinks automatically now)
 ```
 
-### iCloud Sync Conflicts
-
-```bash
-# Find conflict files
-find "~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python" -name "* 2" -o -name "* 2.*"
-
-# Remove them (they're duplicates)
-```
-
 ---
 
 **Status:** Production-ready
-**Last update:** 2025-11-26
+**Last update:** 2025-12-24

@@ -12,8 +12,6 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-
-import allure
 import pytest
 
 from core.models.track_models import TrackDict
@@ -88,9 +86,6 @@ def create_test_tracks(
     ]
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Year Plausibility Integration")
-@allure.story("Issue #72 - Year Plausibility Check")
 @pytest.mark.integration
 class TestYearPlausibilityIntegration:
     """Integration tests for year plausibility check flow."""
@@ -159,8 +154,6 @@ class TestYearPlausibilityIntegration:
             api_orchestrator=mock_api_service,
         )
 
-    @allure.title("Full flow: Impossible year triggers API update")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.asyncio
     async def test_full_flow_impossible_year_fixed(
         self,
@@ -173,36 +166,23 @@ class TestYearPlausibilityIntegration:
         Scenario: Bad Omens (formed 2015) has year 2000 in library.
         Expected: Plausibility check detects impossible year, applies API year.
         """
-        with allure.step("Setup: Configure artist start year"):
-            mock_api_service.artist_activity_response = (2015, None)
-            tracks = create_test_tracks("Bad Omens", "Dying To Love", "2000")
+        mock_api_service.artist_activity_response = (2015, None)
+        tracks = create_test_tracks("Bad Omens", "Dying To Love", "2000")
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2025",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="Bad Omens",
+            album="Dying To Love",
+        )
+        assert result == "2025", f"Expected '2025', got '{result}'"
 
-        with allure.step("Execute: Run fallback logic"):
-            result = await fallback_handler.apply_year_fallback(
-                proposed_year="2025",
-                album_tracks=tracks,
-                is_definitive=False,
-                confidence_score=50,
-                artist="Bad Omens",
-                album="Dying To Love",
-            )
+        # Verify marked for verification with correct reason
+        assert len(mock_pending_service.marked_albums) >= 1
+        reasons = [m[2] for m in mock_pending_service.marked_albums]
+        assert "implausible_existing_year" in reasons
 
-        with allure.step("Verify: Impossible year was NOT preserved"):
-            assert result == "2025", f"Expected '2025', got '{result}'"
-
-            # Verify marked for verification with correct reason
-            assert len(mock_pending_service.marked_albums) >= 1
-            reasons = [m[2] for m in mock_pending_service.marked_albums]
-            assert "implausible_existing_year" in reasons
-
-            allure.attach(
-                f"Result: {result}\nReasons: {reasons}",
-                "Test Results",
-                allure.attachment_type.TEXT,
-            )
-
-    @allure.title("Full flow: Plausible year preserved with low confidence")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.asyncio
     async def test_full_flow_plausible_year_preserved(
         self,
@@ -218,35 +198,22 @@ class TestYearPlausibilityIntegration:
         Note: apply_year_fallback returns None to signal "don't update, keep existing".
         The caller (YearRetriever) interprets None as "preserve existing year".
         """
-        with allure.step("Setup: Configure artist start year"):
-            mock_api_service.artist_activity_response = (1981, None)
-            tracks = create_test_tracks("Metallica", "Master of Puppets", "1986")
+        mock_api_service.artist_activity_response = (1981, None)
+        tracks = create_test_tracks("Metallica", "Master of Puppets", "1986")
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="Metallica",
+            album="Master of Puppets",
+        )
+        # Existing year is returned to propagate to all tracks (including empty ones)
+        assert result == "1986", f"Expected '1986' (propagate existing), got '{result}'"
 
-        with allure.step("Execute: Run fallback logic"):
-            result = await fallback_handler.apply_year_fallback(
-                proposed_year="2020",
-                album_tracks=tracks,
-                is_definitive=False,
-                confidence_score=50,
-                artist="Metallica",
-                album="Master of Puppets",
-            )
+        # Should be marked for verification (suspicious change)
+        assert len(mock_pending_service.marked_albums) >= 1
 
-        with allure.step("Verify: Existing year returned for propagation"):
-            # Existing year is returned to propagate to all tracks (including empty ones)
-            assert result == "1986", f"Expected '1986' (propagate existing), got '{result}'"
-
-            # Should be marked for verification (suspicious change)
-            assert len(mock_pending_service.marked_albums) >= 1
-
-            allure.attach(
-                f"Result: {result}\nExisting propagated: True (via returning existing year)",
-                "Test Results",
-                allure.attachment_type.TEXT,
-            )
-
-    @allure.title("Full flow: High confidence always applies API year")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.asyncio
     async def test_full_flow_high_confidence_applies_api(
         self,
@@ -258,31 +225,18 @@ class TestYearPlausibilityIntegration:
         Scenario: Any artist with high confidence API result (>= 70%).
         Expected: API year is applied regardless of plausibility check.
         """
-        with allure.step("Setup: Configure artist and high confidence"):
-            mock_api_service.artist_activity_response = (1981, None)
-            tracks = create_test_tracks("Metallica", "Some Album", "1999")
+        mock_api_service.artist_activity_response = (1981, None)
+        tracks = create_test_tracks("Metallica", "Some Album", "1999")
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=85,  # High confidence
+            artist="Metallica",
+            album="Some Album",
+        )
+        assert result == "2020", f"Expected '2020', got '{result}'"
 
-        with allure.step("Execute: Run fallback logic with high confidence"):
-            result = await fallback_handler.apply_year_fallback(
-                proposed_year="2020",
-                album_tracks=tracks,
-                is_definitive=False,
-                confidence_score=85,  # High confidence
-                artist="Metallica",
-                album="Some Album",
-            )
-
-        with allure.step("Verify: High confidence applied API year"):
-            assert result == "2020", f"Expected '2020', got '{result}'"
-
-            allure.attach(
-                f"Result: {result}\nConfidence: 85%",
-                "Test Results",
-                allure.attachment_type.TEXT,
-            )
-
-    @allure.title("Full flow: Definitive result bypasses all checks")
-    @allure.severity(allure.severity_level.NORMAL)
     @pytest.mark.asyncio
     async def test_full_flow_definitive_bypasses_all(
         self,
@@ -294,35 +248,21 @@ class TestYearPlausibilityIntegration:
         Scenario: API returns definitive result.
         Expected: Year applied immediately, no fallback logic.
         """
-        with allure.step("Setup: Configure definitive response"):
-            tracks = create_test_tracks("Artist", "Album", "1999")
+        tracks = create_test_tracks("Artist", "Album", "1999")
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=True,
+            confidence_score=95,
+            artist="Artist",
+            album="Album",
+        )
+        assert result == "2020", f"Expected '2020', got '{result}'"
 
-        with allure.step("Execute: Run with definitive result"):
-            result = await fallback_handler.apply_year_fallback(
-                proposed_year="2020",
-                album_tracks=tracks,
-                is_definitive=True,
-                confidence_score=95,
-                artist="Artist",
-                album="Album",
-            )
-
-        with allure.step("Verify: Definitive result applied"):
-            assert result == "2020", f"Expected '2020', got '{result}'"
-
-            # API orchestrator should NOT be called (no plausibility check needed)
-            assert len(mock_api_service.artist_activity_requests) == 0
-
-            allure.attach(
-                f"Result: {result}\nAPI calls: 0",
-                "Test Results",
-                allure.attachment_type.TEXT,
-            )
+        # API orchestrator should NOT be called (no plausibility check needed)
+        assert len(mock_api_service.artist_activity_requests) == 0
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Year Plausibility Integration")
-@allure.story("API Orchestrator Integration")
 @pytest.mark.integration
 class TestApiOrchestratorIntegration:
     """Integration tests for API orchestrator's get_artist_start_year."""
@@ -332,45 +272,28 @@ class TestApiOrchestratorIntegration:
         """Create mock external API service."""
         return MockExternalApiService()
 
-    @allure.title("API Orchestrator returns correct start year")
-    @allure.severity(allure.severity_level.NORMAL)
     @pytest.mark.asyncio
     async def test_orchestrator_returns_start_year(
         self,
         mock_api_service: MockExternalApiService,
     ) -> None:
         """Test API orchestrator returns artist start year."""
-        with allure.step("Setup: Configure artist response"):
-            mock_api_service.artist_activity_response = (1981, 2023)
+        mock_api_service.artist_activity_response = (1981, 2023)
+        result = await mock_api_service.get_artist_start_year("metallica")
+        assert result == 1981
+        assert "metallica" in mock_api_service.artist_activity_requests
 
-        with allure.step("Execute: Get artist start year"):
-            result = await mock_api_service.get_artist_start_year("metallica")
-
-        with allure.step("Verify: Correct start year returned"):
-            assert result == 1981
-            assert "metallica" in mock_api_service.artist_activity_requests
-
-    @allure.title("API Orchestrator handles unknown artist")
-    @allure.severity(allure.severity_level.NORMAL)
     @pytest.mark.asyncio
     async def test_orchestrator_handles_unknown_artist(
         self,
         mock_api_service: MockExternalApiService,
     ) -> None:
         """Test API orchestrator handles unknown artist gracefully."""
-        with allure.step("Setup: Configure no data response"):
-            mock_api_service.artist_activity_response = (None, None)
-
-        with allure.step("Execute: Get artist start year"):
-            result = await mock_api_service.get_artist_start_year("unknown_artist")
-
-        with allure.step("Verify: None returned for unknown artist"):
-            assert result is None
+        mock_api_service.artist_activity_response = (None, None)
+        result = await mock_api_service.get_artist_start_year("unknown_artist")
+        assert result is None
 
 
-@allure.epic("Music Genre Updater")
-@allure.feature("Year Plausibility Integration")
-@allure.story("Real World Scenarios")
 @pytest.mark.integration
 class TestRealWorldScenariosIntegration:
     """Integration tests based on real Issue #72 cases."""
@@ -402,8 +325,6 @@ class TestRealWorldScenariosIntegration:
             api_orchestrator=mock_api_service,
         )
 
-    @allure.title("Real case: Bad Omens impossible year")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.asyncio
     async def test_bad_omens_real_case(
         self,
@@ -435,8 +356,6 @@ class TestRealWorldScenariosIntegration:
             f"Bad Omens case failed: got '{result}' instead of '2025'. Year 2000 should NOT be preserved for band that formed in 2015."
         )
 
-    @allure.title("Real case: Children of Bodom wrong year")
-    @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.asyncio
     async def test_children_of_bodom_real_case(
         self,
