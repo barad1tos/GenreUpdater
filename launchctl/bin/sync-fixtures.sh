@@ -30,6 +30,13 @@ fi
 
 cd "$REPO_DIR"
 
+# Safety check: only push from main or dev branch
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ ! "$CURRENT_BRANCH" =~ ^(main|dev)$ ]]; then
+    log "Skipping: not on main/dev branch (current: $CURRENT_BRANCH)"
+    exit 0
+fi
+
 # Create fixtures dir if needed
 mkdir -p "$(dirname "$FIXTURE_PATH")"
 
@@ -53,9 +60,10 @@ if git diff --staged --quiet; then
     exit 0
 fi
 
-git commit -m "chore: auto-update library snapshot [skip ci]"
+# Commit only the fixture file (not other staged files)
+git commit "$FIXTURE_PATH" -m "chore: auto-update library snapshot [skip ci]"
 
 log "Pushing to origin..."
-git push origin "$(git branch --show-current)"
+git push origin "$CURRENT_BRANCH"
 
 log "Sync complete"

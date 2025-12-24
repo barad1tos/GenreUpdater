@@ -149,12 +149,16 @@ log "Git update complete"
 log "Syncing dependencies..."
 
 # Function to sync with auto-recovery
+# Note: Using if-block instead of &&/|| to avoid set -e edge cases
 sync_dependencies() {
     local sync_output
     local sync_exit
 
-    # First attempt
-    sync_output=$(uv sync --frozen 2>&1) && sync_exit=0 || sync_exit=$?
+    # First attempt (if-block pattern is safer with set -e)
+    sync_exit=0
+    if ! sync_output=$(uv sync --frozen 2>&1); then
+        sync_exit=$?
+    fi
     echo "$sync_output" >> "$DAEMON_LOG"
 
     if [[ $sync_exit -eq 0 ]]; then
@@ -162,10 +166,14 @@ sync_dependencies() {
     fi
 
     # First failure - try cleaning venv and retrying
+    # Safe to rm -rf here: this is daemon's isolated clone, not user's dev env
     log "First sync failed (exit $sync_exit), cleaning venv and retrying..."
     rm -rf "$DAEMON_DIR/.venv" "$DAEMON_DIR/src/music_genre_updater.egg-info"
 
-    sync_output=$(uv sync --frozen 2>&1) && sync_exit=0 || sync_exit=$?
+    sync_exit=0
+    if ! sync_output=$(uv sync --frozen 2>&1); then
+        sync_exit=$?
+    fi
     echo "$sync_output" >> "$DAEMON_LOG"
 
     if [[ $sync_exit -eq 0 ]]; then
