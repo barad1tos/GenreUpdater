@@ -107,6 +107,9 @@ class LastFmAlbum(TypedDict, total=False):
 class LastFmClient(BaseApiClient):
     """Last.fm API client for fetching music metadata."""
 
+    LASTFM_API_URL = "https://ws.audioscrobbler.com/2.0/"
+    DEFAULT_ERROR_MESSAGE = "Unknown error"
+
     def __init__(
         self,
         api_key: str,
@@ -115,6 +118,8 @@ class LastFmClient(BaseApiClient):
         make_api_request_func: Callable[..., Awaitable[dict[str, Any] | None]],
         score_release_func: Callable[..., float],
         use_lastfm: bool = True,
+        *,
+        config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize Last.fm client.
 
@@ -125,6 +130,7 @@ class LastFmClient(BaseApiClient):
             make_api_request_func: Function to make API requests with rate-limiting
             score_release_func: Function to score releases for originality
             use_lastfm: Whether to use Last.fm API
+            config: Application configuration for remaster_keywords
 
         """
         super().__init__(console_logger, error_logger)
@@ -132,6 +138,121 @@ class LastFmClient(BaseApiClient):
         self._make_api_request = make_api_request_func
         self._score_original_release = score_release_func
         self.use_lastfm = use_lastfm
+        self.config = config or {}
+        self._remaster_keywords = self.config.get("cleaning", {}).get("remaster_keywords", [])
+
+    def _strip_trailing_keyword(self, text: str) -> tuple[str, bool]:
+        """Strip a single trailing keyword from text.
+
+        Args:
+            text: Text to process
+
+        Returns:
+            Tuple of (processed_text, was_keyword_found)
+
+        """
+        text_lower = text.lower()
+        for keyword in self._remaster_keywords:
+            keyword_lower = keyword.lower()
+            if text_lower.endswith(keyword_lower):
+                idx = text_lower.rfind(keyword_lower)
+                if idx > 0:
+                    return text[:idx].strip(), True
+        return text, False
+
+    def _clean_album_for_search(self, album: str) -> str | None:
+        """Clean album name for fallback search.
+
+        Removes common suffixes and patterns that cause Last.fm lookup failures.
+        Returns None if no changes were made (to avoid duplicate API calls).
+
+        Args:
+            album: Original album name
+
+        Returns:
+            Cleaned album name or None if unchanged
+
+        """
+        if not album:
+            return None
+
+        original = album
+        cleaned = album.strip()
+
+        # Step 1: Split on colon and take first part
+        if ":" in cleaned:
+            cleaned = cleaned.split(":")[0].strip()
+
+        # Step 2: Strip trailing keywords iteratively
+        if self._remaster_keywords:
+            keyword_found = True
+            while keyword_found:
+                cleaned, keyword_found = self._strip_trailing_keyword(cleaned)
+
+        # Return None if no change (avoid duplicate request)
+        return None if cleaned == original or not cleaned else cleaned
+
+    @staticmethod
+    def _normalize_artist_for_matching(artist: str) -> str:
+        """Normalize artist name for flexible matching.
+
+        Extends basic normalization with Last.fm/Discogs-specific handling:
+        - "Beatles, The" -> "the beatles" (common API format)
+        - "Artist (2)" -> "artist" (disambiguation suffix removal)
+
+        Args:
+            artist: Artist name to normalize
+
+        Returns:
+            Normalized artist name for matching
+
+        """
+        if not artist:
+            return ""
+
+        # Basic normalization: strip + lowercase
+        normalized = artist.strip().lower()
+
+        # Handle "X, The" -> "the x" (common in some API responses)
+        if normalized.endswith(", the"):
+            normalized = f"the {normalized[:-5]}"
+
+        # Remove trailing numbered suffix like "(2)", "(3)" for disambiguation
+        return re.sub(r"\s*\(\d+\)\s*$", "", normalized)
+
+    def _is_artist_match(self, result_artist: str, target_artist: str) -> bool:
+        """Check if result artist matches target artist.
+
+        Uses flexible matching to handle variations like:
+        - "The Beatles" vs "Beatles, The"
+        - "Artist (2)" vs "Artist"
+        - Substring matching as fallback
+
+        Args:
+            result_artist: Artist name from search result
+            target_artist: Target artist we're looking for
+
+        Returns:
+            True if artists match
+
+        """
+        result_norm = self._normalize_artist_for_matching(result_artist)
+        target_norm = self._normalize_artist_for_matching(target_artist)
+
+        # Prepare versions without "The" prefix
+        result_no_the = result_norm.removeprefix("the ")
+        target_no_the = target_norm.removeprefix("the ")
+
+        # Exact match
+        if result_norm == target_norm:
+            return True
+
+        # Match without "The" prefix
+        if result_no_the == target_no_the:
+            return True
+
+        # Substring fallback (handles "Air" in "Air Supply" cases carefully)
+        return target_norm in result_norm or target_no_the in result_norm
 
     def _extract_year_from_release_date(self, album_data: LastFmAlbum | dict[str, Any]) -> str | None:
         """Extract year from the explicit 'releasedate' field.
@@ -254,6 +375,60 @@ class LastFmClient(BaseApiClient):
         # Priority 3: Tags
         return self._extract_year_from_tags(album_data)
 
+    async def _search_albums(self, album: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Search for albums using album.search API method.
+
+        This is a fuzzy search that returns multiple potential matches.
+        Results need post-filtering by artist.
+
+        Args:
+            album: Album name to search for
+            limit: Maximum number of results to return
+
+        Returns:
+            List of album matches from search results
+
+        """
+        if not self.use_lastfm:
+            return []
+
+        url = self.LASTFM_API_URL
+        params: dict[str, str] = {
+            "method": "album.search",
+            "album": album,
+            "api_key": str(self.api_key or ""),
+            "format": "json",
+            "limit": str(limit),
+        }
+
+        try:
+            data = await self._make_api_request("lastfm", url, params=params)
+
+            if not data:
+                return []
+
+            if "error" in data:
+                self.console_logger.debug(
+                    "Last.fm album.search error %s: %s",
+                    data.get("error"),
+                    data.get("message", self.DEFAULT_ERROR_MESSAGE),
+                )
+                return []
+
+            # Navigate to results: data.results.albummatches.album
+            results = data.get("results", {})
+            album_matches = results.get("albummatches", {})
+            albums = album_matches.get("album", [])
+
+            if isinstance(albums, list):
+                self.console_logger.debug("Last.fm album.search found %d results for '%s'", len(albums), album)
+                return albums
+
+        except (OSError, ValueError, KeyError, TypeError):
+            self.error_logger.exception("Error in Last.fm album.search")
+
+        return []
+
     @Analytics.track_instance_method("lastfm_album_search")
     async def get_album_info(
         self,
@@ -273,7 +448,7 @@ class LastFmClient(BaseApiClient):
         if not self.use_lastfm:
             return None
 
-        url = "https://ws.audioscrobbler.com/2.0/"
+        url = self.LASTFM_API_URL
         params: dict[str, str] = {
             "method": "album.getInfo",
             "artist": artist,
@@ -293,7 +468,7 @@ class LastFmClient(BaseApiClient):
                 self.console_logger.warning(
                     "Last.fm API error %s: %s",
                     data.get("error"),
-                    data.get("message", "Unknown error"),
+                    data.get("message", self.DEFAULT_ERROR_MESSAGE),
                 )
                 return None
 
@@ -305,6 +480,67 @@ class LastFmClient(BaseApiClient):
 
         return None
 
+    async def _perform_cleaned_search(self, artist: str, album: str) -> LastFmAlbum | None:
+        """Perform search with cleaned album name (Fallback 1).
+
+        Strips common suffixes and content after colons that cause lookup failures.
+
+        Args:
+            artist: Artist name
+            album: Original album name
+
+        Returns:
+            Album data if found, None otherwise
+
+        """
+        cleaned_album = self._clean_album_for_search(album)
+        if not cleaned_album:
+            return None
+
+        self.console_logger.debug(
+            "Last.fm fallback 1: trying cleaned album '%s' -> '%s'",
+            album,
+            cleaned_album,
+        )
+        return await self.get_album_info(artist, cleaned_album)
+
+    async def _perform_fuzzy_search(self, artist: str, album: str) -> LastFmAlbum | None:
+        """Perform fuzzy search using album.search API (Fallback 2).
+
+        Searches by album name only, then filters results by artist match.
+
+        Args:
+            artist: Target artist name
+            album: Album name to search for
+
+        Returns:
+            Album data if found and artist matches, None otherwise
+
+        """
+        # Try with original album first, then cleaned version
+        search_terms = [album]
+        cleaned_album = self._clean_album_for_search(album)
+        if cleaned_album:
+            search_terms.append(cleaned_album)
+
+        for search_term in search_terms:
+            results = await self._search_albums(search_term)
+
+            for result in results:
+                result_artist = result.get("artist", "")
+                if self._is_artist_match(result_artist, artist):
+                    # Found a match - get full album info
+                    result_album = result.get("name", "")
+                    self.console_logger.debug(
+                        "Last.fm fallback 2: matched '%s - %s' via album.search",
+                        result_artist,
+                        result_album,
+                    )
+                    # Fetch full album info for this match
+                    return await self.get_album_info(result_artist, result_album)
+
+        return None
+
     @Analytics.track_instance_method("lastfm_release_search")
     async def get_scored_releases(
         self,
@@ -312,6 +548,11 @@ class LastFmClient(BaseApiClient):
         album_norm: str,
     ) -> list[ScoredRelease]:
         """Retrieve album release year from Last.fm and return scored releases.
+
+        Uses a 3-level fallback strategy (similar to Discogs):
+        1. Primary: album.getInfo with exact artist + album
+        2. Fallback 1: album.getInfo with cleaned album name (suffixes stripped)
+        3. Fallback 2: album.search with artist post-filter
 
         Args:
             artist_norm: Normalized artist name
@@ -329,10 +570,19 @@ class LastFmClient(BaseApiClient):
         try:
             self.console_logger.debug("Searching Last.fm for: '%s - %s'", artist_norm, album_norm)
 
-            album_data = await self.get_album_info(artist_norm, album_norm)
+            # Primary: Exact album.getInfo, then fallbacks (short-circuit evaluation)
+            album_data = (
+                await self.get_album_info(artist_norm, album_norm)
+                or await self._perform_cleaned_search(artist_norm, album_norm)
+                or await self._perform_fuzzy_search(artist_norm, album_norm)
+            )
 
             if not album_data:
-                self.console_logger.warning("Last.fm getInfo failed for '%s - %s'", artist_norm, album_norm)
+                self.console_logger.warning(
+                    "Last.fm all strategies failed for '%s - %s'",
+                    artist_norm,
+                    album_norm,
+                )
                 return []
 
             # Extract year information
@@ -400,7 +650,7 @@ class LastFmClient(BaseApiClient):
         if not self.use_lastfm:
             return None
 
-        url = "https://ws.audioscrobbler.com/2.0/"
+        url = self.LASTFM_API_URL
         params: dict[str, str] = {
             "method": "artist.getInfo",
             "artist": artist,
@@ -419,7 +669,7 @@ class LastFmClient(BaseApiClient):
                 self.console_logger.warning(
                     "Last.fm API error %s: %s",
                     data.get("error"),
-                    data.get("message", "Unknown error"),
+                    data.get("message", self.DEFAULT_ERROR_MESSAGE),
                 )
                 return None
 

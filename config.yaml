@@ -43,6 +43,9 @@ cleaning:
     - motion picture
     - film score
     - expanded edition
+    # Last.fm fallback patterns (Issue #106)
+    - The 12 Singles
+    - The 12" Singles
   album_suffixes_to_remove:
     - Remaster
     - Remastered

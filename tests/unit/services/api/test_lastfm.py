@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-import pytest
-from services.api.lastfm import LastFmClient
 
+import pytest
+
+from services.api.lastfm import LastFmClient
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -216,3 +217,207 @@ class TestLastFmClientAllure:
 
         # Verify no API calls were made
         mock_api_request.assert_not_called()
+
+
+class TestLastFmAlbumCleaning:
+    """Tests for Last.fm album name cleaning for fallback search."""
+
+    @staticmethod
+    def create_client_with_keywords(keywords: list[str] | None = None) -> LastFmClient:
+        """Create a LastFmClient with specified remaster keywords."""
+        config: dict[str, Any] = {}
+        if keywords is not None:
+            config = {"cleaning": {"remaster_keywords": keywords}}
+
+        return LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=AsyncMock(return_value={}),
+            score_release_func=MagicMock(return_value=0.85),
+            config=config,
+        )
+
+    def test_clean_strips_trailing_whitespace(self) -> None:
+        """Test that trailing whitespace is stripped."""
+        client = self.create_client_with_keywords([])
+        result = client._clean_album_for_search("Mother of Souls ")
+        assert result == "Mother of Souls"
+
+    def test_clean_strips_colon_suffix(self) -> None:
+        """Test that content after colon is stripped."""
+        client = self.create_client_with_keywords([])
+        result = client._clean_album_for_search("Delta Machine: The 12 Singles")
+        assert result == "Delta Machine"
+
+    def test_clean_strips_keyword_suffix(self) -> None:
+        """Test that trailing keywords are stripped."""
+        client = self.create_client_with_keywords(["The 12 Singles", "Remastered"])
+        result = client._clean_album_for_search("A Broken Frame The 12 Singles")
+        assert result == "A Broken Frame"
+
+    def test_clean_returns_none_when_unchanged(self) -> None:
+        """Test that None is returned when no cleaning is needed."""
+        client = self.create_client_with_keywords([])
+        result = client._clean_album_for_search("Thriller")
+        assert result is None
+
+    def test_clean_returns_none_for_empty_string(self) -> None:
+        """Test that None is returned for empty input."""
+        client = self.create_client_with_keywords([])
+        result = client._clean_album_for_search("")
+        assert result is None
+
+    def test_clean_handles_multiple_keywords(self) -> None:
+        """Test cleaning with multiple potential keywords."""
+        client = self.create_client_with_keywords(["Deluxe", "Edition", "Deluxe Edition"])
+        result = client._clean_album_for_search("Album Deluxe Edition")
+        assert result == "Album"
+
+    @pytest.mark.parametrize(
+        ("album", "expected"),
+        [
+            ("A Broken Frame The 12 Singles", "A Broken Frame"),
+            ("Delta Machine: The 12 Singles", "Delta Machine"),
+            ("Mother of Souls ", "Mother of Souls"),
+            ("Thriller", None),
+        ],
+    )
+    def test_issue_106_album_patterns(self, album: str, expected: str | None) -> None:
+        """Test patterns from Issue #106."""
+        client = self.create_client_with_keywords(["The 12 Singles", 'The 12" Singles'])
+        result = client._clean_album_for_search(album)
+        assert result == expected
+
+
+class TestLastFmArtistMatching:
+    """Tests for Last.fm artist name normalization and matching."""
+
+    def test_normalize_basic(self) -> None:
+        """Test basic normalization (strip + lowercase)."""
+        result = LastFmClient._normalize_artist_for_matching("  Depeche Mode  ")
+        assert result == "depeche mode"
+
+    def test_normalize_handles_the_suffix(self) -> None:
+        """Test 'X, The' -> 'the x' conversion."""
+        result = LastFmClient._normalize_artist_for_matching("Beatles, The")
+        assert result == "the beatles"
+
+    def test_normalize_removes_disambiguation_suffix(self) -> None:
+        """Test removal of (2) disambiguation suffix."""
+        result = LastFmClient._normalize_artist_for_matching("Genesis (2)")
+        assert result == "genesis"
+
+    def test_normalize_empty_string(self) -> None:
+        """Test empty string handling."""
+        result = LastFmClient._normalize_artist_for_matching("")
+        assert result == ""
+
+    def test_is_artist_match_exact(self) -> None:
+        """Test exact match."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._is_artist_match("Depeche Mode", "Depeche Mode")
+
+    def test_is_artist_match_case_insensitive(self) -> None:
+        """Test case-insensitive match."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._is_artist_match("DEPECHE MODE", "depeche mode")
+
+    def test_is_artist_match_the_variation(self) -> None:
+        """Test 'The Beatles' vs 'Beatles, The' matching."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._is_artist_match("The Beatles", "Beatles, The")
+        assert client._is_artist_match("Beatles, The", "The Beatles")
+
+    def test_is_artist_match_disambiguation(self) -> None:
+        """Test matching with disambiguation suffix."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._is_artist_match("Genesis (2)", "Genesis")
+        assert client._is_artist_match("Genesis", "Genesis (2)")
+
+    def test_is_artist_match_substring_fallback(self) -> None:
+        """Test substring fallback matching."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # "air" should match "air supply" via substring
+        assert client._is_artist_match("Air Supply", "Air")
+
+    def test_is_artist_no_match(self) -> None:
+        """Test non-matching artists."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert not client._is_artist_match("Metallica", "Iron Maiden")
+
+
+class TestLastFmFallbackChain:
+    """Tests for Last.fm fallback search chain."""
+
+    @pytest.mark.asyncio
+    async def test_primary_search_success_no_fallback(self) -> None:
+        """Test that fallbacks are not called when primary succeeds."""
+        mock_api = AsyncMock(
+            return_value={
+                "album": {
+                    "name": "Test Album",
+                    "artist": "Test Artist",
+                    "releasedate": "2020",
+                }
+            }
+        )
+        client = LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api,
+            score_release_func=MagicMock(return_value=50.0),
+        )
+
+        result = await client.get_scored_releases("test artist", "test album")
+
+        # Should have result from primary search
+        assert len(result) == 1
+        assert result[0]["year"] == "2020"
+        # Only one API call (primary)
+        assert mock_api.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_cleaned_album(self) -> None:
+        """Test fallback to cleaned album name when primary fails."""
+
+        call_count = 0
+
+        async def mock_api_func(_source: str, _url: str, params: dict[str, str]) -> dict[str, Any] | None:
+            """Mock API function that simulates primary failure and cleaned success."""
+            nonlocal call_count
+            call_count += 1
+            album_param = params.get("album", "")
+
+            # Primary fails (full album name)
+            if "The 12 Singles" in album_param:
+                return None
+
+            # Cleaned album succeeds
+            if album_param == "A Broken Frame":
+                return {
+                    "album": {
+                        "name": "A Broken Frame",
+                        "artist": "Depeche Mode",
+                        "releasedate": "1982",
+                    }
+                }
+            return None
+
+        client = LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api_func,  # type: ignore[arg-type]
+            score_release_func=MagicMock(return_value=50.0),
+            config={"cleaning": {"remaster_keywords": ["The 12 Singles"]}},
+        )
+
+        result = await client.get_scored_releases("depeche mode", "A Broken Frame The 12 Singles")
+
+        # Should have result from fallback
+        assert len(result) == 1
+        assert result[0]["year"] == "1982"
+        # Two API calls: primary + fallback 1
+        assert call_count == 2
