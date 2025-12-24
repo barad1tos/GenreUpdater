@@ -103,3 +103,36 @@ class TestDetectSearchStrategy:
         """Empty config should use default patterns."""
         info = detect_search_strategy("Hans Zimmer", "Inception (Original Soundtrack)", {})
         assert info.strategy == SearchStrategy.SOUNDTRACK
+
+
+class TestEdgeCases:
+    """Tests for edge cases and Unicode handling."""
+
+    @pytest.fixture
+    def config(self) -> dict:
+        return {
+            "album_type_detection": {
+                "soundtrack_patterns": ["soundtrack", "OST"],
+                "various_artists_names": ["Various Artists", "Різні виконавці"],
+            }
+        }
+
+    def test_unicode_various_artists(self, config: dict) -> None:
+        """Ukrainian Various Artists should be detected."""
+        info = detect_search_strategy("Різні виконавці", "Ukrainian Hits", config)
+        assert info.strategy == SearchStrategy.VARIOUS_ARTISTS
+
+    def test_case_insensitive_patterns(self, config: dict) -> None:
+        """Pattern matching should be case insensitive."""
+        info = detect_search_strategy("Artist", "Album SOUNDTRACK", config)
+        assert info.strategy == SearchStrategy.SOUNDTRACK
+
+    def test_whitespace_handling(self, config: dict) -> None:
+        """Whitespace should be handled gracefully."""
+        info = detect_search_strategy("  Various Artists  ", "Album", config)
+        assert info.strategy == SearchStrategy.VARIOUS_ARTISTS
+
+    def test_detection_priority(self, config: dict) -> None:
+        """Soundtrack takes priority over Various Artists."""
+        info = detect_search_strategy("Various Artists", "Movie Soundtrack", config)
+        assert info.strategy == SearchStrategy.SOUNDTRACK
