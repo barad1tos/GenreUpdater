@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from core.debug_utils import debug
 from core.models.script_detection import ScriptType, detect_primary_script
+from core.models.search_strategy import SearchStrategy, detect_search_strategy
 
 if TYPE_CHECKING:
     import logging
@@ -111,7 +112,12 @@ class YearSearchCoordinator:
                 return script_results
 
         # Standard API search (all providers concurrently)
-        return await self._execute_standard_api_search(artist_norm, album_norm, artist_region, log_artist, log_album)
+        results = await self._execute_standard_api_search(artist_norm, album_norm, artist_region, log_artist, log_album)
+        if results:
+            return results
+
+        # Fallback: try alternative search strategy
+        return await self._try_alternative_search(album_norm, artist_region, log_artist, log_album)
 
     def _log_api_search_start(
         self,
@@ -299,6 +305,42 @@ class YearSearchCoordinator:
 
         # Process results
         return self._process_api_task_results(results, api_order, log_artist, log_album)
+
+    async def _try_alternative_search(
+        self,
+        album_norm: str,
+        artist_region: str | None,
+        log_artist: str,
+        log_album: str,
+    ) -> list[ScoredRelease]:
+        """Try alternative search strategy when standard search fails."""
+        strategy_info = detect_search_strategy(log_artist, log_album, self.config)
+
+        if strategy_info.strategy == SearchStrategy.NORMAL:
+            return []
+
+        alt_artist = strategy_info.modified_artist
+        alt_album = strategy_info.modified_album
+
+        alt_artist_norm = alt_artist.lower().strip() if alt_artist else ""
+        alt_album_norm = alt_album.lower().strip() if alt_album else album_norm
+
+        self.console_logger.info(
+            "Alternative search: %s - %s -> strategy=%s, query=(%s, %s)",
+            log_artist,
+            log_album,
+            strategy_info.strategy.value,
+            alt_artist or "(none)",
+            alt_album or log_album,
+        )
+
+        return await self._execute_standard_api_search(
+            alt_artist_norm,
+            alt_album_norm,
+            artist_region,
+            alt_artist or log_artist,
+            alt_album or log_album,
+        )
 
     def _process_api_task_results(
         self,
