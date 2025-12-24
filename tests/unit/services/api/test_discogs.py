@@ -163,19 +163,29 @@ class TestDiscogsClientAllure:
 
     @pytest.mark.asyncio
     async def test_authentication_handling(self) -> None:
-        """Test authentication handling."""
+        """Test authentication handling with fallback search strategies.
+
+        The client now uses multiple search strategies:
+        1. Primary: fielded search (artist= + release_title=)
+        2. Fallback 1: generic query (q=artist album)
+        3. Fallback 2: album-only search (release_title=)
+
+        When results are empty, all strategies are tried.
+        """
         mock_api_request = AsyncMock(return_value={"results": []})
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
         await client.get_scored_releases("Test Artist", "Test Album", None)
-        # Verify API request was called (authentication is handled by make_api_request_func)
-        mock_api_request.assert_called_once()
 
-        # Check that proper Discogs API URL was used
-        call_args = mock_api_request.call_args
-        url = call_args[0][1]  # URL argument
-        host = urlparse(url).hostname
-        assert host is not None
-        assert host == "api.discogs.com" or host.endswith(".discogs.com")
+        # Verify all 3 search strategies were attempted (primary + 2 fallbacks)
+        expected_call_count = 3
+        assert mock_api_request.call_count == expected_call_count
+
+        # Check that proper Discogs API URL was used for all calls
+        for call in mock_api_request.call_args_list:
+            url = call[0][1]  # URL argument
+            host = urlparse(url).hostname
+            assert host is not None
+            assert host == "api.discogs.com" or host.endswith(".discogs.com")
 
     @pytest.mark.asyncio
     async def test_api_quota_exceeded(self) -> None:
@@ -226,3 +236,130 @@ class TestDiscogsClientAllure:
 
         # Verify cache was checked
         mock_cache_service.get_async.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_primary_search_success_no_fallback(self) -> None:
+        """Test that fallback is not called when primary search succeeds."""
+        # Create response without master_id to avoid additional API calls
+        mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
+        mock_response["results"][0]["master_id"] = None  # No master release lookup
+        mock_response["results"][0]["master_url"] = None
+
+        mock_api_request = AsyncMock(return_value=mock_response)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+
+        # Primary search should succeed, no fallbacks needed
+        assert len(result) > 0
+
+        # Verify first call was the fielded search (primary)
+        first_call = mock_api_request.call_args_list[0]
+        params = first_call[1]["params"]
+        assert "artist" in params
+        assert "release_title" in params
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_generic_search(self) -> None:
+        """Test fallback to generic search when primary fails."""
+        # Create response without master_id to simplify test
+        mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
+        mock_response["results"][0]["master_id"] = None
+        mock_response["results"][0]["master_url"] = None
+
+        # First call (primary) returns empty, second call (fallback) returns results
+        mock_api_request = AsyncMock(side_effect=[{"results": []}, mock_response])
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+
+        # Should get results from fallback
+        assert len(result) > 0
+
+        # Verify first call was primary search, second was generic
+        first_call = mock_api_request.call_args_list[0]
+        assert "artist" in first_call[1]["params"]
+
+        second_call = mock_api_request.call_args_list[1]
+        params = second_call[1]["params"]
+        assert "q" in params
+        assert params["q"] == "Test Artist Test Album"
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_album_only_search(self) -> None:
+        """Test fallback to album-only search when both primary and generic fail."""
+        # Create response without master_id to simplify test
+        mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
+        mock_response["results"][0]["master_id"] = None
+        mock_response["results"][0]["master_url"] = None
+
+        # First two calls return empty, third returns results
+        mock_api_request = AsyncMock(side_effect=[{"results": []}, {"results": []}, mock_response])
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+
+        # Should get results from album-only fallback
+        assert len(result) > 0
+
+        # Verify search strategy progression
+        first_call = mock_api_request.call_args_list[0]
+        assert "artist" in first_call[1]["params"]  # Primary
+
+        second_call = mock_api_request.call_args_list[1]
+        assert "q" in second_call[1]["params"]  # Fallback 1 (generic)
+
+        third_call = mock_api_request.call_args_list[2]
+        params = third_call[1]["params"]
+        assert "release_title" in params
+        assert "artist" not in params
+        assert "q" not in params  # Fallback 2 (album-only)
+
+    def test_artist_matching_the_prefix(self) -> None:
+        """Test artist matching handles 'The' prefix variations."""
+        from services.api.discogs import DiscogsClient
+
+        # Test "The Beatles" vs "Beatles, The" normalization
+        assert DiscogsClient._normalize_artist_for_matching("The Beatles") == "the beatles"
+        assert DiscogsClient._normalize_artist_for_matching("Beatles, The") == "the beatles"
+
+        # Test numbered suffix removal
+        assert DiscogsClient._normalize_artist_for_matching("Artist (2)") == "artist"
+        assert DiscogsClient._normalize_artist_for_matching("The Band (3)") == "the band"
+
+    def test_artist_matching_empty_and_whitespace(self) -> None:
+        """Test artist matching handles edge cases."""
+        from services.api.discogs import DiscogsClient
+
+        assert DiscogsClient._normalize_artist_for_matching("") == ""
+        assert DiscogsClient._normalize_artist_for_matching("  Artist  ") == "artist"
+        assert DiscogsClient._normalize_artist_for_matching("UPPERCASE") == "uppercase"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("artist", "album"),
+        [
+            ("Diary of Dreams", "The Anatomy of Silence"),
+            ("Fallujah", "Dreamless"),
+            ("Fear Factory", "Aggression Continuum"),
+        ],
+    )
+    async def test_search_strategies_for_known_failures(self, artist: str, album: str) -> None:
+        """Test that search strategies are applied for previously failing cases from issue #107."""
+        mock_api_request = AsyncMock(return_value={"results": []})
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        await client.get_scored_releases(artist, album, None)
+
+        # All 3 strategies should be tried when no results found
+        assert mock_api_request.call_count == 3
+
+        # Verify search parameters for each strategy
+        calls = mock_api_request.call_args_list
+
+        # Call 1: Primary fielded search
+        assert "artist" in calls[0][1]["params"]
+        assert "release_title" in calls[0][1]["params"]
+
+        # Call 2: Generic query
+        assert "q" in calls[1][1]["params"]
+
+        # Call 3: Album-only
+        assert "release_title" in calls[2][1]["params"]
+        assert "artist" not in calls[2][1]["params"]

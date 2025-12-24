@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict
 
+from core.models.normalization import normalize_for_matching
 from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
@@ -233,12 +234,44 @@ class DiscogsClient(BaseApiClient):
                 return parts[0].strip(), parts[1].strip()
         return None, None
 
+    @staticmethod
+    def _normalize_artist_for_matching(artist: str) -> str:
+        """Normalize artist name for flexible Discogs matching.
+
+        Extends the base normalize_for_matching() with Discogs-specific handling:
+        - "Beatles, The" -> "the beatles" (Discogs format to standard)
+        - "Artist (2)" -> "artist" (numbered suffix removal)
+
+        Args:
+            artist: Artist name to normalize
+
+        Returns:
+            Normalized artist name for matching
+
+        """
+        # Use centralized normalization as base (strip + lowercase)
+        normalized = normalize_for_matching(artist)
+        if not normalized:
+            return ""
+
+        # Handle "X, The" -> "the x" (normalize Discogs format to standard)
+        if normalized.endswith(", the"):
+            normalized = f"the {normalized[:-5]}"
+
+        # Remove trailing numbered suffix like "(2)", "(3)" and return
+        return re.sub(r"\s*\(\d+\)\s*$", "", normalized)
+
     def _is_artist_match(
         self,
         item: DiscogsRelease,
         artist_norm: str,
     ) -> bool:
         """Check if a Discogs release matches the target artist.
+
+        Uses flexible matching to handle variations like:
+        - "The Beatles" vs "Beatles, The"
+        - "Artist (2)" vs "Artist"
+        - Substring matching as fallback
 
         Args:
             item: Discogs release item
@@ -248,15 +281,31 @@ class DiscogsClient(BaseApiClient):
             True if the artist matches
 
         """
+        # Prepare normalized target for matching
+        target_normalized = self._normalize_artist_for_matching(artist_norm)
+        target_no_the = target_normalized.removeprefix("the ")
+
         # Try to extract artist from title
         title_artist, _ = DiscogsClient._extract_artist_from_title(item.get("title", ""))
 
-        if title_artist and self._normalize_name(title_artist) == artist_norm:
-            return True
+        if title_artist:
+            item_artist_normalized = self._normalize_artist_for_matching(title_artist)
+            item_artist_no_the = item_artist_normalized.removeprefix("the ")
 
-        # Check the title directly (sometimes it's just the album name)
+            # Exact match
+            if item_artist_normalized == target_normalized:
+                return True
+
+            # Match without "The" prefix (handles "The Beatles" vs "Beatles")
+            if item_artist_no_the == target_no_the:
+                return True
+
+        # Fallback: Check if artist appears anywhere in title (substring match)
         title_full = item.get("title", "")
-        return artist_norm in self._normalize_name(title_full)
+        title_normalized = self._normalize_artist_for_matching(title_full)
+
+        # Check both with and without "The" prefix
+        return target_normalized in title_normalized or target_no_the in title_normalized
 
     @Analytics.track_instance_method("discogs_year_search")
     async def get_year_from_discogs(self, artist: str, album: str) -> str | None:
@@ -311,37 +360,24 @@ class DiscogsClient(BaseApiClient):
         # Use concatenation to avoid mutating the original config lists
         return reissue_keywords + remaster_keywords
 
-    async def _make_discogs_search_request(
+    async def _execute_search(
         self,
-        artist_norm: str,
-        album_norm: str,
-        artist_orig: str | None = None,
-        album_orig: str | None = None,
+        params: dict[str, str],
+        strategy_name: str,
     ) -> dict[str, Any] | None:
-        """Make search request to Discogs API.
+        """Execute a single search request to Discogs API.
 
         Args:
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_orig: Original artist name (for logging)
-            album_orig: Original album name (for logging)
+            params: Search parameters
+            strategy_name: Name of the search strategy (for logging)
 
         Returns:
-            Discogs search response dict or None if failed
+            Discogs search response dict or None if failed/no results
 
         """
-        self.console_logger.debug(
-            f"[discogs] Start search | artist_orig='{artist_orig or artist_norm}' "
-            f"artist_norm='{artist_norm}', album_orig='{album_orig or album_norm}', album_norm='{album_norm}'",
-        )
-
-        # Build search query
-        search_query = f"{artist_norm} {album_norm}"
-        params = {"q": search_query, "type": "release", "per_page": "25"}
         search_url = "https://api.discogs.com/database/search"
-
-        log_discogs_url = f"{search_url}?{urllib.parse.urlencode(params, safe=':/')}"
-        self.console_logger.debug(f"[discogs] Search URL: {log_discogs_url}")
+        log_url = f"{search_url}?{urllib.parse.urlencode(params, safe=':/')}"
+        self.console_logger.debug(f"[discogs] {strategy_name} URL: {log_url}")
 
         data = await self._make_api_request("discogs", search_url, params=params)
 
@@ -350,20 +386,125 @@ class DiscogsClient(BaseApiClient):
             self.error_logger.warning(f"[discogs] API message: {data.get('message')}")
             return None
 
-        # Process results
+        # Check for results
         if not data or "results" not in data:
-            self.console_logger.warning(f"[discogs] Search failed or no results for query: '{search_query}'")
             return None
 
-        # data is already checked to be dict with "results" key
         results = data.get("results", [])
-
         if not results:
-            self.console_logger.info(f"[discogs] No results found for query: '{search_query}'")
             return None
 
-        self.console_logger.debug(f"Found {len(results)} potential Discogs matches for query: '{search_query}'")
+        self.console_logger.debug(f"[discogs] {strategy_name}: found {len(results)} results")
         return data
+
+    async def _perform_primary_search(
+        self,
+        artist_norm: str,
+        album_norm: str,
+    ) -> dict[str, Any] | None:
+        """Perform primary fielded search using artist and release_title parameters.
+
+        This is more precise than generic query search as it uses Discogs API
+        field-specific parameters.
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+
+        Returns:
+            Discogs search response dict or None if no results
+
+        """
+        params = {
+            "artist": artist_norm,
+            "release_title": album_norm,
+            "type": "release",
+            "per_page": "25",
+        }
+        return await self._execute_search(params, "Primary search (fielded)")
+
+    async def _perform_fallback_searches(
+        self,
+        artist_norm: str,
+        album_norm: str,
+        artist_orig: str | None,
+        album_orig: str | None,
+    ) -> dict[str, Any] | None:
+        """Perform fallback searches with broader queries.
+
+        Fallback 1: Generic query with artist + album concatenation
+        Fallback 2: Album-only search (will need post-filtering by artist)
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_orig: Original artist name
+            album_orig: Original album name
+
+        Returns:
+            Discogs search response dict or None if no results
+
+        """
+        # Use original names for fallback if available (better matching)
+        artist_fb = artist_orig or artist_norm
+        album_fb = album_orig or album_norm
+
+        # Fallback 1: Generic concatenated query (current approach)
+        self.console_logger.debug("[discogs] Primary search failed, trying fallback 1 (generic query)")
+        search_query = f"{artist_fb} {album_fb}"
+        params_generic = {"q": search_query, "type": "release", "per_page": "25"}
+        result = await self._execute_search(params_generic, "Fallback 1 (generic)")
+        if result:
+            return result
+
+        # Fallback 2: Album-only search with post-filtering
+        self.console_logger.debug("[discogs] Fallback 1 failed, trying fallback 2 (album-only)")
+        params_album_only = {"release_title": album_fb, "type": "release", "per_page": "25"}
+        return await self._execute_search(params_album_only, "Fallback 2 (album-only)")
+
+    async def _make_discogs_search_request(
+        self,
+        artist_norm: str,
+        album_norm: str,
+        artist_orig: str | None = None,
+        album_orig: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Make search request to Discogs API with fallback strategies.
+
+        Uses multiple search strategies similar to MusicBrainz:
+        1. Primary: Fielded search with artist= and release_title= parameters
+        2. Fallback 1: Generic query with artist + album concatenation
+        3. Fallback 2: Album-only search with artist post-filtering
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_orig: Original artist name (for logging and fallbacks)
+            album_orig: Original album name (for logging and fallbacks)
+
+        Returns:
+            Discogs search response dict or None if all strategies failed
+
+        """
+        self.console_logger.debug(
+            f"[discogs] Start search | artist_orig='{artist_orig or artist_norm}' "
+            f"artist_norm='{artist_norm}', album_orig='{album_orig or album_norm}', album_norm='{album_norm}'",
+        )
+
+        # Try primary fielded search first
+        result = await self._perform_primary_search(artist_norm, album_norm)
+
+        # If primary fails, try fallback strategies
+        if result is None:
+            result = await self._perform_fallback_searches(artist_norm, album_norm, artist_orig, album_orig)
+
+        if result is None:
+            self.console_logger.warning(f"[discogs] All search strategies failed for: '{artist_orig or artist_norm}' - '{album_orig or album_norm}'")
+            return None
+
+        results_count = len(result.get("results", []))
+        self.console_logger.debug(f"[discogs] Found {results_count} potential matches")
+        return result
 
     def _should_fetch_details(self, year_str: str, detail_fetch_count: int, detail_fetch_limit: int) -> bool:
         """Check if details should be fetched based on year validity and fetch limits."""
