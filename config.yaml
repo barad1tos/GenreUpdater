@@ -238,6 +238,21 @@ album_type_detection:
     - remastered
     - anniversary
 
+  # Soundtrack patterns - for extracting movie name from album
+  soundtrack_patterns:
+    - soundtrack
+    - original score
+    - OST
+    - motion picture
+    - film score
+
+  # Various Artists names - search by album only
+  various_artists_names:
+    - Various Artists
+    - Various
+    - VA
+    - Різні виконавці
+
 # -----------------------------------------------------------------------
 # 7. GENRE UPDATE CONFIGURATION
 # -----------------------------------------------------------------------
