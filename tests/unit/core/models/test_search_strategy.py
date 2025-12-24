@@ -110,6 +110,11 @@ class TestEdgeCases:
 
     @pytest.fixture
     def config(self) -> dict:
+        """
+        The fixture provides a configuration dictionary for album type detection.
+        Returns:
+            dict: Configuration with custom soundtrack patterns and various artists names.
+        """
         return {
             "album_type_detection": {
                 "soundtrack_patterns": ["soundtrack", "OST"],

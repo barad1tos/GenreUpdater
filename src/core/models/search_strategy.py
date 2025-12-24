@@ -84,10 +84,10 @@ def _is_soundtrack(album: str, patterns: frozenset[str]) -> str | None:
     - Simpler matching handles variations like "original-score" naturally
     """
     album_lower = album.lower()
-    for pattern in patterns:
-        if pattern.lower() in album_lower:
-            return pattern
-    return None
+    return next(
+        (pattern for pattern in patterns if pattern.lower() in album_lower),
+        None,
+    )
 
 
 def _is_various_artists(artist: str, patterns: frozenset[str]) -> bool:
@@ -98,17 +98,17 @@ def _is_various_artists(artist: str, patterns: frozenset[str]) -> bool:
 
 def _has_unusual_brackets(album: str) -> tuple[bool, str | None]:
     """Check for unusual bracket content like [MESSAGE FROM THE CLERGY]."""
-    bracket_match = re.search(r"\[([^\]]+)\]", album)
+    bracket_match = re.search(r"\[([^]]+)]", album)
     if not bracket_match:
         return False, None
 
-    content = bracket_match.group(1)
+    content = bracket_match[1]
     normal_patterns = {"deluxe", "remaster", "bonus", "disc", "cd", "version"}
     if content.lower() in normal_patterns or any(p in content.lower() for p in normal_patterns):
         return False, None
 
     if len(content) > _UNUSUAL_BRACKET_MIN_LENGTH or content.isupper():
-        stripped = re.sub(r"\s*\[[^\]]+\]\s*", "", album).strip()
+        stripped = re.sub(r"\s*\[[^]]+]\s*", "", album).strip()
         return True, stripped
 
     return False, None
@@ -136,15 +136,13 @@ def detect_search_strategy(
     if pattern := _is_soundtrack(album, soundtrack_patterns):
         album_lower = album.lower()
         idx = album_lower.find(pattern.lower())
-        if idx > 0:
-            movie_name = album[:idx].strip().rstrip("([-\u2013\u2014")
-            if movie_name:
-                return SearchStrategyInfo(
-                    strategy=SearchStrategy.SOUNDTRACK,
-                    detected_pattern=pattern,
-                    modified_artist=movie_name,
-                    modified_album=movie_name,
-                )
+        if idx > 0 and (movie_name := album[:idx].strip().rstrip("([-\u2013\u2014")):
+            return SearchStrategyInfo(
+                strategy=SearchStrategy.SOUNDTRACK,
+                detected_pattern=pattern,
+                modified_artist=movie_name,
+                modified_album=movie_name,
+            )
         return SearchStrategyInfo(
             strategy=SearchStrategy.SOUNDTRACK,
             detected_pattern=pattern,
@@ -152,12 +150,7 @@ def detect_search_strategy(
 
     # 2. Check for Various Artists
     if _is_various_artists(artist, various_patterns):
-        return SearchStrategyInfo(
-            strategy=SearchStrategy.VARIOUS_ARTISTS,
-            detected_pattern=artist,
-            modified_artist=None,
-            modified_album=album,
-        )
+        return SearchStrategyInfo(strategy=SearchStrategy.VARIOUS_ARTISTS, detected_pattern=artist, modified_album=album)
 
     # 3. Check for unusual brackets
     has_unusual, stripped = _has_unusual_brackets(album)
