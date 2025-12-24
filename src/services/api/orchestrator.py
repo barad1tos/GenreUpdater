@@ -71,6 +71,7 @@ def normalize_name(name: str) -> str:
         " w/ ": " with ",
         " w/": " with ",
         " = ": " ",  # Liberation = Termination → Liberation Termination
+        ":": " ",  # Issue #103: Colons break Lucene search (III:Trauma → III Trauma)
     }
 
     for old, new in substitutions.items():
