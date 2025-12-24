@@ -15,13 +15,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from core.logger import LogFormat, get_full_log_path
+from core.logger import LogFormat
 from core.run_tracking import IncrementalRunTracker
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
-from core.utils.icloud_cleanup import cleanup_cache_directory
 from services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
 from services.cache.api_cache import ApiCacheService
 from services.cache.cache_config import CacheEvent, CacheEventType
@@ -67,9 +65,6 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Initialize all cache services."""
         self.logger.info("Initializing %s...", LogFormat.entity("CacheOrchestrator"))
 
-        # Clean up iCloud conflict files before loading caches
-        self._cleanup_icloud_conflicts()
-
         service_tasks: list[tuple[str, Awaitable[Any]]] = [
             ("AlbumCacheService", self.album_service.initialize()),
             ("ApiCacheService", self.api_service.initialize()),
@@ -90,43 +85,6 @@ class CacheOrchestrator(CacheServiceProtocol):
             raise RuntimeError(msg)
 
         self.logger.info("%s initialized successfully", LogFormat.entity("CacheOrchestrator"))
-
-    def _cleanup_icloud_conflicts(self) -> None:
-        """Clean up iCloud sync conflict files in the cache directory.
-
-        iCloud creates numbered copies (e.g., "file 2.json") when sync conflicts occur.
-        This method detects and removes such conflicts, keeping the most recent version.
-        """
-        # Check if cleanup is enabled (default: True)
-        cache_config = self.config.get("cache", {})
-        if not cache_config.get("cleanup_icloud_conflicts", True):
-            self.logger.debug("iCloud conflict cleanup is disabled")
-            return
-
-        # Get cache directory path
-        cache_path = get_full_log_path(self.config, "generic_cache_file", "cache/generic_cache.json")
-        cache_dir = Path(cache_path).parent
-
-        if not cache_dir.exists():
-            return
-
-        # Files to check for conflicts
-        cache_files = [
-            "generic_cache.json",
-            "album_years.csv",
-            "cache.json",  # API cache
-        ]
-
-        try:
-            cleanup_cache_directory(
-                cache_dir=cache_dir,
-                file_patterns=cache_files,
-                logger=self.logger,
-                # 60s minimum age prevents race conditions during active iCloud sync
-                min_age_seconds=60,
-            )
-        except OSError as e:
-            self.logger.warning("Failed to cleanup iCloud conflicts: %s", e)
 
     # =========================== ALBUM CACHE API ===========================
 
