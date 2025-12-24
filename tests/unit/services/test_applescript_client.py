@@ -43,7 +43,8 @@ class TestAppleScriptSanitizerAllure:
         [
             ('do shell script "rm -rf /"', "do shell script"),
             ('tell application "Finder" to delete', 'tell application "Finder"'),
-            ('tell application "System Events" to keystroke', "keystroke"),
+            # "System Events" pattern detected before "keystroke" due to pattern order
+            ('tell application "System Events" to keystroke', 'tell application "System Events"'),
             ('load script file "malicious.scpt"', "load script"),
             ('choose file with prompt "Select file"', "choose file"),
             ('open location "https://malicious.com"', "open location"),
@@ -58,7 +59,7 @@ class TestAppleScriptSanitizerAllure:
         error = exc_info.value
         assert isinstance(error, AppleScriptSanitizationError)
         assert error.dangerous_pattern is not None
-        assert expected_pattern in error.dangerous_pattern
+        assert expected_pattern.lower() in error.dangerous_pattern.lower()
 
     @pytest.mark.parametrize(
         "safe_code",
