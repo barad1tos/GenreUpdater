@@ -626,10 +626,15 @@ class ExternalApiOrchestrator:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
 
+        # Connection pooling settings optimized for long-running sessions (Issue #104)
+        # - Removed force_close=True to enable HTTP keep-alive / connection reuse
+        # - keepalive_timeout=30: Keep idle connections alive for 30 seconds
+        # - enable_cleanup_closed=True: Properly cleanup SSL connections
         connector = aiohttp.TCPConnector(
             limit_per_host=10,
             limit=50,
-            force_close=True,
+            keepalive_timeout=30,
+            enable_cleanup_closed=True,
             ttl_dns_cache=300,
             ssl=ssl_context,
         )

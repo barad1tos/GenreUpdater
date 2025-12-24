@@ -23,7 +23,7 @@ applescript_timeouts:
   single_artist_fetch: 600
   batch_update: 1800
 
-max_retries: 2
+max_retries: 3
 retry_delay_seconds: 1
 cache_ttl_seconds: 1800
 incremental_interval_minutes: 1
