@@ -9,7 +9,7 @@ SUPPORT_DIR="$HOME/Library/Application Support/GenreUpdater"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_NAME="com.music.genreautoupdater"
 
-DAEMON_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0-daemon"
+DAEMON_DIR="$SUPPORT_DIR/app"
 DEV_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0"
 
 echo "=== Genre Updater Daemon Installer ==="
@@ -18,12 +18,13 @@ echo ""
 # === Pre-flight checks ===
 echo "Checking prerequisites..."
 
-if [[ ! -d "$DAEMON_DIR" ]]; then
-    echo "ERROR: Daemon directory not found: $DAEMON_DIR"
-    echo "Please clone the repo first:"
-    echo "  cd \"$(dirname "$DAEMON_DIR")\""
-    echo "  git clone <repo-url> \"$(basename "$DAEMON_DIR")\""
-    exit 1
+# Clone repo if not exists
+if [[ ! -d "$DAEMON_DIR/.git" ]]; then
+    echo "Cloning repo to $DAEMON_DIR..."
+    mkdir -p "$(dirname "$DAEMON_DIR")"
+    rm -rf "$DAEMON_DIR"  # Remove if exists but not a git repo
+    git clone https://github.com/barad1tos/GenreUpdater.git "$DAEMON_DIR"
+    echo "Done"
 fi
 
 if ! command -v uv &> /dev/null; then
@@ -45,7 +46,7 @@ echo "Done"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Copying scripts from $SCRIPT_DIR..."
 
-for script in run-daemon.sh notify.sh update.sh; do
+for script in run-daemon.sh notify.sh update.sh sync-fixtures.sh; do
     if [[ -f "$SCRIPT_DIR/$script" ]]; then
         cp "$SCRIPT_DIR/$script" "$SUPPORT_DIR/bin/$script"
         echo "  Copied: $script"
@@ -122,6 +123,6 @@ echo ""
 echo "Commands:"
 echo "  Manual run:     launchctl kickstart -k gui/\$(id -u)/$PLIST_NAME"
 echo "  View logs:      tail -f \"$SUPPORT_DIR/logs/daemon.log\""
-echo "  Skip cooldown:  touch \"$SUPPORT_DIR/state/cooldown_override\""
+echo "  Force run:      touch \"$SUPPORT_DIR/state/force_run\""
 echo "  Uninstall:      launchctl unload \"$LAUNCH_AGENTS/$PLIST_NAME.plist\""
 echo ""

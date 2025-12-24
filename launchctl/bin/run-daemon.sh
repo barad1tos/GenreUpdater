@@ -3,17 +3,16 @@
 # Called by launchctl when Music Library changes
 #
 # Features:
-# - flock-based locking (prevents concurrent runs)
-# - 30-min cooldown between runs (prevents self-trigger loop)
+# - PID-based locking (prevents concurrent runs)
+# - Quick track count check (skips if no new tracks)
 # - Auto git pull from origin/main
 # - macOS notifications on failure
 # - Comprehensive logging
 
 set -euo pipefail
 
-# === Environment ===
-# launchd runs with minimal PATH, add Homebrew for uv
-export PATH="/opt/homebrew/bin:$PATH"
+# === PATH setup for launchctl (uv is in ~/.local/bin) ===
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # === Configuration ===
 SUPPORT_DIR="$HOME/Library/Application Support/GenreUpdater"
@@ -21,15 +20,14 @@ STATE_DIR="$SUPPORT_DIR/state"
 LOGS_DIR="$SUPPORT_DIR/logs"
 BIN_DIR="$SUPPORT_DIR/bin"
 
-DAEMON_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0-daemon"
+DAEMON_DIR="$SUPPORT_DIR/app"
 CONFIG_SOURCE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/my-config.yaml"
 
 LOCK_FILE="$STATE_DIR/run.lock"
-TIMESTAMP_FILE="$STATE_DIR/last_run.timestamp"
-COOLDOWN_OVERRIDE="$STATE_DIR/cooldown_override"
+TRACK_COUNT_FILE="$STATE_DIR/last_track_count"
+FORCE_RUN_FILE="$STATE_DIR/force_run"
 DAEMON_LOG="$LOGS_DIR/daemon.log"
 
-COOLDOWN_SECONDS=1800  # 30 minutes
 TIMEOUT_SECONDS=14400  # 4 hours
 
 # === Logging ===
@@ -81,34 +79,37 @@ acquire_lock() {
 acquire_lock
 log "Lock acquired (PID: $$)"
 
-# === Cooldown check ===
-check_cooldown() {
-    # Check for override
-    if [[ -f "$COOLDOWN_OVERRIDE" ]]; then
-        log "Cooldown override detected. Proceeding..."
-        rm -f "$COOLDOWN_OVERRIDE"
+# === Quick track count check (BEFORE git/uv for speed) ===
+quick_track_count_check() {
+    # Check for force run override
+    if [[ -f "$FORCE_RUN_FILE" ]]; then
+        log "Force run requested. Skipping count check."
+        rm -f "$FORCE_RUN_FILE"
         return 0
     fi
 
-    # Check timestamp
-    if [[ -f "$TIMESTAMP_FILE" ]]; then
-        local last_run
-        last_run=$(cat "$TIMESTAMP_FILE")
-        local now
-        now=$(date +%s)
-        local diff=$((now - last_run))
-
-        if [[ $diff -lt $COOLDOWN_SECONDS ]]; then
-            local remaining=$(( (COOLDOWN_SECONDS - diff) / 60 ))
-            log "Cooldown active. ${remaining} minutes remaining. Exiting."
-            exit 0
-        fi
+    # Get current track count from Music.app (~0.5 sec)
+    local current_count
+    if ! current_count=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null); then
+        log "Could not get track count (Music.app not running?). Proceeding anyway."
+        return 0
     fi
 
-    log "Cooldown check passed"
+    # Get last known count
+    local last_count
+    last_count=$(cat "$TRACK_COUNT_FILE" 2>/dev/null || echo "0")
+
+    # Compare
+    if [[ "$current_count" == "$last_count" ]]; then
+        log "Track count unchanged ($current_count). No new tracks. Exiting."
+        exit 0
+    fi
+
+    log "Track count changed: $last_count → $current_count"
+    return 0
 }
 
-check_cooldown
+quick_track_count_check
 
 # === Git update ===
 log "Updating from git..."
@@ -146,8 +147,39 @@ log "Git update complete"
 
 # === Dependency sync ===
 log "Syncing dependencies..."
-if ! uv sync --frozen 2>&1 | tee -a "$DAEMON_LOG"; then
-    log_error "Dependency sync failed"
+
+# Function to sync with auto-recovery
+sync_dependencies() {
+    local sync_output
+    local sync_exit
+
+    # First attempt
+    sync_output=$(uv sync --frozen 2>&1) && sync_exit=0 || sync_exit=$?
+    echo "$sync_output" >> "$DAEMON_LOG"
+
+    if [[ $sync_exit -eq 0 ]]; then
+        return 0
+    fi
+
+    # First failure - try cleaning venv and retrying
+    log "First sync failed (exit $sync_exit), cleaning venv and retrying..."
+    rm -rf "$DAEMON_DIR/.venv" "$DAEMON_DIR/src/music_genre_updater.egg-info"
+
+    sync_output=$(uv sync --frozen 2>&1) && sync_exit=0 || sync_exit=$?
+    echo "$sync_output" >> "$DAEMON_LOG"
+
+    if [[ $sync_exit -eq 0 ]]; then
+        log "Sync succeeded after venv cleanup"
+        return 0
+    fi
+
+    # Second failure - fatal
+    log "Second sync also failed (exit $sync_exit)"
+    return 1
+}
+
+if ! sync_dependencies; then
+    log_error "Dependency sync failed even after venv cleanup"
     notify "Genre Updater Error" "uv sync failed"
     exit 1
 fi
@@ -157,26 +189,30 @@ log "Dependencies synced"
 log "Starting main pipeline..."
 EXIT_CODE=0
 
+# Get current count for saving after success
+CURRENT_COUNT=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null || echo "")
+
 if timeout "$TIMEOUT_SECONDS" uv run python main.py \
     >> "$LOGS_DIR/stdout.log" 2>> "$LOGS_DIR/stderr.log"; then
     log "Main pipeline completed successfully"
 
-    # Update timestamp
-    date +%s > "$TIMESTAMP_FILE"
-
-    # Sync diagnostic data to main repo for CI
-    MAIN_REPO="${DAEMON_DIR%-daemon}"
-    SYNC_SCRIPT="$MAIN_REPO/scripts/sync-diagnostics.sh"
-    if [[ -x "$SYNC_SCRIPT" ]]; then
-        log "Syncing diagnostic data to git..."
-        if "$SYNC_SCRIPT" 2>&1 | tee -a "$DAEMON_LOG"; then
-            log "Diagnostic sync completed"
-        else
-            log "Warning: Diagnostic sync failed (non-critical)"
-        fi
+    # Update track count (for next run's quick check)
+    if [[ -n "$CURRENT_COUNT" ]]; then
+        echo "$CURRENT_COUNT" > "$TRACK_COUNT_FILE"
+        log "Track count saved: $CURRENT_COUNT"
     fi
 
     notify "Genre Updater" "Update completed successfully" "Glass"
+
+    # Sync snapshot to repo for regression tests
+    if [[ -x "$BIN_DIR/sync-fixtures.sh" ]]; then
+        log "Syncing snapshot to repo..."
+        if "$BIN_DIR/sync-fixtures.sh" >> "$DAEMON_LOG" 2>&1; then
+            log "Snapshot synced successfully"
+        else
+            log "Snapshot sync failed (non-fatal)"
+        fi
+    fi
 else
     EXIT_CODE=$?
     if [[ $EXIT_CODE -eq 124 ]]; then
