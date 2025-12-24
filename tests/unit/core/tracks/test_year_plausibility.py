@@ -72,6 +72,168 @@ def fallback_handler_no_orchestrator(
     )
 
 
+class TestLowConfidenceNoExistingYear:
+    """Tests for MIN_CONFIDENCE_FOR_NEW_YEAR threshold (Issue #105).
+
+    When no existing year is present to validate against, we require a minimum
+    confidence score (30%) before applying the proposed year. This prevents
+    low-confidence API results from polluting the library.
+    """
+
+    @pytest.fixture
+    def sample_tracks_no_year(self) -> list[TrackDict]:
+        """Create sample tracks with no year."""
+        return [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Artist",
+                album="Album",
+                genre="Rock",
+                year="",
+                date_added="2024-01-01",
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_very_low_confidence_no_existing_year_skips(
+        self,
+        fallback_handler: YearFallbackHandler,
+        mock_pending_verification: MockPendingVerificationService,
+        sample_tracks_no_year: list[TrackDict],
+    ) -> None:
+        """Test that very low confidence (<30%) with no existing year skips update."""
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=sample_tracks_no_year,  # No year
+            is_definitive=False,
+            confidence_score=15,  # Below 30% threshold
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result is None  # Skipped
+        assert len(mock_pending_verification.marked_albums) == 1
+        marked = mock_pending_verification.marked_albums[0]
+        assert marked[2] == "very_low_confidence_no_existing"
+        assert marked[3]["confidence_score"] == 15
+        assert marked[3]["threshold"] == 30
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_at_threshold_applies(
+        self,
+        fallback_handler: YearFallbackHandler,
+        sample_tracks_no_year: list[TrackDict],
+    ) -> None:
+        """Test that confidence exactly at threshold (30%) applies the year."""
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=sample_tracks_no_year,
+            is_definitive=False,
+            confidence_score=30,  # Exactly at threshold
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result == "2020"  # Applied
+
+    @pytest.mark.asyncio
+    async def test_moderate_confidence_no_existing_year_applies(
+        self,
+        fallback_handler: YearFallbackHandler,
+        sample_tracks_no_year: list[TrackDict],
+    ) -> None:
+        """Test that moderate confidence (>30%) with no existing year applies."""
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=sample_tracks_no_year,
+            is_definitive=False,
+            confidence_score=45,  # Above threshold
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result == "2020"
+
+    @pytest.mark.asyncio
+    async def test_very_low_confidence_with_existing_year_still_applies(
+        self,
+        fallback_handler: YearFallbackHandler,
+    ) -> None:
+        """Test that very low confidence with existing year follows other rules.
+
+        The MIN_CONFIDENCE_FOR_NEW_YEAR threshold only applies when there's NO
+        existing year. When there IS an existing year, other rules decide.
+        """
+        tracks_with_year = [
+            TrackDict(
+                id="1",
+                name="Track 1",
+                artist="Artist",
+                album="Album",
+                genre="Rock",
+                year="2018",  # Has existing year
+                date_added="2024-01-01",
+            ),
+        ]
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks_with_year,
+            is_definitive=False,
+            confidence_score=15,  # Very low
+            artist="Artist",
+            album="Album",
+        )
+
+        # Should apply since change is small (2018→2020, within 5 year threshold)
+        assert result == "2020"
+
+    @pytest.mark.asyncio
+    async def test_definitive_bypasses_low_confidence_check(
+        self,
+        fallback_handler: YearFallbackHandler,
+        sample_tracks_no_year: list[TrackDict],
+    ) -> None:
+        """Test that is_definitive=True bypasses the low confidence check."""
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=sample_tracks_no_year,
+            is_definitive=True,  # High confidence
+            confidence_score=15,  # Score is irrelevant when definitive
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result == "2020"
+
+    @pytest.mark.asyncio
+    async def test_absurd_year_check_runs_before_confidence_check(
+        self,
+        fallback_handler: YearFallbackHandler,
+        mock_pending_verification: MockPendingVerificationService,
+        sample_tracks_no_year: list[TrackDict],
+    ) -> None:
+        """Test that absurd year detection runs before low confidence check.
+
+        Order matters: absurd year (Rule 2) should catch impossible years
+        before the confidence check (Rule 2.5).
+        """
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="1850",  # Absurd year (< 1900 threshold)
+            album_tracks=sample_tracks_no_year,
+            is_definitive=False,
+            confidence_score=15,  # Would also fail confidence check
+            artist="Artist",
+            album="Album",
+        )
+
+        assert result is None
+        marked = mock_pending_verification.marked_albums[0]
+        # Should be marked for absurd year, not low confidence
+        assert marked[2] == "absurd_year_no_existing"
+
+
 class TestCheckYearPlausibility:
     """Tests for _check_year_plausibility method."""
 
