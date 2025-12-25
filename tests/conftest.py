@@ -35,6 +35,25 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.set_blocked("pytest_cov")
         config.pluginmanager.set_blocked("_cov")
 
+        # Monkey-patch mutmut bug: record_trampoline_hit crashes when config is None
+        # This happens in pytest-xdist workers that don't inherit mutmut.config
+        # Bug location: mutmut/__main__.py:136-138 accesses config.max_stack_depth
+        # without null check. Fixed in our fork until upstream fixes it.
+        try:
+            import mutmut
+            import mutmut.__main__ as mutmut_main
+
+            _original_record_trampoline_hit = mutmut_main.record_trampoline_hit
+
+            def _patched_record_trampoline_hit(name: str) -> None:
+                if mutmut.config is None:
+                    return None  # Skip stats collection in xdist workers
+                return _original_record_trampoline_hit(name)
+
+            mutmut_main.record_trampoline_hit = _patched_record_trampoline_hit
+        except (ImportError, AttributeError):
+            pass  # mutmut not installed or API changed
+
 
 @pytest.fixture
 def mock_console_logger() -> MagicMock:

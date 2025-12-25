@@ -343,12 +343,9 @@ skips = ["B101", "B311", "B404", "B603"]
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.mutmut]
 paths_to_mutate = ["src/"]
-# Clear pytest addopts and disable problematic plugins for mutmut:
-# - override-ini: clears addopts to prevent conflicts with coverage, xdist, html reports
-# - no:pytest_cov: ensures coverage plugin is fully disabled
-# - no:xdist: fixes mutmut 3.4.0 bug where xdist workers crash with
-#   "AttributeError: 'NoneType' object has no attribute 'max_stack_depth'"
-#   (mutmut.config not initialized in xdist worker processes)
-# - no:html: disables pytest-html report generation
-pytest_add_cli_args = ["--override-ini=addopts=", "-p", "no:pytest_cov", "-p", "no:xdist", "-p", "no:html"]
+# Clear pytest addopts and re-enable xdist:
+# - override-ini: clears default addopts (prevents coverage/html conflicts)
+# - no:pytest_cov, no:html: disable these plugins
+# - -n auto: re-enable xdist parallelism (cleared by override-ini)
+pytest_add_cli_args = ["--override-ini=addopts=", "-p", "no:pytest_cov", "-p", "no:html", "-n", "auto"]
 pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e"]
