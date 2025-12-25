@@ -31,7 +31,6 @@ class TestCacheOrchestrator:
                 "cleanup_interval_seconds": 1,
                 "api_result_cache_path": str(Path(temp_dir) / "api_results.json"),
                 "album_cache_sync_interval": 1,
-                "cleanup_icloud_conflicts": False,  # Disable for tests
             },
             "api_cache_file": str(Path(temp_dir) / "cache.json"),
             "album_years_cache_file": str(Path(temp_dir) / "album_years.csv"),
@@ -83,37 +82,6 @@ class TestCacheOrchestrator:
             pytest.raises(RuntimeError, match="Cache service initialization failed"),
         ):
             await orchestrator.initialize()
-
-    @pytest.mark.asyncio
-    async def test_icloud_cleanup_disabled(self) -> None:
-        """Test that iCloud cleanup is skipped when disabled in config."""
-        orchestrator = self.create_orchestrator({"cache": {"cleanup_icloud_conflicts": False}})
-
-        with patch("services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup:
-            orchestrator._cleanup_icloud_conflicts()
-            mock_cleanup.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_icloud_cleanup_enabled(self) -> None:
-        """Test that iCloud cleanup runs when enabled."""
-        temp_dir = tempfile.mkdtemp()
-        Path(temp_dir).mkdir(parents=True, exist_ok=True)
-
-        orchestrator = self.create_orchestrator(
-            {
-                "cache": {"cleanup_icloud_conflicts": True},
-                "logging": {"base_dir": temp_dir},
-            }
-        )
-
-        with (
-            patch("services.cache.orchestrator.cleanup_cache_directory") as mock_cleanup,
-            patch("services.cache.orchestrator.get_full_log_path", return_value=str(Path(temp_dir) / "cache" / "test.json")),
-        ):
-            # Create the cache directory
-            (Path(temp_dir) / "cache").mkdir(parents=True, exist_ok=True)
-            orchestrator._cleanup_icloud_conflicts()
-            mock_cleanup.assert_called_once()
 
     # =========================== ALBUM CACHE TESTS ===========================
 

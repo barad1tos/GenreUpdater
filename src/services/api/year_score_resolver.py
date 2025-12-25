@@ -47,6 +47,7 @@ class YearScoreResolver:
         current_year: int,
         definitive_score_threshold: int,
         definitive_score_diff: int,
+        remaster_keywords: list[str] | None = None,
     ) -> None:
         """Initialize the year score resolver.
 
@@ -56,6 +57,7 @@ class YearScoreResolver:
             current_year: The current calendar year
             definitive_score_threshold: Min score to consider definitive
             definitive_score_diff: Min difference to prefer one year over another
+            remaster_keywords: Keywords indicating reissue/remaster editions
 
         """
         self.console_logger = console_logger
@@ -63,6 +65,7 @@ class YearScoreResolver:
         self.current_year = current_year
         self.definitive_score_threshold = definitive_score_threshold
         self.definitive_score_diff = definitive_score_diff
+        self.remaster_keywords = remaster_keywords or []
 
     def aggregate_year_scores(self, all_releases: list[ScoredRelease]) -> defaultdict[str, list[int]]:
         """Aggregate release scores by year, filtering out invalid years."""
@@ -77,8 +80,16 @@ class YearScoreResolver:
 
         return year_scores
 
-    def select_best_year(self, year_scores: defaultdict[str, list[int]]) -> tuple[str, bool, int]:
+    def select_best_year(
+        self,
+        year_scores: defaultdict[str, list[int]],
+        all_releases: list[ScoredRelease] | None = None,
+    ) -> tuple[str, bool, int]:
         """Select the best year from aggregated scores and determine if definitive.
+
+        Args:
+            year_scores: Mapping of year to list of scores
+            all_releases: Optional list of all scored releases for keyword detection
 
         Returns:
             Tuple of (best_year, is_definitive, confidence_score)
@@ -96,7 +107,7 @@ class YearScoreResolver:
 
         self._log_ranked_years(sorted_years)
 
-        best_year, best_score, best_year_is_future = self._determine_best_year_candidate(sorted_years)
+        best_year, best_score, best_year_is_future = self._determine_best_year_candidate(sorted_years, all_releases)
 
         # Initialize variables to avoid potential unbound variable errors
         score_thresholds = self._calculate_score_thresholds(best_score)
@@ -135,7 +146,11 @@ class YearScoreResolver:
         truncation_indicator = "..." if len(sorted_years) > MAX_LOGGED_YEARS else ""
         self.console_logger.info("Ranked year scores (Year:MaxScore): %s%s", log_scores, truncation_indicator)
 
-    def _determine_best_year_candidate(self, sorted_years: list[tuple[str, int]]) -> tuple[str, int, bool]:
+    def _determine_best_year_candidate(
+        self,
+        sorted_years: list[tuple[str, int]],
+        all_releases: list[ScoredRelease] | None = None,
+    ) -> tuple[str, int, bool]:
         """Determine the best year candidate.
 
         Handles future vs non-future and reissue vs original preferences.
@@ -149,7 +164,7 @@ class YearScoreResolver:
 
         # After handling future year preference, check for original vs reissue preference
         if len(sorted_years) > 1 and not best_year_is_future:
-            best_year, best_score = self._apply_original_release_preference(sorted_years, best_year, best_score)
+            best_year, best_score = self._apply_original_release_preference(sorted_years, best_year, best_score, all_releases)
 
         return best_year, best_score, best_year_is_future
 
@@ -177,13 +192,64 @@ class YearScoreResolver:
 
         return best_year, best_score, best_year_is_future
 
+    @staticmethod
+    def _get_titles_for_year(
+        all_releases: list[ScoredRelease] | None,
+        year: str,
+    ) -> list[str]:
+        """Get all release titles associated with a specific year.
+
+        Args:
+            all_releases: List of all scored releases with title information
+            year: Year to filter by
+
+        Returns:
+            List of release titles for the specified year
+        """
+        if not all_releases:
+            return []
+        return [str(release.get("title", "")) for release in all_releases if str(release.get("year")) == year]
+
+    def _title_contains_remaster_keywords(self, titles: list[str]) -> bool:
+        """Check if any title contains remaster keywords.
+
+        Args:
+            titles: List of release titles to check
+
+        Returns:
+            True if any title contains a remaster keyword, False otherwise
+        """
+        if not self.remaster_keywords:
+            return False
+        for title in titles:
+            title_lower = title.lower()
+            if any(keyword.lower() in title_lower for keyword in self.remaster_keywords):
+                return True
+        return False
+
     def _apply_original_release_preference(
         self,
         sorted_years: list[tuple[str, int]],
         best_year: str,
         best_score: int,
+        all_releases: list[ScoredRelease] | None = None,
     ) -> tuple[str, int]:
-        """Apply preference for earlier years (original releases) over later years (reissues)."""
+        """Apply preference for earlier years (original releases) over later years (reissues).
+
+        Uses keyword-based validation to distinguish reissues from different albums.
+        Only applies preference if the best year's titles contain remaster keywords.
+        """
+        # NEW: Check if best year has remaster keywords - if not, it's likely a different album
+        if all_releases and self.remaster_keywords:
+            best_year_titles = self._get_titles_for_year(all_releases, best_year)
+            if not self._title_contains_remaster_keywords(best_year_titles):
+                self.console_logger.debug(
+                    "[ORIGINAL_RELEASE_FIX] Skipping - best year %s has no remaster keywords in titles: %s",
+                    best_year,
+                    best_year_titles[:3] if best_year_titles else [],
+                )
+                return best_year, best_score
+
         # Only apply this logic if the best year seems like it could be a reissue
         # (i.e., there are significantly earlier years with similar scores)
         best_year_int = int(best_year)
@@ -219,8 +285,8 @@ class YearScoreResolver:
                     year_gap,
                     best_year,
                 )
-                # Increase preference for earlier years in reissue scenarios
-                return self.definitive_score_diff * 2
+                # Note: Removed * 2 multiplier - keyword-based validation now handles reissue detection
+                return self.definitive_score_diff
 
         return self.definitive_score_diff
 

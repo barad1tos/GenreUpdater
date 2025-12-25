@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict, cast
 
+from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
 from metrics import Analytics
 
@@ -270,6 +271,10 @@ class MusicBrainzClient(BaseApiClient):
     async def get_artist_info(self, artist_norm: str, include_aliases: bool = False) -> dict[str, Any] | None:
         """Get artist information from MusicBrainz.
 
+        Uses non-fielded search to match both canonical names and aliases.
+        Combined with script_detection.detect_primary_script(), enables
+        canonical name resolution for non-Latin artists. Issue #102.
+
         Args:
             artist_norm: Normalized artist name
             include_aliases: Whether to include aliases in the response
@@ -279,8 +284,9 @@ class MusicBrainzClient(BaseApiClient):
 
         """
         search_url = "https://musicbrainz.org/ws/2/artist/"
+        # Non-fielded search matches aliases; see _perform_primary_search for script detection
         params = {
-            "query": f'artist:"{self._escape_lucene(artist_norm)}"',
+            "query": self._escape_lucene(artist_norm),
             "fmt": "json",
             "limit": "1",
         }
@@ -347,8 +353,28 @@ class MusicBrainzClient(BaseApiClient):
 
         return None
 
+    async def get_canonical_artist_name(self, artist_norm: str) -> str | None:
+        """Get the canonical MusicBrainz artist name from an alias.
+
+        Used by _perform_primary_search for non-Latin scripts (detected via
+        script_detection.detect_primary_script). Issue #102.
+
+        Args:
+            artist_norm: Normalized artist name (may be alias)
+
+        Returns:
+            Canonical artist name or None if not found
+
+        """
+        artist_info = await self.get_artist_info(artist_norm)
+        return artist_info.get("name") if artist_info else None
+
     async def _perform_primary_search(self, artist_norm: str, album_norm: str) -> list[MBApiData]:
         """Perform a precise fielded search for release groups.
+
+        For non-Latin scripts (Cyrillic, CJK, etc.), attempts canonical name
+        resolution when initial search fails. This handles cases where the
+        library uses an alias but MusicBrainz uses the canonical name.
 
         Args:
             artist_norm: Normalized artist name
@@ -359,19 +385,62 @@ class MusicBrainzClient(BaseApiClient):
 
         """
         base_search_url = "https://musicbrainz.org/ws/2/release-group/"
-        primary_query = f'artist:"{self._escape_lucene(artist_norm)}" AND releasegroup:"{self._escape_lucene(album_norm)}"'
-        params_rg1 = {"fmt": "json", "limit": "10", "query": primary_query}
 
-        url_rg1 = f"{base_search_url}?{urllib.parse.urlencode(params_rg1)}"
-        self.console_logger.debug(f"[musicbrainz] Attempt 1 URL: {url_rg1}")
+        # Attempt 1: Search with provided artist name
+        results = await self._fielded_release_group_search(base_search_url, artist_norm, album_norm, attempt_num=1)
+        if results:
+            return results
 
-        rg_data1 = await self._make_api_request("musicbrainz", base_search_url, params=params_rg1)
+        # Attempt 1b: Try canonical name resolution for non-Latin scripts only (Issue #102)
+        # Latin artists rarely have alias issues; non-Latin (Cyrillic, CJK) often do
+        artist_script = detect_primary_script(artist_norm)
+        if artist_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
+            canonical_artist = await self.get_canonical_artist_name(artist_norm)
+            if canonical_artist and canonical_artist.lower() != artist_norm.lower():
+                self.console_logger.debug(
+                    "[musicbrainz] Non-Latin artist '%s' (%s) resolved to canonical '%s'. Retrying.",
+                    artist_norm,
+                    artist_script.value,
+                    canonical_artist,
+                )
+                results = await self._fielded_release_group_search(base_search_url, canonical_artist.lower(), album_norm, attempt_num=1)
+                if results:
+                    return results
 
-        if rg_data1 and rg_data1.get("count", 0) > 0 and rg_data1.get("release-groups"):
-            self.console_logger.debug(f"[musicbrainz] Attempt 1 successful. Found {len(rg_data1['release-groups'])} release groups.")
-            return cast("list[MBApiData]", rg_data1["release-groups"])
+        self.console_logger.debug("[musicbrainz] Primary search failed. Trying fallbacks.")
+        return []
 
-        self.console_logger.debug("[musicbrainz] Attempt 1 failed. Trying fallbacks.")
+    async def _fielded_release_group_search(
+        self,
+        base_url: str,
+        artist_name: str,
+        album_name: str,
+        attempt_num: int,
+    ) -> list[MBApiData]:
+        """Execute a fielded release group search.
+
+        Args:
+            base_url: MusicBrainz API base URL
+            artist_name: Artist name to search (may be canonical or alias)
+            album_name: Album name to search
+            attempt_num: Attempt number for logging
+
+        Returns:
+            List of release groups or empty list
+
+        """
+        query = f'artist:"{self._escape_lucene(artist_name)}" AND releasegroup:"{self._escape_lucene(album_name)}"'
+        params = {"fmt": "json", "limit": "10", "query": query}
+
+        url = f"{base_url}?{urllib.parse.urlencode(params)}"
+        self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} URL: {url}")
+
+        rg_data = await self._make_api_request("musicbrainz", base_url, params=params)
+
+        if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
+            self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} successful. Found {len(rg_data['release-groups'])} release groups.")
+            return cast("list[MBApiData]", rg_data["release-groups"])
+
         return []
 
     async def _search_release_groups(

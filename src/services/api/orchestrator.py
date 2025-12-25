@@ -71,6 +71,7 @@ def normalize_name(name: str) -> str:
         " w/ ": " with ",
         " w/": " with ",
         " = ": " ",  # Liberation = Termination → Liberation Termination
+        ":": " ",  # Issue #103: Colons break Lucene search (III:Trauma → III Trauma)
     }
 
     for old, new in substitutions.items():
@@ -530,6 +531,7 @@ class ExternalApiOrchestrator:
             error_logger=self.error_logger,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
+            config=self.config,
         )
 
         # Initialize Apple Music Search API client
@@ -562,6 +564,7 @@ class ExternalApiOrchestrator:
             current_year=self.current_year,
             definitive_score_threshold=self.definitive_score_threshold,
             definitive_score_diff=self.definitive_score_diff,
+            remaster_keywords=remaster_keywords,
         )
 
     def _initialize_year_search_coordinator(self) -> None:
@@ -624,10 +627,15 @@ class ExternalApiOrchestrator:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
 
+        # Connection pooling settings optimized for long-running sessions (Issue #104)
+        # - Removed force_close=True to enable HTTP keep-alive / connection reuse
+        # - keepalive_timeout=30: Keep idle connections alive for 30 seconds
+        # - enable_cleanup_closed=True: Properly cleanup SSL connections
         connector = aiohttp.TCPConnector(
             limit_per_host=10,
             limit=50,
-            force_close=True,
+            keepalive_timeout=30,
+            enable_cleanup_closed=True,
             ttl_dns_cache=300,
             ssl=ssl_context,
         )
@@ -1168,7 +1176,7 @@ class ExternalApiOrchestrator:
             return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
-        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores)
+        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores, all_releases=all_releases)
 
         self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 

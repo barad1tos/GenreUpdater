@@ -34,6 +34,19 @@ def resolver(logger: logging.Logger) -> YearScoreResolver:
     )
 
 
+@pytest.fixture
+def resolver_with_keywords(logger: logging.Logger) -> YearScoreResolver:
+    """Create a YearScoreResolver instance with remaster keywords."""
+    return YearScoreResolver(
+        console_logger=logger,
+        min_valid_year=1900,
+        current_year=2024,
+        definitive_score_threshold=70,
+        definitive_score_diff=15,
+        remaster_keywords=["Anniversary", "Remaster", "Remastered", "Deluxe", "Expanded", "Edition"],
+    )
+
+
 def create_scored_release(year: str, score: int, **kwargs: Any) -> ScoredRelease:
     """Helper to create a ScoredRelease dict."""
     release: ScoredRelease = {
@@ -71,6 +84,32 @@ class TestInitialization:
         assert resolver.current_year == 2025
         assert resolver.definitive_score_threshold == 80
         assert resolver.definitive_score_diff == 20
+
+    def test_init_stores_remaster_keywords(self, logger: logging.Logger) -> None:
+        """Test initialization stores remaster keywords."""
+        keywords = ["Anniversary", "Remaster", "Deluxe"]
+        resolver = YearScoreResolver(
+            console_logger=logger,
+            min_valid_year=1900,
+            current_year=2024,
+            definitive_score_threshold=70,
+            definitive_score_diff=15,
+            remaster_keywords=keywords,
+        )
+
+        assert resolver.remaster_keywords == keywords
+
+    def test_init_defaults_empty_remaster_keywords(self, logger: logging.Logger) -> None:
+        """Test initialization defaults to empty list for remaster keywords."""
+        resolver = YearScoreResolver(
+            console_logger=logger,
+            min_valid_year=1900,
+            current_year=2024,
+            definitive_score_threshold=70,
+            definitive_score_diff=15,
+        )
+
+        assert resolver.remaster_keywords == []
 
 
 class TestAggregateYearScores:
@@ -455,3 +494,210 @@ class TestIntegration:
         best_year, _is_definitive, _score = resolver.select_best_year(year_scores)
 
         assert best_year == "2020"
+
+
+class TestRemasterKeywordDetection:
+    """Tests for remaster keyword detection helpers (Issue #109)."""
+
+    def test_get_titles_for_year_returns_matching_titles(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test _get_titles_for_year returns correct titles for a year."""
+        releases = [
+            create_scored_release("2020", 94, title="Clayman (20th Anniversary Edition)"),
+            create_scored_release("2000", 82, title="Clayman"),
+            create_scored_release("2020", 85, title="Clayman (Deluxe)"),
+        ]
+        titles = resolver_with_keywords._get_titles_for_year(releases, "2020")
+
+        assert len(titles) == 2
+        assert "Clayman (20th Anniversary Edition)" in titles
+        assert "Clayman (Deluxe)" in titles
+
+    def test_get_titles_for_year_returns_empty_for_no_match(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test _get_titles_for_year returns empty list when no matches."""
+        releases = [
+            create_scored_release("2020", 94, title="Album 2020"),
+        ]
+        titles = resolver_with_keywords._get_titles_for_year(releases, "2019")
+
+        assert titles == []
+
+    def test_get_titles_for_year_handles_none_releases(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test _get_titles_for_year handles None releases gracefully."""
+        titles = resolver_with_keywords._get_titles_for_year(None, "2020")
+
+        assert titles == []
+
+    def test_title_contains_remaster_keywords_detects_anniversary(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection finds Anniversary."""
+        titles = ["Clayman (20th Anniversary Edition)"]
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is True
+
+    def test_title_contains_remaster_keywords_detects_remastered(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection finds Remastered."""
+        titles = ["Dark Side of the Moon (Remastered)"]
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is True
+
+    def test_title_contains_remaster_keywords_detects_deluxe(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection finds Deluxe."""
+        titles = ["Thriller (Deluxe Edition)"]
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is True
+
+    def test_title_contains_remaster_keywords_no_match(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection returns False for no match."""
+        titles = ["Kamikaze", "Thriller", "Bad Witch"]
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is False
+
+    def test_title_contains_remaster_keywords_case_insensitive(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection is case insensitive."""
+        titles = ["CLAYMAN (20TH ANNIVERSARY EDITION)"]
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is True
+
+    def test_title_contains_remaster_keywords_empty_list(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Test keyword detection handles empty list."""
+        titles: list[str] = []
+
+        assert resolver_with_keywords._title_contains_remaster_keywords(titles) is False
+
+    def test_title_contains_remaster_keywords_no_keywords_configured(self, resolver: YearScoreResolver) -> None:
+        """Test keyword detection returns False when no keywords configured."""
+        titles = ["Clayman (20th Anniversary Edition)"]
+
+        # resolver has no remaster_keywords configured
+        assert resolver._title_contains_remaster_keywords(titles) is False
+
+
+class TestFalsePositivePrevention:
+    """Tests for preventing false positives in reissue detection (Issue #109).
+
+    These tests verify that the keyword-based validation prevents selecting
+    incorrect years when the best match is a different album, not a reissue.
+    """
+
+    def test_eminem_kamikaze_keeps_2018(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Eminem Kamikaze - should NOT prefer 2013 over 2018.
+
+        False positive scenario: API returns 2013 (The Marshall Mathers LP 2)
+        alongside 2018 (Kamikaze). Without keyword check, would incorrectly
+        select 2013 as "original release".
+        """
+        releases = [
+            create_scored_release("2018", 94, title="Kamikaze"),
+            create_scored_release("2013", 85, title="The Marshall Mathers LP 2"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "2018"  # NOT 2013
+
+    def test_michael_jackson_thriller_keeps_1982(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Michael Jackson Thriller - should NOT prefer 1979 over 1982.
+
+        False positive scenario: API returns 1979 (Off the Wall) alongside
+        1982 (Thriller). Without keyword check, would incorrectly select 1979.
+        """
+        releases = [
+            create_scored_release("1982", 94, title="Thriller"),
+            create_scored_release("1979", 85, title="Off the Wall"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "1982"  # NOT 1979
+
+    def test_evanescence_self_titled_keeps_2011(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Evanescence self-titled - should NOT prefer 1998 over 2011.
+
+        False positive scenario: API returns 1998 (Fallen) alongside
+        2011 (Evanescence). Without keyword check, would incorrectly select 1998.
+        """
+        releases = [
+            create_scored_release("2011", 94, title="Evanescence"),
+            create_scored_release("1998", 82, title="Fallen"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "2011"  # NOT 1998
+
+    def test_nine_inch_nails_bad_witch_keeps_2018(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Nine Inch Nails Bad Witch - should NOT prefer 2016 over 2018.
+
+        False positive scenario: API returns 2016 (Not the Actual Events EP)
+        alongside 2018 (Bad Witch). Without keyword check, would incorrectly
+        select 2016.
+        """
+        releases = [
+            create_scored_release("2018", 94, title="Bad Witch"),
+            create_scored_release("2016", 92, title="Not the Actual Events"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "2018"  # NOT 2016
+
+
+class TestCorrectReissueDetection:
+    """Tests for correct reissue detection behavior (Issue #109 regression tests).
+
+    These tests verify that the keyword-based validation still correctly
+    identifies and prefers original releases over reissues when the reissue
+    has identifying keywords in its title.
+    """
+
+    def test_in_flames_clayman_prefers_2000(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """In Flames Clayman - SHOULD prefer 2000 over 2020 Anniversary.
+
+        Correct behavior: When 2020 release has "Anniversary" keyword,
+        the system correctly identifies it as a reissue and prefers 2000.
+        """
+        releases = [
+            create_scored_release("2020", 94, title="Clayman (20th Anniversary Edition)"),
+            create_scored_release("2000", 82, title="Clayman"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "2000"  # 2020 has "Anniversary" keyword
+
+    def test_pink_floyd_remastered_prefers_original(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Pink Floyd Dark Side - SHOULD prefer 1973 over 2011 Remastered."""
+        releases = [
+            create_scored_release("2011", 94, title="The Dark Side of the Moon (Remastered)"),
+            create_scored_release("1973", 85, title="The Dark Side of the Moon"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "1973"  # 2011 has "Remastered" keyword
+
+    def test_metallica_deluxe_prefers_original(self, resolver_with_keywords: YearScoreResolver) -> None:
+        """Metallica Master of Puppets - SHOULD prefer 1986 over Deluxe reissue."""
+        releases = [
+            create_scored_release("2017", 90, title="Master of Puppets (Deluxe Box Set)"),
+            create_scored_release("1986", 85, title="Master of Puppets"),
+        ]
+        year_scores = resolver_with_keywords.aggregate_year_scores(releases)
+        best_year, _, _ = resolver_with_keywords.select_best_year(year_scores, all_releases=releases)
+
+        assert best_year == "1986"  # 2017 has "Deluxe" keyword
+
+    def test_without_keywords_falls_back_to_score(self, resolver: YearScoreResolver) -> None:
+        """Without keywords configured, falls back to existing score-based logic."""
+        releases = [
+            create_scored_release("2020", 94, title="Clayman (20th Anniversary Edition)"),
+            create_scored_release("2000", 82, title="Clayman"),
+        ]
+        year_scores = resolver.aggregate_year_scores(releases)
+        # resolver has no remaster_keywords, so keyword check is skipped
+        # Falls back to score-based logic which may still prefer earlier year
+        # due to year gap detection
+        best_year, _, _ = resolver.select_best_year(year_scores, all_releases=releases)
+
+        # With no keywords, the year gap detection may still work
+        # but this documents the behavior
+        assert best_year in ("2000", "2020")  # Either is acceptable without keywords

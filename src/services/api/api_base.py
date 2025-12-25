@@ -196,19 +196,6 @@ class BaseApiClient:
         return name
 
     @staticmethod
-    def _simple_norm(name: str) -> str:
-        """Apply simple normalization - lowercase and strip whitespace.
-
-        Args:
-            name: The name to normalize
-
-        Returns:
-            Simply normalized name
-
-        """
-        return name.lower().strip() if name else ""
-
-    @staticmethod
     def _is_valid_year(year_str: str | None) -> bool:
         """Check if a year string represents a valid release year.
 

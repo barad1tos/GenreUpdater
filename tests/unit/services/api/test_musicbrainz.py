@@ -75,10 +75,11 @@ class TestMusicBrainzClientAllure:
         assert "life-span" in result
         assert "aliases" in result
 
-        # Verify API was called with correct parameters
+        # Verify API was called with correct parameters (Issue #102: non-fielded search for alias matching)
         mock_api_request.assert_called_once()
         call_args = mock_api_request.call_args[1]
-        assert "artist:" in call_args["params"]["query"]
+        # Non-fielded search to match both canonical names and aliases (Issue #102)
+        assert call_args["params"]["query"] == "The Beatles"
 
     @pytest.mark.asyncio
     async def test_search_artist_not_found(self) -> None:

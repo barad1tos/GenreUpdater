@@ -17,6 +17,7 @@ from datetime import datetime as dt
 from typing import Any, TypedDict
 
 from core.models.metadata_utils import remove_parentheses_with_keywords
+from core.models.normalization import normalize_for_matching
 from core.models.script_detection import ScriptType, detect_primary_script
 
 # Module-level constant for name normalization
@@ -481,19 +482,19 @@ class ReleaseScorer:
             "various performers",
         }
 
-        artist_lower = artist_norm.lower().strip()
+        artist_normalized = normalize_for_matching(artist_norm)
 
         # Check exact match
-        if artist_lower in soundtrack_artists:
+        if artist_normalized in soundtrack_artists:
             return True
 
         # Check if starts with common patterns
         soundtrack_prefixes = ("various ", "original ", "ost ", "soundtrack ")
-        if any(artist_lower.startswith(prefix) for prefix in soundtrack_prefixes):
+        if any(artist_normalized.startswith(prefix) for prefix in soundtrack_prefixes):
             return True
 
         # Check if contains definitive soundtrack indicators
-        return "soundtrack" in artist_lower or "original score" in artist_lower
+        return "soundtrack" in artist_normalized or "original score" in artist_normalized
 
     def _calculate_soundtrack_compensation(
         self,

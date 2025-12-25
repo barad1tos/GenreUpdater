@@ -68,8 +68,17 @@ class TestNormalizeFunction:
     def test_normalize_complex_album_names(self) -> None:
         """Test complex album names with multiple patterns."""
         # Real problematic album from logs
-        assert normalize_name("The Alchemy Index, Vols. 1 & 2: Fire & Water") == "The Alchemy Index, Vols. 1 and 2: Fire and Water"
+        # Colons replaced with space for API matching (Issue #103)
+        assert normalize_name("The Alchemy Index, Vols. 1 & 2: Fire & Water") == "The Alchemy Index, Vols. 1 and 2 Fire and Water"
         assert normalize_name("Make Love & War - The Wedlock") == "Make Love and War - The Wedlock"
+
+    def test_normalize_colon_in_album_names(self) -> None:
+        """Test colon normalization for API matching (Issue #103)."""
+        # Colons break Lucene search - MusicBrainz escapes them to \:
+        # which doesn't match "III: Trauma" in the database
+        assert normalize_name("III:Trauma") == "III Trauma"
+        assert normalize_name("Node: Reloaded") == "Node Reloaded"
+        assert normalize_name("Album: Subtitle") == "Album Subtitle"
 
 
 class TestExternalApiOrchestrator:

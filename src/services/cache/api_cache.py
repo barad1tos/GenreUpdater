@@ -17,10 +17,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.logger import LogFormat, ensure_directory, get_full_log_path
+from core.models.normalization import are_names_equal
+from core.models.track_models import CachedApiResult
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
-from core.logger import LogFormat, ensure_directory, get_full_log_path
-from core.models.track_models import CachedApiResult
 
 
 class ApiCacheService:
@@ -177,7 +178,9 @@ class ApiCacheService:
                 year_str = str(year_value).strip()
                 year = year_str or None
 
-        # Create cached result
+        # Create cached result - ensure api_response is always a dict for consumers
+        # Use explicit dict() constructor to satisfy both runtime and static analysis
+        response_data: dict[str, Any] | None = dict(data) if data else None
         cached_result = CachedApiResult(
             artist=artist.strip(),
             album=album.strip(),
@@ -185,7 +188,7 @@ class ApiCacheService:
             source=source.strip(),
             timestamp=datetime.now(UTC).timestamp(),
             metadata=metadata or {},
-            api_response=data or {},
+            api_response=response_data,
         )
 
         self.api_cache[key] = cached_result
@@ -206,7 +209,7 @@ class ApiCacheService:
         keys_to_remove.extend(
             key
             for key, cached_result in self.api_cache.items()
-            if (cached_result.artist.lower().strip() == artist.lower().strip() and cached_result.album.lower().strip() == album.lower().strip())
+            if are_names_equal(cached_result.artist, artist) and are_names_equal(cached_result.album, album)
         )
         # Remove found entries
         for key in keys_to_remove:
@@ -283,9 +286,8 @@ class ApiCacheService:
                 self.logger.exception("Failed to save API cache: %s", e)
                 raise
 
-        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, blocking_save)
+        # Run in thread to avoid blocking
+        await asyncio.to_thread(blocking_save)
 
     async def _load_api_cache(self) -> None:
         """Load API cache from JSON file."""
@@ -327,9 +329,8 @@ class ApiCacheService:
                 self.logger.exception("Error loading API cache file %s: %s", self.api_cache_file, e)
                 return {}
 
-        # Run in thread executor to avoid blocking (use event loop's default pool for automatic cleanup)
-        loop = asyncio.get_running_loop()
-        loaded_cache = await loop.run_in_executor(None, blocking_load)
+        # Run in thread to avoid blocking
+        loaded_cache = await asyncio.to_thread(blocking_load)
         self.api_cache.update(loaded_cache)
 
     def emit_track_removed(self, track_id: str, artist: str, album: str) -> None:

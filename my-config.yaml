@@ -54,14 +54,12 @@ cleaning:
     - Redux
     - Expanded
     - Deluxe
-    - Special Edition
-    - Deluxe Edition
-    - Anniversary Edition
+    - Special
+    - Anniversary
     - Bonus Tracks
     - Digital Version
     - Original Soundtrack
     - Re-release
-    - Anniversary
 
   album_suffixes_to_remove:
     - Remaster

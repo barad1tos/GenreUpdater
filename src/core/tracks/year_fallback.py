@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 # Confidence threshold for trusting API over library
 DEFAULT_TRUST_API_SCORE_THRESHOLD = 70  # Trust API if confidence >= this
 
+# Minimum confidence to apply year when no existing year to validate against (Issue #105)
+MIN_CONFIDENCE_FOR_NEW_YEAR = 30
+
 
 class YearFallbackHandler:
     """Handles fallback logic for year decisions.
@@ -142,7 +145,30 @@ class YearFallbackHandler:
         if await self._handle_absurd_year(proposed_year, existing_year, artist, album):
             return None
 
-        # Rule 3: No existing year - nothing to preserve (year passed absurd check)
+        # Rule 2.5: Very low confidence with no existing year (Issue #105)
+        # When no existing year to validate against, require minimum confidence
+        if not existing_year and confidence_score < MIN_CONFIDENCE_FOR_NEW_YEAR:
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="very_low_confidence_no_existing",
+                metadata={
+                    "proposed_year": proposed_year,
+                    "confidence_score": confidence_score,
+                    "threshold": MIN_CONFIDENCE_FOR_NEW_YEAR,
+                },
+            )
+            self.console_logger.warning(
+                "[FALLBACK] Skipping year %s for %s - %s (confidence %d%% below %d%% threshold, no existing year)",
+                proposed_year,
+                artist,
+                album,
+                confidence_score,
+                MIN_CONFIDENCE_FOR_NEW_YEAR,
+            )
+            return None
+
+        # Rule 3: No existing year - nothing to preserve (year passed absurd check and confidence check)
         if not existing_year:
             self.console_logger.debug(
                 "[FALLBACK] Applying year %s for %s - %s (no existing year to preserve)",
