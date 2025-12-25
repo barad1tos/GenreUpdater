@@ -53,7 +53,6 @@ dev = [
     # Type stubs & tools
     "types-pyyaml==6.0.12.20250915",
     "cst-lsp==0.1.3",
-    "mutmut==3.4.0",
     "deptry==0.24.0",
     "pre-commit==4.5.1",
     "pytest-rerunfailures>=16.1",
@@ -337,18 +336,3 @@ skips = ["B101", "B311", "B404", "B603"]
 # B311: random.uniform used for jitter, not security
 # B404: subprocess module is required for AppleScript
 # B603: shell=False is safe (we control the command)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Mutmut configuration - Mutation testing
-# ─────────────────────────────────────────────────────────────────────────────
-[tool.mutmut]
-paths_to_mutate = ["src/"]
-# Stats phase: run serially (no xdist) to collect coverage data properly
-# - override-ini: clears default addopts (prevents coverage/html conflicts)
-# - no:pytest_cov, no:html: disable these plugins
-# NOTE: xdist breaks stats collection because workers don't have mutmut.config
-pytest_add_cli_args = ["--override-ini=addopts=", "-p", "no:pytest_cov", "-p", "no:html", "-n", "0"]
-# Mutation testing phase: use xdist for parallel execution
-# - -n auto overrides -n 0 from pytest_add_cli_args
-# - conftest.py has monkey-patch to handle mutmut.config=None in workers
-pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e", "-n", "auto"]
