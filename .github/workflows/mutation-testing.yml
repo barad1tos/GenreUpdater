@@ -331,12 +331,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Setup gh-pages branch
+        id: setup-pages
         run: |
           # Check if gh-pages exists remotely
           if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            echo "gh-pages exists on remote, fetching..."
             git fetch origin gh-pages
             git checkout gh-pages
+            echo "is_new_branch=false" >> $GITHUB_OUTPUT
           else
+            echo "gh-pages does not exist, creating orphan branch..."
             # Create gh-pages from main's docs/mutation-dashboard
             git checkout --orphan gh-pages
             git rm -rf .
@@ -345,6 +349,7 @@ jobs:
             rm -rf docs
             git add .
             git commit -m "chore: initialize gh-pages with mutation dashboard"
+            echo "is_new_branch=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Load current history
@@ -452,15 +457,29 @@ jobs:
             Survived: ${{ needs.mutation-test.outputs.survived }}
             Trend: ${{ steps.analyze.outputs.trend }} (${{ steps.analyze.outputs.trend_value }}%)"
 
+            IS_NEW_BRANCH="${{ steps.setup-pages.outputs.is_new_branch }}"
             push_success=false
+
             for i in 1 2 3; do
-              if git pull --rebase origin gh-pages && git push origin gh-pages; then
-                push_success=true
-                break
+              if [ "$IS_NEW_BRANCH" = "true" ]; then
+                # New branch: push directly (no remote ref to pull from)
+                if git push -u origin gh-pages; then
+                  push_success=true
+                  break
+                fi
+              else
+                # Existing branch: pull first to handle concurrent updates
+                if git pull --rebase origin gh-pages && git push origin gh-pages; then
+                  push_success=true
+                  break
+                fi
               fi
               echo "Push failed, attempt $i/3, retrying in $((i * 5))s..."
               sleep $((i * 5))
+              # After first push attempt, branch exists on remote
+              IS_NEW_BRANCH="false"
             done
+
             if [ "$push_success" = false ]; then
               echo "::error::Failed to push metrics after 3 attempts"
               exit 1
