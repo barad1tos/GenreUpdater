@@ -343,9 +343,12 @@ skips = ["B101", "B311", "B404", "B603"]
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.mutmut]
 paths_to_mutate = ["src/"]
-# Clear pytest addopts and re-enable xdist:
+# Stats phase: run serially (no xdist) to collect coverage data properly
 # - override-ini: clears default addopts (prevents coverage/html conflicts)
 # - no:pytest_cov, no:html: disable these plugins
-# - -n auto: re-enable xdist parallelism (cleared by override-ini)
-pytest_add_cli_args = ["--override-ini=addopts=", "-p", "no:pytest_cov", "-p", "no:html", "-n", "auto"]
-pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e"]
+# NOTE: xdist breaks stats collection because workers don't have mutmut.config
+pytest_add_cli_args = ["--override-ini=addopts=", "-p", "no:pytest_cov", "-p", "no:html", "-n", "0"]
+# Mutation testing phase: use xdist for parallel execution
+# - -n auto overrides -n 0 from pytest_add_cli_args
+# - conftest.py has monkey-patch to handle mutmut.config=None in workers
+pytest_add_cli_args_test_selection = ["-x", "-q", "--tb=no", "--ignore=tests/integration", "--ignore=tests/e2e", "-n", "auto"]
