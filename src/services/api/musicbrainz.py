@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict, cast
 
+from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
 from metrics import Analytics
 
@@ -271,9 +272,8 @@ class MusicBrainzClient(BaseApiClient):
         """Get artist information from MusicBrainz.
 
         Uses non-fielded search to match both canonical names and aliases.
-        This is essential for Cyrillic/non-Latin artists where the library
-        may have an alias (e.g., TNMK) but MusicBrainz uses the full canonical
-        name (e.g., Tanok na Maidani Kongo). Issue #102.
+        Combined with script_detection.detect_primary_script(), enables
+        canonical name resolution for non-Latin artists. Issue #102.
 
         Args:
             artist_norm: Normalized artist name
@@ -284,8 +284,7 @@ class MusicBrainzClient(BaseApiClient):
 
         """
         search_url = "https://musicbrainz.org/ws/2/artist/"
-        # Use non-fielded search to match aliases (Issue #102)
-        # Fielded search artist:"TNMK" fails, non-fielded finds canonical name
+        # Non-fielded search matches aliases; see _perform_primary_search for script detection
         params = {
             "query": self._escape_lucene(artist_norm),
             "fmt": "json",
@@ -355,11 +354,10 @@ class MusicBrainzClient(BaseApiClient):
         return None
 
     async def get_canonical_artist_name(self, artist_norm: str) -> str | None:
-        """Get the canonical MusicBrainz artist name from an alias or alternate spelling.
+        """Get the canonical MusicBrainz artist name from an alias.
 
-        Essential for Cyrillic/non-Latin artists where the library may have an
-        abbreviated or alternate form (e.g., TNMK) but MusicBrainz stores the
-        full canonical name (e.g., Tanok na Maidani Kongo). Issue #102.
+        Used by _perform_primary_search for non-Latin scripts (detected via
+        script_detection.detect_primary_script). Issue #102.
 
         Args:
             artist_norm: Normalized artist name (may be alias)
@@ -374,9 +372,9 @@ class MusicBrainzClient(BaseApiClient):
     async def _perform_primary_search(self, artist_norm: str, album_norm: str) -> list[MBApiData]:
         """Perform a precise fielded search for release groups.
 
-        If the initial search fails, attempts to resolve the artist name to its
-        canonical MusicBrainz name (handling aliases like TNMK to Tanok na Maidani Kongo)
-        and retries. This is essential for Cyrillic/non-Latin artists. Issue #102.
+        For non-Latin scripts (Cyrillic, CJK, etc.), attempts canonical name
+        resolution when initial search fails. This handles cases where the
+        library uses an alias but MusicBrainz uses the canonical name.
 
         Args:
             artist_norm: Normalized artist name
@@ -393,13 +391,21 @@ class MusicBrainzClient(BaseApiClient):
         if results:
             return results
 
-        # Attempt 1b: Try with canonical artist name (Issue #102 - alias resolution)
-        canonical_artist = await self.get_canonical_artist_name(artist_norm)
-        if canonical_artist and canonical_artist.lower() != artist_norm.lower():
-            self.console_logger.debug(f"[musicbrainz] Resolved alias '{artist_norm}' → canonical '{canonical_artist}'. Retrying search.")
-            results = await self._fielded_release_group_search(base_search_url, canonical_artist.lower(), album_norm, attempt_num=1)
-            if results:
-                return results
+        # Attempt 1b: Try canonical name resolution for non-Latin scripts only (Issue #102)
+        # Latin artists rarely have alias issues; non-Latin (Cyrillic, CJK) often do
+        artist_script = detect_primary_script(artist_norm)
+        if artist_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
+            canonical_artist = await self.get_canonical_artist_name(artist_norm)
+            if canonical_artist and canonical_artist.lower() != artist_norm.lower():
+                self.console_logger.debug(
+                    "[musicbrainz] Non-Latin artist '%s' (%s) resolved to canonical '%s'. Retrying.",
+                    artist_norm,
+                    artist_script.value,
+                    canonical_artist,
+                )
+                results = await self._fielded_release_group_search(base_search_url, canonical_artist.lower(), album_norm, attempt_num=1)
+                if results:
+                    return results
 
         self.console_logger.debug("[musicbrainz] Primary search failed. Trying fallbacks.")
         return []
