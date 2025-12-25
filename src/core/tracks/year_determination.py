@@ -158,7 +158,7 @@ class YearDeterminator:
         earliest_added = YearConsistencyChecker.get_earliest_track_added_year(album_tracks)
 
         try:
-            year_result, is_definitive, confidence_score, _year_scores = await self.external_api.get_album_year(
+            year_result, is_definitive, confidence_score, year_scores = await self.external_api.get_album_year(
                 artist,
                 album,
                 current_library_year=dominant_year,
@@ -172,6 +172,7 @@ class YearDeterminator:
 
         if year_result:
             # Apply fallback logic to validate/skip the proposed year
+            # Issue #93: pass year_scores for existing year validation
             validated_year = await self.fallback_handler.apply_year_fallback(
                 proposed_year=year_result,
                 album_tracks=album_tracks,
@@ -179,6 +180,7 @@ class YearDeterminator:
                 confidence_score=confidence_score,
                 artist=artist,
                 album=album,
+                year_scores=year_scores,
             )
 
             if validated_year is not None:
