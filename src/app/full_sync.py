@@ -112,8 +112,8 @@ async def main() -> None:
     print("=" * 55)
 
     # Determine config path - look for it in the current project directory
-    # Try standard config names in order of preference
-    config_files = ["config.yaml", "my-config.yaml"]
+    # User config takes precedence over template (my-config.yaml is gitignored)
+    config_files = ["my-config.yaml", "config.yaml"]
     if found_configs := [project_root / name for name in config_files if (project_root / name).exists()]:
         config_path = found_configs[0]
         if len(found_configs) > 1:

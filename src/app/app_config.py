@@ -13,8 +13,8 @@ except ImportError:
 
 T = TypeVar("T")
 
-# Prioritize standard config name, fallback to legacy name for compatibility
-DEFAULT_CONFIG_FILES = ["config.yaml", "my-config.yaml"]
+# User config takes precedence over template (my-config.yaml is gitignored)
+DEFAULT_CONFIG_FILES = ["my-config.yaml", "config.yaml"]
 
 
 class Config:
