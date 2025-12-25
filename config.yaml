@@ -150,6 +150,7 @@ year_retrieval:
     suspicion_threshold_years: 10
     definitive_score_threshold: 50
     definitive_score_diff: 15
+    min_confidence_for_new_year: 30  # Minimum confidence to apply year when no existing year (Issue #105)
     preferred_countries:
       - us
       - gb

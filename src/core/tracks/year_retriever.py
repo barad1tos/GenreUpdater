@@ -18,7 +18,7 @@ from metrics import Analytics
 from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
-from .year_fallback import YearFallbackHandler
+from .year_fallback import DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR, YearFallbackHandler
 from .year_utils import (
     normalize_collaboration_artist,
     resolve_non_negative_float,
@@ -127,6 +127,10 @@ class YearRetriever:
             logic_config.get("suspicion_threshold_years"),
             default=self.DEFAULT_SUSPICION_THRESHOLD_YEARS,
         )
+        self.min_confidence_for_new_year = resolve_positive_int(
+            logic_config.get("min_confidence_for_new_year"),
+            default=DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
+        )
 
         # Initialize consistency checker
         self.year_consistency_checker = YearConsistencyChecker(
@@ -144,6 +148,7 @@ class YearRetriever:
             fallback_enabled=self.fallback_enabled,
             absurd_year_threshold=self.absurd_year_threshold,
             year_difference_threshold=self.year_difference_threshold,
+            min_confidence_for_new_year=self.min_confidence_for_new_year,
             api_orchestrator=self.external_api,
         )
 

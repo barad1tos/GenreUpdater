@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 DEFAULT_TRUST_API_SCORE_THRESHOLD = 70  # Trust API if confidence >= this
 
 # Minimum confidence to apply year when no existing year to validate against (Issue #105)
-MIN_CONFIDENCE_FOR_NEW_YEAR = 30
+DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR = 30
 
 
 class YearFallbackHandler:
@@ -56,6 +56,7 @@ class YearFallbackHandler:
         absurd_year_threshold: int,
         year_difference_threshold: int,
         trust_api_score_threshold: int = DEFAULT_TRUST_API_SCORE_THRESHOLD,
+        min_confidence_for_new_year: int = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
         api_orchestrator: ExternalApiServiceProtocol | None = None,
     ) -> None:
         """Initialize the year fallback handler.
@@ -67,6 +68,7 @@ class YearFallbackHandler:
             absurd_year_threshold: Years below this are considered absurd
             year_difference_threshold: Max allowed year difference before dramatic change
             trust_api_score_threshold: Trust API if confidence >= this value
+            min_confidence_for_new_year: Minimum confidence to apply year when no existing year
             api_orchestrator: API orchestrator for artist data lookups (optional)
 
         """
@@ -76,6 +78,7 @@ class YearFallbackHandler:
         self.absurd_year_threshold = absurd_year_threshold
         self.year_difference_threshold = year_difference_threshold
         self.trust_api_score_threshold = trust_api_score_threshold
+        self.min_confidence_for_new_year = min_confidence_for_new_year
         self.api_orchestrator = api_orchestrator
 
     async def apply_year_fallback(
@@ -147,7 +150,7 @@ class YearFallbackHandler:
 
         # Rule 2.5: Very low confidence with no existing year (Issue #105)
         # When no existing year to validate against, require minimum confidence
-        if not existing_year and confidence_score < MIN_CONFIDENCE_FOR_NEW_YEAR:
+        if not existing_year and confidence_score < self.min_confidence_for_new_year:
             await self.pending_verification.mark_for_verification(
                 artist=artist,
                 album=album,
@@ -155,7 +158,7 @@ class YearFallbackHandler:
                 metadata={
                     "proposed_year": proposed_year,
                     "confidence_score": confidence_score,
-                    "threshold": MIN_CONFIDENCE_FOR_NEW_YEAR,
+                    "threshold": self.min_confidence_for_new_year,
                 },
             )
             self.console_logger.warning(
@@ -164,7 +167,7 @@ class YearFallbackHandler:
                 artist,
                 album,
                 confidence_score,
-                MIN_CONFIDENCE_FOR_NEW_YEAR,
+                self.min_confidence_for_new_year,
             )
             return None
 

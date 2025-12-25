@@ -9,6 +9,7 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict, cast
 
+from core.models.normalization import normalize_for_matching
 from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
@@ -200,7 +201,7 @@ class LastFmClient(BaseApiClient):
     def _normalize_artist_for_matching(artist: str) -> str:
         """Normalize artist name for flexible matching.
 
-        Extends basic normalization with Last.fm/Discogs-specific handling:
+        Extends the base normalize_for_matching() with Last.fm-specific handling:
         - "Beatles, The" -> "the beatles" (common API format)
         - "Artist (2)" -> "artist" (disambiguation suffix removal)
 
@@ -211,11 +212,10 @@ class LastFmClient(BaseApiClient):
             Normalized artist name for matching
 
         """
-        if not artist:
+        # Use centralized normalization as base (strip + lowercase)
+        normalized = normalize_for_matching(artist)
+        if not normalized:
             return ""
-
-        # Basic normalization: strip + lowercase
-        normalized = artist.strip().lower()
 
         # Handle "X, The" -> "the x" (common in some API responses)
         if normalized.endswith(", the"):
