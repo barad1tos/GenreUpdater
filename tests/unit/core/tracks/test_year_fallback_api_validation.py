@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.track_models import TrackDict
 from core.tracks.year_fallback import YearFallbackHandler
+
+if TYPE_CHECKING:
+    from core.models.protocols import PendingVerificationServiceProtocol
+
+
+def make_track(artist: str, album: str, year: str | None = None) -> TrackDict:
+    """Create a TrackDict for testing with minimal required fields."""
+    return TrackDict(id="test-id", name="Test Track", artist=artist, album=album, year=year)
 
 
 @pytest.fixture
@@ -18,11 +27,11 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def pending_verification() -> MagicMock:
+def pending_verification() -> PendingVerificationServiceProtocol:
     """Create a mock pending verification service."""
     mock = MagicMock()
     mock.mark_for_verification = AsyncMock()
-    return mock
+    return cast("PendingVerificationServiceProtocol", mock)
 
 
 @pytest.fixture
@@ -36,7 +45,7 @@ def api_orchestrator() -> MagicMock:
 @pytest.fixture
 def fallback_handler(
     logger: logging.Logger,
-    pending_verification: MagicMock,
+    pending_verification: PendingVerificationServiceProtocol,
     api_orchestrator: MagicMock,
 ) -> YearFallbackHandler:
     """Create a YearFallbackHandler for testing."""
@@ -108,7 +117,7 @@ class TestIssue93FalsePositives:
         # Mock artist period (formed 1997)
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1997)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Abney Park", "album": "Scallywag", "year": "1998"}]
+        tracks = [make_track("Abney Park", "Scallywag", "1998")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2018",
@@ -132,7 +141,7 @@ class TestIssue93FalsePositives:
         # Mock artist period (formed 1993)
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1993)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Korn", "album": "Korn", "year": "2003"}]
+        tracks = [make_track("Korn", "Korn", "2003")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="1994",
@@ -155,7 +164,7 @@ class TestIssue93FalsePositives:
         """Abney Park - Taxidermy: existing=1998, API=2019, should return 2019."""
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1997)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Abney Park", "album": "Taxidermy", "year": "1998"}]
+        tracks = [make_track("Abney Park", "Taxidermy", "1998")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2019",
@@ -178,7 +187,7 @@ class TestIssue93FalsePositives:
         """Korn - Life is Peachy: existing=2003, API=1996, should return 1996."""
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1993)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Korn", "album": "Life is Peachy", "year": "2003"}]
+        tracks = [make_track("Korn", "Life is Peachy", "2003")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="1996",
@@ -205,7 +214,7 @@ class TestPreservesValidExistingYear:
         """Should preserve existing year if it appears in API results with dramatic change."""
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1990)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Test", "album": "Album", "year": "2000"}]
+        tracks = [make_track("Test", "Album", "2000")]
 
         # Both years in API results - existing has lower score but is still valid
         # The method should NOT automatically reject 2000 just because 2020 has higher score
@@ -232,7 +241,7 @@ class TestPreservesValidExistingYear:
         """Should apply new year when change is not dramatic."""
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1990)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Test", "album": "Album", "year": "2018"}]
+        tracks = [make_track("Test", "Album", "2018")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2020",
@@ -260,7 +269,7 @@ class TestBackwardCompatibility:
         """Should work correctly when year_scores is not provided (backward compatibility)."""
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1990)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Test", "album": "Album", "year": "2000"}]
+        tracks = [make_track("Test", "Album", "2000")]
 
         # No year_scores provided - should fall through to existing logic
         result = await fallback_handler.apply_year_fallback(
@@ -285,7 +294,7 @@ class TestPendingVerificationCalls:
     async def test_marks_for_verification_when_existing_year_in_api_results(
         self,
         fallback_handler: YearFallbackHandler,
-        pending_verification: MagicMock,
+        pending_verification: Any,
         api_orchestrator: MagicMock,
     ) -> None:
         """Should call mark_for_verification when existing year IS in API results.
@@ -299,7 +308,7 @@ class TestPendingVerificationCalls:
         """
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1990)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Test", "album": "Album", "year": "2000"}]
+        tracks = [make_track("Test", "Album", "2000")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2020",
@@ -327,7 +336,7 @@ class TestPendingVerificationCalls:
     async def test_no_verification_when_existing_year_not_in_api(
         self,
         fallback_handler: YearFallbackHandler,
-        pending_verification: MagicMock,
+        pending_verification: Any,
         api_orchestrator: MagicMock,
     ) -> None:
         """Should NOT call mark_for_verification when existing year NOT in API.
@@ -337,7 +346,7 @@ class TestPendingVerificationCalls:
         """
         api_orchestrator.get_artist_start_year = AsyncMock(return_value=1997)
 
-        tracks: list[dict[str, Any]] = [{"artist": "Abney Park", "album": "Scallywag", "year": "1998"}]
+        tracks = [make_track("Abney Park", "Scallywag", "1998")]
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2018",
