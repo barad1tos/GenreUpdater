@@ -18,7 +18,7 @@ from metrics import Analytics
 from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
-from .year_fallback import YearFallbackHandler
+from .year_fallback import DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR, YearFallbackHandler
 from .year_utils import (
     normalize_collaboration_artist,
     resolve_non_negative_float,
@@ -129,7 +129,7 @@ class YearRetriever:
         )
         self.min_confidence_for_new_year = resolve_positive_int(
             logic_config.get("min_confidence_for_new_year"),
-            default=30,  # DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR
+            default=DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
         )
 
         # Initialize consistency checker

@@ -128,7 +128,7 @@ class TestMusicBrainzClientAllure:
             {},
         ]
 
-        for i, malformed_response in enumerate(malformed_responses):
+        for malformed_response in malformed_responses:
             mock_api_request = AsyncMock(return_value=malformed_response)
             client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
 
@@ -266,3 +266,39 @@ class TestMusicBrainzArtistMatching:
         result = client._filter_release_groups_by_artist(release_groups, "Beatles")
         assert len(result) == 1
         assert result[0]["title"] == "Let It Be"
+
+    def test_artist_matches_multiple_credits_first_match(self) -> None:
+        """Test matching when multiple artist-credit entries exist.
+
+        Should short-circuit and return True on first match.
+        """
+        client = self.create_client()
+        artist_credits = [
+            {"artist": {"name": "Iron Maiden"}},
+            {"artist": {"name": "Metallica"}},
+            {"artist": {"name": "Slayer"}},
+        ]
+        # Metallica is second in list but should still match
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is True
+
+    def test_artist_matches_missing_artist_key(self) -> None:
+        """Test handling of credits with missing 'artist' key."""
+        client = self.create_client()
+        artist_credits: list[dict[str, Any]] = [
+            {},  # Missing 'artist' key
+            {"artist": {"name": "Metallica"}},
+        ]
+        # Should handle gracefully and still find Metallica
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is True
+
+    def test_filter_release_groups_missing_artist_key(self) -> None:
+        """Test filtering handles credits with missing artist key."""
+        client = self.create_client()
+        release_groups = [
+            {"title": "Album 1", "artist-credit": [{}]},  # Empty credit - missing 'artist' key
+            {"title": "Album 2", "artist-credit": [{"artist": {"name": "Metallica"}}]},
+        ]
+        # Should skip malformed entries and find Album 2
+        result = client._filter_release_groups_by_artist(release_groups, "Metallica")
+        assert len(result) == 1
+        assert result[0]["title"] == "Album 2"

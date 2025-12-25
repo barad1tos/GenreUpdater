@@ -536,6 +536,18 @@ class TestLastFmYearExtraction:
         result = client._extract_year_from_tags(album_data)
         assert result is None
 
+    def test_extract_year_from_tags_multiple_numeric(self) -> None:
+        """Test extraction with multiple numeric tags (original + remaster years).
+
+        When multiple years are present, the method should return the first valid year found.
+        """
+        client = self.create_client()
+        # Multiple year tags - common for remastered albums
+        album_data: dict[str, Any] = {"tags": {"tag": [{"name": "1984"}, {"name": "rock"}, {"name": "2010"}]}}
+        result = client._extract_year_from_tags(album_data)
+        # Should return first valid year found (as string)
+        assert result == "1984"
+
 
 class TestLastFmFuzzySearch:
     """Tests for Last.fm album.search fuzzy search functionality."""
@@ -601,6 +613,40 @@ class TestLastFmFuzzySearch:
         result = await client._search_albums("NonExistent Album")
 
         assert result == []
+
+
+class TestLastFmNormalizeArtistForMatching:
+    """Focused tests for Last.fm-specific artist normalization."""
+
+    def test_normalizes_trailing_the_comma(self) -> None:
+        """'Beatles, The' is normalized to 'the beatles'."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._normalize_artist_for_matching("Beatles, The") == "the beatles"
+
+    def test_normalizes_artist_suffix_number_in_parens(self) -> None:
+        """'Artist (2)' is normalized to 'artist' (disambiguation removed)."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._normalize_artist_for_matching("Artist (2)") == "artist"
+
+    def test_normalizes_basic_case_and_whitespace(self) -> None:
+        """Basic normalization: strip + lowercase via normalize_for_matching."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._normalize_artist_for_matching("  Metallica  ") == "metallica"
+
+    def test_normalizes_empty_string(self) -> None:
+        """Empty string returns empty string."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        assert client._normalize_artist_for_matching("") == ""
+
+    def test_normalizes_combined_rules(self) -> None:
+        """Test combined normalization: 'Queen (2)' -> 'queen'.
+
+        Note: ", The" handling happens BEFORE (2) removal, so
+        'Queen, The (2)' becomes 'queen, the' not 'the queen'.
+        """
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # (2) removal happens after ", The" check, so this just removes (2)
+        assert client._normalize_artist_for_matching("Queen (2)") == "queen"
 
 
 class TestLastFmArtistMatchEdgeCases:
