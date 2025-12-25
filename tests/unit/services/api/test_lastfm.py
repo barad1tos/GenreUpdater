@@ -669,3 +669,25 @@ class TestLastFmArtistMatchEdgeCases:
         client = TestLastFmAlbumCleaning.create_client_with_keywords([])
         # "Air" should match "Air Supply" (whole word present)
         assert client._is_artist_match("Air Supply", "Air")
+
+    def test_artist_match_case_insensitive(self) -> None:
+        """Test case-insensitive artist matching."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # Matching should be case-insensitive
+        assert client._is_artist_match("METALLICA", "metallica")
+        assert client._is_artist_match("Metallica", "METALLICA")
+        assert client._is_artist_match("MeTaLLiCa", "metallica")
+
+    def test_artist_match_empty_input(self) -> None:
+        """Test artist matching with empty inputs.
+
+        Note: Empty strings match each other (both normalize to empty).
+        Non-empty does not match empty.
+        """
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # Empty target should not match non-empty API artist
+        assert not client._is_artist_match("Metallica", "")
+        # Empty API artist should not match non-empty target
+        assert not client._is_artist_match("", "Metallica")
+        # Two empty strings technically match (edge case)
+        assert client._is_artist_match("", "")

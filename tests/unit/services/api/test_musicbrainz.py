@@ -302,3 +302,26 @@ class TestMusicBrainzArtistMatching:
         result = client._filter_release_groups_by_artist(release_groups, "Metallica")
         assert len(result) == 1
         assert result[0]["title"] == "Album 2"
+
+    def test_artist_matches_case_sensitive_matching(self) -> None:
+        """Test that artist matching is case-sensitive (BaseApiClient._normalize_name is stub).
+
+        Note: BaseApiClient._normalize_name returns unchanged, so matching is case-sensitive.
+        This documents current behavior - if normalization is implemented, update this test.
+        """
+        client = self.create_client()
+        artist_credits = [{"artist": {"name": "Metallica"}}]
+        # Exact case matches
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is True
+        # Different case does NOT match (stub behavior)
+        assert client._artist_matches_any_credit(artist_credits, "metallica") is False
+        assert client._artist_matches_any_credit(artist_credits, "METALLICA") is False
+
+    def test_artist_matches_empty_aliases_list(self) -> None:
+        """Test handling of artist with empty aliases list."""
+        client = self.create_client()
+        artist_credits = [{"artist": {"name": "Metallica", "aliases": []}}]
+        # Should still match by name even with empty aliases
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is True
+        # Non-matching name with empty aliases returns False
+        assert client._artist_matches_any_credit(artist_credits, "Iron Maiden") is False
