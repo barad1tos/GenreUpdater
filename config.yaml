@@ -32,23 +32,25 @@ incremental_interval_minutes: 1
 # 3. FEATURE TOGGLES AND SETTINGS
 # -----------------------------------------------------------------------
 cleaning:
+  # Keywords indicating reissue/remaster editions (for year scoring)
   remaster_keywords:
     - remaster
     - remastered
     - reissue
+    - expanded edition
     # Soundtrack edition suffixes - strip from album names for matching
     - soundtrack
     - original motion picture
     - original score
     - motion picture
     - film score
-    - expanded edition
-    # Last.fm fallback patterns (Issue #106)
-    - The 12 Singles
-    - The 12" Singles
+  # Suffixes to strip from album names for display
   album_suffixes_to_remove:
     - Remaster
     - Remastered
+    # Last.fm-specific album patterns (Issue #106) - moved from remaster_keywords
+    - The 12 Singles
+    - The 12" Singles
 
 artist_renamer:
   config_path: artist-renames.yaml

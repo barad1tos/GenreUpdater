@@ -29,7 +29,6 @@ class SearchStrategy(Enum):
     SOUNDTRACK = "soundtrack"  # Extract movie name from album
     VARIOUS_ARTISTS = "various"  # Search by album only
     STRIP_BRACKETS = "strip"  # Remove [SPECIAL TEXT] from album
-    GREATEST_HITS = "hits"  # Try artist + "Greatest Hits"
 
 
 @dataclass(frozen=True, slots=True)

@@ -178,7 +178,9 @@ class ApiCacheService:
                 year_str = str(year_value).strip()
                 year = year_str or None
 
-        # Create cached result
+        # Create cached result - ensure api_response is always a dict for consumers
+        # Use explicit dict() constructor to satisfy both runtime and static analysis
+        response_data: dict[str, Any] | None = dict(data) if data else None
         cached_result = CachedApiResult(
             artist=artist.strip(),
             album=album.strip(),
@@ -186,7 +188,7 @@ class ApiCacheService:
             source=source.strip(),
             timestamp=datetime.now(UTC).timestamp(),
             metadata=metadata or {},
-            api_response=data,  # None is valid, don't convert to empty dict
+            api_response=response_data,
         )
 
         self.api_cache[key] = cached_result

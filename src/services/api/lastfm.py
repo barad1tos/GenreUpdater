@@ -139,7 +139,11 @@ class LastFmClient(BaseApiClient):
         self._score_original_release = score_release_func
         self.use_lastfm = use_lastfm
         self.config = config or {}
-        self._remaster_keywords = self.config.get("cleaning", {}).get("remaster_keywords", [])
+        # Combine remaster_keywords and album_suffixes_to_remove for comprehensive cleaning
+        cleaning_config = self.config.get("cleaning", {})
+        remaster_keywords = cleaning_config.get("remaster_keywords", [])
+        album_suffixes = cleaning_config.get("album_suffixes_to_remove", [])
+        self._remaster_keywords = list(remaster_keywords) + list(album_suffixes)
 
     def _strip_trailing_keyword(self, text: str) -> tuple[str, bool]:
         """Strip a single trailing keyword from text.
@@ -251,8 +255,10 @@ class LastFmClient(BaseApiClient):
         if result_no_the == target_no_the:
             return True
 
-        # Substring fallback (handles "Air" in "Air Supply" cases carefully)
-        return target_norm in result_norm or target_no_the in result_norm
+        # Word-level fallback: match when the target artist appears as a whole word
+        # in the result name, to avoid short-name false positives (e.g., "Air" vs "Air Supply")
+        result_words = set(result_norm.split())
+        return target_norm in result_words or target_no_the in result_words
 
     def _extract_year_from_release_date(self, album_data: LastFmAlbum | dict[str, Any]) -> str | None:
         """Extract year from the explicit 'releasedate' field.
@@ -424,8 +430,11 @@ class LastFmClient(BaseApiClient):
                 self.console_logger.debug("Last.fm album.search found %d results for '%s'", len(albums), album)
                 return albums
 
-        except (OSError, ValueError, KeyError, TypeError):
-            self.error_logger.exception("Error in Last.fm album.search")
+        except OSError:
+            self.error_logger.exception("Network error in Last.fm album.search")
+        except (AttributeError, TypeError) as e:
+            # Unexpected response structure from API
+            self.error_logger.warning("Unexpected API response structure in album.search: %s", e)
 
         return []
 

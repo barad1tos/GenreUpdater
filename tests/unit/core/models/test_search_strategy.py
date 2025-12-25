@@ -20,7 +20,6 @@ class TestSearchStrategyEnum:
         assert SearchStrategy.SOUNDTRACK.value == "soundtrack"
         assert SearchStrategy.VARIOUS_ARTISTS.value == "various"
         assert SearchStrategy.STRIP_BRACKETS.value == "strip"
-        assert SearchStrategy.GREATEST_HITS.value == "hits"
 
 
 class TestSearchStrategyInfo:

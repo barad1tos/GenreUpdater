@@ -55,13 +55,11 @@ cleaning:
     - Expanded
     - Deluxe
     - Special
-    - Deluxe
     - Anniversary
     - Bonus Tracks
     - Digital Version
     - Original Soundtrack
     - Re-release
-    - Anniversary
 
   album_suffixes_to_remove:
     - Remaster
