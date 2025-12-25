@@ -127,6 +127,10 @@ class YearRetriever:
             logic_config.get("suspicion_threshold_years"),
             default=self.DEFAULT_SUSPICION_THRESHOLD_YEARS,
         )
+        self.min_confidence_for_new_year = resolve_positive_int(
+            logic_config.get("min_confidence_for_new_year"),
+            default=30,  # DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR
+        )
 
         # Initialize consistency checker
         self.year_consistency_checker = YearConsistencyChecker(
@@ -144,6 +148,7 @@ class YearRetriever:
             fallback_enabled=self.fallback_enabled,
             absurd_year_threshold=self.absurd_year_threshold,
             year_difference_threshold=self.year_difference_threshold,
+            min_confidence_for_new_year=self.min_confidence_for_new_year,
             api_orchestrator=self.external_api,
         )
 

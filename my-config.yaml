@@ -197,6 +197,7 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     suspicion_threshold_years: 10
     definitive_score_threshold: 50 # Increased from 20 to avoid false positives
     definitive_score_diff: 15 # Reduced from 15 to handle close scores
+    min_confidence_for_new_year: 30 # Minimum confidence to apply year when no existing year (Issue #105)
     preferred_countries:
       [
         "us",

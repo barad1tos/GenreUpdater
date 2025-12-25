@@ -421,3 +421,205 @@ class TestLastFmFallbackChain:
         assert result[0]["year"] == "1982"
         # Two API calls: primary + fallback 1
         assert call_count == 2
+
+
+class TestLastFmYearExtraction:
+    """Tests for Last.fm year extraction from various data sources."""
+
+    @staticmethod
+    def create_client() -> LastFmClient:
+        """Create a basic LastFmClient for testing."""
+        return LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=AsyncMock(return_value={}),
+            score_release_func=MagicMock(return_value=0.85),
+        )
+
+    def test_extract_year_from_release_date_valid(self) -> None:
+        """Test extraction from valid releasedate field."""
+        client = self.create_client()
+        album_data = {"releasedate": "15 Jan 2020"}
+        result = client._extract_year_from_release_date(album_data)
+        assert result == "2020"
+
+    def test_extract_year_from_release_date_empty(self) -> None:
+        """Test extraction when releasedate is empty."""
+        client = self.create_client()
+        album_data: dict[str, Any] = {"releasedate": ""}
+        result = client._extract_year_from_release_date(album_data)
+        assert result is None
+
+    def test_extract_year_from_release_date_missing(self) -> None:
+        """Test extraction when releasedate is missing."""
+        client = self.create_client()
+        album_data: dict[str, Any] = {}
+        result = client._extract_year_from_release_date(album_data)
+        assert result is None
+
+    def test_extract_year_from_wiki_content_released_on(self) -> None:
+        """Test extraction from wiki with 'released on' pattern."""
+        client = self.create_client()
+        album_data = {"wiki": {"content": "This album was released on January 15, 2020. It was a commercial success."}}
+        result = client._extract_year_from_wiki_content(album_data)
+        assert result == "2020"
+
+    def test_extract_year_from_wiki_content_released_in(self) -> None:
+        """Test extraction from wiki with 'released in YYYY' pattern."""
+        client = self.create_client()
+        album_data = {"wiki": {"content": "Originally released in 1985, this album became a classic."}}
+        result = client._extract_year_from_wiki_content(album_data)
+        assert result == "1985"
+
+    def test_extract_year_from_wiki_content_year_album(self) -> None:
+        """Test extraction from wiki with 'YYYY album' pattern."""
+        client = self.create_client()
+        album_data = {"wiki": {"content": "This is a 2019 album that defined the decade."}}
+        result = client._extract_year_from_wiki_content(album_data)
+        assert result == "2019"
+
+    def test_extract_year_from_wiki_content_empty_wiki(self) -> None:
+        """Test extraction when wiki content is empty."""
+        client = self.create_client()
+        album_data = {"wiki": {"content": ""}}
+        result = client._extract_year_from_wiki_content(album_data)
+        assert result is None
+
+    def test_extract_year_from_wiki_content_no_wiki(self) -> None:
+        """Test extraction when wiki is missing."""
+        client = self.create_client()
+        album_data: dict[str, Any] = {}
+        result = client._extract_year_from_wiki_content(album_data)
+        assert result is None
+
+    def test_extract_year_from_tags_dict_format(self) -> None:
+        """Test extraction from tags in dict format."""
+        client = self.create_client()
+        album_data = {
+            "tags": {
+                "tag": [
+                    {"name": "rock"},
+                    {"name": "2015"},
+                    {"name": "alternative"},
+                ]
+            }
+        }
+        result = client._extract_year_from_tags(album_data)
+        assert result == "2015"
+
+    def test_extract_year_from_tags_string_format(self) -> None:
+        """Test extraction from tags in string list format."""
+        client = self.create_client()
+        album_data = {"tags": {"tag": ["rock", "1999", "electronic"]}}
+        result = client._extract_year_from_tags(album_data)
+        assert result == "1999"
+
+    def test_extract_year_from_tags_no_year_tag(self) -> None:
+        """Test extraction when no year tags present."""
+        client = self.create_client()
+        album_data = {
+            "tags": {
+                "tag": [
+                    {"name": "rock"},
+                    {"name": "metal"},
+                ]
+            }
+        }
+        result = client._extract_year_from_tags(album_data)
+        assert result is None
+
+    def test_extract_year_from_tags_missing(self) -> None:
+        """Test extraction when tags are missing."""
+        client = self.create_client()
+        album_data: dict[str, Any] = {}
+        result = client._extract_year_from_tags(album_data)
+        assert result is None
+
+
+class TestLastFmFuzzySearch:
+    """Tests for Last.fm album.search fuzzy search functionality."""
+
+    @pytest.mark.asyncio
+    async def test_search_albums_returns_results(self) -> None:
+        """Test album search returns formatted results."""
+        mock_response = {
+            "results": {
+                "albummatches": {
+                    "album": [
+                        {"name": "Thriller", "artist": "Michael Jackson"},
+                        {"name": "Thriller (Deluxe)", "artist": "Michael Jackson"},
+                    ]
+                }
+            }
+        }
+        mock_api = AsyncMock(return_value=mock_response)
+        client = LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api,
+            score_release_func=MagicMock(return_value=50.0),
+        )
+
+        result = await client._search_albums("Thriller")
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Thriller"
+        assert result[0]["artist"] == "Michael Jackson"
+
+    @pytest.mark.asyncio
+    async def test_search_albums_disabled(self) -> None:
+        """Test search returns empty when Last.fm is disabled."""
+        mock_api = AsyncMock(return_value={})
+        client = LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api,
+            score_release_func=MagicMock(return_value=50.0),
+            use_lastfm=False,
+        )
+
+        result = await client._search_albums("Thriller")
+
+        assert result == []
+        mock_api.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_search_albums_empty_response(self) -> None:
+        """Test search handles empty response gracefully."""
+        mock_api = AsyncMock(return_value=None)
+        client = LastFmClient(
+            api_key="test_key",
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api,
+            score_release_func=MagicMock(return_value=50.0),
+        )
+
+        result = await client._search_albums("NonExistent Album")
+
+        assert result == []
+
+
+class TestLastFmArtistMatchEdgeCases:
+    """Edge case tests for Last.fm artist matching."""
+
+    def test_artist_match_the_prefix_only(self) -> None:
+        """Test matching 'The Beatles' against 'Beatles'."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # "The Beatles" without "The" matches "Beatles"
+        assert client._is_artist_match("The Beatles", "Beatles")
+
+    def test_artist_no_match_partial_word(self) -> None:
+        """Test that partial word matches are rejected (Air vs Airship)."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # "Air" should NOT match "Airship" (not a whole word)
+        assert not client._is_artist_match("Airship", "Air")
+
+    def test_artist_match_word_boundary(self) -> None:
+        """Test word-level matching respects boundaries."""
+        client = TestLastFmAlbumCleaning.create_client_with_keywords([])
+        # "Air" should match "Air Supply" (whole word present)
+        assert client._is_artist_match("Air Supply", "Air")

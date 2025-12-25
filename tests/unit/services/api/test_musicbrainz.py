@@ -187,3 +187,82 @@ class TestMusicBrainzClientAllure:
         begin, end = await client.get_artist_activity_period("Test Artist")
         assert begin == "1980"
         assert end == "2020"
+
+
+class TestMusicBrainzArtistMatching:
+    """Tests for MusicBrainz artist matching and filtering."""
+
+    @staticmethod
+    def create_client() -> MusicBrainzClient:
+        """Create a basic MusicBrainzClient for testing."""
+        return MusicBrainzClient(
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=AsyncMock(return_value={}),
+            score_release_func=MagicMock(return_value=0.85),
+        )
+
+    def test_artist_matches_any_credit_direct_match(self) -> None:
+        """Test direct artist name match in credits.
+
+        Note: BaseApiClient._normalize_name is a stub that returns unchanged,
+        so matching is case-sensitive in the base implementation.
+        """
+        client = self.create_client()
+        artist_credits = [{"artist": {"name": "Metallica"}}]
+        # Exact match (case-sensitive since base _normalize_name is stub)
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is True
+
+    def test_artist_matches_any_credit_alias_match(self) -> None:
+        """Test artist alias match in credits."""
+        client = self.create_client()
+        artist_credits = [{"artist": {"name": "The Beatles", "aliases": [{"name": "Beatles"}]}}]
+        # Exact alias match
+        assert client._artist_matches_any_credit(artist_credits, "Beatles") is True
+
+    def test_artist_matches_any_credit_no_match(self) -> None:
+        """Test no match when artist not in credits."""
+        client = self.create_client()
+        artist_credits = [{"artist": {"name": "Iron Maiden"}}]
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is False
+
+    def test_artist_matches_any_credit_empty_credits(self) -> None:
+        """Test empty credits list."""
+        client = self.create_client()
+        artist_credits: list[dict[str, Any]] = []
+        assert client._artist_matches_any_credit(artist_credits, "Metallica") is False
+
+    def test_filter_release_groups_by_artist_matches(self) -> None:
+        """Test filtering release groups by artist."""
+        client = self.create_client()
+        release_groups = [
+            {"title": "Master of Puppets", "artist-credit": [{"artist": {"name": "Metallica"}}]},
+            {"title": "The Number of the Beast", "artist-credit": [{"artist": {"name": "Iron Maiden"}}]},
+        ]
+        result = client._filter_release_groups_by_artist(release_groups, "Metallica")
+        assert len(result) == 1
+        assert result[0]["title"] == "Master of Puppets"
+
+    def test_filter_release_groups_no_credits(self) -> None:
+        """Test filtering skips release groups without credits."""
+        client = self.create_client()
+        release_groups = [
+            {"title": "Unknown Album"},  # No artist-credit
+            {"title": "Master of Puppets", "artist-credit": [{"artist": {"name": "Metallica"}}]},
+        ]
+        result = client._filter_release_groups_by_artist(release_groups, "Metallica")
+        assert len(result) == 1
+
+    def test_filter_release_groups_via_alias(self) -> None:
+        """Test filtering matches via artist alias (Issue #102 - canonical name resolution)."""
+        client = self.create_client()
+        release_groups = [
+            {
+                "title": "Let It Be",
+                "artist-credit": [{"artist": {"name": "The Beatles", "aliases": [{"name": "Beatles"}]}}],
+            }
+        ]
+        # Search by alias should find the release group
+        result = client._filter_release_groups_by_artist(release_groups, "Beatles")
+        assert len(result) == 1
+        assert result[0]["title"] == "Let It Be"
