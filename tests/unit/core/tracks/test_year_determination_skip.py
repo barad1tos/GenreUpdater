@@ -1,10 +1,10 @@
-"""Tests for YearDeterminator skip logic with new_year tracking and pre-check pipeline.
+"""Tests for YearDeterminator skip logic with year_set_by_mgu tracking and pre-check pipeline.
 
 Tests the skip re-processing optimization added in Issue #85.
-When new_year matches current year, the album was already processed and should be skipped.
+When year_set_by_mgu matches current year, the album was already processed and should be skipped.
 
 Also tests the pre-check pipeline added in Issue #75:
-- Pre-check 1: Already processed (new_year tracking)
+- Pre-check 1: Already processed (year_set_by_mgu tracking)
 - Pre-check 2: Recently rejected by FALLBACK
 - Pre-check 3: Year consistent across all tracks
 """
@@ -36,8 +36,8 @@ def _create_track(
     artist: str = "Artist",
     album: str = "Album",
     year: str | None = None,
-    old_year: str | None = None,
-    new_year: str | None = None,
+    year_before_mgu: str | None = None,
+    year_set_by_mgu: str | None = None,
 ) -> TrackDict:
     """Create a test TrackDict with specified values."""
     return TrackDict(
@@ -46,8 +46,8 @@ def _create_track(
         artist=artist,
         album=album,
         year=year,
-        old_year=old_year,
-        new_year=new_year,
+        year_before_mgu=year_before_mgu,
+        year_set_by_mgu=year_set_by_mgu,
     )
 
 
@@ -114,13 +114,13 @@ def _create_year_determinator(
 
 @pytest.mark.unit
 class TestShouldSkipAlbumNewYearLogic:
-    """Tests for should_skip_album new_year skip logic (Pre-check 1)."""
+    """Tests for should_skip_album year_set_by_mgu skip logic (Pre-check 1)."""
 
     @pytest.mark.asyncio
-    async def test_skips_when_new_year_matches_current_year(self) -> None:
-        """Should skip when new_year equals current year (already processed)."""
+    async def test_skips_when_year_set_by_mgu_matches_current_year(self) -> None:
+        """Should skip when year_set_by_mgu equals current year (already processed)."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", new_year="2020")]
+        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -128,12 +128,12 @@ class TestShouldSkipAlbumNewYearLogic:
         assert reason == "already_processed"
 
     @pytest.mark.asyncio
-    async def test_does_not_skip_when_new_year_differs_from_current(self) -> None:
-        """Should NOT skip when new_year differs from current year (user changed)."""
+    async def test_does_not_skip_when_year_set_by_mgu_differs_from_current(self) -> None:
+        """Should NOT skip when year_set_by_mgu differs from current year (user changed)."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2018", new_year="2020")]
+        tracks = [_create_track("1", year="2018", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -141,12 +141,12 @@ class TestShouldSkipAlbumNewYearLogic:
         assert reason == ""
 
     @pytest.mark.asyncio
-    async def test_does_not_skip_when_new_year_not_set(self) -> None:
-        """Should NOT skip when new_year is not set (not yet processed)."""
+    async def test_does_not_skip_when_year_set_by_mgu_not_set(self) -> None:
+        """Should NOT skip when year_set_by_mgu is not set (not yet processed)."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", new_year=None)]
+        tracks = [_create_track("1", year="2020", year_set_by_mgu=None)]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -154,12 +154,12 @@ class TestShouldSkipAlbumNewYearLogic:
         assert reason == ""
 
     @pytest.mark.asyncio
-    async def test_does_not_skip_when_new_year_empty_string(self) -> None:
-        """Should NOT skip when new_year is empty string."""
+    async def test_does_not_skip_when_year_set_by_mgu_empty_string(self) -> None:
+        """Should NOT skip when year_set_by_mgu is empty string."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", new_year="")]
+        tracks = [_create_track("1", year="2020", year_set_by_mgu="")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -168,11 +168,11 @@ class TestShouldSkipAlbumNewYearLogic:
 
     @pytest.mark.asyncio
     async def test_does_not_skip_when_current_year_empty(self) -> None:
-        """Should NOT skip when current year is empty but new_year is set."""
+        """Should NOT skip when current year is empty but year_set_by_mgu is set."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="", new_year="2020")]
+        tracks = [_create_track("1", year="", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -180,22 +180,22 @@ class TestShouldSkipAlbumNewYearLogic:
         assert reason == ""
 
     @pytest.mark.asyncio
-    async def test_skips_when_new_year_matches_empty_current(self) -> None:
-        """Should skip when both new_year and current year are empty strings."""
+    async def test_skips_when_year_set_by_mgu_matches_empty_current(self) -> None:
+        """Should skip when both year_set_by_mgu and current year are empty strings."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="", new_year="")]
+        tracks = [_create_track("1", year="", year_set_by_mgu="")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # Empty string new_year is falsy, so it won't enter the skip block
+        # Empty string year_set_by_mgu is falsy, so it won't enter the skip block
         # This tests that empty strings are handled correctly
         assert should_skip is False
 
     @pytest.mark.asyncio
-    async def test_force_mode_bypasses_new_year_skip(self) -> None:
-        """Should NOT skip when force=True even if new_year matches."""
+    async def test_force_mode_bypasses_year_set_by_mgu_skip(self) -> None:
+        """Should NOT skip when force=True even if year_set_by_mgu matches."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", new_year="2020")]
+        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album", force=True)
 
@@ -223,30 +223,30 @@ class TestShouldSkipAlbumEmptyTracks:
 
 @pytest.mark.unit
 class TestShouldSkipAlbumCacheInteraction:
-    """Tests for should_skip_album cache and new_year interaction."""
+    """Tests for should_skip_album cache and year_set_by_mgu interaction."""
 
     @pytest.mark.asyncio
-    async def test_new_year_check_runs_before_cache_check(self) -> None:
-        """Should check new_year before querying cache."""
+    async def test_year_set_by_mgu_check_runs_before_cache_check(self) -> None:
+        """Should check year_set_by_mgu before querying cache."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value="2020")
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", new_year="2020")]
+        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # Should skip due to new_year match, cache should not be queried
+        # Should skip due to year_set_by_mgu match, cache should not be queried
         assert should_skip is True
         assert reason == "already_processed"
         cache_service.get_album_year_from_cache.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_cache_queried_when_new_year_not_matching(self) -> None:
-        """Should query cache when new_year doesn't match current."""
+    async def test_cache_queried_when_year_set_by_mgu_not_matching(self) -> None:
+        """Should query cache when year_set_by_mgu doesn't match current."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value="2020")
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2018", new_year="2020")]
+        tracks = [_create_track("1", year="2018", year_set_by_mgu="2020")]
 
         await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -258,17 +258,17 @@ class TestShouldSkipAlbumMultipleTracks:
     """Tests for should_skip_album with multiple tracks."""
 
     @pytest.mark.asyncio
-    async def test_uses_first_track_for_new_year_check(self) -> None:
-        """Should use first track's new_year for skip check."""
+    async def test_uses_first_track_for_year_set_by_mgu_check(self) -> None:
+        """Should use first track's year_set_by_mgu for skip check."""
         determinator = _create_year_determinator()
         tracks = [
-            _create_track("1", year="2020", new_year="2020"),
-            _create_track("2", year="2018", new_year="2019"),  # Different values
+            _create_track("1", year="2020", year_set_by_mgu="2020"),
+            _create_track("2", year="2018", year_set_by_mgu="2019"),  # Different values
         ]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # Should skip based on first track's new_year matching
+        # Should skip based on first track's year_set_by_mgu matching
         assert should_skip is True
         assert reason == "already_processed"
 
@@ -279,8 +279,8 @@ class TestShouldSkipAlbumMultipleTracks:
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
         tracks = [
-            _create_track("1", year="2018", new_year="2020"),  # Mismatch
-            _create_track("2", year="2020", new_year="2020"),  # Match
+            _create_track("1", year="2018", year_set_by_mgu="2020"),  # Mismatch
+            _create_track("2", year="2020", year_set_by_mgu="2020"),  # Match
         ]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
@@ -291,31 +291,31 @@ class TestShouldSkipAlbumMultipleTracks:
 
 @pytest.mark.unit
 class TestShouldSkipAlbumWithOldYear:
-    """Tests for should_skip_album handling of old_year field."""
+    """Tests for should_skip_album handling of year_before_mgu field."""
 
     @pytest.mark.asyncio
-    async def test_old_year_does_not_affect_skip_logic(self) -> None:
-        """old_year should not affect skip decision."""
+    async def test_year_before_mgu_does_not_affect_skip_logic(self) -> None:
+        """year_before_mgu should not affect skip decision."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", old_year="2015", new_year="2020")]
+        tracks = [_create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # Should still skip - old_year is irrelevant to skip logic
+        # Should still skip - year_before_mgu is irrelevant to skip logic
         assert should_skip is True
         assert reason == "already_processed"
 
     @pytest.mark.asyncio
-    async def test_old_year_preserved_when_skipping(self) -> None:
-        """old_year should be preserved when album is skipped."""
+    async def test_year_before_mgu_preserved_when_skipping(self) -> None:
+        """year_before_mgu should be preserved when album is skipped."""
         determinator = _create_year_determinator()
-        track = _create_track("1", year="2020", old_year="2015", new_year="2020")
+        track = _create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")
         tracks = [track]
 
         await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # old_year should be unchanged
-        assert track.old_year == "2015"
+        # year_before_mgu should be unchanged
+        assert track.year_before_mgu == "2015"
 
 
 @pytest.mark.unit
@@ -485,9 +485,9 @@ class TestPreCheckPriority:
     async def test_already_processed_takes_priority_over_consistent_year(self) -> None:
         """Pre-check 1 (already_processed) should run before pre-check 3 (year_consistent)."""
         determinator = _create_year_determinator()
-        # All tracks have same year AND new_year matches current
+        # All tracks have same year AND year_set_by_mgu matches current
         tracks = [
-            _create_track("1", year="2020", new_year="2020"),
+            _create_track("1", year="2020", year_set_by_mgu="2020"),
             _create_track("2", year="2020"),
             _create_track("3", year="2020"),
         ]

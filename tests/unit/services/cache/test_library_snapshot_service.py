@@ -1321,7 +1321,7 @@ class TestParseRawTrack:
             "track_status": "played",
             "year": "2020",
             "release_year": "2020",
-            "new_year": "2021",
+            "year_set_by_mgu": "2021",
         }
         result = LibrarySnapshotService._parse_raw_track(raw)
         assert result.id == "123"

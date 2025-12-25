@@ -27,8 +27,8 @@ TRACK_FIELDNAMES: list[str] = [
     "date_added",
     "last_modified",
     "track_status",
-    "old_year",  # Original year before first update (for rollback/audit)
-    "new_year",  # Year after last update (for skip logic)
+    "year_before_mgu",  # Original year before first MGU update (for rollback/audit)
+    "year_set_by_mgu",  # Year that MGU applied (for skip logic)
 ]
 
 

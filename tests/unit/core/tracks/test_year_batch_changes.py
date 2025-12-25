@@ -1,8 +1,8 @@
 """Tests for YearBatchProcessor year change tracking functionality.
 
-Tests the old_year population and conflict detection added in Issue #85.
-- old_year: original year before first update (preserved, set once)
-- new_year: year after last update (updated each time)
+Tests the year_before_mgu population and conflict detection added in Issue #85.
+- year_before_mgu: original year before first update (preserved, set once)
+- year_set_by_mgu: year after last update (updated each time)
 - Conflict detection: when user manually changes year in Music.app
 """
 
@@ -28,8 +28,8 @@ def _create_track(
     artist: str = "Artist",
     album: str = "Album",
     year: str | None = None,
-    old_year: str | None = None,
-    new_year: str | None = None,
+    year_before_mgu: str | None = None,
+    year_set_by_mgu: str | None = None,
 ) -> TrackDict:
     """Create a test TrackDict with specified values."""
     return TrackDict(
@@ -38,8 +38,8 @@ def _create_track(
         artist=artist,
         album=album,
         year=year,
-        old_year=old_year,
-        new_year=new_year,
+        year_before_mgu=year_before_mgu,
+        year_set_by_mgu=year_set_by_mgu,
     )
 
 
@@ -95,11 +95,11 @@ def _create_year_batch_processor(
 
 @pytest.mark.unit
 class TestRecordSuccessfulUpdatesOldYear:
-    """Tests for _record_successful_updates old_year population."""
+    """Tests for _record_successful_updates year_before_mgu population."""
 
-    def test_sets_old_year_when_not_set(self) -> None:
-        """Should set old_year from current year when not already set."""
-        track = _create_track("1", year="2015", old_year=None, new_year=None)
+    def test_sets_year_before_mgu_when_not_set(self) -> None:
+        """Should set year_before_mgu from current year when not already set."""
+        track = _create_track("1", year="2015", year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -112,12 +112,12 @@ class TestRecordSuccessfulUpdatesOldYear:
             changes_log=changes_log,
         )
 
-        # old_year should be set to original value
-        assert track.old_year == "2015"
+        # year_before_mgu should be set to original value
+        assert track.year_before_mgu == "2015"
 
-    def test_sets_old_year_empty_when_year_was_none(self) -> None:
-        """Should set old_year to empty string when original year was None."""
-        track = _create_track("1", year=None, old_year=None, new_year=None)
+    def test_sets_year_before_mgu_empty_when_year_was_none(self) -> None:
+        """Should set year_before_mgu to empty string when original year was None."""
+        track = _create_track("1", year=None, year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -130,12 +130,12 @@ class TestRecordSuccessfulUpdatesOldYear:
             changes_log=changes_log,
         )
 
-        # old_year should be empty string
-        assert track.old_year == ""
+        # year_before_mgu should be empty string
+        assert track.year_before_mgu == ""
 
-    def test_preserves_existing_old_year(self) -> None:
-        """Should NOT overwrite existing old_year (preserve original)."""
-        track = _create_track("1", year="2018", old_year="2015", new_year="2018")
+    def test_preserves_existing_year_before_mgu(self) -> None:
+        """Should NOT overwrite existing year_before_mgu (preserve original)."""
+        track = _create_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2018")
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -148,13 +148,13 @@ class TestRecordSuccessfulUpdatesOldYear:
             changes_log=changes_log,
         )
 
-        # old_year should remain unchanged
-        assert track.old_year == "2015"
+        # year_before_mgu should remain unchanged
+        assert track.year_before_mgu == "2015"
 
-    def test_preserves_empty_string_old_year(self) -> None:
-        """Should preserve old_year even if it's empty string (falsy but set)."""
+    def test_preserves_empty_string_year_before_mgu(self) -> None:
+        """Should preserve year_before_mgu even if it's empty string (falsy but set)."""
         # Note: empty string is falsy, so this tests the exact condition
-        track = _create_track("1", year="2018", old_year="", new_year="2018")
+        track = _create_track("1", year="2018", year_before_mgu="", year_set_by_mgu="2018")
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -167,13 +167,13 @@ class TestRecordSuccessfulUpdatesOldYear:
             changes_log=changes_log,
         )
 
-        # Empty string old_year is falsy, so it will be overwritten
-        # This is the expected behavior - only non-empty old_year is preserved
-        assert track.old_year == "2018"
+        # Empty string year_before_mgu is falsy, so it will be overwritten
+        # This is the expected behavior - only non-empty year_before_mgu is preserved
+        assert track.year_before_mgu == "2018"
 
-    def test_updates_year_and_new_year(self) -> None:
-        """Should update both year and new_year to new value."""
-        track = _create_track("1", year="2015", old_year=None, new_year=None)
+    def test_updates_year_and_year_set_by_mgu(self) -> None:
+        """Should update both year and year_set_by_mgu to new value."""
+        track = _create_track("1", year="2015", year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -187,11 +187,11 @@ class TestRecordSuccessfulUpdatesOldYear:
         )
 
         assert track.year == "2020"
-        assert track.new_year == "2020"
+        assert track.year_set_by_mgu == "2020"
 
     def test_creates_change_log_entry(self) -> None:
         """Should create ChangeLogEntry with old and new year."""
-        track = _create_track("1", name="Test Track", year="2015", old_year=None, new_year=None)
+        track = _create_track("1", name="Test Track", year="2015", year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -207,15 +207,15 @@ class TestRecordSuccessfulUpdatesOldYear:
         assert len(changes_log) == 1
         entry = changes_log[0]
         assert entry.change_type == "year_update"
-        assert entry.old_year == "2015"
-        assert entry.new_year == "2020"
+        assert entry.year_before_mgu == "2015"
+        assert entry.year_set_by_mgu == "2020"
         assert entry.track_name == "Test Track"
         assert entry.artist == "Artist"
         assert entry.album_name == "Album"
 
     def test_appends_to_updated_tracks(self) -> None:
         """Should append updated track copy to updated_tracks list."""
-        track = _create_track("1", year="2015", old_year=None, new_year=None)
+        track = _create_track("1", year="2015", year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -239,9 +239,9 @@ class TestRecordSuccessfulUpdatesMultipleTracks:
     def test_processes_all_tracks(self) -> None:
         """Should process all tracks in the list."""
         tracks = [
-            _create_track("1", year="2015", old_year=None),
-            _create_track("2", year="2016", old_year=None),
-            _create_track("3", year="2017", old_year=None),
+            _create_track("1", year="2015", year_before_mgu=None),
+            _create_track("2", year="2016", year_before_mgu=None),
+            _create_track("3", year="2017", year_before_mgu=None),
         ]
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
@@ -257,16 +257,16 @@ class TestRecordSuccessfulUpdatesMultipleTracks:
 
         assert len(updated_tracks) == 3
         assert len(changes_log) == 3
-        assert tracks[0].old_year == "2015"
-        assert tracks[1].old_year == "2016"
-        assert tracks[2].old_year == "2017"
+        assert tracks[0].year_before_mgu == "2015"
+        assert tracks[1].year_before_mgu == "2016"
+        assert tracks[2].year_before_mgu == "2017"
 
-    def test_each_track_gets_own_old_year(self) -> None:
-        """Each track should preserve its own original year in old_year."""
+    def test_each_track_gets_own_year_before_mgu(self) -> None:
+        """Each track should preserve its own original year in year_before_mgu."""
         tracks = [
-            _create_track("1", year="2015", old_year=None),
-            _create_track("2", year=None, old_year=None),  # No year
-            _create_track("3", year="2017", old_year="2014"),  # Already has old_year
+            _create_track("1", year="2015", year_before_mgu=None),
+            _create_track("2", year=None, year_before_mgu=None),  # No year
+            _create_track("3", year="2017", year_before_mgu="2014"),  # Already has year_before_mgu
         ]
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
@@ -280,9 +280,9 @@ class TestRecordSuccessfulUpdatesMultipleTracks:
             changes_log=changes_log,
         )
 
-        assert tracks[0].old_year == "2015"  # Set from year
-        assert tracks[1].old_year == ""  # Empty since year was None
-        assert tracks[2].old_year == "2014"  # Preserved
+        assert tracks[0].year_before_mgu == "2015"  # Set from year
+        assert tracks[1].year_before_mgu == ""  # Empty since year was None
+        assert tracks[2].year_before_mgu == "2014"  # Preserved
 
 
 @pytest.mark.unit
@@ -292,31 +292,31 @@ class TestDetectUserYearChanges:
     def test_detects_user_change(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should detect when user manually changed year."""
         processor = _create_year_batch_processor()
-        tracks = [_create_track("1", year="2018", old_year="2015", new_year="2020")]
+        tracks = [_create_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2020")]
 
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
 
         assert "User manually changed year" in caplog.text
         assert "Artist - Album" in caplog.text
-        assert "2015" in caplog.text  # old_year
-        assert "2020" in caplog.text  # new_year (we set)
+        assert "2015" in caplog.text  # year_before_mgu
+        assert "2020" in caplog.text  # year_set_by_mgu (we set)
         assert "2018" in caplog.text  # current year
 
     def test_no_detection_when_years_match(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should NOT log when new_year matches current year."""
+        """Should NOT log when year_set_by_mgu matches current year."""
         processor = _create_year_batch_processor()
-        tracks = [_create_track("1", year="2020", old_year="2015", new_year="2020")]
+        tracks = [_create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")]
 
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
 
         assert "User manually changed year" not in caplog.text
 
-    def test_no_detection_when_new_year_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should NOT log when new_year is not set."""
+    def test_no_detection_when_year_set_by_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should NOT log when year_set_by_mgu is not set."""
         processor = _create_year_batch_processor()
-        tracks = [_create_track("1", year="2018", old_year="2015", new_year=None)]
+        tracks = [_create_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu=None)]
 
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
@@ -326,17 +326,17 @@ class TestDetectUserYearChanges:
     def test_no_detection_when_current_year_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should NOT log when current year is not set."""
         processor = _create_year_batch_processor()
-        tracks = [_create_track("1", year=None, old_year="2015", new_year="2020")]
+        tracks = [_create_track("1", year=None, year_before_mgu="2015", year_set_by_mgu="2020")]
 
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
 
         assert "User manually changed year" not in caplog.text
 
-    def test_logs_unknown_when_old_year_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log 'unknown' when old_year is not set."""
+    def test_logs_unknown_when_year_before_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log 'unknown' when year_before_mgu is not set."""
         processor = _create_year_batch_processor()
-        tracks = [_create_track("1", year="2018", old_year=None, new_year="2020")]
+        tracks = [_create_track("1", year="2018", year_before_mgu=None, year_set_by_mgu="2020")]
 
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
@@ -347,8 +347,8 @@ class TestDetectUserYearChanges:
         """Should log only once even if multiple tracks have conflicts."""
         processor = _create_year_batch_processor()
         tracks = [
-            _create_track("1", year="2018", old_year="2015", new_year="2020"),
-            _create_track("2", year="2017", old_year="2014", new_year="2019"),
+            _create_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2020"),
+            _create_track("2", year="2017", year_before_mgu="2014", year_set_by_mgu="2019"),
         ]
 
         with caplog.at_level(logging.INFO):
@@ -373,9 +373,9 @@ class TestDetectUserYearChanges:
 class TestYearChangeTrackingEndToEnd:
     """End-to-end tests for year change tracking flow."""
 
-    def test_first_update_sets_old_year(self) -> None:
-        """First update should set old_year from original value."""
-        track = _create_track("1", year="2015", old_year=None, new_year=None)
+    def test_first_update_sets_year_before_mgu(self) -> None:
+        """First update should set year_before_mgu from original value."""
+        track = _create_track("1", year="2015", year_before_mgu=None, year_set_by_mgu=None)
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -389,13 +389,13 @@ class TestYearChangeTrackingEndToEnd:
             changes_log=changes_log,
         )
 
-        assert track.old_year == "2015"  # Original preserved
+        assert track.year_before_mgu == "2015"  # Original preserved
         assert track.year == "2020"  # Updated
-        assert track.new_year == "2020"  # Set
+        assert track.year_set_by_mgu == "2020"  # Set
 
-    def test_second_update_preserves_old_year(self) -> None:
-        """Second update should preserve original old_year."""
-        track = _create_track("1", year="2020", old_year="2015", new_year="2020")
+    def test_second_update_preserves_year_before_mgu(self) -> None:
+        """Second update should preserve original year_before_mgu."""
+        track = _create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -409,13 +409,13 @@ class TestYearChangeTrackingEndToEnd:
             changes_log=changes_log,
         )
 
-        assert track.old_year == "2015"  # Still original
+        assert track.year_before_mgu == "2015"  # Still original
         assert track.year == "2021"  # Updated
-        assert track.new_year == "2021"  # Updated
+        assert track.year_set_by_mgu == "2021"  # Updated
 
     def test_change_log_reflects_actual_change(self) -> None:
-        """Change log should show the actual year change, not old_year."""
-        track = _create_track("1", year="2020", old_year="2015", new_year="2020")
+        """Change log should show the actual year change, not year_before_mgu."""
+        track = _create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")
         updated_tracks: list[TrackDict] = []
         changes_log: list[ChangeLogEntry] = []
 
@@ -430,5 +430,5 @@ class TestYearChangeTrackingEndToEnd:
         )
 
         entry = changes_log[0]
-        assert entry.old_year == "2020"  # Previous year (not old_year)
-        assert entry.new_year == "2021"  # New year
+        assert entry.year_before_mgu == "2020"  # Previous year (not year_before_mgu)
+        assert entry.year_set_by_mgu == "2021"  # New year

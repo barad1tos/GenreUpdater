@@ -92,8 +92,8 @@ class Key:
     TRACK_NAME = "track_name"
     OLD_GENRE = "old_genre"
     NEW_GENRE = "new_genre"
-    OLD_YEAR = "old_year"
-    NEW_YEAR = "new_year"
+    YEAR_BEFORE_MGU = "year_before_mgu"
+    YEAR_SET_BY_MGU = "year_set_by_mgu"
     OLD_TRACK_NAME = "old_track_name"
     NEW_TRACK_NAME = "new_track_name"
     OLD_ALBUM_NAME = "old_album_name"
@@ -169,8 +169,8 @@ _HEADERS_BY_TYPE: dict[str, dict[str, str]] = {
     "year": {
         "Artist": Key.ARTIST,
         "Album": Key.ALBUM,
-        "Old Year": Key.OLD_YEAR,
-        "New Year": Key.NEW_YEAR,
+        "Old Year": Key.YEAR_BEFORE_MGU,
+        "New Year": Key.YEAR_SET_BY_MGU,
     },
     "cleaning": {
         "Artist": Key.ARTIST,
@@ -249,11 +249,13 @@ def _create_value_transformers() -> dict[str, Callable[[dict[str, str]], str]]:
 
 def _determine_if_changed(header: str, value: str, record: dict[str, str]) -> bool:
     """Determine if a value represents an actual change."""
-    if "new" not in header.lower() or not value:
+    # Check for "new" style fields OR semantic naming (year_set_by_mgu)
+    is_new_value_field = "new" in header.lower() or "set_by_mgu" in header.lower()
+    if not is_new_value_field or not value:
         return False
 
     if "year" in header.lower():
-        old_year = record.get(Key.OLD_YEAR, "")
+        old_year = record.get(Key.YEAR_BEFORE_MGU, "")
         return old_year != value
     if "genre" in header.lower():
         old_genre = record.get(Key.OLD_GENRE, "")
@@ -370,8 +372,8 @@ def _render_year_change(console: Console, record: dict[str, Any]) -> None:
     """Render year update change."""
     artist = record.get(Key.ARTIST, "")
     album = record.get(Key.ALBUM, "")
-    old_val = record.get(Key.OLD_YEAR, "")
-    new_val = record.get(Key.NEW_YEAR, "")
+    old_val = record.get(Key.YEAR_BEFORE_MGU, "")
+    new_val = record.get(Key.YEAR_SET_BY_MGU, "")
     item = f"{artist} - {album}"
     _print_change_line(console, item, old_val, new_val, highlight=(old_val != new_val))
 
@@ -444,8 +446,8 @@ def _get_csv_fieldnames() -> list[str]:
         Key.TRACK_NAME,
         Key.OLD_GENRE,
         Key.NEW_GENRE,
-        Key.OLD_YEAR,
-        Key.NEW_YEAR,
+        Key.YEAR_BEFORE_MGU,
+        Key.YEAR_SET_BY_MGU,
         Key.OLD_TRACK_NAME,
         Key.NEW_TRACK_NAME,
         Key.OLD_ALBUM_NAME,
@@ -477,7 +479,7 @@ def _is_real_change(change: dict[str, Any], logger: logging.Logger | None = None
     if change_type == "genre_update":
         return change.get("old_genre") != change.get("new_genre")
     if change_type == "year_update":
-        return change.get("old_year") != change.get("new_year")
+        return change.get("year_before_mgu") != change.get("year_set_by_mgu")
     if change_type == "name_clean":
         return change.get("old_track_name") != change.get("new_track_name")
     if change_type == "metadata_cleaning":
@@ -577,7 +579,7 @@ def _determine_change_type(change: dict[str, Any]) -> str:
     """Determine the change type based on available fields."""
     if ("new_genre" in change and change.get("new_genre")) or change.get("field") == "genre":
         return "genre"
-    if ("new_year" in change and change.get("new_year")) or change.get("field") == "year":
+    if ("year_set_by_mgu" in change and change.get("year_set_by_mgu")) or change.get("field") == "year":
         return "year"
     if "new_track_name" in change or "new_album_name" in change or change.get("field") == "name":
         return "name"
@@ -594,10 +596,10 @@ def _map_genre_field_values(change: dict[str, Any]) -> None:
 
 def _map_year_field_values(change: dict[str, Any]) -> None:
     """Map year field values from old_value/new_value to specific fields."""
-    if "old_value" in change and "old_year" not in change:
-        change["old_year"] = change["old_value"]
-    if "new_value" in change and "new_year" not in change:
-        change["new_year"] = change["new_value"]
+    if "old_value" in change and "year_before_mgu" not in change:
+        change["year_before_mgu"] = change["old_value"]
+    if "new_value" in change and "year_set_by_mgu" not in change:
+        change["year_set_by_mgu"] = change["new_value"]
 
 
 def _normalize_field_mappings(change: dict[str, Any]) -> None:

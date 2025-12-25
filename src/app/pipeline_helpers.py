@@ -110,8 +110,8 @@ def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:
         "track_status",
         "original_artist",
         "original_album",
-        "old_year",
-        "new_year",
+        "year_before_mgu",
+        "year_set_by_mgu",
         "release_year",
     ]
     for field in optional_str_fields:

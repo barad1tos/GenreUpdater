@@ -625,7 +625,7 @@ class TestCreateUpdatedTrack:
     the inline behavior directly using model_copy().
     """
 
-    def test_creates_track_with_new_year(self) -> None:
+    def test_creates_track_with_year_set_by_mgu(self) -> None:
         """Test creates track copy with new year using model_copy (inline pattern)."""
         track = TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="2019")
         # This is the inline pattern now used in _update_tracks_for_album
@@ -978,22 +978,22 @@ class TestCreateChangeEntry:
             track_name=track.name or "",
             artist="Artist",
             album_name="Album",
-            old_year=track.year or "",
-            new_year="2020",
+            year_before_mgu=track.year or "",
+            year_set_by_mgu="2020",
         )
         assert entry.change_type == "year_update"
         assert entry.track_id == "123"
         assert entry.artist == "Artist"
         assert entry.album_name == "Album"
         assert entry.track_name == "Track Name"
-        assert entry.old_year == "2019"
-        assert entry.new_year == "2020"
+        assert entry.year_before_mgu == "2019"
+        assert entry.year_set_by_mgu == "2020"
 
     def test_handles_none_year_values(self) -> None:
         """Test handles None values for year fields using inline pattern."""
         track = TrackDict(id="123", name="Track Name", artist="Artist", album="Album", genre="R", year=None)
         # Inline pattern handles None by using "or ''" pattern
-        new_year: str | None = None
+        year_set_by_mgu: str | None = None
         entry = ChangeLogEntry(
             timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
             change_type="year_update",
@@ -1001,11 +1001,11 @@ class TestCreateChangeEntry:
             track_name=track.name or "",
             artist="Artist",
             album_name="Album",
-            old_year=track.year or "",
-            new_year=new_year or "",
+            year_before_mgu=track.year or "",
+            year_set_by_mgu=year_set_by_mgu or "",
         )
-        assert entry.old_year == ""
-        assert entry.new_year == ""
+        assert entry.year_before_mgu == ""
+        assert entry.year_set_by_mgu == ""
 
 
 class TestProcessBatchesConcurrently:
@@ -1735,7 +1735,7 @@ class TestShouldSkipAlbumDueToExistingYearsBranches:
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         should_skip, reason = await year_retriever._year_determinator.should_skip_album(tracks, "Artist", "Album")
         # May skip due to year_consistent (all tracks have year=2020) or proceed to cache check
-        # With pre-check pipeline, consistent year skips unless new_year tracking indicates otherwise
+        # With pre-check pipeline, consistent year skips unless year_set_by_mgu tracking indicates otherwise
         assert should_skip is True or reason == ""
 
     @pytest.mark.asyncio
@@ -1930,11 +1930,11 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
     """
 
     @pytest.mark.asyncio
-    async def test_sets_new_year_from_updated_track_when_change_entry_empty(
+    async def test_sets_year_set_by_mgu_from_updated_track_when_change_entry_empty(
         self,
         year_retriever: YearRetriever,
     ) -> None:
-        """Test sets change_entry.new_year correctly when updating tracks."""
+        """Test sets change_entry.year_set_by_mgu correctly when updating tracks."""
         # Track with empty year
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year=""),
@@ -1954,6 +1954,6 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
             changes_log=changes_log,
         )
 
-        # The change entry should have new_year set correctly
+        # The change entry should have year_set_by_mgu set correctly
         assert len(changes_log) == 1
-        assert changes_log[0].new_year == "2020"
+        assert changes_log[0].year_set_by_mgu == "2020"

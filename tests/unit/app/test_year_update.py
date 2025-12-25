@@ -386,8 +386,8 @@ class TestUpdateAllYearsWithLogs:
                 artist="Artist",
                 album_name="Album",
                 track_name="Track 1",
-                old_year="2019",
-                new_year="2020",
+                year_before_mgu="2019",
+                year_set_by_mgu="2020",
             )
         ]
         mock_year_retriever.get_album_years_with_logs = AsyncMock(return_value=(sample_tracks, changes))

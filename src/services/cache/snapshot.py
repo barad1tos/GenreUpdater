@@ -319,7 +319,7 @@ class LibrarySnapshotService:
             track_status=raw_track.get("track_status"),
             year=year_value if year_value and str(year_value).strip() else None,
             release_year=raw_track.get("release_year"),
-            new_year=raw_track.get("new_year"),
+            year_set_by_mgu=raw_track.get("year_set_by_mgu"),
             last_modified=None,
         )
 
@@ -346,7 +346,7 @@ class LibrarySnapshotService:
             fields = line.split(field_separator)
 
             # Expected fields: id, name, artist, album_artist, album, genre, date_added,
-            # track_status, year, release_year, new_year
+            # track_status, year, release_year, year_set_by_mgu
             if len(fields) >= 11:
                 track = {
                     "id": fields[0],
@@ -359,7 +359,7 @@ class LibrarySnapshotService:
                     "track_status": fields[7],
                     "year": fields[8],
                     "release_year": fields[9],
-                    "new_year": fields[10],
+                    "year_set_by_mgu": fields[10],
                 }
                 tracks.append(track)
             else:

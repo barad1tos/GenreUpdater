@@ -318,8 +318,8 @@ class TrackDict(BaseModel):
     track_status: str | None = None
     original_artist: str | None = None
     original_album: str | None = None
-    old_year: str | None = None  # For tracking changes
-    new_year: str | None = None  # For tracking changes
+    year_before_mgu: str | None = None  # Original year before first MGU update
+    year_set_by_mgu: str | None = None  # Year that MGU applied
     release_year: str | None = None  # Year from Music.app release date field
     original_pos: int | None = None  # Original position in the track list
     album_artist: str | None = None  # Album artist for proper grouping of collaborations
@@ -380,8 +380,8 @@ class ChangeLogEntry(BaseModel):
     album_name: str = ""
     old_genre: str | None = None
     new_genre: str | None = None
-    old_year: str | None = None
-    new_year: str | None = None
+    year_before_mgu: str | None = None
+    year_set_by_mgu: str | None = None
     old_track_name: str | None = None
     new_track_name: str | None = None
     old_album_name: str | None = None

@@ -412,7 +412,7 @@ class TestParseTrackOutput:
         assert result[0]["track_status"] == "subscription"
         assert result[0]["year"] == "2020"
         assert result[0]["release_year"] == "2020"
-        assert result[0]["new_year"] == "2021"
+        assert result[0]["year_set_by_mgu"] == "2021"
 
     def test_parses_multiple_tracks(self) -> None:
         """Test parses multiple tracks separated by line separator."""

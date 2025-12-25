@@ -52,8 +52,8 @@ def _create_test_track(
     year: str | None = "2020",
     date_added: str | None = "2024-01-01",
     track_status: str | None = "OK",
-    old_year: str | None = "2020",
-    new_year: str | None = "2021",
+    year_before_mgu: str | None = "2020",
+    year_set_by_mgu: str | None = "2021",
 ) -> TrackDict:
     """Create a test TrackDict with default values."""
     return TrackDict(
@@ -65,8 +65,8 @@ def _create_test_track(
         year=year,
         date_added=date_added,
         track_status=track_status,
-        old_year=old_year,
-        new_year=new_year,
+        year_before_mgu=year_before_mgu,
+        year_set_by_mgu=year_set_by_mgu,
     )
 
 
@@ -154,8 +154,8 @@ class TestCreateTrackFromRow:
             "year": "2020",
             "date_added": "2024-01-01",
             "track_status": "OK",
-            "old_year": "2020",
-            "new_year": "2021",
+            "year_before_mgu": "2020",
+            "year_set_by_mgu": "2021",
         }
         fields_to_read = list(row.keys())
         expected_fieldnames = fields_to_read
@@ -179,8 +179,8 @@ class TestCreateTrackFromRow:
             "year": "2020",
             "date_added": "2024-01-01",
             "track_status": "OK",
-            "old_year": "2015",
-            "new_year": "2020",
+            "year_before_mgu": "2015",
+            "year_set_by_mgu": "2020",
         }
         fields_to_read = list(row.keys())
         expected_fieldnames = fields_to_read
@@ -189,8 +189,8 @@ class TestCreateTrackFromRow:
 
         assert track is not None
         assert track.year == "2020"
-        assert track.old_year == "2015"
-        assert track.new_year == "2020"
+        assert track.year_before_mgu == "2015"
+        assert track.year_set_by_mgu == "2020"
 
     @pytest.mark.parametrize(
         "invalid_id",
@@ -213,7 +213,7 @@ class TestCreateTrackFromRow:
         """Should handle missing optional fields gracefully."""
         row = {"id": "1", "name": "Track", "artist": "Artist", "album": "Album", "genre": ""}
         fields_to_read = ["id", "name", "artist", "album", "genre"]
-        expected_fieldnames = ["id", "name", "artist", "album", "genre", "date_added", "track_status", "old_year", "new_year"]
+        expected_fieldnames = ["id", "name", "artist", "album", "genre", "date_added", "track_status", "year_before_mgu", "year_set_by_mgu"]
 
         track = _create_track_from_row(row, fields_to_read, expected_fieldnames)
 
@@ -236,7 +236,7 @@ class TestLoadTrackList:
         """Should load tracks from valid CSV file."""
         csv_file = tmp_path / "tracks.csv"
         csv_file.write_text(
-            "id,name,artist,album,genre,date_added,last_modified,track_status,old_year,new_year\n"
+            "id,name,artist,album,genre,date_added,last_modified,track_status,year_before_mgu,year_set_by_mgu\n"
             "1,Track 1,Artist,Album,Rock,2024-01-01,,OK,2020,2021\n"
             "2,Track 2,Artist,Album,Pop,2024-01-02,,OK,2019,2020\n"
         )
@@ -279,7 +279,7 @@ class TestGetProcessedAlbumsFromCsv:
 
     def test_returns_processed_albums(self, mock_cache_service: CacheServiceProtocol) -> None:
         """Should return mapping of album keys to new years."""
-        track = _create_test_track("100", new_year="2022")
+        track = _create_test_track("100", year_set_by_mgu="2022")
         csv_map = {"100": track}
 
         result = _get_processed_albums_from_csv(csv_map, mock_cache_service)
@@ -287,9 +287,9 @@ class TestGetProcessedAlbumsFromCsv:
         assert "Artist|Album" in result
         assert result["Artist|Album"] == "2022"
 
-    def test_skips_tracks_without_new_year(self, mock_cache_service: CacheServiceProtocol) -> None:
-        """Should skip tracks without new_year value."""
-        track = _create_test_track("101", new_year=None)
+    def test_skips_tracks_without_year_set_by_mgu(self, mock_cache_service: CacheServiceProtocol) -> None:
+        """Should skip tracks without year_set_by_mgu value."""
+        track = _create_test_track("101", year_set_by_mgu=None)
         csv_map = {"101": track}
 
         result = _get_processed_albums_from_csv(csv_map, mock_cache_service)
@@ -300,30 +300,30 @@ class TestGetProcessedAlbumsFromCsv:
 class TestNormalizeTrackYearFields:
     """Tests for _normalize_track_year_fields function."""
 
-    def test_sets_empty_old_year_when_none(self) -> None:
-        """Should set old_year to empty string when None."""
-        track = _create_test_track("102", old_year=None)
+    def test_sets_empty_year_before_mgu_when_none(self) -> None:
+        """Should set year_before_mgu to empty string when None."""
+        track = _create_test_track("102", year_before_mgu=None)
 
         _normalize_track_year_fields(track)
 
-        assert track.old_year == ""
+        assert track.year_before_mgu == ""
 
-    def test_sets_empty_new_year_when_none(self) -> None:
-        """Should set new_year to empty string when None."""
-        track = _create_test_track("103", new_year=None)
+    def test_sets_empty_year_set_by_mgu_when_none(self) -> None:
+        """Should set year_set_by_mgu to empty string when None."""
+        track = _create_test_track("103", year_set_by_mgu=None)
 
         _normalize_track_year_fields(track)
 
-        assert track.new_year == ""
+        assert track.year_set_by_mgu == ""
 
     def test_preserves_existing_values(self) -> None:
         """Should preserve existing year values."""
-        track = _create_test_track("104", old_year="2019", new_year="2022")
+        track = _create_test_track("104", year_before_mgu="2019", year_set_by_mgu="2022")
 
         _normalize_track_year_fields(track)
 
-        assert track.old_year == "2019"
-        assert track.new_year == "2022"
+        assert track.year_before_mgu == "2019"
+        assert track.year_set_by_mgu == "2022"
 
 
 class TestCreateNormalizedTrackDict:
@@ -363,15 +363,15 @@ class TestGetMusicappSyncableFields:
         assert "year" in fields
 
     def test_excludes_tracking_fields(self) -> None:
-        """Should NOT include old_year/new_year - they are preserved from CSV.
+        """Should NOT include year_before_mgu/year_set_by_mgu - they are preserved from CSV.
 
         These fields are managed by year_batch.py during year updates,
         not by sync operations. AppleScript doesn't provide them.
         """
         fields = _get_musicapp_syncable_fields()
 
-        assert "old_year" not in fields
-        assert "new_year" not in fields
+        assert "year_before_mgu" not in fields
+        assert "year_set_by_mgu" not in fields
 
 
 class TestTrackFieldsDiffer:
@@ -513,16 +513,16 @@ class TestParseOsascriptOutput:
 
     Field format (12 fields with album_artist):
     0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added,
-    7:modification_date, 8:status, 9:year, 10:release_year, 11:new_year
+    7:modification_date, 8:status, 9:year, 10:release_year, 11:year_set_by_mgu
 
     Field format (11 fields without album_artist):
     0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added,
-    6:modification_date, 7:status, 8:year, 9:release_year, 10:new_year
+    6:modification_date, 7:status, 8:year, 9:release_year, 10:year_set_by_mgu
     """
 
     def test_parses_tab_separated_output(self) -> None:
         """Should parse tab-separated output (11 fields without album_artist)."""
-        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, year_set_by_mgu
         raw_output = "1\tTrack 1\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew_value"
 
         result = _parse_osascript_output(raw_output)
@@ -535,7 +535,7 @@ class TestParseOsascriptOutput:
 
     def test_parses_12_field_output(self) -> None:
         """Should parse 12-field output (with album_artist)."""
-        # 12 fields: id, name, artist, album_artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        # 12 fields: id, name, artist, album_artist, album, genre, date_added, mod_date, status, year, release_year, year_set_by_mgu
         raw_output = "1\tTrack\tArtist\tAlbum Artist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\t"
 
         result = _parse_osascript_output(raw_output)
@@ -550,7 +550,7 @@ class TestParseOsascriptOutput:
         """Should parse chr(30) field-separated output."""
         sep = chr(30)
         line_sep = chr(29)
-        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, year_set_by_mgu
         raw_output = sep.join(["1", "Track", "Artist", "Album", "Rock", "2024-01-01", "2024-01-02", "OK", "2020", "2021", "new"]) + line_sep
 
         result = _parse_osascript_output(raw_output)
@@ -572,7 +572,7 @@ class TestParseOsascriptOutput:
 
     def test_skips_empty_lines(self) -> None:
         """Should skip empty lines."""
-        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, year_set_by_mgu
         raw_output = "\n1\tTrack\tArtist\tAlbum\tRock\t2024\t2024\tOK\t2020\t2021\tnew\n\n"
 
         result = _parse_osascript_output(raw_output)
@@ -695,7 +695,7 @@ class TestStripPreservesTrailingTabs:
 
     def test_preserves_trailing_empty_field(self) -> None:
         """Should preserve 12th empty field when line ends with tab."""
-        # 12 fields with trailing tab for empty new_year
+        # 12 fields with trailing tab for empty year_set_by_mgu
         raw_output = "1\tTrack\tArtist\tAlbumArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\t"
 
         result = _parse_osascript_output(raw_output)
@@ -706,7 +706,7 @@ class TestStripPreservesTrailingTabs:
 
     def test_handles_multiple_trailing_empty_fields(self) -> None:
         """Should handle lines with multiple empty fields at end."""
-        # 12 fields: year and new_year are empty
+        # 12 fields: year and year_set_by_mgu are empty
         raw_output = "1\tTrack\tArtist\tAlbumArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t\t\t"
 
         result = _parse_osascript_output(raw_output)
@@ -888,18 +888,18 @@ class TestUpdateTrackWithCachedFieldsForSync:
     """Tests for _update_track_with_cached_fields_for_sync function.
 
     Note: ParsedTrackFields uses 'year' key for Music.app's current year.
-    This gets mapped to track.old_year (for new tracks) and track.year (for delta detection).
+    This gets mapped to track.year_before_mgu (for new tracks) and track.year (for delta detection).
     """
 
     def test_updates_empty_fields_from_cache(self) -> None:
         """Should update empty fields from cache."""
-        track = _create_test_track("6", date_added=None, track_status=None, year=None, old_year=None)
+        track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None)
         tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",
                 "last_modified": "2024-06-02",
                 "track_status": "Playing",
-                "year": "2018",  # Music.app's current year → populates track.old_year AND track.year
+                "year": "2018",  # Music.app's current year → populates track.year_before_mgu AND track.year
             }
         }
 
@@ -908,11 +908,11 @@ class TestUpdateTrackWithCachedFieldsForSync:
         assert track.date_added == "2024-06-01"
         assert track.track_status == "Playing"
         assert track.year == "2018"  # Populated from cache
-        assert track.old_year == "2018"  # Populated from cache (original value for rollback)
+        assert track.year_before_mgu == "2018"  # Populated from cache (original value for rollback)
 
     def test_preserves_existing_fields(self) -> None:
         """Should not overwrite existing field values."""
-        track = _create_test_track("6", date_added="2023-05-01", track_status="Paused", year="2016", old_year="2017")
+        track = _create_test_track("6", date_added="2023-05-01", track_status="Paused", year="2016", year_before_mgu="2017")
         tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",
@@ -927,7 +927,7 @@ class TestUpdateTrackWithCachedFieldsForSync:
         assert track.date_added == "2023-05-01"
         assert track.track_status == "Paused"
         assert track.year == "2016"  # Preserved (not overwritten)
-        assert track.old_year == "2017"  # Preserved (original value)
+        assert track.year_before_mgu == "2017"  # Preserved (original value)
 
     def test_skips_track_not_in_cache(self) -> None:
         """Should skip tracks not in cache."""
@@ -960,8 +960,8 @@ class TestConvertTrackToCsvDict:
             year="2019",
             date_added="2024-03-15",
             track_status="Active",
-            old_year="2018",
-            new_year="2019",
+            year_before_mgu="2018",
+            year_set_by_mgu="2019",
         )
 
         result = _convert_track_to_csv_dict(track)
@@ -974,30 +974,30 @@ class TestConvertTrackToCsvDict:
         assert result["year"] == "2019"
         assert result["date_added"] == "2024-03-15"
         assert result["track_status"] == "Active"
-        assert result["old_year"] == "2018"
-        assert result["new_year"] == "2019"
+        assert result["year_before_mgu"] == "2018"
+        assert result["year_set_by_mgu"] == "2019"
 
     def test_converts_year_field_to_csv(self) -> None:
         """Should include year field in CSV dict (Issue #85 - delta detection)."""
-        track = _create_test_track("10", old_year="2015", new_year="2020")
+        track = _create_test_track("10", year_before_mgu="2015", year_set_by_mgu="2020")
 
         result = _convert_track_to_csv_dict(track)
 
         assert result["year"] == "2020"
-        assert result["old_year"] == "2015"
-        assert result["new_year"] == "2020"
+        assert result["year_before_mgu"] == "2015"
+        assert result["year_set_by_mgu"] == "2020"
 
     def test_handles_none_values(self) -> None:
         """Should convert None values to empty strings."""
-        track = _create_test_track("9", genre=None, year=None, date_added=None, old_year=None, new_year=None)
+        track = _create_test_track("9", genre=None, year=None, date_added=None, year_before_mgu=None, year_set_by_mgu=None)
 
         result = _convert_track_to_csv_dict(track)
 
         assert result["genre"] == ""
         assert result["year"] == ""
         assert result["date_added"] == ""
-        assert result["old_year"] == ""
-        assert result["new_year"] == ""
+        assert result["year_before_mgu"] == ""
+        assert result["year_set_by_mgu"] == ""
 
 
 class TestSaveTrackMapToCsv:
@@ -1071,13 +1071,13 @@ class TestBuildMusicappTrackMap:
         """Should handle partial sync with processed albums."""
         from metrics.track_sync import _build_musicapp_track_map
 
-        tracks = [_create_test_track("12", artist="Test", album="Album2", new_year=None)]
+        tracks = [_create_test_track("12", artist="Test", album="Album2", year_set_by_mgu=None)]
         processed_albums = {"Test|Album2": "2023"}
 
         result = await _build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger)
 
         assert "12" in result
-        assert result["12"].new_year == "2023"
+        assert result["12"].year_set_by_mgu == "2023"
 
 
 class TestHandlePartialSyncCache:
@@ -1092,12 +1092,12 @@ class TestHandlePartialSyncCache:
         """Should skip when album not in processed albums."""
         from metrics.track_sync import _handle_partial_sync_cache
 
-        track = _create_test_track("13", new_year=None)
+        track = _create_test_track("13", year_set_by_mgu=None)
         processed_albums: dict[str, str] = {}
 
         await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
-        assert track.new_year is None
+        assert track.year_set_by_mgu is None
 
     @pytest.mark.asyncio
     async def test_updates_year_from_processed_albums(
@@ -1105,16 +1105,16 @@ class TestHandlePartialSyncCache:
         mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
     ) -> None:
-        """Should update new_year from processed albums."""
+        """Should update year_set_by_mgu from processed albums."""
         from metrics.track_sync import _handle_partial_sync_cache
 
-        track = _create_test_track("14", new_year=None)
+        track = _create_test_track("14", year_set_by_mgu=None)
         processed_albums = {"Artist|Album": "2023"}
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
         await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
-        assert track.new_year == "2023"
+        assert track.year_set_by_mgu == "2023"
         cast(AsyncMock, mock_cache_service.store_album_year_in_cache).assert_called_once()
 
     @pytest.mark.asyncio
@@ -1127,14 +1127,14 @@ class TestHandlePartialSyncCache:
         """Should handle cache errors gracefully."""
         from metrics.track_sync import _handle_partial_sync_cache
 
-        track = _create_test_track("15", new_year=None)
+        track = _create_test_track("15", year_set_by_mgu=None)
         processed_albums = {"Artist|Album": "2023"}
         mock_cache_service.get_album_year_from_cache = AsyncMock(side_effect=OSError("Cache error"))
 
         with caplog.at_level(logging.ERROR):
             await _handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
 
-        assert track.new_year == "2023"
+        assert track.year_set_by_mgu == "2023"
 
 
 class TestExecuteOsascriptProcess:
@@ -1177,7 +1177,7 @@ class TestFetchTrackFieldsDirect:
         """Should parse successful osascript output."""
         from metrics.track_sync import _fetch_track_fields_direct
 
-        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, new_year
+        # 11 fields: id, name, artist, album, genre, date_added, mod_date, status, year, release_year, year_set_by_mgu
         output = "1\tTrack\tArtist\tAlbum\tRock\t2024-01-01\t2024-01-02\tOK\t2020\t2021\tnew"
         with patch("metrics.track_sync._execute_osascript_process", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = (0, output.encode(), b"")
@@ -1259,7 +1259,7 @@ class TestSyncTrackListWithCurrent:
 
         csv_file = tmp_path / "tracks.csv"
         csv_file.write_text(
-            "id,name,artist,album,genre,date_added,last_modified,track_status,old_year,new_year\n"
+            "id,name,artist,album,genre,date_added,last_modified,track_status,year_before_mgu,year_set_by_mgu\n"
             "old_id,Old Track,Artist,Album,Rock,2024-01-01,,OK,2020,2021\n"
         )
         tracks = [_create_test_track("19", artist="New Artist")]

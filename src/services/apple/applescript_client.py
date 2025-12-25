@@ -396,7 +396,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             fields = line.split(field_separator)
 
             # Expected fields: id, name, artist, album_artist, album, genre, date_added,
-            # track_status, year, release_year, new_year
+            # track_status, year, release_year, year_set_by_mgu
             if len(fields) >= 11:
                 track = {
                     "id": fields[0],
@@ -409,7 +409,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     "track_status": fields[7],
                     "year": fields[8],
                     "release_year": fields[9],
-                    "new_year": fields[10],
+                    "year_set_by_mgu": fields[10],
                 }
                 tracks.append(track)
             else:

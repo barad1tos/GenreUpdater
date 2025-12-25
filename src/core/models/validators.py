@@ -284,9 +284,9 @@ class SecurityValidator:
             "year",
             "date_added",
             "track_status",
-            "old_year",
+            "year_before_mgu",
             "release_year",
-            "new_year",
+            "year_set_by_mgu",
             "album_artist",
         ]
         for field in optional_fields:

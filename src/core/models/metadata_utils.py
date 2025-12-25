@@ -103,7 +103,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
 
     Note on year fields:
         - AppleScript provides: year (Music.app property), release_year (from release date)
-        - TrackDict tracking fields (old_year, new_year) are NOT from AppleScript
+        - TrackDict tracking fields (year_before_mgu, year_set_by_mgu) are NOT from AppleScript
         - They are managed by year_batch.py and persisted in CSV only
     """
     idx = AppleScriptFieldIndex  # Alias for readability
@@ -119,7 +119,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     track_status = _extract_optional_field(fields, idx.TRACK_STATUS)
 
     # Build base TrackDict
-    # Note: old_year/new_year are set to musicapp_year for NEW tracks only.
+    # Note: year_before_mgu/year_set_by_mgu are set to musicapp_year for NEW tracks only.
     # For existing tracks, these are preserved from CSV during sync.
     track = TrackDict(
         id=fields[idx.ID].strip(),
@@ -131,8 +131,8 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         track_status=track_status or None,
         year=musicapp_year,  # Current year in Music.app
         release_year=release_year,  # From release date metadata
-        old_year=musicapp_year,  # Initial value for new tracks (will be preserved)
-        new_year="",  # Empty until MGU updates this track
+        year_before_mgu=musicapp_year,  # Initial value for new tracks (will be preserved)
+        year_set_by_mgu="",  # Empty until MGU updates this track
     )
 
     if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):
