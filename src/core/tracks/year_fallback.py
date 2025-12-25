@@ -89,6 +89,7 @@ class YearFallbackHandler:
         confidence_score: int,
         artist: str,
         album: str,
+        year_scores: dict[str, int] | None = None,
     ) -> str | None:
         """Apply fallback logic for year decisions.
 
@@ -99,6 +100,7 @@ class YearFallbackHandler:
             confidence_score: API confidence score (0-100)
             artist: Artist name
             album: Album name
+            year_scores: Mapping of year to max score from API results (Issue #93)
 
         Returns:
             Year to apply (proposed or existing), or None to skip update
@@ -182,7 +184,7 @@ class YearFallbackHandler:
             return proposed_year
 
         # Delegate remaining rules to helper method
-        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album)
+        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album, year_scores)
 
     async def _apply_existing_year_rules(
         self,
@@ -191,6 +193,7 @@ class YearFallbackHandler:
         confidence_score: int,
         artist: str,
         album: str,
+        year_scores: dict[str, int] | None = None,
     ) -> str:
         """Apply rules when existing year is present.
 
@@ -202,6 +205,7 @@ class YearFallbackHandler:
             confidence_score: API confidence score (0-100)
             artist: Artist name
             album: Album name
+            year_scores: Mapping of year to max score from API results (Issue #93)
 
         Returns:
             Year to apply (proposed or existing)
@@ -214,7 +218,7 @@ class YearFallbackHandler:
             return special_result if special_result != "" else existing_year
 
         # Rule 5: Check for dramatic year change (now considers confidence score and suspicious years)
-        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album):
+        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album, year_scores):
             # Propagate existing year to all tracks instead of skipping entirely
             return existing_year
 
@@ -450,6 +454,57 @@ class YearFallbackHandler:
 
         return False
 
+    def _check_existing_year_in_api_results(
+        self,
+        existing_year: str,
+        year_scores: dict[str, int] | None,
+        artist: str,
+        album: str,
+    ) -> bool | None:
+        """Check if existing year appears in API results (Issue #93).
+
+        This validation ensures we don't preserve incorrect years that have
+        no support from any API source.
+
+        Args:
+            existing_year: The year currently in the library
+            year_scores: Mapping of year to max score from API results
+            artist: Artist name for logging
+            album: Album name for logging
+
+        Returns:
+            True: existing year found in API → continue existing logic
+            False: existing year NOT in API → trust API year
+            None: no year_scores data → continue existing logic
+
+        """
+        if not year_scores:
+            self.console_logger.debug(
+                "[API_VALIDATION] No year_scores available for %s - %s, skipping API validation",
+                artist,
+                album,
+            )
+            return None  # No data, continue existing logic
+
+        if existing_year in year_scores:
+            self.console_logger.debug(
+                "[API_VALIDATION] Existing year %s found in API results with score %d for %s - %s",
+                existing_year,
+                year_scores[existing_year],
+                artist,
+                album,
+            )
+            return True  # Found, continue existing logic
+
+        self.console_logger.info(
+            "[API_VALIDATION] Existing year %s NOT found in API results for %s - %s (available years: %s)",
+            existing_year,
+            artist,
+            album,
+            list(year_scores.keys()),
+        )
+        return False  # NOT found → trust API year
+
     # noinspection PySimplifyBooleanCheck
     async def _handle_dramatic_year_change(
         self,
@@ -458,14 +513,16 @@ class YearFallbackHandler:
         confidence_score: int,
         artist: str,
         album: str,
+        year_scores: dict[str, int] | None = None,
     ) -> bool:
         """Handle dramatic year changes. Returns True if should skip update.
 
         Logic:
         1. Not dramatic change → apply API year
         2. High confidence API (>=70%) → trust API, apply year
-        3. NEW: Check plausibility → if existing is impossible → apply API year
-        4. Low confidence + dramatic + plausible → preserve existing, mark for verification
+        3. NEW (Issue #93): Check if existing year is in API results → if NOT → apply API year
+        4. Check plausibility → if existing is impossible → apply API year
+        5. Low confidence + dramatic + plausible → preserve existing, mark for verification
         """
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
@@ -481,6 +538,20 @@ class YearFallbackHandler:
                 album,
             )
             return False  # Don't skip - apply the year
+
+        # Issue #93: Check if existing year has any support from API results
+        api_validation = self._check_existing_year_in_api_results(existing_year, year_scores, artist, album)
+        if api_validation is False:
+            # Existing year NOT found in any API result → trust API year
+            self.console_logger.info(
+                "[FALLBACK] Existing year %s has no API support for %s - %s, trusting API year %s (confidence %d%%)",
+                existing_year,
+                artist,
+                album,
+                proposed_year,
+                confidence_score,
+            )
+            return False  # Don't skip - apply API year
 
         # Check if years are plausible for the artist
         plausibility_result = await self._check_year_plausibility(
