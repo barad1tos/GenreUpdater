@@ -276,3 +276,81 @@ class TestBackwardCompatibility:
         # Dramatic change + low confidence + both plausible + no year_scores
         # → existing logic preserves existing year
         assert result == "2000"
+
+
+class TestPendingVerificationCalls:
+    """Tests for pending_verification.mark_for_verification calls (Sourcery suggestion)."""
+
+    @pytest.mark.asyncio
+    async def test_marks_for_verification_when_existing_year_in_api_results(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: MagicMock,
+        api_orchestrator: MagicMock,
+    ) -> None:
+        """Should call mark_for_verification when existing year IS in API results.
+
+        When:
+        - Dramatic year change (>5 years)
+        - Low confidence (<70%)
+        - Existing year IS in API results (Issue #93 validation passes)
+        - Both years plausible for artist
+        → Preserve existing year AND mark for verification
+        """
+        api_orchestrator.get_artist_start_year = AsyncMock(return_value=1990)
+
+        tracks: list[dict[str, Any]] = [{"artist": "Test", "album": "Album", "year": "2000"}]
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,  # Low confidence
+            artist="Test",
+            album="Album",
+            year_scores={"2000": 70, "2020": 85},  # Existing year IS in API
+        )
+
+        # Should preserve existing year
+        assert result == "2000"
+
+        # Should have called mark_for_verification with "suspicious_year_change" reason
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert call_kwargs["artist"] == "Test"
+        assert call_kwargs["album"] == "Album"
+        assert call_kwargs["reason"] == "suspicious_year_change"
+        assert call_kwargs["metadata"]["existing_year"] == "2000"
+        assert call_kwargs["metadata"]["proposed_year"] == "2020"
+
+    @pytest.mark.asyncio
+    async def test_no_verification_when_existing_year_not_in_api(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: MagicMock,
+        api_orchestrator: MagicMock,
+    ) -> None:
+        """Should NOT call mark_for_verification when existing year NOT in API.
+
+        Issue #93 fix: When existing year has no API support, we trust API directly
+        without marking for verification (we're confident existing was wrong).
+        """
+        api_orchestrator.get_artist_start_year = AsyncMock(return_value=1997)
+
+        tracks: list[dict[str, Any]] = [{"artist": "Abney Park", "album": "Scallywag", "year": "1998"}]
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2018",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=60,
+            artist="Abney Park",
+            album="Scallywag",
+            year_scores={"2018": 85},  # 1998 NOT in API results
+        )
+
+        # Should apply API year
+        assert result == "2018"
+
+        # Should NOT have called mark_for_verification (confident existing was wrong)
+        pending_verification.mark_for_verification.assert_not_called()

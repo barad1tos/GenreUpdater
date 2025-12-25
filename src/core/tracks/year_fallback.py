@@ -517,12 +517,28 @@ class YearFallbackHandler:
     ) -> bool:
         """Handle dramatic year changes. Returns True if should skip update.
 
+        Args:
+            proposed_year: Year from API
+            existing_year: Existing year from tracks
+            confidence_score: API confidence score (0-100)
+            artist: Artist name
+            album: Album name
+            year_scores: Mapping of year to max score from API results.
+                Used to validate if existing_year has any API support (Issue #93).
+                If existing_year is NOT in year_scores, we trust the API year
+                rather than preserving a potentially incorrect existing year.
+
+        Returns:
+            True: Skip update, preserve existing year
+            False: Apply proposed year from API
+
         Logic:
-        1. Not dramatic change → apply API year
-        2. High confidence API (>=70%) → trust API, apply year
-        3. NEW (Issue #93): Check if existing year is in API results → if NOT → apply API year
-        4. Check plausibility → if existing is impossible → apply API year
-        5. Low confidence + dramatic + plausible → preserve existing, mark for verification
+            1. Not dramatic change → apply API year
+            2. High confidence API (>=70%) → trust API, apply year
+            3. Issue #93: Check if existing year is in API results → if NOT → apply API year
+            4. Check plausibility → if existing is impossible → apply API year
+            5. Low confidence + dramatic + plausible → preserve existing, mark for verification
+
         """
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
