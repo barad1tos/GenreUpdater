@@ -77,9 +77,3 @@ csv/
 .worktrees/
 /applescripts/*.scpt
 /applescripts/temp_script_*.applescript
-
-# Mutation testing
-mutants/
-session.sqlite
-.mutmut-cache/
-cosmic-ray*.toml
