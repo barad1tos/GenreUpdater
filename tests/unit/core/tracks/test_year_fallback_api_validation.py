@@ -31,7 +31,7 @@ def pending_verification() -> PendingVerificationServiceProtocol:
     """Create a mock pending verification service."""
     mock = MagicMock()
     mock.mark_for_verification = AsyncMock()
-    return cast("PendingVerificationServiceProtocol", mock)
+    return cast("PendingVerificationServiceProtocol", cast(object, mock))
 
 
 @pytest.fixture
