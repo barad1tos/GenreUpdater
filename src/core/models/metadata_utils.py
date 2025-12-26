@@ -115,8 +115,9 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     musicapp_year = _validate_year_field(raw_musicapp_year)
     release_year = _validate_year_field(raw_release_year)
 
-    # Extract optional track_status field if available
+    # Extract optional fields if available
     track_status = _extract_optional_field(fields, idx.TRACK_STATUS)
+    last_modified = _extract_optional_field(fields, idx.MODIFICATION_DATE)
 
     # Build base TrackDict
     # Note: year_before_mgu/year_set_by_mgu are set to musicapp_year for NEW tracks only.
@@ -128,6 +129,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         album=fields[idx.ALBUM].strip(),
         genre=fields[idx.GENRE].strip(),
         date_added=fields[idx.DATE_ADDED].strip(),
+        last_modified=last_modified or None,
         track_status=track_status or None,
         year=musicapp_year,  # Current year in Music.app
         release_year=release_year,  # From release date metadata

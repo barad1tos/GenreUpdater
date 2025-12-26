@@ -469,6 +469,40 @@ class TestMergeMusicappIntoCsv:
 
         assert updated == 0
 
+    def test_initializes_empty_year_before_mgu_from_musicapp(self) -> None:
+        """Should initialize empty year_before_mgu from Music.app year.
+
+        Issue #126: Prevents redundant second fetch in sync_track_list_with_current.
+        When CSV track has empty year_before_mgu but Music.app has a year,
+        the merge should initialize year_before_mgu to prevent triggering
+        a full library re-fetch.
+        """
+        csv_track = _create_test_track("6", year="2023", year_before_mgu=None)
+        musicapp_track = _create_test_track("6", year="2023", year_before_mgu="2023")
+        csv_tracks = {"6": csv_track}
+        musicapp_tracks = {"6": musicapp_track}
+
+        _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
+
+        # year_before_mgu should be populated from Music.app's year
+        assert csv_tracks["6"].year_before_mgu == "2023"
+
+    def test_preserves_existing_year_before_mgu(self) -> None:
+        """Should preserve existing year_before_mgu (historical tracking data).
+
+        Issue #126: Only empty year_before_mgu should be initialized;
+        existing values represent historical tracking and must be preserved.
+        """
+        csv_track = _create_test_track("7", year="2024", year_before_mgu="2020")
+        musicapp_track = _create_test_track("7", year="2024", year_before_mgu="2024")
+        csv_tracks = {"7": csv_track}
+        musicapp_tracks = {"7": musicapp_track}
+
+        _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
+
+        # Original year_before_mgu should be preserved
+        assert csv_tracks["7"].year_before_mgu == "2020"
+
 
 class TestBuildOsascriptCommand:
     """Tests for _build_osascript_command function."""

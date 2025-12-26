@@ -257,6 +257,10 @@ def _get_musicapp_syncable_fields() -> list[str]:
     - They are tracking fields managed by year_batch.py, not sync
     - AppleScript doesn't provide them (only Music.app's current year)
     - During sync, we preserve CSV's historical tracking data
+
+    However, _merge_musicapp_into_csv() will initialize empty year_before_mgu
+    from musicapp_track.year to prevent redundant fetches in sync_track_list_with_current.
+    See Issue #126 for context.
     """
     return [
         "name",
@@ -315,7 +319,8 @@ def _merge_musicapp_into_csv(
 
     - New tracks (in Music.app but not CSV): added to csv_tracks
     - Existing tracks: CSV updated with Music.app values for syncable fields
-    - Tracking fields (year_before_mgu, year_set_by_mgu): preserved from CSV
+    - Tracking fields (year_before_mgu, year_set_by_mgu): preserved from CSV if present,
+      otherwise initialized from Music.app's current year
 
     Returns count of added/updated tracks.
     """
@@ -334,6 +339,12 @@ def _merge_musicapp_into_csv(
         if _track_fields_differ(csv_track, musicapp_track, syncable_fields):
             _update_csv_track_from_musicapp(csv_track, musicapp_track, syncable_fields)
             updated += 1
+
+        # Initialize empty year_before_mgu from Music.app's current year
+        # This prevents a redundant second fetch in sync_track_list_with_current
+        if not csv_track.year_before_mgu and musicapp_track.year:
+            csv_track.year_before_mgu = musicapp_track.year
+
     return updated
 
 
