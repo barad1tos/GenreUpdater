@@ -24,7 +24,8 @@ DAEMON_DIR="$SUPPORT_DIR/app"
 CONFIG_SOURCE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/my-config.yaml"
 
 LOCK_FILE="$STATE_DIR/run.lock"
-TRACK_COUNT_FILE="$STATE_DIR/last_track_count"
+TOTAL_COUNT_FILE="$STATE_DIR/last_total_count"
+MODIFIABLE_COUNT_FILE="$STATE_DIR/last_modifiable_count"
 FORCE_RUN_FILE="$STATE_DIR/force_run"
 DAEMON_LOG="$LOGS_DIR/daemon.log"
 
@@ -79,7 +80,9 @@ acquire_lock() {
 acquire_lock
 log "Lock acquired (PID: $$)"
 
-# === Quick track count check (BEFORE git/uv for speed) ===
+# === Hybrid track count check (BEFORE git/uv for speed) ===
+# Step 1: Quick total count (0.4s) - exit early if unchanged
+# Step 2: Slow modifiable count (27s) - only when total changed
 quick_track_count_check() {
     # Check for force run override
     if [[ -f "$FORCE_RUN_FILE" ]]; then
@@ -88,24 +91,60 @@ quick_track_count_check() {
         return 0
     fi
 
-    # Get current track count from Music.app (~0.5 sec)
-    local current_count
-    if ! current_count=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null); then
+    # Migration: remove old state file (one-time cleanup)
+    rm -f "$STATE_DIR/last_track_count"
+
+    # Step 1: Quick total count check (~0.4s)
+    local current_total
+    if ! current_total=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null); then
         log "Could not get track count (Music.app not running?). Proceeding anyway."
         return 0
     fi
 
-    # Get last known count
-    local last_count
-    last_count=$(cat "$TRACK_COUNT_FILE" 2>/dev/null || echo "0")
+    local last_total
+    last_total=$(cat "$TOTAL_COUNT_FILE" 2>/dev/null || echo "0")
 
-    # Compare
-    if [[ "$current_count" == "$last_count" ]]; then
-        log "Track count unchanged ($current_count). No new tracks. Exiting."
+    if [[ "$current_total" == "$last_total" ]]; then
+        log "Total track count unchanged ($current_total). No new tracks. Exiting."
         exit 0
     fi
 
-    log "Track count changed: $last_count → $current_count"
+    log "Total track count changed: $last_total → $current_total"
+
+    # Step 2: Slow modifiable count check (~27s) - only when total changed
+    log "Checking modifiable track count..."
+    local current_modifiable
+    local script_path="$DAEMON_DIR/applescripts/count_modifiable_tracks.applescript"
+
+    if [[ ! -f "$script_path" ]]; then
+        log "Modifiable count script not found. Proceeding with pipeline."
+        echo "$current_total" > "$TOTAL_COUNT_FILE"
+        return 0
+    fi
+
+    if ! current_modifiable=$(osascript "$script_path" 2>/dev/null); then
+        log "Could not get modifiable count. Proceeding with pipeline."
+        echo "$current_total" > "$TOTAL_COUNT_FILE"
+        return 0
+    fi
+
+    # Check for error response from script
+    if [[ "$current_modifiable" == ERROR:* ]]; then
+        log "Modifiable count script error: $current_modifiable. Proceeding with pipeline."
+        echo "$current_total" > "$TOTAL_COUNT_FILE"
+        return 0
+    fi
+
+    local last_modifiable
+    last_modifiable=$(cat "$MODIFIABLE_COUNT_FILE" 2>/dev/null || echo "0")
+
+    if [[ "$current_modifiable" == "$last_modifiable" ]]; then
+        log "Modifiable count unchanged ($current_modifiable). Only non-modifiable tracks changed. Skipping."
+        echo "$current_total" > "$TOTAL_COUNT_FILE"
+        exit 0
+    fi
+
+    log "Modifiable track count changed: $last_modifiable → $current_modifiable"
     return 0
 }
 
@@ -197,17 +236,27 @@ log "Dependencies synced"
 log "Starting main pipeline..."
 EXIT_CODE=0
 
-# Get current count for saving after success
-CURRENT_COUNT=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null || echo "")
+# Get current counts for saving after success
+CURRENT_TOTAL=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null || echo "")
+MODIFIABLE_SCRIPT="$DAEMON_DIR/applescripts/count_modifiable_tracks.applescript"
+if [[ -f "$MODIFIABLE_SCRIPT" ]]; then
+    CURRENT_MODIFIABLE=$(osascript "$MODIFIABLE_SCRIPT" 2>/dev/null || echo "")
+else
+    CURRENT_MODIFIABLE=""
+fi
 
 if timeout "$TIMEOUT_SECONDS" uv run python main.py \
     >> "$LOGS_DIR/stdout.log" 2>> "$LOGS_DIR/stderr.log"; then
     log "Main pipeline completed successfully"
 
-    # Update track count (for next run's quick check)
-    if [[ -n "$CURRENT_COUNT" ]]; then
-        echo "$CURRENT_COUNT" > "$TRACK_COUNT_FILE"
-        log "Track count saved: $CURRENT_COUNT"
+    # Update both counts (for next run's hybrid check)
+    if [[ -n "$CURRENT_TOTAL" ]]; then
+        echo "$CURRENT_TOTAL" > "$TOTAL_COUNT_FILE"
+        log "Total count saved: $CURRENT_TOTAL"
+    fi
+    if [[ -n "$CURRENT_MODIFIABLE" && "$CURRENT_MODIFIABLE" != ERROR:* ]]; then
+        echo "$CURRENT_MODIFIABLE" > "$MODIFIABLE_COUNT_FILE"
+        log "Modifiable count saved: $CURRENT_MODIFIABLE"
     fi
 
     notify "Genre Updater" "Update completed successfully" "Glass"

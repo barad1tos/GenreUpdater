@@ -175,38 +175,60 @@ The daemon watches:
 
 Any change to this file triggers the daemon.
 
-### Track Count Check
+### Track Count Check (Hybrid)
+
+The daemon uses a two-step check to avoid unnecessary runs:
+
+1. **Quick check (~0.4s)**: Compare total track count
+2. **Filtered check (~27s)**: If total changed, check modifiable track count
+
+This filters out changes to prerelease, unknown, and "no longer available" tracks
+which are read-only and cannot be updated by the pipeline.
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Music Library Changed                               │
-│           │                                          │
-│           ▼                                          │
-│  ┌─────────────────-┐                                │
-│  │ Already running? │──Yes──▶ Exit (lock file)       │
-│  └────────┬───────-─┘                                │
-│           │ No                                       │
-│           ▼                                          │
-│  ┌────────────────────┐                              │
-│  │ Track count same?  │──Yes──▶ Exit (~0.2 sec)      │
-│  └────────┬───────────┘                              │
-│           │ No (or force_run exists)                 │
-│           ▼                                          │
-│  ┌────────────────-─┐                                │
-│  │  git pull        │                                │
-│  │  uv sync         │                                │
-│  │  run script      │                                │
-│  └────────┬──────-──┘                                │
-│           │                                          │
-│           ▼                                          │
-│  Save track count / Send notification                │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  Music Library Changed                                     │
+│           │                                                │
+│           ▼                                                │
+│  ┌─────────────────────┐                                   │
+│  │ Already running?    │──Yes──▶ Exit (lock file)          │
+│  └────────┬────────────┘                                   │
+│           │ No                                             │
+│           ▼                                                │
+│  ┌─────────────────────┐                                   │
+│  │ Total count same?   │──Yes──▶ Exit (~0.4 sec)           │
+│  └────────┬────────────┘                                   │
+│           │ No (or force_run)                              │
+│           ▼                                                │
+│  ┌─────────────────────────┐                               │
+│  │ Modifiable count same?  │──Yes──▶ Exit (~27 sec total)  │
+│  │ (excludes prerelease)   │        (update total count)   │
+│  └────────┬────────────────┘                               │
+│           │ No                                             │
+│           ▼                                                │
+│  ┌────────────────────┐                                    │
+│  │  git pull          │                                    │
+│  │  uv sync           │                                    │
+│  │  run pipeline      │                                    │
+│  └────────┬───────────┘                                    │
+│           │                                                │
+│           ▼                                                │
+│  Save both counts / Send notification                      │
+└────────────────────────────────────────────────────────────┘
 ```
+
+**Modifiable cloud statuses** (included in count):
+- `local only`, `purchased`, `matched`, `uploaded`, `subscription`, `downloaded`
+
+**Non-modifiable statuses** (excluded):
+- `prerelease` (read-only, cannot update metadata)
+- `unknown`, `no longer available`
 
 **Timings:**
 
 - LaunchAgent ThrottleInterval: 5 minutes (minimum between triggers)
-- Track count check: ~0.2 seconds (fast exit if unchanged)
+- Quick total count check: ~0.4 seconds
+- Filtered modifiable count: ~27 seconds (only when total changed)
 - Max runtime: 4 hours (timeout)
 
 ## Development Workflow
