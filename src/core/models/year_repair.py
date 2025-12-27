@@ -95,9 +95,7 @@ def _choose_backup_year(row: dict[str, str]) -> str:
         return v
     # Check year_set_by_mgu/new_year (backward compat)
     v = (row.get("year_set_by_mgu") or row.get("new_year") or "").strip()
-    if v.isdigit():
-        return v
-    return ""
+    return v if v.isdigit() else ""
 
 
 def _read_backup_csv(
