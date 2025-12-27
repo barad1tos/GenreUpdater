@@ -343,7 +343,7 @@ class YearBatchProcessor:
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
 
-        # Detect user manual changes (new_year is set but differs from current year)
+        # Detect user manual changes (year_set_by_mgu is set but differs from current year)
         # Behavior: log and re-process (override user's change with API data)
         self._detect_user_year_changes(artist, album, album_tracks)
 
@@ -568,18 +568,18 @@ class YearBatchProcessor:
                     artist=artist,
                     album_name=album,
                     track_name=str(track.get("name", "")),
-                    old_year=str(old_year_value) if old_year_value is not None else "",
-                    new_year=year,
+                    year_before_mgu=str(old_year_value) if old_year_value is not None else "",
+                    year_set_by_mgu=year,
                 )
             )
 
-            # Preserve original year in old_year (only if not already set)
-            if not track.old_year:
-                track.old_year = str(old_year_value) if old_year_value else ""
+            # Preserve original year in year_before_mgu (only if not already set)
+            if not track.year_before_mgu:
+                track.year_before_mgu = str(old_year_value) if old_year_value else ""
 
             # Keep the in-memory snapshot aligned
             track.year = year
-            track.new_year = year
+            track.year_set_by_mgu = year
 
     @staticmethod
     def _track_needs_year_update(current_year: str | int | None, target_year: str) -> bool:
@@ -623,7 +623,7 @@ class YearBatchProcessor:
     def _detect_user_year_changes(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
         """Detect if user manually changed year in Music.app.
 
-        If new_year is set (we previously updated) but current year differs,
+        If year_set_by_mgu is set (we previously updated) but current year differs,
         the user manually changed the year. Log this for visibility.
         Behavior: log and continue processing (override with API data).
 
@@ -634,13 +634,13 @@ class YearBatchProcessor:
 
         """
         for track in album_tracks:
-            if track.new_year and track.year and track.new_year != track.year:
+            if track.year_set_by_mgu and track.year and track.year_set_by_mgu != track.year:
                 self.console_logger.info(
                     "User manually changed year for '%s - %s': was %s (we set %s), now %s - will re-process",
                     artist,
                     album,
-                    track.old_year or "unknown",
-                    track.new_year,
+                    track.year_before_mgu or "unknown",
+                    track.year_set_by_mgu,
                     track.year,
                 )
                 return  # Only log once per album

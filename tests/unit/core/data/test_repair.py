@@ -17,8 +17,8 @@ def _make_changes_report(tmp_path: Path, rows: list[dict[str, str]]) -> dict[str
         "artist",
         "album",
         "track_name",
-        "old_year",
-        "new_year",
+        "year_before_mgu",
+        "year_set_by_mgu",
     ]
     lines = [",".join(header)]
     for r in rows:
@@ -40,8 +40,8 @@ def _make_backup_csv(tmp_path: Path, rows: list[dict[str, str]]) -> str:
         "date_added",
         "track_status",
         "year",
-        "old_year",
-        "new_year",
+        "year_before_mgu",
+        "year_set_by_mgu",
     ]
     lines = [",".join(header)]
     for r in rows:
@@ -60,16 +60,16 @@ def test_build_targets_from_changes_report(tmp_path: Path) -> None:
                 "artist": "Otep",
                 "album": "Hydra",
                 "track_name": "Rising",
-                "old_year": "2013",
-                "new_year": "2007",
+                "year_before_mgu": "2013",
+                "year_set_by_mgu": "2007",
             },
             {
                 "change_type": "genre_update",
                 "artist": "Otep",
                 "album": "Hydra",
                 "track_name": "Rising",
-                "old_year": "",
-                "new_year": "",
+                "year_before_mgu": "",
+                "year_set_by_mgu": "",
             },
         ],
     )
@@ -78,7 +78,7 @@ def test_build_targets_from_changes_report(tmp_path: Path) -> None:
     assert len(targets) == 1
     t = targets[0]
     assert t.track_name == "Rising"
-    assert t.old_year == "2013"
+    assert t.year_before_mgu == "2013"
     assert t.album == "Hydra"
 
 
@@ -95,8 +95,8 @@ def test_build_targets_from_backup_csv(tmp_path: Path) -> None:
                 "date_added": "",
                 "track_status": "",
                 "year": "2013",
-                "old_year": "",
-                "new_year": "",
+                "year_before_mgu": "",
+                "year_set_by_mgu": "",
             },
             {
                 "id": "99822",
@@ -107,16 +107,16 @@ def test_build_targets_from_backup_csv(tmp_path: Path) -> None:
                 "date_added": "",
                 "track_status": "",
                 "year": "",
-                "old_year": "2013",
-                "new_year": "",
+                "year_before_mgu": "2013",
+                "year_set_by_mgu": "",
             },
         ],
     )
 
     targets = repair_utils.build_revert_targets(config={}, artist="Otep", album="Hydra", backup_csv_path=backup_path)
-    # Both rows should be used since one has year, another has old_year
+    # Both rows should be used since one has year, another has year_before_mgu
     assert len(targets) == 2
-    years = sorted(t.old_year for t in targets)
+    years = sorted(t.year_before_mgu for t in targets)
     assert years == ["2013", "2013"]
 
 
@@ -143,7 +143,7 @@ async def test_apply_year_reverts_matches_by_id_and_album_name() -> None:
             self,
             *,
             track_id: str,
-            new_year: str | None = None,
+            new_year: str | None = None,  # API param: the new value to set
             **_kwargs: Any,
         ) -> bool:
             """Update track year in mock storage."""
@@ -155,8 +155,8 @@ async def test_apply_year_reverts_matches_by_id_and_album_name() -> None:
 
     # Two targets: one by ID, one by (album, name)
     targets = [
-        repair_utils.RevertTarget(track_id="1", track_name="Rising", album="Hydra", old_year="2013"),
-        repair_utils.RevertTarget(track_id=None, track_name="Zero", album="Generation Doom", old_year="2016"),
+        repair_utils.RevertTarget(track_id="1", track_name="Rising", album="Hydra", year_before_mgu="2013"),
+        repair_utils.RevertTarget(track_id=None, track_name="Zero", album="Generation Doom", year_before_mgu="2016"),
     ]
 
     updated, missing, change_log = await repair_utils.apply_year_reverts(

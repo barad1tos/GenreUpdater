@@ -225,7 +225,7 @@ class YearDeterminator:
             )
             return False, ""
 
-        # Pre-check 1: Already processed via new_year tracking
+        # Pre-check 1: Already processed via year_set_by_mgu tracking
         if result := self._check_already_processed(album_tracks, artist, album):
             return result
 
@@ -249,21 +249,21 @@ class YearDeterminator:
         artist: str,
         album: str,
     ) -> tuple[bool, str] | None:
-        """Check if album was already processed via new_year tracking.
+        """Check if album was already processed via year_set_by_mgu tracking.
 
         Returns:
             Tuple (True, "already_processed") if should skip, None otherwise.
 
         """
         sample_track = album_tracks[0] if album_tracks else None
-        if not sample_track or not sample_track.new_year:
+        if not sample_track or not sample_track.year_set_by_mgu:
             return None
 
         current_year = str(sample_track.year or "")
-        applied_year = str(sample_track.new_year or "")
+        applied_year = str(sample_track.year_set_by_mgu or "")
         if applied_year and applied_year == current_year:
             self.console_logger.debug(
-                "[PRE-CHECK] Skip %s - %s: already processed (new_year=%s)",
+                "[PRE-CHECK] Skip %s - %s: already processed (year_set_by_mgu=%s)",
                 artist,
                 album,
                 applied_year,

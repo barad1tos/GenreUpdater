@@ -25,6 +25,7 @@ from typing import Any
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
+from core.tracks.year_utils import normalize_collaboration_artist
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
 _logged_cleaning_exceptions: set[tuple[str, str]] = set()
@@ -103,7 +104,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
 
     Note on year fields:
         - AppleScript provides: year (Music.app property), release_year (from release date)
-        - TrackDict tracking fields (old_year, new_year) are NOT from AppleScript
+        - TrackDict tracking fields (year_before_mgu, year_set_by_mgu) are NOT from AppleScript
         - They are managed by year_batch.py and persisted in CSV only
     """
     idx = AppleScriptFieldIndex  # Alias for readability
@@ -115,11 +116,12 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     musicapp_year = _validate_year_field(raw_musicapp_year)
     release_year = _validate_year_field(raw_release_year)
 
-    # Extract optional track_status field if available
+    # Extract optional fields if available
     track_status = _extract_optional_field(fields, idx.TRACK_STATUS)
+    last_modified = _extract_optional_field(fields, idx.MODIFICATION_DATE)
 
     # Build base TrackDict
-    # Note: old_year/new_year are set to musicapp_year for NEW tracks only.
+    # Note: year_before_mgu/year_set_by_mgu are set to musicapp_year for NEW tracks only.
     # For existing tracks, these are preserved from CSV during sync.
     track = TrackDict(
         id=fields[idx.ID].strip(),
@@ -128,11 +130,12 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
         album=fields[idx.ALBUM].strip(),
         genre=fields[idx.GENRE].strip(),
         date_added=fields[idx.DATE_ADDED].strip(),
+        last_modified=last_modified or None,
         track_status=track_status or None,
         year=musicapp_year,  # Current year in Music.app
         release_year=release_year,  # From release date metadata
-        old_year=musicapp_year,  # Initial value for new tracks (will be preserved)
-        new_year="",  # Empty until MGU updates this track
+        year_before_mgu=musicapp_year,  # Initial value for new tracks (will be preserved)
+        year_set_by_mgu="",  # Empty until MGU updates this track
     )
 
     if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):
@@ -189,25 +192,27 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
 def group_tracks_by_artist(
     tracks: list[TrackDict],
 ) -> dict[str, list[TrackDict]]:
-    """Group tracks by artist name into a dictionary for efficient processing.
+    """Group tracks by album_artist or normalized artist.
 
-    Uses standard Python collections, no external dependencies or logging needed internally.
+    Uses album_artist when available to properly handle collaboration tracks.
+    Falls back to normalized artist when album_artist is empty.
 
     :param tracks: List of track dictionaries.
     :return: Dictionary mapping artist names to lists of their tracks.
     """
-    # Use defaultdict for efficient grouping without checking for key existence
     artists: defaultdict[str, list[TrackDict]] = defaultdict(list)
     for track in tracks:
-        # Ensure artist key exists, default to "Unknown" if missing
-        # Use dict.get() for dictionary access, not getattr() which is for object attributes
-        artist = track.get("artist", "Unknown")
-        if artist and isinstance(artist, str):
-            # Normalize for case-insensitive grouping
-            # (e.g., "2CELLOS" and "2Cellos" become same group)
-            artist_key = normalize_for_matching(artist)
+        # Prefer album_artist for grouping (handles collaborations correctly)
+        album_artist = track.get("album_artist", "")
+
+        # Fallback to normalized artist if album_artist is empty
+        if not album_artist or not str(album_artist).strip():
+            raw_artist = str(track.get("artist", "Unknown"))
+            album_artist = normalize_collaboration_artist(raw_artist)
+
+        if album_artist and isinstance(album_artist, str) and album_artist.strip():
+            artist_key = normalize_for_matching(album_artist)
             artists[artist_key].append(track)
-    # Convert to dict for type safety (function signature promises dict, not defaultdict)
     return dict(artists)
 
 

@@ -1,13 +1,15 @@
 #!/bin/bash
-# run-daemon.sh - Main wrapper script for Genre Updater daemon
+# run-daemon.sh - Thin infrastructure wrapper for Genre Updater daemon
 # Called by launchctl when Music Library changes
 #
-# Features:
+# Responsibilities (infrastructure only):
 # - PID-based locking (prevents concurrent runs)
-# - Quick track count check (skips if no new tracks)
-# - Auto git pull from origin/main
-# - macOS notifications on failure
-# - Comprehensive logging
+# - Git pull from origin/main
+# - Dependency sync (uv)
+# - Execute Python pipeline
+# - Notifications on success/failure
+#
+# Business logic is handled entirely by Python.
 
 set -euo pipefail
 
@@ -24,8 +26,6 @@ DAEMON_DIR="$SUPPORT_DIR/app"
 CONFIG_SOURCE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/my-config.yaml"
 
 LOCK_FILE="$STATE_DIR/run.lock"
-TRACK_COUNT_FILE="$STATE_DIR/last_track_count"
-FORCE_RUN_FILE="$STATE_DIR/force_run"
 DAEMON_LOG="$LOGS_DIR/daemon.log"
 
 TIMEOUT_SECONDS=14400  # 4 hours
@@ -79,38 +79,6 @@ acquire_lock() {
 acquire_lock
 log "Lock acquired (PID: $$)"
 
-# === Quick track count check (BEFORE git/uv for speed) ===
-quick_track_count_check() {
-    # Check for force run override
-    if [[ -f "$FORCE_RUN_FILE" ]]; then
-        log "Force run requested. Skipping count check."
-        rm -f "$FORCE_RUN_FILE"
-        return 0
-    fi
-
-    # Get current track count from Music.app (~0.5 sec)
-    local current_count
-    if ! current_count=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null); then
-        log "Could not get track count (Music.app not running?). Proceeding anyway."
-        return 0
-    fi
-
-    # Get last known count
-    local last_count
-    last_count=$(cat "$TRACK_COUNT_FILE" 2>/dev/null || echo "0")
-
-    # Compare
-    if [[ "$current_count" == "$last_count" ]]; then
-        log "Track count unchanged ($current_count). No new tracks. Exiting."
-        exit 0
-    fi
-
-    log "Track count changed: $last_count → $current_count"
-    return 0
-}
-
-quick_track_count_check
-
 # === Git update ===
 log "Updating from git..."
 cd "$DAEMON_DIR"
@@ -149,12 +117,11 @@ log "Git update complete"
 log "Syncing dependencies..."
 
 # Function to sync with auto-recovery
-# Note: Using if-block instead of &&/|| to avoid set -e edge cases
 sync_dependencies() {
     local sync_output
     local sync_exit
 
-    # First attempt (if-block pattern is safer with set -e)
+    # First attempt
     sync_exit=0
     if ! sync_output=$(uv sync --frozen 2>&1); then
         sync_exit=$?
@@ -166,7 +133,6 @@ sync_dependencies() {
     fi
 
     # First failure - try cleaning venv and retrying
-    # Safe to rm -rf here: this is daemon's isolated clone, not user's dev env
     log "First sync failed (exit $sync_exit), cleaning venv and retrying..."
     rm -rf "$DAEMON_DIR/.venv" "$DAEMON_DIR/src/music_genre_updater.egg-info"
 
@@ -197,19 +163,9 @@ log "Dependencies synced"
 log "Starting main pipeline..."
 EXIT_CODE=0
 
-# Get current count for saving after success
-CURRENT_COUNT=$(osascript -e 'tell application "Music" to count of tracks' 2>/dev/null || echo "")
-
 if timeout "$TIMEOUT_SECONDS" uv run python main.py \
     >> "$LOGS_DIR/stdout.log" 2>> "$LOGS_DIR/stderr.log"; then
     log "Main pipeline completed successfully"
-
-    # Update track count (for next run's quick check)
-    if [[ -n "$CURRENT_COUNT" ]]; then
-        echo "$CURRENT_COUNT" > "$TRACK_COUNT_FILE"
-        log "Track count saved: $CURRENT_COUNT"
-    fi
-
     notify "Genre Updater" "Update completed successfully" "Glass"
 
     # Sync snapshot to repo for regression tests
@@ -228,7 +184,6 @@ else
         notify "Genre Updater Error" "Script timed out after 4 hours"
     else
         log_error "Script failed with exit code: $EXIT_CODE"
-        # Get last few lines of stderr for notification
         error_snippet=$(tail -3 "$LOGS_DIR/stderr.log" 2>/dev/null | tr '\n' ' ' | cut -c1-100)
         notify "Genre Updater Error" "Exit code $EXIT_CODE: $error_snippet"
     fi

@@ -306,7 +306,11 @@ class LibrarySnapshotService:
 
     @staticmethod
     def _parse_raw_track(raw_track: dict[str, Any]) -> TrackDict:
-        """Parse raw track dict to TrackDict."""
+        """Parse raw track dict to TrackDict.
+
+        Note: year_set_by_mgu is a tracking field managed by MGU, not from AppleScript.
+        It's initialized to None here and populated by year_batch.py during processing.
+        """
         year_value = raw_track.get("year")
         return TrackDict(
             id=raw_track.get("id", ""),
@@ -316,11 +320,11 @@ class LibrarySnapshotService:
             album=raw_track.get("album", ""),
             genre=raw_track.get("genre"),
             date_added=raw_track.get("date_added"),
+            last_modified=raw_track.get("modification_date"),
             track_status=raw_track.get("track_status"),
             year=year_value if year_value and str(year_value).strip() else None,
             release_year=raw_track.get("release_year"),
-            new_year=raw_track.get("new_year"),
-            last_modified=None,
+            year_set_by_mgu=None,  # Tracking field, not from AppleScript
         )
 
     def _parse_fetch_tracks_output(self, raw_output: str) -> list[dict[str, str]]:
@@ -345,8 +349,9 @@ class LibrarySnapshotService:
 
             fields = line.split(field_separator)
 
-            # Expected fields: id, name, artist, album_artist, album, genre, date_added,
-            # track_status, year, release_year, new_year
+            # Expected fields from AppleScript (fetch_tracks.applescript):
+            # id, name, artist, album_artist, album, genre, date_added,
+            # modification_date, track_status, year, release_year, ""
             if len(fields) >= 11:
                 track = {
                     "id": fields[0],
@@ -356,10 +361,10 @@ class LibrarySnapshotService:
                     "album": fields[4],
                     "genre": fields[5],
                     "date_added": fields[6],
-                    "track_status": fields[7],
-                    "year": fields[8],
-                    "release_year": fields[9],
-                    "new_year": fields[10],
+                    "modification_date": fields[7],
+                    "track_status": fields[8],
+                    "year": fields[9],
+                    "release_year": fields[10],
                 }
                 tracks.append(track)
             else:

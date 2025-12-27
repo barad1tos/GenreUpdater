@@ -19,9 +19,7 @@ launchctl/                              # In git repo (version controlled)
 ├── app/                                # Git clone of repo (main branch)
 │   └── [full repo clone]
 ├── state/
-│   ├── last_track_count                # Track count for delta detection
-│   ├── run.lock                        # PID lock file
-│   └── force_run                       # Touch to force next run
+│   └── run.lock                        # PID lock file
 ├── logs/
 │   ├── daemon.log
 │   ├── stdout.log
@@ -36,9 +34,19 @@ launchctl/                              # In git repo (version controlled)
 
 ## Architecture
 
+The daemon is a **thin infrastructure wrapper**. All business logic is in Python.
+
 ```
-iCloud/.../Genres Autoupdater v2.0/           # DEV (your development work)
-~/Library/Application Support/GenreUpdater/app/  # DAEMON (production, main branch)
+┌─────────────────────────────────────────────────┐
+│  Python + AppleScript = Self-sufficient system  │
+│  Decides what to process, handles all logic     │
+└─────────────────────────────────────────────────┘
+                      ↑
+                      │ just runs
+┌─────────────────────────────────────────────────┐
+│  Daemon = Infrastructure only                   │
+│  Lock → Git pull → uv sync → Run Python         │
+└─────────────────────────────────────────────────┘
 ```
 
 ### Why This Structure?
@@ -47,7 +55,6 @@ iCloud/.../Genres Autoupdater v2.0/           # DEV (your development work)
 - **Daemon (app/)**: Isolated git clone in Application Support, always on `main`
 - **Isolation**: Daemon code is NOT synced via iCloud (prevents race conditions)
 - **Auto-update**: Daemon pulls from `origin/main` on each trigger
-- **State files**: Local only, never synced
 
 ## Quick Start
 
@@ -87,11 +94,11 @@ Edit `launchctl/com.music.genreautoupdater.plist` in the repo:
 <key>ThrottleInterval</key>
 <integer>300</integer>  <!-- 5 minutes -->
 
-        <!-- Change CPU priority (0=normal, 10=low) -->
+<!-- Change CPU priority (0=normal, 10=low) -->
 <key>Nice</key>
 <integer>10</integer>
 
-        <!-- Change timeout -->
+<!-- Change timeout -->
 <key>ExitTimeOut</key>
 <integer>14400</integer>  <!-- 4 hours -->
 ```
@@ -121,7 +128,6 @@ Then redeploy:
 Edit the plist template, find WatchPaths:
 
 ```xml
-
 <key>WatchPaths</key>
 <array>
 <string>$HOME/Music/Music/Music Library.musiclibrary</string>
@@ -141,8 +147,7 @@ Edit the plist template, find WatchPaths:
 ### Manual Operations
 
 ```bash
-# Force run now (ignoring track count check)
-touch ~/Library/Application\ Support/GenreUpdater/state/force_run
+# Trigger daemon manually
 launchctl kickstart -k gui/$(id -u)/com.music.genreautoupdater
 
 # Manual run without kickstart
@@ -175,38 +180,37 @@ The daemon watches:
 
 Any change to this file triggers the daemon.
 
-### Track Count Check
+### Daemon Flow
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Music Library Changed                               │
-│           │                                          │
-│           ▼                                          │
-│  ┌─────────────────-┐                                │
-│  │ Already running? │──Yes──▶ Exit (lock file)       │
-│  └────────┬───────-─┘                                │
-│           │ No                                       │
-│           ▼                                          │
-│  ┌────────────────────┐                              │
-│  │ Track count same?  │──Yes──▶ Exit (~0.2 sec)      │
-│  └────────┬───────────┘                              │
-│           │ No (or force_run exists)                 │
-│           ▼                                          │
-│  ┌────────────────-─┐                                │
-│  │  git pull        │                                │
-│  │  uv sync         │                                │
-│  │  run script      │                                │
-│  └────────┬──────-──┘                                │
-│           │                                          │
-│           ▼                                          │
-│  Save track count / Send notification                │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│  Music Library Changed                     │
+│           │                                │
+│           ▼                                │
+│  ┌─────────────────────┐                   │
+│  │ Already running?    │──Yes──▶ Exit      │
+│  └────────┬────────────┘                   │
+│           │ No                             │
+│           ▼                                │
+│  ┌────────────────────┐                    │
+│  │  git pull          │                    │
+│  │  uv sync           │                    │
+│  │  run Python        │                    │
+│  └────────┬───────────┘                    │
+│           │                                │
+│           ▼                                │
+│  Python decides what to process            │
+│  (uses snapshot cache for speed)           │
+│           │                                │
+│           ▼                                │
+│  Send notification                         │
+└────────────────────────────────────────────┘
 ```
 
 **Timings:**
 
 - LaunchAgent ThrottleInterval: 5 minutes (minimum between triggers)
-- Track count check: ~0.2 seconds (fast exit if unchanged)
+- Python startup + quick exit if nothing to do: ~3-4 seconds
 - Max runtime: 4 hours (timeout)
 
 ## Development Workflow
@@ -241,11 +245,10 @@ Each machine has:
 
 - Shared dev code via iCloud (v2.0/)
 - Independent daemon clone (app/) - NOT synced
-- Local state (lock, track count, logs) - NOT synced
+- Local state (lock, logs) - NOT synced
 
 This means:
 
-- Each machine has independent track count state
 - Each machine can run daemon independently
 - No conflict between machines
 
@@ -287,19 +290,6 @@ launchctl unload ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 launchctl load ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 ```
 
-### Script Not Running on Library Changes
-
-```bash
-# Verify WatchPaths target exists
-ls -la ~/Music/Music/Music\ Library.musiclibrary
-
-# Check daemon.log for track count messages
-grep -i "track count" ~/Library/Application\ Support/GenreUpdater/logs/daemon.log
-
-# Force a run (bypasses track count check)
-touch ~/Library/Application\ Support/GenreUpdater/state/force_run
-```
-
 ### Git Pull Fails
 
 ```bash
@@ -328,4 +318,4 @@ ls -la ~/Library/Application\ Support/GenreUpdater/app/.env
 ---
 
 **Status:** Production-ready
-**Last update:** 2025-12-24
+**Last update:** 2025-12-26

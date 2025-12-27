@@ -283,11 +283,12 @@ class TestGroupTracksByArtist:
     """Tests for group_tracks_by_artist function."""
 
     @staticmethod
-    def _make_track(track_id: str, artist: str) -> TrackDict:
+    def _make_track(track_id: str, artist: str, album_artist: str = "") -> TrackDict:
         return TrackDict(
             id=track_id,
             name=f"Track {track_id}",
             artist=artist,
+            album_artist=album_artist,
             album="Album",
             genre="Rock",
             date_added="2020-01-01 00:00:00",
@@ -330,6 +331,77 @@ class TestGroupTracksByArtist:
         # Empty artist names are skipped, only "Real Artist" (lowercased) should be present
         assert len(result) == 1
         assert "real artist" in result
+
+    def test_uses_album_artist_when_present(self) -> None:
+        """Tracks with same album_artist should be grouped together."""
+        tracks = [
+            self._make_track("1", "Lord of the Lost", "Lord of the Lost"),
+            self._make_track("2", "Lord of the Lost & IAMX", "Lord of the Lost"),
+            self._make_track("3", "Lord of the Lost feat. Mono Inc.", "Lord of the Lost"),
+        ]
+        result = group_tracks_by_artist(tracks)
+
+        # All tracks have same album_artist, should be one group
+        assert len(result) == 1
+        assert "lord of the lost" in result
+        assert len(result["lord of the lost"]) == 3
+
+    def test_normalizes_collaboration_when_album_artist_empty(self) -> None:
+        """When album_artist is empty, extract main artist from collaboration."""
+        tracks = [
+            self._make_track("1", "Artist A feat. Artist B", ""),
+            self._make_track("2", "Artist A", ""),
+        ]
+        result = group_tracks_by_artist(tracks)
+
+        # Both should be grouped under normalized "Artist A"
+        assert len(result) == 1
+        assert "artist a" in result
+        assert len(result["artist a"]) == 2
+
+    def test_collaboration_separators(self) -> None:
+        """Various collaboration separators should all normalize correctly."""
+        tracks = [
+            self._make_track("1", "Main Artist & Other", ""),
+            self._make_track("2", "Main Artist feat. Someone", ""),
+            self._make_track("3", "Main Artist ft. Another", ""),
+            self._make_track("4", "Main Artist vs. Rival", ""),
+            self._make_track("5", "Main Artist with Friend", ""),
+            self._make_track("6", "Main Artist x Collab", ""),
+        ]
+        result = group_tracks_by_artist(tracks)
+
+        # All should be grouped under "main artist"
+        assert len(result) == 1
+        assert "main artist" in result
+        assert len(result["main artist"]) == 6
+
+    def test_various_artists_grouping(self) -> None:
+        """Compilation tracks with 'Various Artists' album_artist group together."""
+        tracks = [
+            self._make_track("1", "Band One", "Various Artists"),
+            self._make_track("2", "Band Two", "Various Artists"),
+            self._make_track("3", "Band Three", "Various Artists"),
+        ]
+        result = group_tracks_by_artist(tracks)
+
+        # All tracks have same album_artist "Various Artists"
+        assert len(result) == 1
+        assert "various artists" in result
+        assert len(result["various artists"]) == 3
+
+    def test_album_artist_whitespace_only_falls_back(self) -> None:
+        """Whitespace-only album_artist should be treated as empty."""
+        tracks = [
+            self._make_track("1", "Test Artist feat. Guest", "   "),
+            self._make_track("2", "Test Artist", "   "),
+        ]
+        result = group_tracks_by_artist(tracks)
+
+        # Whitespace album_artist falls back to normalized artist
+        assert len(result) == 1
+        assert "test artist" in result
+        assert len(result["test artist"]) == 2
 
 
 class TestDominantGenreWithEmptyDates:

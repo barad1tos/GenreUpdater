@@ -35,21 +35,21 @@ class TestTrackFieldnames:
     def test_track_fieldnames_has_year_fields(self) -> None:
         """Verify year-related fields are present."""
         assert "year" in TRACK_FIELDNAMES
-        assert "old_year" in TRACK_FIELDNAMES
-        assert "new_year" in TRACK_FIELDNAMES
+        assert "year_before_mgu" in TRACK_FIELDNAMES
+        assert "year_set_by_mgu" in TRACK_FIELDNAMES
 
     def test_track_fieldnames_year_field_position(self) -> None:
-        """Verify year field comes before old_year and new_year."""
+        """Verify year field comes before year_before_mgu and year_set_by_mgu."""
         year_idx = TRACK_FIELDNAMES.index("year")
-        old_year_idx = TRACK_FIELDNAMES.index("old_year")
-        new_year_idx = TRACK_FIELDNAMES.index("new_year")
+        year_before_mgu_idx = TRACK_FIELDNAMES.index("year_before_mgu")
+        year_set_by_mgu_idx = TRACK_FIELDNAMES.index("year_set_by_mgu")
         # year should be for delta detection (current), old/new for tracking
-        assert year_idx < old_year_idx
-        assert year_idx < new_year_idx
+        assert year_idx < year_before_mgu_idx
+        assert year_idx < year_set_by_mgu_idx
 
     def test_track_fieldnames_has_all_core_fields(self) -> None:
         """Verify all core fields for year change tracking are present."""
-        core_fields = ["id", "name", "artist", "album", "genre", "year", "old_year", "new_year"]
+        core_fields = ["id", "name", "artist", "album", "genre", "year", "year_before_mgu", "year_set_by_mgu"]
         for field in core_fields:
             assert field in TRACK_FIELDNAMES, f"Missing field: {field}"
 

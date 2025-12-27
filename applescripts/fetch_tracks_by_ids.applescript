@@ -65,10 +65,10 @@ on serializeTrack(trackRef, fieldSeparator)
             set track_status to my normalize_cloud_status(cloud status of trackRef)
             set track_year to my normalizeYear(year of trackRef)
             set release_year to my extractReleaseYear(trackRef)
-            set new_year to "" -- maintained for compatibility
         end tell
 
-        set fields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, new_year}
+        -- Last field is empty placeholder for field count compatibility
+        set fields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, ""}
         return my joinFields(fields, fieldSeparator)
     on error
         return ""

@@ -24,7 +24,7 @@ class RevertTarget:
     track_id: str | None
     track_name: str
     album: str | None
-    old_year: str
+    year_before_mgu: str  # The year to restore (what it was before MGU changed it)
 
 
 def _changes_row_to_target(
@@ -47,11 +47,12 @@ def _changes_row_to_target(
         return None
 
     track_name = (row.get("track_name", "") or "").strip()
-    old_year = (row.get("old_year", "") or "").strip()
+    # Backward compat: check both new and old column names
+    old_year = (row.get("year_before_mgu") or row.get("old_year") or "").strip()
     if not track_name or not old_year:
         return None
 
-    return RevertTarget(track_id=None, track_name=track_name, album=row_album or None, old_year=old_year)
+    return RevertTarget(track_id=None, track_name=track_name, album=row_album or None, year_before_mgu=old_year)
 
 
 def _read_changes_report(
@@ -81,12 +82,21 @@ def _read_changes_report(
 def _choose_backup_year(row: dict[str, str]) -> str:
     """Choose year value from a backup CSV row.
 
-    Priority: 'year' column if present -> 'old_year' -> 'new_year'.
+    Priority: 'year' column if present -> 'year_before_mgu'/'old_year' -> 'year_set_by_mgu'/'new_year'.
+    Supports both old and new column names for backward compat.
     """
-    for key in ("year", "old_year", "new_year"):
-        v = (row.get(key, "") or "").strip()
-        if v.isdigit():
-            return v
+    # Check 'year' column first
+    v = (row.get("year", "") or "").strip()
+    if v.isdigit():
+        return v
+    # Check year_before_mgu/old_year (backward compat)
+    v = (row.get("year_before_mgu") or row.get("old_year") or "").strip()
+    if v.isdigit():
+        return v
+    # Check year_set_by_mgu/new_year (backward compat)
+    v = (row.get("year_set_by_mgu") or row.get("new_year") or "").strip()
+    if v.isdigit():
+        return v
     return ""
 
 
@@ -119,7 +129,7 @@ def _read_backup_csv(
                         track_id=(row.get("id", "") or "").strip() or None,
                         track_name=(row.get("name", "") or "").strip(),
                         album=row_album or None,
-                        old_year=year_val,
+                        year_before_mgu=year_val,
                     )
                 )
     return targets
@@ -187,8 +197,8 @@ def _build_year_change_entry(track: dict[str, Any], reverted_year: str) -> dict[
         "album": _normalize_text(track.get("album")),
         "album_name": _normalize_text(track.get("album")),
         "track_name": _normalize_text(track.get("name")),
-        "old_year": _normalize_text(track.get("year")),
-        "new_year": reverted_year,
+        "year_before_mgu": _normalize_text(track.get("year")),
+        "year_set_by_mgu": reverted_year,
     }
 
 
@@ -262,10 +272,10 @@ async def apply_year_reverts(
             missing += 1
             continue
 
-        if not await _revert_track_year(track_processor, track=track, track_id=track_id, reverted_year=target.old_year):
+        if not await _revert_track_year(track_processor, track=track, track_id=track_id, reverted_year=target.year_before_mgu):
             continue
 
         updated += 1
-        change_log.append(_build_year_change_entry(track, target.old_year))
+        change_log.append(_build_year_change_entry(track, target.year_before_mgu))
 
     return updated, missing, change_log

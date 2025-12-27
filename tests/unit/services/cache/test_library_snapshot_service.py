@@ -639,15 +639,22 @@ class TestParseFetchTracksOutput:
     """Tests for _parse_fetch_tracks_output method."""
 
     def test_parses_valid_output(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should parse valid AppleScript output."""
+        """Should parse valid AppleScript output.
+
+        AppleScript field order (from fetch_tracks.applescript):
+        id, name, artist, album_artist, album, genre, date_added,
+        modification_date, track_status, year, release_year
+        """
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
 
+        # Fields: id, name, artist, album_artist, album, genre, date_added,
+        #         modification_date, track_status, year, release_year
         raw_output = (
             "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e"
-            "2024-01-01\x1eplayed\x1e2020\x1e2020\x1e\x1d"
+            "2024-01-01\x1e2024-01-15\x1ematched\x1e2020\x1e2020\x1d"
             "2\x1eName2\x1eArtist2\x1e\x1eAlbum2\x1ePop\x1e"
-            "2024-01-02\x1eplayed\x1e2021\x1e2021\x1e\x1d"
+            "2024-01-02\x1e2024-01-16\x1epurchased\x1e2021\x1e2021\x1d"
         )
 
         result = service._parse_fetch_tracks_output(raw_output)
@@ -655,8 +662,12 @@ class TestParseFetchTracksOutput:
         assert len(result) == 2
         assert result[0]["id"] == "1"
         assert result[0]["artist"] == "Artist"
+        assert result[0]["modification_date"] == "2024-01-15"
+        assert result[0]["track_status"] == "matched"
+        assert result[0]["year"] == "2020"
         assert result[1]["id"] == "2"
         assert result[1]["genre"] == "Pop"
+        assert result[1]["track_status"] == "purchased"
 
     def test_skips_empty_lines(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should skip empty lines."""
@@ -686,11 +697,16 @@ class TestParseFetchTracksOutput:
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
 
-        raw_output = "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e2024-01-01\x1eplayed\x1e2020\x1e2020\x1e\x1dinvalid\x1eline\x1d"
+        # Valid: id, name, artist, album_artist, album, genre, date_added,
+        #        modification_date, track_status, year, release_year (11 fields)
+        raw_output = (
+            "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e2024-01-01\x1e2024-01-15\x1ematched\x1e2020\x1e2020\x1dinvalid\x1eline\x1d"
+        )
 
         result = service._parse_fetch_tracks_output(raw_output)
         assert len(result) == 1
         assert result[0]["id"] == "1"
+        assert result[0]["track_status"] == "matched"
 
 
 # ========================= Compute Smart Delta Tests =========================
@@ -1309,7 +1325,11 @@ class TestParseRawTrack:
     """Tests for _parse_raw_track static method."""
 
     def test_parses_complete_track(self) -> None:
-        """Should parse complete track data."""
+        """Should parse complete track data.
+
+        Note: year_set_by_mgu is a tracking field managed by MGU, not from AppleScript.
+        It's always None when parsing AppleScript output.
+        """
         raw = {
             "id": "123",
             "name": "Track Name",
@@ -1318,15 +1338,18 @@ class TestParseRawTrack:
             "album": "Album",
             "genre": "Rock",
             "date_added": "2024-01-01",
-            "track_status": "played",
+            "modification_date": "2024-01-15",
+            "track_status": "matched",
             "year": "2020",
             "release_year": "2020",
-            "new_year": "2021",
         }
         result = LibrarySnapshotService._parse_raw_track(raw)
         assert result.id == "123"
         assert result.name == "Track Name"
         assert result.year == "2020"
+        assert result.last_modified == "2024-01-15"
+        assert result.track_status == "matched"
+        assert result.year_set_by_mgu is None  # Tracking field, not from AppleScript
 
     def test_handles_empty_year(self) -> None:
         """Should handle empty year value."""

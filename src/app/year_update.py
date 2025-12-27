@@ -203,8 +203,8 @@ class YearUpdateService:
                     artist="ERROR",
                     album_name=f"Year update failed: {type(e).__name__}",
                     track_name=str(e)[:100],
-                    old_year="",
-                    new_year="",
+                    year_before_mgu="",
+                    year_set_by_mgu="",
                 )
             )
 

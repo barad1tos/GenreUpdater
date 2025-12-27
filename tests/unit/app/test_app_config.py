@@ -33,6 +33,21 @@ class TestConfigInit:
         """Config should fall back to my-config.yaml if config.yaml doesn't exist."""
         self._setup_config_file(monkeypatch, tmp_path, "my-config.yaml")
 
+    def test_prefers_my_config_over_config_when_both_exist(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When both config.yaml and my-config.yaml exist, prefer my-config.yaml."""
+        monkeypatch.delenv("CONFIG_PATH", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        # Create both config files
+        (tmp_path / "config.yaml").write_text("source: template")
+        (tmp_path / "my-config.yaml").write_text("source: custom")
+
+        with patch("app.app_config.load_dotenv", return_value=None):
+            config = Config()
+
+        # my-config.yaml should take precedence (user config over template)
+        assert config.config_path == "my-config.yaml"
+
     @staticmethod
     def _setup_config_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, config_filename: str) -> None:
         """Set up a config file in tmp_path and verify Config finds it."""

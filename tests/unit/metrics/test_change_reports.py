@@ -112,13 +112,13 @@ class TestKeyConstants:
         """Verify NEW_GENRE constant."""
         assert Key.NEW_GENRE == "new_genre"
 
-    def test_key_old_year(self) -> None:
+    def test_key_year_before_mgu(self) -> None:
         """Verify OLD_YEAR constant."""
-        assert Key.OLD_YEAR == "old_year"
+        assert Key.YEAR_BEFORE_MGU == "year_before_mgu"
 
-    def test_key_new_year(self) -> None:
+    def test_key_year_set_by_mgu(self) -> None:
         """Verify NEW_YEAR constant."""
-        assert Key.NEW_YEAR == "new_year"
+        assert Key.YEAR_SET_BY_MGU == "year_set_by_mgu"
 
     def test_key_timestamp(self) -> None:
         """Verify TIMESTAMP constant."""
@@ -187,8 +187,8 @@ class TestIsRealChange:
         """Test year update with different values."""
         change = {
             "change_type": "year_update",
-            "old_year": "2020",
-            "new_year": "2021",
+            "year_before_mgu": "2020",
+            "year_set_by_mgu": "2021",
         }
         assert _is_real_change(change) is True
 
@@ -196,8 +196,8 @@ class TestIsRealChange:
         """Test year update with same values."""
         change = {
             "change_type": "year_update",
-            "old_year": "2020",
-            "new_year": "2020",
+            "year_before_mgu": "2020",
+            "year_set_by_mgu": "2020",
         }
         assert _is_real_change(change) is False
 
@@ -278,9 +278,9 @@ class TestDetermineChangeType:
         change = {"field": "genre"}
         assert _determine_change_type(change) == "genre"
 
-    def test_year_from_new_year_field(self) -> None:
-        """Test year detection from new_year field."""
-        change = {"new_year": "2020"}
+    def test_year_from_year_set_by_mgu_field(self) -> None:
+        """Test year detection from year_set_by_mgu field."""
+        change = {"year_set_by_mgu": "2020"}
         assert _determine_change_type(change) == "year"
 
     def test_year_from_field_attribute(self) -> None:
@@ -435,13 +435,13 @@ class TestDetermineIfChanged:
 
     def test_year_changed(self) -> None:
         """Test year change detection."""
-        record = {Key.OLD_YEAR: "2020", Key.NEW_YEAR: "2021"}
-        assert _determine_if_changed("new_year", "2021", record) is True
+        record = {Key.YEAR_BEFORE_MGU: "2020", Key.YEAR_SET_BY_MGU: "2021"}
+        assert _determine_if_changed("year_set_by_mgu", "2021", record) is True
 
     def test_year_not_changed(self) -> None:
         """Test year not changed."""
-        record = {Key.OLD_YEAR: "2020", Key.NEW_YEAR: "2020"}
-        assert _determine_if_changed("new_year", "2020", record) is False
+        record = {Key.YEAR_BEFORE_MGU: "2020", Key.YEAR_SET_BY_MGU: "2020"}
+        assert _determine_if_changed("year_set_by_mgu", "2020", record) is False
 
     def test_genre_changed(self) -> None:
         """Test genre change detection."""
@@ -465,8 +465,8 @@ class TestDetermineIfChanged:
 
     def test_empty_value_returns_false(self) -> None:
         """Test empty value returns False."""
-        record = {Key.OLD_YEAR: "2020"}
-        assert _determine_if_changed("new_year", "", record) is False
+        record = {Key.YEAR_BEFORE_MGU: "2020"}
+        assert _determine_if_changed("year_set_by_mgu", "", record) is False
 
 
 class TestMapGenreFieldValues:
@@ -500,23 +500,23 @@ class TestMapGenreFieldValues:
 class TestMapYearFieldValues:
     """Tests for _map_year_field_values function."""
 
-    def test_maps_old_value_to_old_year(self) -> None:
-        """Test old_value is mapped to old_year."""
+    def test_maps_old_value_to_year_before_mgu(self) -> None:
+        """Test old_value is mapped to year_before_mgu."""
         change: dict[str, Any] = {"old_value": "2020"}
         _map_year_field_values(change)
-        assert change["old_year"] == "2020"
+        assert change["year_before_mgu"] == "2020"
 
-    def test_maps_new_value_to_new_year(self) -> None:
-        """Test new_value is mapped to new_year."""
+    def test_maps_new_value_to_year_set_by_mgu(self) -> None:
+        """Test new_value is mapped to year_set_by_mgu."""
         change: dict[str, Any] = {"new_value": "2021"}
         _map_year_field_values(change)
-        assert change["new_year"] == "2021"
+        assert change["year_set_by_mgu"] == "2021"
 
-    def test_does_not_override_existing_old_year(self) -> None:
-        """Test existing old_year is not overridden."""
-        change: dict[str, Any] = {"old_value": "2020", "old_year": "2019"}
+    def test_does_not_override_existing_year_before_mgu(self) -> None:
+        """Test existing year_before_mgu is not overridden."""
+        change: dict[str, Any] = {"old_value": "2020", "year_before_mgu": "2019"}
         _map_year_field_values(change)
-        assert change["old_year"] == "2019"
+        assert change["year_before_mgu"] == "2019"
 
 
 class TestNormalizeFieldMappings:
@@ -533,8 +533,8 @@ class TestNormalizeFieldMappings:
         """Test year field triggers year mapping."""
         change: dict[str, Any] = {"field": "year", "old_value": "2020", "new_value": "2021"}
         _normalize_field_mappings(change)
-        assert change["old_year"] == "2020"
-        assert change["new_year"] == "2021"
+        assert change["year_before_mgu"] == "2020"
+        assert change["year_set_by_mgu"] == "2021"
 
     def test_name_to_track_name_mapping(self) -> None:
         """Test name is mapped to track_name."""
@@ -547,7 +547,7 @@ class TestNormalizeFieldMappings:
         change: dict[str, Any] = {"old_value": "Value"}
         _normalize_field_mappings(change)
         assert "old_genre" not in change
-        assert "old_year" not in change
+        assert "year_before_mgu" not in change
 
 
 class TestConvertChangelogToDict:
@@ -608,8 +608,8 @@ class TestGetCsvFieldnames:
         assert Key.TRACK_NAME in result
         assert Key.OLD_GENRE in result
         assert Key.NEW_GENRE in result
-        assert Key.OLD_YEAR in result
-        assert Key.NEW_YEAR in result
+        assert Key.YEAR_BEFORE_MGU in result
+        assert Key.YEAR_SET_BY_MGU in result
         assert Key.TIMESTAMP in result
 
     def test_field_count(self) -> None:
@@ -907,8 +907,8 @@ class TestIntegration:
                 "artist": "Artist",
                 "album": "Album",
                 "track_name": "Track",
-                "old_year": "2020",
-                "new_year": "2021",
+                "year_before_mgu": "2020",
+                "year_set_by_mgu": "2021",
             },
         ]
         save_changes_report(changes, str(file_path))
@@ -937,8 +937,8 @@ class TestIntegration:
                 "change_type": "year_update",
                 "artist": "Artist2",
                 "album": "Album",
-                "old_year": "2020",
-                "new_year": "2021",
+                "year_before_mgu": "2020",
+                "year_set_by_mgu": "2021",
             },
             {
                 "change_type": "name_clean",
