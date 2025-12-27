@@ -187,8 +187,8 @@ class YearDeterminator:
     ) -> str | None:
         """Determine year for album using simplified Linus approach.
 
-        Order: dominant year -> consensus release_year -> cache -> API -> None
-        When force=True, skips dominant year and cache checks - always queries API.
+        Order: dominant year -> cache (high confidence) -> consensus release_year -> API -> None
+        When force=True, skips local sources - always queries API.
 
         Args:
             artist: Artist name
