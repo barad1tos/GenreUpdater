@@ -129,7 +129,7 @@ on run argv
 					set release_date_raw to my item_or_missing(releaseDateList, idx)
 					set release_year to my extractYearFromDate(release_date_raw)
 
-					-- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, new_year
+					-- Output: track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, "" (empty placeholder)
 					set trackFields to {track_id, track_name, track_artist, album_artist, track_album, track_genre, date_added, modification_date, track_status, track_year, release_year, ""}
 
 					set oldDelimiters to AppleScript's text item delimiters

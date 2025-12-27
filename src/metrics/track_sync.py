@@ -357,19 +357,20 @@ def _build_osascript_command(script_path: str, artist_filter: str | None) -> lis
 
 
 # AppleScript output field count constants
-# Format: id, name, artist, album_artist, album, genre, date_added, modification_date, status, year, release_year, new_year
+# Format: id, name, artist, album_artist, album, genre, date_added, modification_date, status, year, release_year, ""
+# Note: Last field is empty placeholder (AppleScript outputs ""). year_set_by_mgu is CSV-only, set by year_batch.py.
 _FIELD_COUNT_WITH_ALBUM_ARTIST = 12
 _FIELD_COUNT_WITHOUT_ALBUM_ARTIST = 11
 
 # Field indices for format with album_artist (12 fields)
-# 0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added, 7:mod_date, 8:status, 9:year, 10:release_year, 11:new_year
+# 0:id, 1:name, 2:artist, 3:album_artist, 4:album, 5:genre, 6:date_added, 7:mod_date, 8:status, 9:year, 10:release_year, 11:""
 _DATE_ADDED_IDX_12 = 6
 _MODIFICATION_DATE_IDX_12 = 7
 _STATUS_IDX_12 = 8
 _YEAR_IDX_12 = 9
 
 # Field indices for format without album_artist (11 fields)
-# 0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added, 6:mod_date, 7:status, 8:year, 9:release_year, 10:new_year
+# 0:id, 1:name, 2:artist, 3:album, 4:genre, 5:date_added, 6:mod_date, 7:status, 8:year, 9:release_year, 10:""
 _DATE_ADDED_IDX_11 = 5
 _MODIFICATION_DATE_IDX_11 = 6
 _STATUS_IDX_11 = 7
