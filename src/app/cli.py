@@ -139,11 +139,7 @@ Examples:
 
         # Subcommands
         subparsers = parser.add_subparsers(
-            dest="command",
-            title="Commands",
-            description="Available commands",
-            help="Use '%(prog)s COMMAND --help' for command-specific help",
-            required=False,
+            dest="command", title="Commands", description="Available commands", help="Use '%(prog)s COMMAND --help' for command-specific help"
         )
 
         # Clean artist command
