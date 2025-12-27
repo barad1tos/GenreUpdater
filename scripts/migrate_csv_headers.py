@@ -47,10 +47,7 @@ def _get_logs_base() -> Path:
 
     # Check environment variable
     env_path = os.environ.get("MGU_LOGS_BASE")
-    if env_path:
-        return Path(env_path)
-
-    return _DEFAULT_LOGS_BASE
+    return Path(env_path) if env_path else _DEFAULT_LOGS_BASE
 
 
 def _get_csv_files(logs_base: Path) -> list[Path]:
@@ -65,7 +62,7 @@ def backup_file(file_path: Path) -> Path:
     """Create a timestamped backup of the file."""
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     backup_path = file_path.with_suffix(f".backup_{timestamp}.csv")
-    shutil.copy2(file_path, backup_path)
+    _ = shutil.copy2(file_path, backup_path)
     return backup_path
 
 
@@ -82,7 +79,7 @@ def migrate_headers(file_path: Path, dry_run: bool = False) -> tuple[bool, list[
         return False, messages
 
     # Read the file
-    with file_path.open("r", encoding="utf-8") as f:
+    with file_path.open(encoding="utf-8") as f:
         reader = csv.reader(f)
         rows = list(reader)
 
@@ -92,7 +89,7 @@ def migrate_headers(file_path: Path, dry_run: bool = False) -> tuple[bool, list[
 
     # Check headers
     original_headers = rows[0]
-    new_headers = []
+    new_headers: list[str] = []
     changed = False
 
     for header in original_headers:
