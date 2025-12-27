@@ -25,6 +25,7 @@ from typing import Any
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
+from core.tracks.year_utils import normalize_collaboration_artist
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
 _logged_cleaning_exceptions: set[tuple[str, str]] = set()
@@ -191,25 +192,27 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
 def group_tracks_by_artist(
     tracks: list[TrackDict],
 ) -> dict[str, list[TrackDict]]:
-    """Group tracks by artist name into a dictionary for efficient processing.
+    """Group tracks by album_artist or normalized artist.
 
-    Uses standard Python collections, no external dependencies or logging needed internally.
+    Uses album_artist when available to properly handle collaboration tracks.
+    Falls back to normalized artist when album_artist is empty.
 
     :param tracks: List of track dictionaries.
     :return: Dictionary mapping artist names to lists of their tracks.
     """
-    # Use defaultdict for efficient grouping without checking for key existence
     artists: defaultdict[str, list[TrackDict]] = defaultdict(list)
     for track in tracks:
-        # Ensure artist key exists, default to "Unknown" if missing
-        # Use dict.get() for dictionary access, not getattr() which is for object attributes
-        artist = track.get("artist", "Unknown")
-        if artist and isinstance(artist, str):
-            # Normalize for case-insensitive grouping
-            # (e.g., "2CELLOS" and "2Cellos" become same group)
-            artist_key = normalize_for_matching(artist)
+        # Prefer album_artist for grouping (handles collaborations correctly)
+        album_artist = track.get("album_artist", "")
+
+        # Fallback to normalized artist if album_artist is empty
+        if not album_artist or not str(album_artist).strip():
+            raw_artist = str(track.get("artist", "Unknown"))
+            album_artist = normalize_collaboration_artist(raw_artist)
+
+        if album_artist and isinstance(album_artist, str) and album_artist.strip():
+            artist_key = normalize_for_matching(album_artist)
             artists[artist_key].append(track)
-    # Convert to dict for type safety (function signature promises dict, not defaultdict)
     return dict(artists)
 
 
