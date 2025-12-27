@@ -396,8 +396,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
             fields = line.split(field_separator)
 
             # Expected fields: id, name, artist, album_artist, album, genre, date_added,
-            # track_status, year, release_year, year_set_by_mgu
-            if len(fields) >= 11:
+            # track_status, year, release_year, "" (empty placeholder, ignored)
+            # Note: year_set_by_mgu is a tracking field managed by year_batch.py,
+            # NOT from AppleScript. The last field is always empty.
+            if len(fields) >= 10:
                 track = {
                     "id": fields[0],
                     "name": fields[1],
@@ -409,12 +411,12 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     "track_status": fields[7],
                     "year": fields[8],
                     "release_year": fields[9],
-                    "year_set_by_mgu": fields[10],
+                    # fields[10] is empty placeholder - intentionally not exposed
                 }
                 tracks.append(track)
             else:
                 logging.warning(
-                    "Skipping line with insufficient fields (%d < 11): %s",
+                    "Skipping line with insufficient fields (%d < 10): %s",
                     len(fields),
                     line[:100] if len(line) > 100 else line,
                 )

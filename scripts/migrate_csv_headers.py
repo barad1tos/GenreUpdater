@@ -7,15 +7,20 @@ This script:
 3. Preserves all data
 
 Usage:
-    uv run python scripts/migrate_csv_headers.py [--dry-run]
+    uv run python scripts/migrate_csv_headers.py [--dry-run] [--logs-base PATH]
 
 Options:
-    --dry-run    Show what would be changed without modifying files
+    --dry-run         Show what would be changed without modifying files
+    --logs-base PATH  Override the logs directory (default: $MGU_LOGS_BASE or iCloud path)
+
+Environment:
+    MGU_LOGS_BASE     Base directory for logs (overrides default path)
 """
 
 from __future__ import annotations
 
 import csv
+import os
 import shutil
 import sys
 from datetime import datetime, UTC
@@ -27,12 +32,33 @@ HEADER_MIGRATIONS = {
     "new_year": "year_set_by_mgu",
 }
 
-# CSV files to migrate (absolute paths to REAL data location)
-LOGS_BASE = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs"
-CSV_FILES = [
-    LOGS_BASE / "csv/track_list.csv",
-    LOGS_BASE / "csv/changes_report.csv",  # May not exist yet
-]
+# Default logs path (can be overridden via --logs-base or MGU_LOGS_BASE env var)
+_DEFAULT_LOGS_BASE = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs"
+
+
+def _get_logs_base() -> Path:
+    """Get logs base directory from CLI args, env var, or default."""
+    # Check CLI args for --logs-base
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg == "--logs-base" and i < len(sys.argv) - 1:
+            return Path(sys.argv[i + 1])
+        if arg.startswith("--logs-base="):
+            return Path(arg.split("=", 1)[1])
+
+    # Check environment variable
+    env_path = os.environ.get("MGU_LOGS_BASE")
+    if env_path:
+        return Path(env_path)
+
+    return _DEFAULT_LOGS_BASE
+
+
+def _get_csv_files(logs_base: Path) -> list[Path]:
+    """Get list of CSV files to migrate."""
+    return [
+        logs_base / "csv/track_list.csv",
+        logs_base / "csv/changes_report.csv",  # May not exist yet
+    ]
 
 
 def backup_file(file_path: Path) -> Path:
@@ -102,10 +128,13 @@ def migrate_headers(file_path: Path, dry_run: bool = False) -> tuple[bool, list[
 def main() -> int:
     """Run the migration."""
     dry_run = "--dry-run" in sys.argv
+    logs_base = _get_logs_base()
+    csv_files = _get_csv_files(logs_base)
 
     print("=" * 60)
     print("CSV Header Migration: old_year/new_year → year_before_mgu/year_set_by_mgu")
     print("=" * 60)
+    print(f"Logs base: {logs_base}")
 
     if dry_run:
         print("\n⚠️  DRY RUN MODE - No files will be modified\n")
@@ -114,7 +143,7 @@ def main() -> int:
 
     total_changed = 0
 
-    for csv_path in CSV_FILES:
+    for csv_path in csv_files:
         print(f"\nProcessing: {csv_path}")
 
         changed, messages = migrate_headers(csv_path, dry_run=dry_run)

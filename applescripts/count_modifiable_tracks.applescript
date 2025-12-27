@@ -3,7 +3,10 @@
 -- Excludes: prerelease, unknown, no longer available (read-only tracks)
 --
 -- Performance: ~27s for 37K tracks (vs 0.4s for simple count)
--- Used by daemon for accurate change detection
+--
+-- Status: NOT WIRED into daemon (kept for manual debugging/future use)
+-- The daemon was simplified to remove track-count logic - Python pipeline
+-- handles all business logic including deciding whether to run.
 --
 -- Filtering logic matches fetch_tracks.applescript and fetch_track_ids.applescript
 

@@ -503,6 +503,37 @@ class TestMergeMusicappIntoCsv:
         # Original year_before_mgu should be preserved
         assert csv_tracks["7"].year_before_mgu == "2020"
 
+    def test_initializes_empty_string_year_before_mgu_from_musicapp(self) -> None:
+        """Should initialize empty string year_before_mgu from Music.app year.
+
+        Issue #126: Tests empty string (vs None) case for year_before_mgu.
+        Normalized CSVs may contain empty strings rather than None.
+        """
+        csv_track = _create_test_track("8", year="2023", year_before_mgu="")
+        musicapp_track = _create_test_track("8", year="2023", year_before_mgu="2023")
+        csv_tracks = {"8": csv_track}
+        musicapp_tracks = {"8": musicapp_track}
+
+        _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
+
+        # Empty string year_before_mgu should be initialized from Music.app year
+        assert csv_tracks["8"].year_before_mgu == "2023"
+
+    def test_no_initialization_when_both_years_empty(self) -> None:
+        """Should not initialize when both csv and musicapp have empty years.
+
+        Issue #126: When Music.app has no year, there's nothing to initialize from.
+        """
+        csv_track = _create_test_track("9", year="", year_before_mgu="")
+        musicapp_track = _create_test_track("9", year="", year_before_mgu="")
+        csv_tracks = {"9": csv_track}
+        musicapp_tracks = {"9": musicapp_track}
+
+        _merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
+
+        # Should remain empty when no year to initialize from
+        assert csv_tracks["9"].year_before_mgu == ""
+
 
 class TestBuildOsascriptCommand:
     """Tests for _build_osascript_command function."""
