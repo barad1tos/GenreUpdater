@@ -138,7 +138,12 @@ class Orchestrator:
 
     async def _maybe_auto_verify(self) -> None:
         """Run automatic database verification if threshold days have passed."""
-        if await self.music_updater.database_verifier.should_auto_verify():
+        should_verify = await self.music_updater.database_verifier.should_auto_verify()
+        self.console_logger.info(
+            "Auto-verify check: %s",
+            "running verification" if should_verify else "not needed yet",
+        )
+        if should_verify:
             await self.music_updater.run_verify_database()
 
     async def _run_test_mode(self, args: argparse.Namespace) -> None:
