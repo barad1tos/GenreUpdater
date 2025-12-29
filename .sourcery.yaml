@@ -1,0 +1,7 @@
+# .sourcery.yaml - Sourcery AI code review configuration
+# https://docs.sourcery.ai/Code-Review/Configuration/
+
+# Exclude large fixture files from AI review
+# library_snapshot.json is 14MB (37K tracks) - exceeds 150K char limit
+ignore:
+  - tests/fixtures/**
