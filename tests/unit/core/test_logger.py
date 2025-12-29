@@ -161,7 +161,7 @@ class TestGetFullLogPath:
 class TestBuildConfigAliasMap:
     """Tests for build_config_alias_map function."""
 
-    def test_retubuild_config_alias_mapconfig(self) -> None:
+    def test_returns_empty_for_non_dict_config(self) -> None:
         """Should return empty list for non-dict config."""
         result = build_config_alias_map(None)
         assert result == []
@@ -847,7 +847,6 @@ class TestRunTrackingHandler:
         captured = capsys.readouterr()
         assert "Failed to write log footer" in captured.err
 
-    # TODO Rename this here and in `test_emit_writes_header_before_first_record`, `test_emit_writes_header_only_once`, `test_close_writes_footer`, `test_emit_handles_header_write_error`, `test_close_handles_footer_write_error` and `test_close_handles_trim_error`
     def test_close_handles_trim_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when trimming log file."""
         log_file = tmp_path / "test.log"
