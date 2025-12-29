@@ -52,6 +52,9 @@ fi
 log "Copying snapshot to fixtures..."
 cp "$SNAPSHOT" "$FIXTURE_PATH"
 
+# Ensure trailing newline (fixes end-of-file-fixer pre-commit hook)
+[[ -n "$(tail -c1 "$FIXTURE_PATH")" ]] && echo >> "$FIXTURE_PATH"
+
 log "Committing..."
 git add "$FIXTURE_PATH"
 
