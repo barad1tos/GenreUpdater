@@ -44,6 +44,35 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.status import Status
 
+# Explicit exports
+__all__ = [
+    "LEVEL_ABBREV",
+    "CompactFormatter",
+    "LogFormat",
+    "Loggable",
+    "LoggerFilter",
+    "RunHandler",
+    "RunTrackingHandler",
+    "SafeQueueListener",
+    "build_config_alias_map",
+    "convert_path_value_to_string",
+    "create_console_logger",
+    "create_fallback_loggers",
+    "ensure_directory",
+    "get_full_log_path",
+    "get_html_report_path",
+    "get_log_file_paths",
+    "get_log_levels_from_config",
+    "get_loggers",
+    "get_path_from_config",
+    "get_shared_console",
+    "setup_queue_logging",
+    "shorten_path",
+    "spinner",
+    "try_config_alias_replacement",
+    "try_home_directory_replacement",
+]
+
 # Module-level shared console container (avoids global statement)
 _console_holder: dict[str, Console] = {}
 
@@ -342,7 +371,7 @@ def ensure_directory(path: str, error_logger: logging.Logger | None = None) -> N
             print(f"ERROR: Error creating directory {path}: {e}", file=sys.stderr)
 
 
-def _convert_path_value_to_string(path_value: str | int | None, default: str, error_logger: logging.Logger | None) -> str:
+def convert_path_value_to_string(path_value: str | int | None, default: str, error_logger: logging.Logger | None) -> str:
     """Convert a config path value to string, with fallback and error handling."""
     if path_value is None:
         return default
@@ -356,7 +385,7 @@ def _convert_path_value_to_string(path_value: str | int | None, default: str, er
         return default
 
 
-def _get_path_from_config(config: dict[str, Any], key: str, default: str, error_logger: logging.Logger | None) -> str:
+def get_path_from_config(config: dict[str, Any], key: str, default: str, error_logger: logging.Logger | None) -> str:
     """Extract relative path from logging config section."""
     if "logging" not in config:
         if error_logger is not None:
@@ -372,7 +401,7 @@ def _get_path_from_config(config: dict[str, Any], key: str, default: str, error_
     if key not in logging_config:
         return default
 
-    return _convert_path_value_to_string(logging_config[key], default, error_logger)
+    return convert_path_value_to_string(logging_config[key], default, error_logger)
 
 
 # Added optional loggers arguments for logging within the utility
@@ -391,7 +420,7 @@ def get_full_log_path(
 
     if config is not None:
         logs_base_dir = str(config.get("logs_base_dir", ""))
-        relative_path = _get_path_from_config(config, key, default, error_logger)
+        relative_path = get_path_from_config(config, key, default, error_logger)
     elif error_logger is not None:
         error_logger.error("Invalid config passed to get_full_log_path.")
 
@@ -407,7 +436,7 @@ def get_full_log_path(
     return full_path
 
 
-def _build_config_alias_map(config: dict[str, Any] | None) -> list[tuple[str, str]]:
+def build_config_alias_map(config: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Build alias mapping from config directories."""
     if not isinstance(config, dict):
         return []
@@ -424,9 +453,9 @@ def _build_config_alias_map(config: dict[str, Any] | None) -> list[tuple[str, st
     ]
 
 
-def _try_config_alias_replacement(norm_path: str, config: dict[str, Any] | None) -> str | None:
+def try_config_alias_replacement(norm_path: str, config: dict[str, Any] | None) -> str | None:
     """Try to replace path with config-based aliases."""
-    alias_map = _build_config_alias_map(config)
+    alias_map = build_config_alias_map(config)
 
     for base_dir, alias in alias_map:
         if base_dir and norm_path.startswith(base_dir):
@@ -436,7 +465,7 @@ def _try_config_alias_replacement(norm_path: str, config: dict[str, Any] | None)
     return None
 
 
-def _try_home_directory_replacement(norm_path: str, error_logger: logging.Logger | None) -> str | None:
+def try_home_directory_replacement(norm_path: str, error_logger: logging.Logger | None) -> str | None:
     """Try to replace path with home directory shortcut."""
     try:
         home_dir = str(Path.home())
@@ -475,10 +504,10 @@ def shorten_path(
 
     norm_path = os.path.normpath(path)
 
-    if config_result := _try_config_alias_replacement(norm_path, config):
+    if config_result := try_config_alias_replacement(norm_path, config):
         return config_result
 
-    if home_result := _try_home_directory_replacement(norm_path, error_logger):
+    if home_result := try_home_directory_replacement(norm_path, error_logger):
         return home_result
 
     # 3. Fallbacks
@@ -721,7 +750,7 @@ class Loggable:
         self.error_logger = error_logger
 
 
-def _get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
+def get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
     """Extract log levels from config for different loggers."""
     logging_config = config.get("logging", {})
     levels_config = logging_config.get("levels", {})
@@ -753,7 +782,7 @@ def _get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
+def get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
     """Get all log file paths from config."""
     return {
         "main": get_full_log_path(config, "main_log_file", "main/main.log"),
@@ -762,7 +791,7 @@ def _get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
+def create_console_logger(levels: dict[str, int]) -> logging.Logger:
     """Create and configure the console logger."""
     console_logger = logging.getLogger("console_logger")
     if not console_logger.handlers:
@@ -781,7 +810,7 @@ def _create_console_logger(levels: dict[str, int]) -> logging.Logger:
     return console_logger
 
 
-def _setup_queue_logging(
+def setup_queue_logging(
     config: dict[str, Any], levels: dict[str, int], log_files: dict[str, str]
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener]:
     """Set up queue-based file logging with all handlers."""
@@ -852,20 +881,20 @@ def get_loggers(
 
     """
     try:
-        levels = _get_log_levels_from_config(config)
-        log_files = _get_log_file_paths(config)
-        console_logger = _create_console_logger(levels)
+        levels = get_log_levels_from_config(config)
+        log_files = get_log_file_paths(config)
+        console_logger = create_console_logger(levels)
 
-        _, error_logger, analytics_logger, db_verify_logger, listener = _setup_queue_logging(config, levels, log_files)
+        _, error_logger, analytics_logger, db_verify_logger, listener = setup_queue_logging(config, levels, log_files)
 
     except (ImportError, OSError, ValueError, AttributeError, TypeError) as e:
-        return _create_fallback_loggers(e)
+        return create_fallback_loggers(e)
 
     console_logger.debug("Logging setup with QueueListener and RichHandler complete.")
     return console_logger, error_logger, analytics_logger, db_verify_logger, listener
 
 
-def _create_fallback_loggers(
+def create_fallback_loggers(
     e: Exception,
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, None]:
     """Create fallback loggers when main logger setup fails."""

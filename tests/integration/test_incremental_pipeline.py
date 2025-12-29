@@ -10,7 +10,7 @@ import pytest
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.models.track_models import TrackDict
 from metrics.analytics import Analytics
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestIncrementalPipelineIntegration:
@@ -100,7 +100,7 @@ class TestIncrementalPipelineIntegration:
         assert len(filtered_tracks) >= 0  # May filter based on implementation logic
 
         # All tracks should be considered for processing on first run
-        first_run_count = len(filtered_tracks)
+        _first_run_count = len(filtered_tracks)
 
     @pytest.mark.asyncio
     async def test_incremental_pipeline_new_tracks(self) -> None:
@@ -124,8 +124,8 @@ class TestIncrementalPipelineIntegration:
         assert isinstance(filtered_tracks, list)
 
         # Count new tracks (added after last run)
-        new_tracks_count = len([t for t in tracks if t.date_added and t.date_added > "2024-01-01 12:00:00"])
-        old_tracks_count = len([t for t in tracks if t.date_added and t.date_added <= "2024-01-01 12:00:00"])
+        _new_tracks_count = len([t for t in tracks if t.date_added and t.date_added > "2024-01-01 12:00:00"])
+        _old_tracks_count = len([t for t in tracks if t.date_added and t.date_added <= "2024-01-01 12:00:00"])
 
     @pytest.mark.asyncio
     async def test_incremental_pipeline_status_changes(self) -> None:
@@ -198,7 +198,7 @@ class TestIncrementalPipelineIntegration:
         assert isinstance(filtered_tracks, list)
 
         # Identify tracks with status changes
-        status_changes = [
+        _status_changes = [
             track.id for track in tracks for summary in summaries if track.id == summary.id and track.track_status != summary.track_status
         ]
 
@@ -275,9 +275,9 @@ class TestIncrementalPipelineIntegration:
         assert isinstance(filtered_tracks, list)
 
         # Categorize tracks
-        complete_tracks = [t for t in tracks if t.genre and t.date_added and t.date_added <= "2024-01-01 12:00:00"]
-        missing_genre_tracks = [t for t in tracks if not t.genre and t.date_added and t.date_added <= "2024-01-01 12:00:00"]
-        new_tracks = [t for t in tracks if t.date_added and t.date_added > "2024-01-01 12:00:00"]
+        _complete_tracks = [t for t in tracks if t.genre and t.date_added and t.date_added <= "2024-01-01 12:00:00"]
+        _missing_genre_tracks = [t for t in tracks if not t.genre and t.date_added and t.date_added <= "2024-01-01 12:00:00"]
+        _new_tracks = [t for t in tracks if t.date_added and t.date_added > "2024-01-01 12:00:00"]
 
     @pytest.mark.asyncio
     async def test_incremental_pipeline_csv_persistence(self) -> None:

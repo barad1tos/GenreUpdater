@@ -11,7 +11,7 @@ from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
 from metrics.analytics import Analytics
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestGenrePipelineIntegration:
@@ -187,12 +187,12 @@ class TestGenrePipelineIntegration:
 
         # Track processor should be called same number of times
         # (assuming no caching at track update level)
-        first_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
+        _first_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
 
         # Reset and run again
         genre_manager.track_processor.update_track_async.reset_mock()  # type: ignore[attr-defined]
         await genre_manager.update_genres_by_artist_async(tracks)
-        second_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
+        _second_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_batch_processing(self) -> None:
@@ -220,13 +220,13 @@ class TestGenrePipelineIntegration:
         start_time = datetime.now(UTC)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
         end_time = datetime.now(UTC)
-        processing_time = (end_time - start_time).total_seconds()
+        _processing_time = (end_time - start_time).total_seconds()
         # Verify all tracks were processed
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
         # Count tracks that needed updates (empty genres)
-        tracks_needing_updates = len([t for t in tracks if not t.genre])
+        _tracks_needing_updates = len([t for t in tracks if not t.genre])
         actual_updates = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
 
         # Should process all tracks needing updates
@@ -278,4 +278,4 @@ class TestGenrePipelineIntegration:
 
         # Error logger should have recorded any errors
         if error_messages := getattr(genre_manager.error_logger, "error_messages", []):
-            error_count = len(error_messages)
+            _error_count = len(error_messages)

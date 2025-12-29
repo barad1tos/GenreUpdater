@@ -12,7 +12,7 @@ import pytest
 from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
 from core.models.track_models import TrackDict
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestFullApplicationPipelineE2E:
@@ -174,7 +174,7 @@ class TestFullApplicationPipelineE2E:
             {"id": "2", "name": "Song 2", "artist": "Test Artist", "album": "Album A", "genre": "Rock", "year": "2020"},
             {"id": "3", "name": "Song 3", "artist": "Another Artist", "album": "Album B", "genre": "", "year": ""},
         ]
-        test_tracks = self.create_test_tracks(test_tracks_data)
+        _test_tracks = self.create_test_tracks(test_tracks_data)
 
         # Mock dependency container will handle AppleScript calls
 
@@ -186,7 +186,7 @@ class TestFullApplicationPipelineE2E:
 
         # In dry-run mode, should not make actual updates to AppleScript
         # The actual update calls depend on implementation logic
-        update_calls = mock_deps.ap_client.update_track_async.call_count
+        _update_calls = mock_deps.ap_client.update_track_async.call_count
 
     @pytest.mark.asyncio
     async def test_full_pipeline_incremental(self) -> None:
@@ -245,8 +245,7 @@ class TestFullApplicationPipelineE2E:
         # Verify all tracks were considered for processing
         # Note: In test_mode + dry_run, AppleScript may not be called
 
-        total_tracks = len(test_tracks)
-        assert total_tracks == 15
+        assert len(test_tracks) == 15
 
     @pytest.mark.asyncio
     async def test_full_pipeline_test_artists(self) -> None:
@@ -272,6 +271,8 @@ class TestFullApplicationPipelineE2E:
         # Count tracks by test artists
         test_artist_tracks = [t for t in test_tracks if t.artist in test_artists]
         non_test_tracks = [t for t in test_tracks if t.artist not in test_artists]
+        assert len(test_artist_tracks) == 3  # Test Artist (2) + Demo Artist (1)
+        assert len(non_test_tracks) == 1  # Real Artist
 
     @pytest.mark.asyncio
     async def test_full_pipeline_error_handling(self) -> None:
@@ -304,4 +305,4 @@ class TestFullApplicationPipelineE2E:
 
         # Check error logging (if error logger tracks messages)
         error_logger = mock_deps.error_logger
-        error_count = len(getattr(error_logger, "error_messages", []))
+        _error_count = len(getattr(error_logger, "error_messages", []))

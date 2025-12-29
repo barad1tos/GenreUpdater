@@ -296,7 +296,7 @@ class TestComputeFutureYearStats:
             {"year": str(current_year + 3)},
         ]
 
-        future_count, max_future, ratio_triggered, significant = orchestrator._compute_future_year_stats(tracks, current_year)
+        future_count, max_future, _ratio_triggered, _significant = orchestrator._compute_future_year_stats(tracks, current_year)
 
         assert future_count >= 0
         assert max_future >= current_year + 2 or max_future == 0
@@ -540,7 +540,6 @@ class TestCurrentYearContamination:
             current_library_year=str(current_year),
             log_artist="Test Artist",
             log_album="Test Album",
-            earliest_track_added_year=None,
         )
         assert result is None, "Current year should be rejected when track added date is unknown"
 
@@ -574,7 +573,7 @@ class TestCurrentYearContamination:
         """_handle_year_search_error should use earliest_track_added_year for contamination check."""
         current_year = orchestrator.current_year
         # Tracks added this year → accept current year
-        result, is_def, conf, scores = orchestrator._handle_year_search_error(
+        result, is_def, conf, _scores = orchestrator._handle_year_search_error(
             log_artist="Test Artist",
             log_album="Test Album",
             current_library_year=str(current_year),

@@ -100,10 +100,11 @@ def _create_year_determinator(
     config: dict[str, Any] | None = None,
 ) -> YearDeterminator:
     """Create YearDeterminator with mock dependencies."""
+    # Cast through object to satisfy type checker for mock objects
     return YearDeterminator(
-        cache_service=cast(CacheServiceProtocol, cache_service or _create_mock_cache_service()),
-        external_api=cast(ExternalApiServiceProtocol, external_api or _create_mock_external_api()),
-        pending_verification=cast(PendingVerificationServiceProtocol, pending_verification or _create_mock_pending_verification()),
+        cache_service=cast(CacheServiceProtocol, cast(object, cache_service or _create_mock_cache_service())),
+        external_api=cast(ExternalApiServiceProtocol, cast(object, external_api or _create_mock_external_api())),
+        pending_verification=cast(PendingVerificationServiceProtocol, cast(object, pending_verification or _create_mock_pending_verification())),
         consistency_checker=cast(YearConsistencyChecker, consistency_checker or _create_mock_consistency_checker()),
         fallback_handler=cast(YearFallbackHandler, fallback_handler or _create_mock_fallback_handler()),
         console_logger=logging.getLogger("test.console"),
@@ -120,7 +121,7 @@ class TestShouldSkipAlbumNewYearLogic:
     async def test_skips_when_year_set_by_mgu_matches_current_year(self) -> None:
         """Should skip when year_set_by_mgu equals current year (already processed)."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -133,7 +134,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2018", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2018", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -146,7 +147,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", year_set_by_mgu=None)]
+        tracks = [_create_track(year="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -159,7 +160,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", year_set_by_mgu="")]
+        tracks = [_create_track(year="2020", year_set_by_mgu="")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -172,7 +173,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -183,9 +184,9 @@ class TestShouldSkipAlbumNewYearLogic:
     async def test_skips_when_year_set_by_mgu_matches_empty_current(self) -> None:
         """Should skip when both year_set_by_mgu and current year are empty strings."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="", year_set_by_mgu="")]
+        tracks = [_create_track(year="", year_set_by_mgu="")]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        should_skip, _reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
         # Empty string year_set_by_mgu is falsy, so it won't enter the skip block
         # This tests that empty strings are handled correctly
@@ -195,7 +196,7 @@ class TestShouldSkipAlbumNewYearLogic:
     async def test_force_mode_bypasses_year_set_by_mgu_skip(self) -> None:
         """Should NOT skip when force=True even if year_set_by_mgu matches."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album", force=True)
 
@@ -231,7 +232,7 @@ class TestShouldSkipAlbumCacheInteraction:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value="2020")
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2020", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2020", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -246,7 +247,7 @@ class TestShouldSkipAlbumCacheInteraction:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value="2020")
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1", year="2018", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2018", year_set_by_mgu="2020")]
 
         await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -262,7 +263,7 @@ class TestShouldSkipAlbumMultipleTracks:
         """Should use first track's year_set_by_mgu for skip check."""
         determinator = _create_year_determinator()
         tracks = [
-            _create_track("1", year="2020", year_set_by_mgu="2020"),
+            _create_track(year="2020", year_set_by_mgu="2020"),
             _create_track("2", year="2018", year_set_by_mgu="2019"),  # Different values
         ]
 
@@ -279,11 +280,11 @@ class TestShouldSkipAlbumMultipleTracks:
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
         tracks = [
-            _create_track("1", year="2018", year_set_by_mgu="2020"),  # Mismatch
+            _create_track(year="2018", year_set_by_mgu="2020"),  # Mismatch
             _create_track("2", year="2020", year_set_by_mgu="2020"),  # Match
         ]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        should_skip, _reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
         # Should NOT skip because first track has mismatch (user changed)
         assert should_skip is False
@@ -297,7 +298,7 @@ class TestShouldSkipAlbumWithOldYear:
     async def test_year_before_mgu_does_not_affect_skip_logic(self) -> None:
         """year_before_mgu should not affect skip decision."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")]
+        tracks = [_create_track(year="2020", year_before_mgu="2015", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -309,7 +310,7 @@ class TestShouldSkipAlbumWithOldYear:
     async def test_year_before_mgu_preserved_when_skipping(self) -> None:
         """year_before_mgu should be preserved when album is skipped."""
         determinator = _create_year_determinator()
-        track = _create_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")
+        track = _create_track(year="2020", year_before_mgu="2015", year_set_by_mgu="2020")
         tracks = [track]
 
         await determinator.should_skip_album(tracks, "Artist", "Album")
@@ -343,7 +344,7 @@ class TestShouldSkipAlbumRecentRejection:
         pending_service.is_verification_needed = AsyncMock(return_value=False)  # Not yet time to re-verify
 
         determinator = _create_year_determinator(pending_verification=pending_service)
-        tracks = [_create_track("1", year="2020")]
+        tracks = [_create_track(year="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -371,7 +372,7 @@ class TestShouldSkipAlbumRecentRejection:
             pending_verification=pending_service,
             cache_service=cache_service,
         )
-        tracks = [_create_track("1", year="2020")]
+        tracks = [_create_track(year="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -398,9 +399,9 @@ class TestShouldSkipAlbumRecentRejection:
             pending_verification=pending_service,
             cache_service=cache_service,
         )
-        tracks = [_create_track("1", year="2020")]
+        tracks = [_create_track(year="2020")]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        _should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
         # Should NOT be skipped due to rejection (may be skipped for other reasons)
         assert not reason.startswith("recently_rejected:")
@@ -419,7 +420,7 @@ class TestShouldSkipAlbumConsistentYear:
         """Should skip when all tracks have the same valid year."""
         determinator = _create_year_determinator()
         tracks = [
-            _create_track("1", year="2020"),
+            _create_track(year="2020"),
             _create_track("2", year="2020"),
             _create_track("3", year="2020"),
         ]
@@ -435,7 +436,7 @@ class TestShouldSkipAlbumConsistentYear:
         cache_service = _create_mock_cache_service()
         determinator = _create_year_determinator(cache_service=cache_service)
         tracks = [
-            _create_track("1", year="2020"),
+            _create_track(year="2020"),
             _create_track("2", year="2019"),  # Different year
             _create_track("3", year="2020"),
         ]
@@ -450,7 +451,7 @@ class TestShouldSkipAlbumConsistentYear:
         cache_service = _create_mock_cache_service()
         determinator = _create_year_determinator(cache_service=cache_service)
         tracks = [
-            _create_track("1", year="2020"),
+            _create_track(year="2020"),
             _create_track("2", year=""),  # Missing year
             _create_track("3", year="2020"),
         ]
@@ -465,11 +466,11 @@ class TestShouldSkipAlbumConsistentYear:
         cache_service = _create_mock_cache_service()
         determinator = _create_year_determinator(cache_service=cache_service)
         tracks = [
-            _create_track("1", year=""),
+            _create_track(year=""),
             _create_track("2", year=""),
         ]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        _should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
         assert reason != "year_consistent"
 
@@ -487,7 +488,7 @@ class TestPreCheckPriority:
         determinator = _create_year_determinator()
         # All tracks have same year AND year_set_by_mgu matches current
         tracks = [
-            _create_track("1", year="2020", year_set_by_mgu="2020"),
+            _create_track(year="2020", year_set_by_mgu="2020"),
             _create_track("2", year="2020"),
             _create_track("3", year="2020"),
         ]
@@ -517,7 +518,7 @@ class TestPreCheckPriority:
         determinator = _create_year_determinator(pending_verification=pending_service)
         # All tracks have same year
         tracks = [
-            _create_track("1", year="2020"),
+            _create_track(year="2020"),
             _create_track("2", year="2020"),
         ]
 

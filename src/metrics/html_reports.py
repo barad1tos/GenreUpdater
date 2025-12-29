@@ -18,7 +18,7 @@ from core.logger import get_full_log_path
 DURATION_FIELD = "Duration (s)"
 
 
-def _generate_empty_html_template(
+def generate_empty_html_template(
     date_str: str,
     report_file: str,
     console_logger: logging.Logger,
@@ -69,7 +69,7 @@ def _generate_empty_html_template(
         error_logger.exception("Failed to save empty HTML report")
 
 
-def _group_events_by_duration_and_success(
+def group_events_by_duration_and_success(
     events: list[dict[str, Any]],
     duration_thresholds: dict[str, float],
     group_successful_short_calls: bool,
@@ -191,7 +191,7 @@ def _generate_main_html_template(
     </div>"""
 
 
-def _generate_grouped_success_table(
+def generate_grouped_success_table(
     grouped_short_success: dict[tuple[str, str], dict[str, float]],
     group_successful_short_calls: bool,
 ) -> str:
@@ -228,7 +228,7 @@ def _generate_grouped_success_table(
     return html
 
 
-def _get_duration_category(
+def get_duration_category(
     event_duration: float,
     duration_thresholds: dict[str, float],
 ) -> str:
@@ -240,7 +240,7 @@ def _get_duration_category(
     return "long"
 
 
-def _determine_event_row_class(
+def determine_event_row_class(
     event: dict[str, Any],
     duration_thresholds: dict[str, float],
 ) -> str:
@@ -250,11 +250,11 @@ def _determine_event_row_class(
         return "error"
 
     event_duration = event.get(DURATION_FIELD, 0)
-    duration_category = _get_duration_category(event_duration, duration_thresholds)
+    duration_category = get_duration_category(event_duration, duration_thresholds)
     return f"duration-{duration_category}"
 
 
-def _format_event_table_row(event: dict[str, Any], row_class: str) -> str:
+def format_event_table_row(event: dict[str, Any], row_class: str) -> str:
     """Format a single event as an HTML table row."""
     event_duration = event.get(DURATION_FIELD, 0)
     success = event.get("Success", False)
@@ -297,8 +297,8 @@ def _generate_detailed_events_table_html(
     if big_or_fail_events:
         for event in sorted(big_or_fail_events, key=_safe_start_time):
             try:
-                row_class = _determine_event_row_class(event, duration_thresholds)
-                html += _format_event_table_row(event, row_class)
+                row_class = determine_event_row_class(event, duration_thresholds)
+                html += format_event_table_row(event, row_class)
             except KeyError:
                 error_logger.exception(
                     "Error formatting event for detailed list, event data: %s",
@@ -312,7 +312,7 @@ def _generate_detailed_events_table_html(
     return html
 
 
-def _generate_summary_table_html(
+def generate_summary_table_html(
     call_counts: dict[str, int],
     success_counts: dict[str, int],
     decorator_overhead: dict[str, float],
@@ -397,19 +397,19 @@ def save_html_report(
         console_logger.warning(
             "No analytics data available for report - creating empty template",
         )
-        _generate_empty_html_template(date_str, report_file, console_logger, error_logger)
+        generate_empty_html_template(date_str, report_file, console_logger, error_logger)
         return
 
     # Group events
-    grouped_short_success, big_or_fail_events = _group_events_by_duration_and_success(
+    grouped_short_success, big_or_fail_events = group_events_by_duration_and_success(
         events, duration_thresholds, group_successful_short_calls, error_logger
     )
 
     # Generate HTML sections
     html_content = _generate_main_html_template(date_str, call_counts, success_counts, events, force_mode)
-    html_content += _generate_grouped_success_table(grouped_short_success, group_successful_short_calls)
+    html_content += generate_grouped_success_table(grouped_short_success, group_successful_short_calls)
     html_content += _generate_detailed_events_table_html(big_or_fail_events, duration_thresholds, error_logger)
-    html_content += _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
+    html_content += generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
     # Save the report
     try:
