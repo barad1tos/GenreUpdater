@@ -1,8 +1,4 @@
-"""Unit tests for html_reports module.
-
-Note: This module tests internal functions that are prefixed with underscore.
-Testing private functions is intentional to ensure correctness of internal logic.
-"""
+"""Unit tests for html_reports module."""
 
 from __future__ import annotations
 
@@ -15,13 +11,13 @@ import pytest
 
 from metrics.html_reports import (
     DURATION_FIELD,
-    _determine_event_row_class,
-    _format_event_table_row,
-    _generate_empty_html_template,
-    _generate_grouped_success_table,
-    _generate_summary_table_html,
-    _get_duration_category,
-    _group_events_by_duration_and_success,
+    determine_event_row_class,
+    format_event_table_row,
+    generate_empty_html_template,
+    generate_grouped_success_table,
+    generate_summary_table_html,
+    get_duration_category,
+    group_events_by_duration_and_success,
     save_html_report,
 )
 
@@ -93,36 +89,36 @@ class TestDurationField:
 
 
 class TestGetDurationCategory:
-    """Tests for _get_duration_category function."""
+    """Tests for get_duration_category function."""
 
     def test_short_duration(self, duration_thresholds: dict[str, float]) -> None:
         """Should return 'short' for durations <= short_max."""
-        assert _get_duration_category(1.0, duration_thresholds) == "short"
-        assert _get_duration_category(2.0, duration_thresholds) == "short"
+        assert get_duration_category(1.0, duration_thresholds) == "short"
+        assert get_duration_category(2.0, duration_thresholds) == "short"
 
     def test_medium_duration(self, duration_thresholds: dict[str, float]) -> None:
         """Should return 'medium' for durations between short_max and medium_max."""
-        assert _get_duration_category(3.0, duration_thresholds) == "medium"
-        assert _get_duration_category(5.0, duration_thresholds) == "medium"
+        assert get_duration_category(3.0, duration_thresholds) == "medium"
+        assert get_duration_category(5.0, duration_thresholds) == "medium"
 
     def test_long_duration(self, duration_thresholds: dict[str, float]) -> None:
         """Should return 'long' for durations > medium_max."""
-        assert _get_duration_category(6.0, duration_thresholds) == "long"
-        assert _get_duration_category(100.0, duration_thresholds) == "long"
+        assert get_duration_category(6.0, duration_thresholds) == "long"
+        assert get_duration_category(100.0, duration_thresholds) == "long"
 
     def test_uses_default_thresholds(self) -> None:
         """Should use default thresholds when not provided."""
-        result = _get_duration_category(1.5, {})
+        result = get_duration_category(1.5, {})
         assert result == "short"
 
 
 class TestDetermineEventRowClass:
-    """Tests for _determine_event_row_class function."""
+    """Tests for determine_event_row_class function."""
 
     def test_returns_error_for_failed_event(self, duration_thresholds: dict[str, float]) -> None:
         """Should return 'error' class for failed events."""
         event = _create_simple_event(1.0, success=False)
-        result = _determine_event_row_class(event, duration_thresholds)
+        result = determine_event_row_class(event, duration_thresholds)
         assert result == "error"
 
     @pytest.mark.parametrize(
@@ -141,18 +137,18 @@ class TestDetermineEventRowClass:
     ) -> None:
         """Should return correct class based on duration for successful events."""
         event = _create_simple_event(duration)
-        result = _determine_event_row_class(event, duration_thresholds)
+        result = determine_event_row_class(event, duration_thresholds)
         assert result == expected_class
 
     def test_handles_missing_success_key(self, duration_thresholds: dict[str, float]) -> None:
         """Should default to error when Success key is missing."""
         event: dict[str, Any] = {DURATION_FIELD: 1.0}
-        result = _determine_event_row_class(event, duration_thresholds)
+        result = determine_event_row_class(event, duration_thresholds)
         assert result == "error"
 
 
 class TestFormatEventTableRow:
-    """Tests for _format_event_table_row function."""
+    """Tests for format_event_table_row function."""
 
     def test_formats_complete_event(self) -> None:
         """Should format event with all fields."""
@@ -164,7 +160,7 @@ class TestFormatEventTableRow:
             DURATION_FIELD: 5.0,
             "Success": True,
         }
-        result = _format_event_table_row(event, "duration-medium")
+        result = format_event_table_row(event, "duration-medium")
 
         assert 'class="duration-medium"' in result
         assert "<td>test_func</td>" in result
@@ -182,7 +178,7 @@ class TestFormatEventTableRow:
             DURATION_FIELD: 1.0,
             "Success": False,
         }
-        result = _format_event_table_row(event, "error")
+        result = format_event_table_row(event, "error")
 
         assert 'class="error"' in result
         assert "<td>No</td>" in result
@@ -190,13 +186,13 @@ class TestFormatEventTableRow:
     def test_handles_missing_fields(self) -> None:
         """Should use 'Unknown' for missing fields."""
         event: dict[str, Any] = {DURATION_FIELD: 1.0, "Success": True}
-        result = _format_event_table_row(event, "duration-short")
+        result = format_event_table_row(event, "duration-short")
 
         assert "<td>Unknown</td>" in result
 
 
 class TestGroupEventsByDurationAndSuccess:
-    """Tests for _group_events_by_duration_and_success function."""
+    """Tests for group_events_by_duration_and_success function."""
 
     def test_returns_all_events_when_grouping_disabled(
         self,
@@ -205,7 +201,7 @@ class TestGroupEventsByDurationAndSuccess:
         error_logger: logging.Logger,
     ) -> None:
         """Should return all events when grouping is disabled."""
-        grouped, remaining = _group_events_by_duration_and_success(
+        grouped, remaining = group_events_by_duration_and_success(
             sample_events,
             duration_thresholds,
             group_successful_short_calls=False,
@@ -236,7 +232,7 @@ class TestGroupEventsByDurationAndSuccess:
             },
         ]
 
-        grouped, remaining = _group_events_by_duration_and_success(
+        grouped, remaining = group_events_by_duration_and_success(
             events,
             duration_thresholds,
             group_successful_short_calls=True,
@@ -255,7 +251,7 @@ class TestGroupEventsByDurationAndSuccess:
         error_logger: logging.Logger,
     ) -> None:
         """Should keep long and failed events in remaining list."""
-        grouped, remaining = _group_events_by_duration_and_success(
+        _grouped, remaining = group_events_by_duration_and_success(
             sample_events,
             duration_thresholds,
             group_successful_short_calls=True,
@@ -281,7 +277,7 @@ class TestGroupEventsByDurationAndSuccess:
             }
         ]
 
-        grouped, remaining = _group_events_by_duration_and_success(
+        grouped, remaining = group_events_by_duration_and_success(
             events,
             duration_thresholds,
             group_successful_short_calls=True,
@@ -299,7 +295,7 @@ class TestGroupEventsByDurationAndSuccess:
         """Should handle events with missing required keys."""
         events: list[dict[str, Any]] = [{"Function": "func"}]
 
-        grouped, remaining = _group_events_by_duration_and_success(
+        _grouped, remaining = group_events_by_duration_and_success(
             events,
             duration_thresholds,
             group_successful_short_calls=True,
@@ -310,16 +306,16 @@ class TestGroupEventsByDurationAndSuccess:
 
 
 class TestGenerateGroupedSuccessTable:
-    """Tests for _generate_grouped_success_table function."""
+    """Tests for generate_grouped_success_table function."""
 
     def test_shows_disabled_message_when_disabled(self) -> None:
         """Should show message when grouping disabled."""
-        result = _generate_grouped_success_table({}, group_successful_short_calls=False)
+        result = generate_grouped_success_table({}, group_successful_short_calls=False)
         assert "No short successful calls found or grouping disabled" in result
 
     def test_shows_message_when_no_grouped_data(self) -> None:
         """Should show message when no grouped events."""
-        result = _generate_grouped_success_table({}, group_successful_short_calls=True)
+        result = generate_grouped_success_table({}, group_successful_short_calls=True)
         assert "No short successful calls found or grouping disabled" in result
 
     def test_generates_table_with_grouped_data(self) -> None:
@@ -329,7 +325,7 @@ class TestGenerateGroupedSuccessTable:
             ("func_b", "type_2"): {"count": 3, "total_duration": 1.2},
         }
 
-        result = _generate_grouped_success_table(grouped, group_successful_short_calls=True)
+        result = generate_grouped_success_table(grouped, group_successful_short_calls=True)
 
         assert "<h3>Grouped Short & Successful Calls</h3>" in result
         assert "<td>func_a</td>" in result
@@ -339,7 +335,7 @@ class TestGenerateGroupedSuccessTable:
 
 
 class TestGenerateSummaryTableHtml:
-    """Tests for _generate_summary_table_html function."""
+    """Tests for generate_summary_table_html function."""
 
     def test_generates_summary_with_data(self) -> None:
         """Should generate summary table with call data."""
@@ -347,7 +343,7 @@ class TestGenerateSummaryTableHtml:
         success_counts = {"func_a": 9, "func_b": 5}
         decorator_overhead = {"func_a": 0.01, "func_b": 0.005}
 
-        result = _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
+        result = generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
         assert "<h3>Summary</h3>" in result
         assert "<td>func_a</td>" in result
@@ -357,7 +353,7 @@ class TestGenerateSummaryTableHtml:
 
     def test_generates_empty_message_when_no_data(self) -> None:
         """Should show 'no function calls' message when empty."""
-        result = _generate_summary_table_html({}, {}, {})
+        result = generate_summary_table_html({}, {}, {})
 
         assert "No function calls recorded" in result
 
@@ -367,13 +363,13 @@ class TestGenerateSummaryTableHtml:
         success_counts = {"func_a": 0}
         decorator_overhead = {"func_a": 0.0}
 
-        result = _generate_summary_table_html(call_counts, success_counts, decorator_overhead)
+        result = generate_summary_table_html(call_counts, success_counts, decorator_overhead)
 
         assert "0.00" in result
 
 
 class TestGenerateEmptyHtmlTemplate:
-    """Tests for _generate_empty_html_template function."""
+    """Tests for generate_empty_html_template function."""
 
     def test_creates_empty_template_file(
         self,
@@ -384,7 +380,7 @@ class TestGenerateEmptyHtmlTemplate:
         """Should create empty HTML template file."""
         report_file = tmp_path / "empty_report.html"
 
-        _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
+        generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
         content = report_file.read_text()
@@ -400,7 +396,7 @@ class TestGenerateEmptyHtmlTemplate:
         """Should create parent directories if needed."""
         report_file = tmp_path / "nested" / "dir" / "report.html"
 
-        _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
+        generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
         assert report_file.exists()
 
@@ -414,7 +410,7 @@ class TestGenerateEmptyHtmlTemplate:
         report_file = tmp_path / "report.html"
 
         with patch("metrics.html_reports.Path.open", side_effect=OSError("Write error")):
-            _generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
+            generate_empty_html_template("2024-01-15", str(report_file), console_logger, error_logger)
 
 
 class TestSaveHtmlReport:

@@ -12,7 +12,7 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.tracks.year_fallback import YearFallbackHandler
-from tests.mocks.protocol_mocks import (
+from tests.mocks.protocol_mocks import (  # sourcery skip: dont-import-test-modules
     MockExternalApiService,
     MockPendingVerificationService,
 )
@@ -116,6 +116,7 @@ class TestLowConfidenceNoExistingYear:
         assert len(mock_pending_verification.marked_albums) == 1
         marked = mock_pending_verification.marked_albums[0]
         assert marked[2] == "very_low_confidence_no_existing"
+        assert marked[3] is not None  # Metadata should be present
         assert marked[3]["confidence_score"] == 15
         assert marked[3]["threshold"] == 30
 

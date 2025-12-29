@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
 from core.models.track_models import TrackDict
@@ -275,7 +275,8 @@ class TestIncrementalFilterService:
     @staticmethod
     def _test_invalid_date_parsing(date_added: object) -> None:
         """Helper to test invalid date parsing."""
-        track_invalid = _create_track(date_added=date_added)
+        # Cast to satisfy type checker - we're intentionally testing invalid input
+        track_invalid = _create_track(date_added=cast(str | None, date_added))
         result = parse_track_date_added(track_invalid)
         assert result is None
 

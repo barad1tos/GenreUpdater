@@ -13,8 +13,9 @@ for unit testing internal behavior.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.models.track_models import TrackDict
@@ -169,7 +170,7 @@ class TestYearRetrieverEdgeCases:
         # Abney Park - Scallywag case: 2018 → 1998
         current_year = "2018"
         api_year = "1998"
-        year_difference = abs(int(current_year) - int(api_year))
+        _year_difference = abs(int(current_year) - int(api_year))
 
         needs_update = YearBatchProcessor._track_needs_year_update(current_year, api_year)
         # This is expected - the low-level method just checks if years differ
@@ -1060,44 +1061,19 @@ class TestSuspiciousOldYearDetection:
 
     def test_boundary_exactly_at_threshold(self) -> None:
         """Test boundary: exactly 10 years difference should NOT be suspicious."""
-        retriever = self.create_retriever()
-
-        # Album released 2014, added to library 2024 (exactly 10 years)
-        album_tracks = [
-            TrackDict(
-                id="1",
-                name="Track 1",
-                artist="Test Artist",
-                album="Test Album",
-                year="2014",
-                date_added="2024-01-01 10:00:00",
-            )
-        ]
-
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2014", album_tracks)
-
-        # threshold check is > not >=, so exactly 10 should NOT be suspicious
-        assert is_suspicious is False, "Exactly 10 year gap should not be suspicious (> not >=)"
+        self._assert_year_suspicious_detection(
+            year="2014",
+            expected_suspicious=False,
+            assertion_msg="Exactly 10 year gap should not be suspicious (> not >=)",
+        )
 
     def test_boundary_one_over_threshold(self) -> None:
         """Test boundary: 11 years difference should be suspicious."""
-        retriever = self.create_retriever()
-
-        # Album released 2013, added to library 2024 (11 years)
-        album_tracks = [
-            TrackDict(
-                id="1",
-                name="Track 1",
-                artist="Test Artist",
-                album="Test Album",
-                year="2013",
-                date_added="2024-01-01 10:00:00",
-            )
-        ]
-
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("2013", album_tracks)
-
-        assert is_suspicious is True, "11 year gap should be suspicious"
+        self._assert_year_suspicious_detection(
+            year="2013",
+            expected_suspicious=True,
+            assertion_msg="11 year gap should be suspicious",
+        )
 
     def test_uses_earliest_date_added(self) -> None:
         """Test that the earliest date_added is used for comparison."""
@@ -1129,22 +1105,32 @@ class TestSuspiciousOldYearDetection:
 
     def test_invalid_year_string(self) -> None:
         """Test that invalid year strings are handled gracefully."""
-        retriever = self.create_retriever()
+        self._assert_year_suspicious_detection(
+            year="invalid",
+            expected_suspicious=False,
+            assertion_msg="Invalid year should not be suspicious",
+        )
 
+    def _assert_year_suspicious_detection(
+        self,
+        year: str,
+        expected_suspicious: bool,
+        assertion_msg: str,
+    ) -> None:
+        """Assert whether a year is detected as suspiciously old."""
+        retriever = self.create_retriever()
         album_tracks = [
             TrackDict(
                 id="1",
                 name="Track 1",
                 artist="Test Artist",
                 album="Test Album",
-                year="invalid",
+                year=year,
                 date_added="2024-01-01 10:00:00",
             )
         ]
-
-        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old("invalid", album_tracks)
-
-        assert is_suspicious is False, "Invalid year should not be suspicious"
+        is_suspicious = retriever.year_consistency_checker._is_year_suspiciously_old(year, album_tracks)
+        assert is_suspicious is expected_suspicious, assertion_msg
 
     def test_invalid_date_added_format(self) -> None:
         """Test that tracks with invalid date_added are skipped."""
@@ -1228,27 +1214,36 @@ class TestAnomalousTracksLogging:
     @staticmethod
     def get_debug_logs(retriever: YearRetriever) -> list[str]:
         """Extract debug logs from retriever's consistency checker."""
-        logs: list[str] = retriever.year_consistency_checker.console_logger.debug_messages
+        # MockLogger has debug_messages attribute, use getattr for type safety
+        logger = retriever.year_consistency_checker.console_logger
+        logs: list[str] = getattr(logger, "debug_messages", [])
         return logs
 
     def test_logs_anomalous_tracks(self) -> None:
         """Test that tracks with non-dominant years are logged at DEBUG level."""
         retriever = self.create_retriever()
         checker = retriever.year_consistency_checker
-        album_tracks = [
-            {"id": "1", "name": "Track 1", "year": "2020"},
-            {"id": "2", "name": "Track 2", "year": "2020"},
-            {"id": "3", "name": "Track 3", "year": "2020"},
-            {"id": "4", "name": "Track 4", "year": "2020"},
-            {"id": "5", "name": "Track 5", "year": "2020"},
-            {"id": "6", "name": "Track 6", "year": "2020"},
-            {"id": "7", "name": "Bonus Track", "year": "2021"},  # Anomalous
-        ]
+        album_tracks = cast(
+            list[TrackDict],
+            cast(
+                object,
+                [
+                    {"id": "1", "name": "Track 1", "year": "2020"},
+                    {"id": "2", "name": "Track 2", "year": "2020"},
+                    {"id": "3", "name": "Track 3", "year": "2020"},
+                    {"id": "4", "name": "Track 4", "year": "2020"},
+                    {"id": "5", "name": "Track 5", "year": "2020"},
+                    {"id": "6", "name": "Track 6", "year": "2020"},
+                    {"id": "7", "name": "Bonus Track", "year": "2021"},  # Anomalous
+                ],
+            ),
+        )
 
-        dominant = checker.get_dominant_year(album_tracks)
-        debug_logs = self.get_debug_logs(retriever)
-
-        assert dominant == "2020"
+        debug_logs = self._verify_dominant_year_and_get_logs(
+            checker=checker,
+            album_tracks=album_tracks,
+            retriever=retriever,
+        )
         assert any("Bonus Track" in msg for msg in debug_logs)
         assert any("2021" in msg for msg in debug_logs)
         assert any("2020" in msg for msg in debug_logs)
@@ -1257,37 +1252,63 @@ class TestAnomalousTracksLogging:
         """Test that no anomaly logging occurs when all tracks have the same year."""
         retriever = self.create_retriever()
         checker = retriever.year_consistency_checker
-        album_tracks = [
-            {"id": "1", "name": "Track 1", "year": "2020"},
-            {"id": "2", "name": "Track 2", "year": "2020"},
-            {"id": "3", "name": "Track 3", "year": "2020"},
-        ]
+        album_tracks = cast(
+            list[TrackDict],
+            cast(
+                object,
+                [
+                    {"id": "1", "name": "Track 1", "year": "2020"},
+                    {"id": "2", "name": "Track 2", "year": "2020"},
+                    {"id": "3", "name": "Track 3", "year": "2020"},
+                ],
+            ),
+        )
 
-        dominant = checker.get_dominant_year(album_tracks)
-        debug_logs = self.get_debug_logs(retriever)
-
-        assert dominant == "2020"
+        debug_logs = self._verify_dominant_year_and_get_logs(
+            checker=checker,
+            album_tracks=album_tracks,
+            retriever=retriever,
+        )
         assert all("differs from dominant" not in msg for msg in debug_logs)
 
     def test_ignores_empty_years(self) -> None:
         """Test that empty/zero years are not reported as anomalies."""
         retriever = self.create_retriever()
         checker = retriever.year_consistency_checker
-        album_tracks = [
-            {"id": "1", "name": "Track 1", "year": "2020"},
-            {"id": "2", "name": "Track 2", "year": "2020"},
-            {"id": "3", "name": "Track 3", "year": "2020"},
-            {"id": "4", "name": "Track 4", "year": "2020"},
-            {"id": "5", "name": "Empty Year", "year": ""},  # Should be ignored
-            {"id": "6", "name": "Zero Year", "year": "0"},  # Should be ignored
-        ]
+        album_tracks = cast(
+            list[TrackDict],
+            cast(
+                object,
+                [
+                    {"id": "1", "name": "Track 1", "year": "2020"},
+                    {"id": "2", "name": "Track 2", "year": "2020"},
+                    {"id": "3", "name": "Track 3", "year": "2020"},
+                    {"id": "4", "name": "Track 4", "year": "2020"},
+                    {"id": "5", "name": "Empty Year", "year": ""},  # Should be ignored
+                    {"id": "6", "name": "Zero Year", "year": "0"},  # Should be ignored
+                ],
+            ),
+        )
 
-        dominant = checker.get_dominant_year(album_tracks)
-        debug_logs = self.get_debug_logs(retriever)
-
-        assert dominant == "2020"
+        debug_logs = self._verify_dominant_year_and_get_logs(
+            checker=checker,
+            album_tracks=album_tracks,
+            retriever=retriever,
+        )
         assert all("Empty Year" not in msg for msg in debug_logs)
         assert all("Zero Year" not in msg for msg in debug_logs)
+
+    def _verify_dominant_year_and_get_logs(
+        self,
+        checker: Any,
+        album_tracks: list[TrackDict],
+        retriever: YearRetriever,
+    ) -> list[str]:
+        """Verify dominant year is 2020 and return debug logs for further assertions."""
+        dominant = checker.get_dominant_year(album_tracks)
+        debug_logs = self.get_debug_logs(retriever)
+        assert dominant == "2020"
+        return debug_logs
 
 
 class TestYearFallbackConfidenceScoring:

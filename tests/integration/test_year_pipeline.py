@@ -10,7 +10,7 @@ from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
 from metrics.analytics import Analytics
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestYearPipelineIntegration:
@@ -248,8 +248,8 @@ class TestYearPipelineIntegration:
         assert isinstance(result, bool)
 
         # Count prerelease vs regular tracks
-        prerelease_count = sum(t.track_status == "prerelease" for t in tracks)
-        regular_count = sum(t.track_status == "subscription" for t in tracks)
+        _prerelease_count = sum(t.track_status == "prerelease" for t in tracks)
+        _regular_count = sum(t.track_status == "subscription" for t in tracks)
 
     @pytest.mark.asyncio
     async def test_year_pipeline_verification_needed(self) -> None:
@@ -297,5 +297,5 @@ class TestYearPipelineIntegration:
         assert isinstance(result, bool)
 
         unique_years = {track.year for track in tracks[:3] if track.year}
-        conflicting_tracks = len(unique_years) > 1
-        suspicious_album = any(len(t.album) <= 3 for t in tracks)  # Short album names
+        _conflicting_tracks = len(unique_years) > 1
+        _suspicious_album = any(len(t.album) <= 3 for t in tracks)  # Short album names

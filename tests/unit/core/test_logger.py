@@ -1,8 +1,4 @@
-"""Unit tests for logger module.
-
-Note: This module tests internal logger functions that are prefixed with underscore.
-Testing private functions is intentional to ensure correctness of internal logic.
-"""
+"""Unit tests for logger module."""
 
 from __future__ import annotations
 
@@ -16,28 +12,28 @@ import pytest
 from core.logger import (
     LEVEL_ABBREV,
     CompactFormatter,
-    Loggable,
     LogFormat,
+    Loggable,
     LoggerFilter,
     RunHandler,
     RunTrackingHandler,
     SafeQueueListener,
-    _build_config_alias_map,
-    _convert_path_value_to_string,
-    _create_console_logger,
-    _create_fallback_loggers,
-    _get_log_file_paths,
-    _get_log_levels_from_config,
-    _get_path_from_config,
-    _setup_queue_logging,
-    _try_config_alias_replacement,
-    _try_home_directory_replacement,
+    build_config_alias_map,
+    convert_path_value_to_string,
+    create_console_logger,
+    create_fallback_loggers,
     ensure_directory,
     get_full_log_path,
     get_html_report_path,
+    get_log_file_paths,
+    get_log_levels_from_config,
     get_loggers,
+    get_path_from_config,
+    setup_queue_logging,
     shorten_path,
     spinner,
+    try_config_alias_replacement,
+    try_home_directory_replacement,
 )
 
 if TYPE_CHECKING:
@@ -84,49 +80,49 @@ class TestEnsureDirectory:
 
 
 class TestConvertPathValueToString:
-    """Tests for _convert_path_value_to_string function."""
+    """Tests for convert_path_value_to_string function."""
 
     def test_returns_string_unchanged(self) -> None:
         """Should return string value unchanged."""
-        result = _convert_path_value_to_string("/path/to/file", "default", None)
+        result = convert_path_value_to_string("/path/to/file", "default", None)
         assert result == "/path/to/file"
 
     def test_returns_default_for_none(self) -> None:
         """Should return default when value is None."""
-        result = _convert_path_value_to_string(None, "default.log", None)
+        result = convert_path_value_to_string(None, "default.log", None)
         assert result == "default.log"
 
     def test_converts_int_to_string(self) -> None:
         """Should convert integer to string."""
-        result = _convert_path_value_to_string(123, "default", None)
+        result = convert_path_value_to_string(123, "default", None)
         assert result == "123"
 
 
 class TestGetPathFromConfig:
-    """Tests for _get_path_from_config function."""
+    """Tests for get_path_from_config function."""
 
     def test_returns_default_when_no_logging_section(self) -> None:
         """Should return default when logging section is missing."""
         config: dict[str, Any] = {}
-        result = _get_path_from_config(config, "log_file", "default.log", None)
+        result = get_path_from_config(config, "log_file", "default.log", None)
         assert result == "default.log"
 
     def test_returns_default_when_logging_not_dict(self) -> None:
         """Should return default when logging is not a dict."""
         config: dict[str, Any] = {"logging": "invalid"}
-        result = _get_path_from_config(config, "log_file", "default.log", None)
+        result = get_path_from_config(config, "log_file", "default.log", None)
         assert result == "default.log"
 
     def test_returns_value_from_config(self) -> None:
         """Should return value from logging config."""
         config: dict[str, Any] = {"logging": {"log_file": "custom.log"}}
-        result = _get_path_from_config(config, "log_file", "default.log", None)
+        result = get_path_from_config(config, "log_file", "default.log", None)
         assert result == "custom.log"
 
     def test_returns_default_when_key_not_in_logging(self) -> None:
         """Should return default when key is not in logging section."""
         config: dict[str, Any] = {"logging": {"other_key": "value"}}
-        result = _get_path_from_config(config, "missing_key", "default.log", None)
+        result = get_path_from_config(config, "missing_key", "default.log", None)
         assert result == "default.log"
 
 
@@ -163,11 +159,11 @@ class TestGetFullLogPath:
 
 
 class TestBuildConfigAliasMap:
-    """Tests for _build_config_alias_map function."""
+    """Tests for build_config_alias_map function."""
 
     def test_returns_empty_for_non_dict_config(self) -> None:
         """Should return empty list for non-dict config."""
-        result = _build_config_alias_map(None)
+        result = build_config_alias_map(None)
         assert result == []
 
     def test_builds_alias_map_from_config(self, tmp_path: Path) -> None:
@@ -178,14 +174,14 @@ class TestBuildConfigAliasMap:
             "music_library_path": str(tmp_path / "music"),
         }
 
-        result = _build_config_alias_map(config)
+        result = build_config_alias_map(config)
 
         assert len(result) == 3
         assert ("$SCRIPTS" in result[0][1]) or ("$LOGS" in result[1][1])
 
 
 class TestTryConfigAliasReplacement:
-    """Tests for _try_config_alias_replacement function."""
+    """Tests for try_config_alias_replacement function."""
 
     def test_replaces_path_with_alias(self, tmp_path: Path) -> None:
         """Should replace matching path with alias."""
@@ -193,7 +189,7 @@ class TestTryConfigAliasReplacement:
         scripts_dir.mkdir()
         config: dict[str, Any] = {"apple_scripts_dir": str(scripts_dir)}
 
-        result = _try_config_alias_replacement(str(scripts_dir / "test.scpt"), config)
+        result = try_config_alias_replacement(str(scripts_dir / "test.scpt"), config)
 
         assert result is not None
         assert "$SCRIPTS" in result
@@ -201,17 +197,17 @@ class TestTryConfigAliasReplacement:
     def test_returns_none_for_non_matching_path(self) -> None:
         """Should return None when path doesn't match any alias."""
         config: dict[str, Any] = {"apple_scripts_dir": "/some/path"}
-        result = _try_config_alias_replacement("/other/path/file.txt", config)
+        result = try_config_alias_replacement("/other/path/file.txt", config)
         assert result is None
 
 
 class TestTryHomeDirectoryReplacement:
-    """Tests for _try_home_directory_replacement function."""
+    """Tests for try_home_directory_replacement function."""
 
     def test_replaces_home_with_tilde(self) -> None:
         """Should replace home directory with ~."""
         home_path = str(PathLib.home() / "test" / "file.txt")
-        result = _try_home_directory_replacement(home_path, None)
+        result = try_home_directory_replacement(home_path, None)
 
         assert result is not None
         assert result.startswith("~")
@@ -219,13 +215,13 @@ class TestTryHomeDirectoryReplacement:
     def test_returns_tilde_for_exact_home(self) -> None:
         """Should return ~ for exact home directory path."""
         home_dir = str(PathLib.home())
-        result = _try_home_directory_replacement(home_dir, None)
+        result = try_home_directory_replacement(home_dir, None)
 
         assert result == "~"
 
     def test_returns_none_for_non_home_path(self) -> None:
         """Should return None when path is not under home."""
-        result = _try_home_directory_replacement("/usr/local/bin", None)
+        result = try_home_directory_replacement("/usr/local/bin", None)
         assert result is None
 
 
@@ -409,12 +405,12 @@ class TestLoggable:
 
 
 class TestGetLogLevelsFromConfig:
-    """Tests for _get_log_levels_from_config function."""
+    """Tests for get_log_levels_from_config function."""
 
     def test_returns_default_levels_for_empty_config(self) -> None:
         """Should return default levels for empty config."""
         config: dict[str, Any] = {}
-        levels = _get_log_levels_from_config(config)
+        levels = get_log_levels_from_config(config)
 
         assert levels["console"] == logging.INFO
         assert levels["main_file"] == logging.INFO
@@ -430,7 +426,7 @@ class TestGetLogLevelsFromConfig:
             }
         }
 
-        levels = _get_log_levels_from_config(config)
+        levels = get_log_levels_from_config(config)
 
         assert levels["console"] == logging.DEBUG
         assert levels["main_file"] == logging.WARNING
@@ -446,14 +442,14 @@ class TestGetLogLevelsFromConfig:
             }
         }
 
-        levels = _get_log_levels_from_config(config)
+        levels = get_log_levels_from_config(config)
 
         assert levels["console"] == logging.DEBUG
         assert levels["main_file"] == logging.ERROR
 
 
 class TestGetLogFilePaths:
-    """Tests for _get_log_file_paths function."""
+    """Tests for get_log_file_paths function."""
 
     def test_returns_all_file_paths(self, tmp_path: Path) -> None:
         """Should return all log file paths."""
@@ -462,7 +458,7 @@ class TestGetLogFilePaths:
             "logging": {},
         }
 
-        paths = _get_log_file_paths(config)
+        paths = get_log_file_paths(config)
 
         assert "main" in paths
         assert "analytics" in paths
@@ -682,30 +678,17 @@ class TestRunTrackingHandler:
     def test_emit_writes_header_before_first_record(self, tmp_path: Path) -> None:
         """Should write header before first log record."""
         log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
+        run_handler = RunHandler()
         handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="Test message",
-            args=(),
-            exc_info=None,
-        )
-        handler.emit(record)
-        handler.close()
-
-        content = log_file.read_text()
-        assert "NEW RUN" in content
+        content = self._emit_record_and_verify_footer("Test message", handler, log_file, "NEW RUN")
         assert "Test message" in content
 
     def test_emit_writes_header_only_once(self, tmp_path: Path) -> None:
         """Should write header only before first record."""
         log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
+        run_handler = RunHandler()
         handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
@@ -729,24 +712,11 @@ class TestRunTrackingHandler:
     def test_close_writes_footer(self, tmp_path: Path) -> None:
         """Should write footer on close."""
         log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
+        run_handler = RunHandler()
         handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="Test",
-            args=(),
-            exc_info=None,
-        )
-        handler.emit(record)
-        handler.close()
-
-        content = log_file.read_text()
-        assert "END RUN" in content
+        self._emit_record_and_verify_footer("Test", handler, log_file, "END RUN")
 
     def test_close_prevents_double_close(self, tmp_path: Path) -> None:
         """Should not crash on double close."""
@@ -759,7 +729,7 @@ class TestRunTrackingHandler:
     def test_emit_without_run_handler(self, tmp_path: Path) -> None:
         """Should emit records without run handler."""
         log_file = tmp_path / "test.log"
-        handler = RunTrackingHandler(str(log_file), run_handler=None)
+        handler = RunTrackingHandler(str(log_file))
         handler.setFormatter(logging.Formatter("%(message)s"))
 
         record = logging.LogRecord(
@@ -797,55 +767,53 @@ class TestRunTrackingHandler:
         handler.emit(record)
         handler.close()
 
-    def test_emit_handles_header_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """Should handle OSError when writing header."""
-        log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
-        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
-        handler.setFormatter(logging.Formatter("%(message)s"))
+    @staticmethod
+    def _emit_record_and_verify_footer(
+        msg: str,
+        handler: RunTrackingHandler,
+        log_file: PathLib,
+        expected_footer: str,
+    ) -> str:
+        """Emit a log record and verify the footer is written on close.
 
+        Returns the log file content for additional assertions.
+        """
         record = logging.LogRecord(
             name="test",
             level=logging.INFO,
             pathname="",
             lineno=0,
-            msg="Test",
-            args=(),
-            exc_info=None,
-        )
-
-        with patch.object(handler.stream, "write", side_effect=OSError("Write failed")):
-            handler.emit(record)
-
-        assert handler._header_failed is True
-        captured = capsys.readouterr()
-        assert "Failed to write log header" in captured.err
-
-        handler.close()
-
-    def test_close_handles_footer_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """Should handle error when writing footer."""
-        log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
-        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="Test",
+            msg=msg,
             args=(),
             exc_info=None,
         )
         handler.emit(record)
+        handler.close()
+        result = log_file.read_text()
+        assert expected_footer in result
+        return result
 
+    def test_emit_handles_header_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should handle OSError when writing header."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler()
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
         with patch.object(handler.stream, "write", side_effect=OSError("Write failed")):
-            handler.close()
-
+            handler.emit(record)
+        assert handler._header_failed is True
         captured = capsys.readouterr()
-        assert "Failed to write log footer" in captured.err
+        assert "Failed to write log header" in captured.err
+        handler.close()
 
     def test_close_handles_close_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when closing stream."""
@@ -858,10 +826,31 @@ class TestRunTrackingHandler:
         captured = capsys.readouterr()
         assert "Error closing file stream" in captured.err
 
+    def test_close_handles_footer_write_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should handle error when writing footer."""
+        log_file = tmp_path / "test.log"
+        run_handler = RunHandler()
+        handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        with patch.object(handler.stream, "write", side_effect=OSError("Write failed")):
+            handler.close()
+        captured = capsys.readouterr()
+        assert "Failed to write log footer" in captured.err
+
     def test_close_handles_trim_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should handle error when trimming log file."""
         log_file = tmp_path / "test.log"
-        run_handler = RunHandler(max_runs=3)
+        run_handler = RunHandler()
         handler = RunTrackingHandler(str(log_file), run_handler=run_handler)
 
         with patch.object(run_handler, "trim_log_to_max_runs", side_effect=OSError("Trim failed")):
@@ -920,7 +909,7 @@ class TestRunHandlerTrim:
 
 
 class TestCreateConsoleLogger:
-    """Tests for _create_console_logger function."""
+    """Tests for create_console_logger function."""
 
     def test_creates_logger_with_rich_handler(self) -> None:
         """Should create logger with RichHandler."""
@@ -928,7 +917,7 @@ class TestCreateConsoleLogger:
 
         levels = {"console": logging.INFO}
 
-        logger = _create_console_logger(levels)
+        logger = create_console_logger(levels)
 
         assert logger.name == "console_logger"
         assert any(isinstance(h, RichHandler) for h in logger.handlers)
@@ -937,13 +926,13 @@ class TestCreateConsoleLogger:
         """Should set correct log level."""
         levels = {"console": logging.DEBUG}
 
-        logger_name = f"console_logger_{id(object())}"
+        _logger_name = f"console_logger_{id(object())}"
         with patch("core.logger.logging.getLogger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_logger.handlers = []
             mock_get_logger.return_value = mock_logger
 
-            _create_console_logger(levels)
+            create_console_logger(levels)
 
             mock_logger.setLevel.assert_called_with(logging.DEBUG)
 
@@ -953,17 +942,17 @@ class TestCreateConsoleLogger:
 
         levels = {"console": logging.INFO}
 
-        logger = _create_console_logger(levels)
+        logger = create_console_logger(levels)
         handler_count = len([h for h in logger.handlers if isinstance(h, RichHandler)])
 
-        _create_console_logger(levels)
+        create_console_logger(levels)
 
         new_handler_count = len([h for h in logger.handlers if isinstance(h, RichHandler)])
         assert new_handler_count == handler_count
 
 
 class TestSetupQueueLogging:
-    """Tests for _setup_queue_logging function."""
+    """Tests for setup_queue_logging function."""
 
     def test_returns_all_loggers(self, tmp_path: Path) -> None:
         """Should return all loggers and listener."""
@@ -982,7 +971,7 @@ class TestSetupQueueLogging:
             "db_verify": str(tmp_path / "db_verify.log"),
         }
 
-        result = _setup_queue_logging(config, levels, log_files)
+        result = setup_queue_logging(config, levels, log_files)
         main_logger, error_logger, analytics_logger, db_verify_logger, listener = result
 
         assert main_logger is not None
@@ -1010,7 +999,7 @@ class TestSetupQueueLogging:
             "db_verify": str(tmp_path / "logs" / "db_verify.log"),
         }
 
-        _, _, _, _, listener = _setup_queue_logging(config, levels, log_files)
+        _, _, _, _, listener = setup_queue_logging(config, levels, log_files)
         listener.stop()
 
         assert (tmp_path / "logs").exists()
@@ -1044,22 +1033,22 @@ class TestGetLoggers:
     def test_returns_fallback_on_error(self) -> None:
         """Should return fallback loggers on error."""
         with patch(
-            "core.logger._get_log_levels_from_config",
+            "core.logger.get_log_levels_from_config",
             side_effect=ValueError("Config error"),
         ):
             result = get_loggers({})
 
-        console, error, analytics, db_verify, listener = result
+        console, _error, _analytics, _db_verify, listener = result
         assert listener is None
         assert console.name == "console_fallback"
 
 
 class TestCreateFallbackLoggers:
-    """Tests for _create_fallback_loggers function."""
+    """Tests for create_fallback_loggers function."""
 
     def test_returns_four_loggers_and_none_listener(self) -> None:
         """Should return four fallback loggers and None listener."""
-        result = _create_fallback_loggers(ValueError("Test error"))
+        result = create_fallback_loggers(ValueError("Test error"))
         console, error, analytics, db_verify, listener = result
 
         assert console.name == "console_fallback"
@@ -1070,7 +1059,7 @@ class TestCreateFallbackLoggers:
 
     def test_adds_stream_handlers(self) -> None:
         """Should add stream handlers to fallback loggers."""
-        console, error, analytics, db_verify, _ = _create_fallback_loggers(RuntimeError("Setup failed"))
+        console, error, analytics, db_verify, _ = create_fallback_loggers(RuntimeError("Setup failed"))
 
         assert len(console.handlers) > 0
         assert len(error.handlers) > 0
@@ -1079,7 +1068,7 @@ class TestCreateFallbackLoggers:
 
     def test_logs_error_message(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should log error message to stderr."""
-        _create_fallback_loggers(TypeError("Type mismatch"))
+        create_fallback_loggers(TypeError("Type mismatch"))
 
         captured = capsys.readouterr()
         assert "FATAL ERROR" in captured.err

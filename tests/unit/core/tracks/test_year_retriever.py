@@ -229,9 +229,9 @@ class TestYearRetrieverAllure:
         # Access the private function through the imported module
         result = year_consistency_module._is_reasonable_year(year)
 
-        current_year = datetime.now(UTC).year
-        min_year = YearRetriever.MIN_VALID_YEAR
-        max_year = current_year + 1
+        _current_year = datetime.now(UTC).year
+        _min_year = YearRetriever.MIN_VALID_YEAR
+        _max_year = _current_year + 1
 
         assert result is expected
 
@@ -331,7 +331,7 @@ class TestYearRetrieverAllure:
         assert len(grouped_albums[("Artist B", "Album 1")]) == 2
 
         # Create summary for attachment
-        summary = "\n".join([f"{artist} - {album}: {len(tracks)} tracks" for (artist, album), tracks in grouped_albums.items()])
+        _summary = "\n".join([f"{artist} - {album}: {len(tracks)} tracks" for (artist, album), tracks in grouped_albums.items()])
 
     @pytest.mark.asyncio
     async def test_determine_album_year_from_api(self) -> None:

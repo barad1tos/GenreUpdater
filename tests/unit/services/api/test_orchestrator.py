@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestExternalApiOrchestratorAllure:
@@ -215,8 +215,7 @@ class TestExternalApiOrchestratorAllure:
             "Authentication failure",
         ]
 
-        for scenario in error_scenarios:
-            pass
+        assert error_scenarios  # ensure scenarios are defined for future error-handling tests
         # The orchestrator should have error handling mechanisms
         assert hasattr(orchestrator, "console_logger")
         assert hasattr(orchestrator, "error_logger")
@@ -250,16 +249,14 @@ class TestExternalApiOrchestratorAllure:
         assert mock_analytics.events[0] == test_event
 
     @pytest.mark.parametrize(
-        ("config_key", "config_value", "expected_valid"),
+        ("config_key", "config_value"),
         [
-            ("timeout", 30, True),
-            ("timeout", -1, False),  # Invalid negative timeout
-            ("max_concurrent_requests", 10, True),
-            ("max_concurrent_requests", 0, False),  # Invalid zero requests
+            ("timeout", 30),
+            ("max_concurrent_requests", 10),
         ],
     )
-    def test_configuration_validation(self, config_key: str, config_value: Any, expected_valid: bool) -> None:
-        """Test configuration parameter validation."""
+    def test_configuration_validation(self, config_key: str, config_value: Any) -> None:
+        """Test configuration values are stored correctly."""
         config = {
             "year_retrieval": {
                 "api_auth": {
@@ -280,15 +277,8 @@ class TestExternalApiOrchestratorAllure:
                 "lastfm": {"enabled": True},
             },
         }
-        try:
-            orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
-            configuration_valid = True
-        except (ValueError, KeyError):
-            configuration_valid = False
-        if expected_valid:
-            assert configuration_valid, f"Expected valid configuration for {config_key}={config_value}"
-            if configuration_valid:
-                assert orchestrator.config["external_apis"][config_key] == config_value
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
+        assert orchestrator.config["external_apis"][config_key] == config_value
 
     def test_http_session_management(self) -> None:
         """Test HTTP session management capabilities."""
@@ -301,7 +291,7 @@ class TestExternalApiOrchestratorAllure:
         assert isinstance(config, dict)
 
         # Should support timeout configuration
-        timeout_configured = "timeout" in config or any(
+        _timeout_configured = "timeout" in config or any(
             "timeout" in provider_config for provider_config in config.values() if isinstance(provider_config, dict)
         )
 

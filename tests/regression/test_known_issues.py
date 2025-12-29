@@ -71,7 +71,7 @@ class TestKnownMissingYearAlbums:
         """Known problematic albums should have year data in tracks."""
         albums_without_years: list[tuple[str, str]] = []
 
-        for artist, album, expected_year in KNOWN_MISSING_YEAR_ALBUMS:
+        for artist, album, _expected_year in KNOWN_MISSING_YEAR_ALBUMS:
             if (artist, album) not in albums_with_tracks:
                 continue
 
@@ -219,7 +219,7 @@ class TestGenreEdgeCases:
         error_logger: logging.Logger,
     ) -> None:
         """Artists with multiple genres should get consistent dominant."""
-        inconsistent_artists: list[tuple[str, set[str | None], str]] = []
+        inconsistent_artists: list[tuple[str, set[str], str]] = []
 
         for artist, tracks in artists_with_tracks.items():
             genres = {t.genre for t in tracks if t.genre}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
@@ -667,7 +667,9 @@ class TestVerifyTracksBulk:
     @pytest.mark.asyncio
     async def test_returns_empty_when_tracks_have_no_ids(self, verifier: DatabaseVerifier) -> None:
         """Should return empty list when tracks have no IDs."""
-        tracks = [{"name": "Track1"}, {"name": "Track2"}]  # No 'id' field
+        # Intentionally malformed data to test error handling
+        # Cast through object to silence type checker for intentionally invalid test data
+        tracks = cast(list[TrackDict], cast(object, [{"name": "Track1"}, {"name": "Track2"}]))  # No 'id' field
         result = await verifier._verify_tracks_bulk(tracks)
         assert result == []
 

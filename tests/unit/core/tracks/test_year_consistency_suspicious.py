@@ -144,11 +144,11 @@ class TestGetDominantYearNoMisleadingLog:
         assert result is None
 
         # Check that we DID log about suspicious year (can be WARNING or INFO)
-        suspicious_logs = [msg for level, msg, args in mock_logger.logged_messages if "suspicious" in msg.lower()]
+        suspicious_logs = [msg for _level, msg, _args in mock_logger.logged_messages if "suspicious" in msg.lower()]
         assert suspicious_logs, "Should log that year is marked suspicious"
 
         # Check that we did NOT log "No dominant year (below X%)"
-        misleading_logs = [msg for level, msg, args in mock_logger.logged_messages if "No dominant year (below" in msg]
+        misleading_logs = [msg for _level, msg, _args in mock_logger.logged_messages if "No dominant year (below" in msg]
         assert not misleading_logs, f"Should NOT log 'No dominant year (below X%)' for suspicious year. Found: {misleading_logs}"
 
     def test_genuinely_below_threshold_logs_no_dominant_message(
@@ -170,7 +170,7 @@ class TestGetDominantYearNoMisleadingLog:
         assert result is None
 
         # Check that we DID log "No dominant year (below X%)"
-        below_threshold_logs = [msg for level, msg, args in mock_logger.logged_messages if "No dominant year (below" in msg]
+        below_threshold_logs = [msg for _level, msg, _args in mock_logger.logged_messages if "No dominant year (below" in msg]
         assert len(below_threshold_logs) == 1, (
             f"Should log 'No dominant year (below X%)' for genuinely low dominance. Logs: {mock_logger.logged_messages}"
         )
