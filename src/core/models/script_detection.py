@@ -406,6 +406,20 @@ def _handle_latin_mixed_case(script_counts: dict[ScriptType, int], total_chars: 
     return ScriptType.MIXED
 
 
+def get_all_scripts(text: str) -> list[ScriptType]:
+    """Get all scripts detected in text.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        List of detected script types
+    """
+    if not text:
+        return []
+    return [script_type for script_type, detector in SCRIPT_DETECTORS.items() if detector(text)]
+
+
 def detect_primary_script(text: str) -> ScriptType:
     """Detect the primary script used in text.
 
