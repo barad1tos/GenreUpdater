@@ -170,67 +170,6 @@ class TestFingerprintValidateFormat:
         assert FingerprintGenerator.validate_fingerprint([]) is False  # type: ignore[arg-type]
 
 
-class TestFingerprintComparison:
-    """Tests for fingerprint comparison."""
-
-    def test_fingerprints_match_identical(self, generator: FingerprintGenerator) -> None:
-        """Test matching identical fingerprints."""
-        fp = "a" * 64
-        assert generator.fingerprints_match(fp, fp) is True
-
-    def test_fingerprints_match_equal_values(self, generator: FingerprintGenerator) -> None:
-        """Test matching equal fingerprint values."""
-        fp1 = "0123456789abcdef" * 4
-        fp2 = "0123456789abcdef" * 4
-        assert generator.fingerprints_match(fp1, fp2) is True
-
-    def test_fingerprints_dont_match_different(self, generator: FingerprintGenerator) -> None:
-        """Test non-matching different fingerprints."""
-        fp1 = "a" * 64
-        fp2 = "b" * 64
-        assert generator.fingerprints_match(fp1, fp2) is False
-
-    def test_fingerprints_match_invalid_first_fails(self, generator: FingerprintGenerator) -> None:
-        """Test that invalid first fingerprint fails."""
-        assert generator.fingerprints_match("invalid", "a" * 64) is False
-
-    def test_fingerprints_match_invalid_second_fails(self, generator: FingerprintGenerator) -> None:
-        """Test that invalid second fingerprint fails."""
-        assert generator.fingerprints_match("a" * 64, "invalid") is False
-
-
-class TestFingerprintSummary:
-    """Tests for fingerprint summary."""
-
-    def test_get_summary_contains_fingerprint(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
-        """Test that summary contains fingerprint."""
-        summary = generator.get_fingerprint_summary(valid_track_data)
-
-        assert "fingerprint" in summary
-        assert len(summary["fingerprint"]) == 64
-
-    def test_get_summary_contains_properties(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
-        """Test that summary contains properties used."""
-        summary = generator.get_fingerprint_summary(valid_track_data)
-
-        assert "properties_used" in summary
-        assert "persistent_id" in summary["properties_used"]
-        assert "location" in summary["properties_used"]
-
-    def test_get_summary_contains_track_id(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
-        """Test that summary contains track_id."""
-        summary = generator.get_fingerprint_summary(valid_track_data)
-
-        assert summary["track_id"] == valid_track_data["persistent_id"]
-
-    def test_get_summary_property_count(self, generator: FingerprintGenerator, valid_track_data: dict[str, Any]) -> None:
-        """Test that summary has correct property count."""
-        summary = generator.get_fingerprint_summary(valid_track_data)
-
-        # 2 required + 4 optional properties
-        assert summary["property_count"] == 6
-
-
 class TestNormalization:
     """Tests for property normalization."""
 
@@ -273,38 +212,6 @@ class TestNormalization:
     def test_normalize_string_number(self) -> None:
         """Test normalizing number converts to string."""
         assert FingerprintGenerator._normalize_string_value(123) == "123"
-
-
-class TestDefaultValues:
-    """Tests for default value handling."""
-
-    def test_missing_optional_fields_use_defaults(self, generator: FingerprintGenerator) -> None:
-        """Test that missing optional fields use defaults."""
-        minimal_data = {
-            "persistent_id": "TEST123",
-            "location": "/path/to/file.mp3",
-        }
-        summary = generator.get_fingerprint_summary(minimal_data)
-
-        props = summary["properties_used"]
-        assert props["file_size"] == 0.0
-        assert props["duration"] == 0.0
-        assert props["date_modified"] == ""
-        assert props["date_added"] == ""
-
-    def test_partial_optional_fields(self, generator: FingerprintGenerator) -> None:
-        """Test with some optional fields present."""
-        partial_data = {
-            "persistent_id": "TEST123",
-            "location": "/path/to/file.mp3",
-            "file_size": 1024,
-            # duration, date_modified, date_added missing
-        }
-        summary = generator.get_fingerprint_summary(partial_data)
-
-        props = summary["properties_used"]
-        assert props["file_size"] == 1024.0
-        assert props["duration"] == 0.0
 
 
 class TestEdgeCases:

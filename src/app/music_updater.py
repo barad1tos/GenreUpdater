@@ -5,7 +5,7 @@ This is a streamlined version that uses the new modular components.
 
 import contextlib
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,21 +13,23 @@ from app.features.verify.database_verifier import DatabaseVerifier
 from app.pipeline_snapshot import PipelineSnapshotManager
 from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
+from core.logger import LogFormat, get_full_log_path
+from core.models.metadata_utils import is_music_app_running
+from core.models.track_models import ChangeLogEntry, TrackDict
+from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
 from core.tracks.incremental_filter import IncrementalFilterService
+from core.tracks.track_delta import has_identity_changed
 from core.tracks.track_processor import TrackProcessor
 from core.tracks.year_retriever import YearRetriever
-from core.logger import LogFormat, get_full_log_path
-from core.run_tracking import IncrementalRunTracker
-from core.models.metadata_utils import is_music_app_running
-from core.models.track_models import ChangeLogEntry, TrackDict
 from metrics.change_reports import (
     save_changes_report,
     sync_track_list_with_current,
 )
 
 if TYPE_CHECKING:
+    from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
     from services.pending_verification import PendingAlbumEntry
 
@@ -207,40 +209,6 @@ class MusicUpdater:
         Uses backup CSV if provided; otherwise uses the latest changes_report.csv.
         """
         await self.year_service.run_revert_years(artist, album, backup_csv)
-
-    @staticmethod
-    def _create_change_log_entry(
-        artist: str,
-        original_track_name: str,
-        original_album_name: str,
-        cleaned_track_name: str,
-        cleaned_album_name: str,
-    ) -> ChangeLogEntry:
-        """Create a change log entry for metadata cleaning.
-
-        Args:
-            artist: Artist name
-            original_track_name: Original track name
-            original_album_name: Original album name
-            cleaned_track_name: Cleaned track name
-            cleaned_album_name: Cleaned album name
-
-        Returns:
-            Change log entry object
-
-        """
-        return ChangeLogEntry(
-            timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-            change_type="metadata_cleaning",
-            track_id="",  # Not available in cleaning context
-            artist=artist,
-            track_name=original_track_name,
-            album_name=original_album_name,
-            old_track_name=original_track_name,
-            new_track_name=cleaned_track_name,
-            old_album_name=original_album_name,
-            new_album_name=cleaned_album_name,
-        )
 
     async def _save_clean_results(self, changes_log: list[ChangeLogEntry]) -> None:
         """Save cleaning results to CSV and changes report.
@@ -548,7 +516,19 @@ class MusicUpdater:
                     len(delta.updated_ids),
                     len(delta.removed_ids),
                 )
+
+                # Build lookup maps for cache invalidation (needed for both removed and updated)
+                snapshot_map = {str(t.id): t for t in snapshot_tracks if t.id}
+                api_cache = self.deps.cache_service.api_service
+
+                # Emit cache invalidation for removed tracks
+                self._emit_removed_track_events(delta.removed_ids, snapshot_map, api_cache)
+
                 result = await self.snapshot_manager.merge_smart_delta(snapshot_tracks, delta)
+
+                # Emit cache invalidation for identity changes (artist/album renamed)
+                if result:
+                    self._emit_identity_change_events(delta.updated_ids, snapshot_map, result, api_cache)
         except (OSError, RuntimeError, ValueError, KeyError) as exc:
             # Broad catch intentional: Smart Delta is an optimization, not critical path.
             # Any failure should gracefully fall back to full batch scan.
@@ -557,6 +537,49 @@ class MusicUpdater:
             result = None
 
         return result
+
+    def _emit_removed_track_events(
+        self,
+        removed_ids: list[str],
+        snapshot_map: dict[str, "TrackDict"],
+        api_cache: "ApiCacheService",
+    ) -> None:
+        """Emit cache invalidation events for removed tracks."""
+        if not removed_ids:
+            return
+
+        for track_id in removed_ids:
+            if stored := snapshot_map.get(track_id):
+                api_cache.emit_track_removed(track_id, stored.artist or "", stored.album or "")
+
+        self.console_logger.info("Emitted cache invalidation for %d removed tracks", len(removed_ids))
+
+    def _emit_identity_change_events(
+        self,
+        updated_ids: list[str],
+        snapshot_map: dict[str, "TrackDict"],
+        current_tracks: list["TrackDict"],
+        api_cache: "ApiCacheService",
+    ) -> None:
+        """Emit cache invalidation for tracks with identity changes (artist/album renamed)."""
+        if not updated_ids:
+            return
+
+        result_map = {str(t.id): t for t in current_tracks if t.id}
+        identity_changed_count = 0
+
+        for track_id in updated_ids:
+            stored = snapshot_map.get(track_id)
+            current = result_map.get(track_id)
+            if stored and current and has_identity_changed(current, stored):
+                api_cache.emit_track_modified(track_id, stored.artist or "", stored.album or "")
+                identity_changed_count += 1
+
+        if identity_changed_count:
+            self.console_logger.info(
+                "Emitted cache invalidation for %d tracks with identity changes",
+                identity_changed_count,
+            )
 
     async def _fetch_tracks_for_pipeline_mode(self, force: bool = False) -> list["TrackDict"]:
         """Fetch tracks based on the current mode (test or normal).
@@ -658,16 +681,6 @@ class MusicUpdater:
         self.snapshot_manager.update_tracks(updated_genre_tracks)
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
-
-    async def _update_all_years(self, tracks: list["TrackDict"], force: bool, fresh: bool = False) -> None:
-        """Update years for all tracks (Step 4 of pipeline).
-
-        Args:
-            tracks: List of tracks to process
-            force: Force all operations
-            fresh: Fresh mode - invalidate cache before processing, implies force
-        """
-        await self.year_service.update_all_years(tracks, force, fresh)
 
     async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).

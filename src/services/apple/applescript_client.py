@@ -15,9 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, spinner
 from core.models.protocols import AppleScriptClientProtocol
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from metrics import Analytics
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
+from services.apple.rate_limiter import EnhancedRateLimiter
 from services.apple.sanitizer import AppleScriptSanitizer
 
 if TYPE_CHECKING:
@@ -65,8 +67,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
             # Log critical error but don't raise here in __init__, let the initialize method handle it
             self.error_logger.critical("Configuration error: 'apple_scripts_dir' key is missing.")
 
-        # Semaphore is initialized in the async initialize method
-        self.semaphore: asyncio.Semaphore | None = None  # Initialize as None
+        # Semaphore and rate limiter are initialized in the async initialize method
+        self.semaphore: asyncio.Semaphore | None = None
+        self.rate_limiter: EnhancedRateLimiter | None = None
 
         # Initialize the security sanitizer
         self.sanitizer = AppleScriptSanitizer(self.console_logger)
@@ -130,15 +133,40 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     self.error_logger.critical(error_msg)
                     raise ValueError(error_msg)
 
-                self.console_logger.debug("Creating semaphore with concurrency limit: %d", concurrent_limit)
-                self.semaphore = asyncio.Semaphore(concurrent_limit)
-                self.executor.update_semaphore(self.semaphore)
-                self.console_logger.info(
-                    "%s initialized (%d scripts, concurrency: %d)",
-                    LogFormat.entity("AppleScriptClient"),
-                    len(scripts),
-                    concurrent_limit,
-                )
+                # Check if rate limiting is enabled (provides better throughput stability)
+                rate_limit_config = self.config.get("apple_script_rate_limit", {})
+                if rate_limit_config.get("enabled", False):
+                    # Use enhanced rate limiter (rate limiting + concurrency control)
+                    requests_per_window = rate_limit_config.get("requests_per_window", 10)
+                    window_size = rate_limit_config.get("window_size_seconds", 1.0)
+
+                    self.rate_limiter = EnhancedRateLimiter(
+                        requests_per_window=requests_per_window,
+                        window_size=window_size,
+                        max_concurrent=concurrent_limit,
+                        logger=self.console_logger,
+                    )
+                    await self.rate_limiter.initialize()
+                    self.executor.update_rate_limiter(self.rate_limiter)
+                    self.console_logger.info(
+                        "%s initialized (%d scripts, concurrency: %d, rate: %d/%ss)",
+                        LogFormat.entity("AppleScriptClient"),
+                        len(scripts),
+                        concurrent_limit,
+                        requests_per_window,
+                        window_size,
+                    )
+                else:
+                    # Use semaphore-only concurrency control (legacy behavior)
+                    self.console_logger.debug("Creating semaphore with concurrency limit: %d", concurrent_limit)
+                    self.semaphore = asyncio.Semaphore(concurrent_limit)
+                    self.executor.update_semaphore(self.semaphore)
+                    self.console_logger.info(
+                        "%s initialized (%d scripts, concurrency: %d)",
+                        LogFormat.entity("AppleScriptClient"),
+                        len(scripts),
+                        concurrent_limit,
+                    )
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
                 self.error_logger.exception("Error initializing AppleScriptClient: %s", e)
                 raise
@@ -381,19 +409,16 @@ class AppleScriptClient(AppleScriptClientProtocol):
             List of track dictionaries
 
         """
-        field_separator = "\x1e"  # ASCII 30
-        line_separator = "\x1d"  # ASCII 29
-
         tracks: list[dict[str, str]] = []
 
         # Split by line separator
-        lines = raw_output.split(line_separator)
+        lines = raw_output.split(LINE_SEPARATOR)
 
         for line in lines:
             if not line.strip():
                 continue
 
-            fields = line.split(field_separator)
+            fields = line.split(FIELD_SEPARATOR)
 
             # Expected fields: id, name, artist, album_artist, album, genre, date_added,
             # track_status, year, release_year, "" (empty placeholder, ignored)

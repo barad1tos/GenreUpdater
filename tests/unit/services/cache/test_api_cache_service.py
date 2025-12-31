@@ -242,14 +242,45 @@ class TestApiCacheService:
         assert await service.get_cached_result(artist, album, "spotify") is None
         assert await service.get_cached_result(artist, album, "lastfm") is None
 
-    def test_handle_track_modified_event(self) -> None:
-        """Test handling track modified event."""
+    def test_handle_track_modified_event_without_metadata(self) -> None:
+        """Test handling track modified event without metadata does nothing."""
         service = TestApiCacheService.create_service()
         event = CacheEvent(event_type=CacheEventType.TRACK_MODIFIED, track_id="track456")
 
-        # Should only log, not modify cache
+        # Event without metadata should be ignored (no artist/album to invalidate)
         service.event_manager.emit_event(event)
-        cast(MagicMock, service.logger.debug).assert_called_once_with("Track modified: %s, API cache unaffected", "track456")
+        cast(MagicMock, service.logger.info).assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_track_modified_event_with_metadata(self) -> None:
+        """Test handling track modified event invalidates cache for old artist/album."""
+        service = TestApiCacheService.create_service()
+        await service.initialize()
+
+        # Pre-populate cache
+        await service.set_cached_result("Old Artist", "Old Album", "musicbrainz", True, {"year": "2020"})
+        assert await service.get_cached_result("Old Artist", "Old Album", "musicbrainz") is not None
+
+        # Emit track modified event with old artist/album in metadata
+        event = CacheEvent(
+            event_type=CacheEventType.TRACK_MODIFIED,
+            track_id="track456",
+            metadata={"artist": "Old Artist", "album": "Old Album"},
+        )
+        service.event_manager.emit_event(event)
+
+        # Verify info log was called
+        cast(MagicMock, service.logger.info).assert_called_with(
+            "Track %s identity changed, invalidating cache for: %s - %s",
+            "track456",
+            "Old Artist",
+            "Old Album",
+        )
+
+        # Wait for async task to complete
+        await asyncio.sleep(0.1)
+        # Cache should be invalidated
+        assert await service.get_cached_result("Old Artist", "Old Album", "musicbrainz") is None
 
     @pytest.mark.asyncio
     async def test_get_stats(self) -> None:

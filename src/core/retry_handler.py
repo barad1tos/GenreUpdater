@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypedDict, TypeVar, cast
 
-from core.exceptions import ConfigurationError
+from core.core_config import ConfigurationError
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")

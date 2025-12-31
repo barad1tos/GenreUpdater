@@ -75,27 +75,6 @@ class DebugConfig:
         value = os.environ.get(key, "").lower()
         return value in ("1", "true", "yes", "on")
 
-    def enable_all(self) -> None:
-        """Enable all debug flags."""
-        self.year = True
-        self.api = True
-        self.cache = True
-        self.applescript = True
-        self.pipeline = True
-
-    def disable_all(self) -> None:
-        """Disable all debug flags."""
-        self.year = False
-        self.api = False
-        self.cache = False
-        self.applescript = False
-        self.pipeline = False
-
-    @property
-    def any_enabled(self) -> bool:
-        """Check if any debug flag is enabled."""
-        return any([self.year, self.api, self.cache, self.applescript, self.pipeline])
-
 
 # Global debug configuration instance
 # Import this in other modules: from core.debug_utils import debug

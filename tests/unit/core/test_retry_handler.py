@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from core.exceptions import ConfigurationError
+from core.core_config import ConfigurationError
 from core.retry_handler import (
     ConfigurationRetryHandler,
     DatabaseRetryHandler,

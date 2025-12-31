@@ -76,35 +76,6 @@ class UnifiedHashService:
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     @classmethod
-    def hash_custom_key(cls, *args: Any, **kwargs: Any) -> str:
-        """Generate SHA256 hash for custom cache key with multiple components.
-
-        Args:
-            *args: Positional arguments to include in key
-            **kwargs: Keyword arguments to include in key
-
-        Returns:
-            SHA256 hash string
-
-        Note:
-            Non-JSON-serializable arguments are converted to their string representation.
-        """
-
-        def safe_serialize(obj: Any) -> str:
-            """Serialize object to JSON, with str() fallback for non-serializable types."""
-            return json.dumps(obj, sort_keys=True, default=str)
-
-        # Use json.dumps for stable serialization, fallback to str() if not serializable
-        args_string = "|".join(safe_serialize(arg) for arg in args)
-
-        # Build kwargs string from sorted key-value pairs
-        kwargs_string = "|".join(f"{k}={safe_serialize(v)}" for k, v in sorted(kwargs.items())) if kwargs else ""
-
-        combined_string = f"{args_string}|{kwargs_string}".strip("|")
-
-        return hashlib.sha256(combined_string.encode()).hexdigest()
-
-    @classmethod
     def hash_pending_key(cls, track_id: str) -> str:
         """Generate SHA256 hash for pending verification key.
 
@@ -116,12 +87,3 @@ class UnifiedHashService:
         """
         key_string = f"pending:{track_id}"
         return hashlib.sha256(key_string.encode()).hexdigest()
-
-    @classmethod
-    def get_algorithm(cls) -> str:
-        """Get the hash algorithm being used.
-
-        Returns:
-            Algorithm name (sha256)
-        """
-        return cls.ALGORITHM

@@ -201,56 +201,6 @@ class SmartCacheConfig:
         """
         return content_type in [CacheContentType.TRACK_METADATA, CacheContentType.SUCCESSFUL_API_METADATA, CacheContentType.ALBUM_YEAR]
 
-    def get_cleanup_threshold(self, content_type: CacheContentType) -> float:
-        """Get cleanup threshold for cache size management.
-
-        Args:
-            content_type: Type of cached content
-
-        Returns:
-            Threshold as ratio (0.0 - 1.0) when cleanup should trigger
-        """
-        return self._policies[content_type].cleanup_threshold
-
-    def update_policy(self, content_type: CacheContentType, **kwargs: Any) -> None:
-        """Update cache policy for specific content type.
-
-        Args:
-            content_type: Type of cached content
-            **kwargs: Policy attributes to update
-        """
-        policy = self._policies[content_type]
-
-        for key, value in kwargs.items():
-            if hasattr(policy, key):
-                setattr(policy, key, value)
-                self.logger.info("Updated %s policy: %s=%s", content_type.value, key, value)
-            else:
-                msg = f"Unknown policy attribute: {key}"
-                raise AttributeError(msg)
-
-    def get_all_policies(self) -> dict[CacheContentType, CachePolicy]:
-        """Get all configured cache policies.
-
-        Returns:
-            Dictionary mapping content types to their policies
-        """
-        return self._policies.copy()
-
-    def log_configuration(self) -> None:
-        """Log current cache configuration for debugging."""
-        self.logger.info("=== Smart Cache Configuration ===")
-
-        for content_type, policy in self._policies.items():
-            ttl_str = self._format_ttl(policy.ttl_seconds)
-            self.logger.info(
-                "%s | TTL: %s | Strategy: %s | Max: %sMB",
-                f"{content_type.value:20}",
-                f"{ttl_str:12}",
-                f"{policy.invalidation_strategy.value:15}",
-                f"{policy.max_size_mb or 'N/A':3}",
-            )
-
     def _format_ttl(self, seconds: int) -> str:
         """Format TTL seconds into human-readable string.
 
@@ -345,8 +295,9 @@ class EventDrivenCacheManager:
         for handler in handlers:
             try:
                 handler(event)
-            except Exception:  # Intentionally broad to ensure remaining handlers execute
-                self.logger.exception("Event handler %r failed while processing event %r", handler, event)
+            except (RuntimeError, ValueError, TypeError, AttributeError, KeyError) as exc:
+                # Catch common runtime errors; ensures remaining handlers execute
+                self.logger.exception("Event handler %r failed: %s", handler, exc)
 
     def should_invalidate_for_event(self, content_type: CacheContentType, event: CacheEvent) -> bool:
         """Check if cache should be invalidated for given event.

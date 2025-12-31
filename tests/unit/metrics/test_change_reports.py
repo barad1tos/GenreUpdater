@@ -12,7 +12,6 @@ import pytest
 from core.models.track_models import ChangeLogEntry
 from metrics.change_reports import (
     ChangeType,
-    Color,
     Format,
     Key,
     Misc,
@@ -43,26 +42,6 @@ def console_logger() -> MagicMock:
 def error_logger() -> MagicMock:
     """Create a mock error logger."""
     return MagicMock()
-
-
-class TestColorConstants:
-    """Tests for Color class constants."""
-
-    def test_color_red(self) -> None:
-        """Verify RED ANSI code."""
-        assert Color.RED == "\033[31m"
-
-    def test_color_yellow(self) -> None:
-        """Verify YELLOW ANSI code."""
-        assert Color.YELLOW == "\033[33m"
-
-    def test_color_green(self) -> None:
-        """Verify GREEN ANSI code."""
-        assert Color.GREEN == "\033[32m"
-
-    def test_color_reset(self) -> None:
-        """Verify RESET ANSI code."""
-        assert Color.RESET == "\033[0m"
 
 
 class TestChangeTypeConstants:

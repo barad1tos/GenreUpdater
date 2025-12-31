@@ -79,27 +79,6 @@ class DatabaseVerifier:
             LogFormat.number(track_count),
         )
 
-    def _log_batch_progress(self, batch_num: int, total_batches: int, checked: int, valid: int, invalid: int) -> None:
-        """Log batch progress with IDE-like highlighting."""
-        # File log (plain)
-        self.db_verify_logger.info(
-            "BATCH %d/%d | checked=%d valid=%d invalid=%d",
-            batch_num,
-            total_batches,
-            checked,
-            valid,
-            invalid,
-        )
-        # Console log (highlighted) - only show if there are invalid tracks
-        if invalid > 0:
-            self.console_logger.info(
-                "%s %s | valid: %s invalid: %s",
-                LogFormat.dim(f"BATCH {batch_num}/{total_batches}"),
-                LogFormat.number(checked),
-                LogFormat.success(str(valid)),
-                LogFormat.error(str(invalid)),
-            )
-
     def _log_verify_complete(self, total: int, invalid: int, removed: int) -> None:
         """Log verification completion with IDE-like highlighting."""
         duration = time.time() - self._verify_start_time

@@ -318,55 +318,6 @@ class TestRunRevertYears:
         assert "2 not found" in caplog.text
 
 
-class TestUpdateAllYears:
-    """Tests for update_all_years method."""
-
-    @pytest.mark.asyncio
-    async def test_processes_album_years(
-        self,
-        service: YearUpdateService,
-        mock_year_retriever: MagicMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Should process album years."""
-        mock_year_retriever.process_album_years = AsyncMock(return_value=True)
-        mock_year_retriever.get_last_updated_tracks.return_value = sample_tracks
-
-        await service.update_all_years(tracks=sample_tracks, force=False)
-
-        mock_year_retriever.process_album_years.assert_called_once_with(sample_tracks, force=False, fresh=False)
-
-    @pytest.mark.asyncio
-    async def test_updates_snapshot(
-        self,
-        service: YearUpdateService,
-        mock_year_retriever: MagicMock,
-        mock_snapshot_manager: MagicMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Should update snapshot with updated tracks."""
-        updated_tracks = [sample_tracks[0]]
-        mock_year_retriever.process_album_years = AsyncMock(return_value=True)
-        mock_year_retriever.get_last_updated_tracks.return_value = updated_tracks
-
-        await service.update_all_years(tracks=sample_tracks, force=False)
-
-        mock_snapshot_manager.update_tracks.assert_called_once_with(updated_tracks)
-
-    @pytest.mark.asyncio
-    async def test_raises_on_error(
-        self,
-        service: YearUpdateService,
-        mock_year_retriever: MagicMock,
-        sample_tracks: list[TrackDict],
-    ) -> None:
-        """Should raise exception on error."""
-        mock_year_retriever.process_album_years = AsyncMock(side_effect=ValueError("Test error"))
-
-        with pytest.raises(ValueError, match="Test error"):
-            await service.update_all_years(tracks=sample_tracks, force=False)
-
-
 class TestUpdateAllYearsWithLogs:
     """Tests for update_all_years_with_logs method."""
 

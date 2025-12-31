@@ -9,7 +9,7 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeGuard
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
@@ -22,26 +22,6 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime-only aliasing for type hints
     CacheableKey = Any
     CacheableValue = Any
-
-
-def is_generic_cache_entry(value: object) -> TypeGuard[tuple[CacheableValue, float]]:
-    """Type guard to check if value is a valid generic cache entry.
-
-    Args:
-        value: Value to check
-
-    Returns:
-        True if value is a (data, timestamp) tuple
-    """
-    if not isinstance(value, tuple) or len(value) != 2:
-        return False
-
-    # Check timestamp (second element) is numeric
-    if not isinstance(value[1], (int, float)):
-        return False
-
-    # Check first element is a cacheable type (str, int, float, bool, dict, list, or None)
-    return isinstance(value[0], (str, int, float, bool, dict, list, type(None)))
 
 
 class GenericCacheService:
@@ -233,14 +213,6 @@ class GenericCacheService:
             True if expired, False otherwise
         """
         return timestamp <= time.time()
-
-    def get_all_entries(self) -> list[tuple[str, Any, float]]:
-        """Get all cache entries for debugging/inspection.
-
-        Returns:
-            List of (key, value, timestamp) tuples
-        """
-        return [(key[:16], value, timestamp) for key, (value, timestamp) in self.cache.items()]
 
     def enforce_size_limits(self) -> int:
         """Enforce cache size limits by removing oldest entries.

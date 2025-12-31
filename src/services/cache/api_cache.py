@@ -84,14 +84,33 @@ class ApiCacheService:
                 task.add_done_callback(self._background_tasks.discard)
 
     def _handle_track_modified(self, event: CacheEvent) -> None:
-        """Handle track modification event.
+        """Handle track modification event by invalidating cache for old artist/album.
+
+        When user changes artist/album in Music.app, the API cache for the OLD
+        combination becomes stale and must be invalidated.
 
         Args:
-            event: Cache event with track information
+            event: Cache event with old artist/album in metadata
         """
-        # For now, only log - track modifications usually don't affect API metadata
-        if event.track_id:
-            self.logger.debug("Track modified: %s, API cache unaffected", event.track_id)
+        if event.track_id and event.metadata:
+            artist = event.metadata.get("artist")
+            album = event.metadata.get("album")
+
+            if artist and album:
+                # Limit background tasks to prevent unbounded memory growth
+                if len(self._background_tasks) >= self._max_background_tasks:
+                    self.logger.debug(
+                        "Background task limit reached (%d), skipping invalidation for %s - %s",
+                        self._max_background_tasks,
+                        artist,
+                        album,
+                    )
+                    return
+
+                self.logger.info("Track %s identity changed, invalidating cache for: %s - %s", event.track_id, artist, album)
+                task = asyncio.create_task(self.invalidate_for_album(artist, album))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
     async def initialize(self) -> None:
         """Initialize API cache by loading data from disk."""
@@ -342,6 +361,20 @@ class ApiCacheService:
             album: Album name
         """
         event = CacheEvent(event_type=CacheEventType.TRACK_REMOVED, track_id=track_id, metadata={"artist": artist, "album": album})
+        self.event_manager.emit_event(event)
+
+    def emit_track_modified(self, track_id: str, old_artist: str, old_album: str) -> None:
+        """Emit track modified event for cache invalidation.
+
+        Called when user changes artist/album in Music.app. Invalidates cache
+        for the OLD artist/album combination since it's now stale.
+
+        Args:
+            track_id: Unique track identifier
+            old_artist: Previous artist name (before user edit)
+            old_album: Previous album name (before user edit)
+        """
+        event = CacheEvent(event_type=CacheEventType.TRACK_MODIFIED, track_id=track_id, metadata={"artist": old_artist, "album": old_album})
         self.event_manager.emit_event(event)
 
     def get_stats(self) -> dict[str, Any]:

@@ -14,7 +14,6 @@ from services.apple import (
     AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
-    EnhancedRateLimiter,
 )
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
@@ -323,11 +322,11 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
     def test_script_size_validation(self) -> None:
         """Test script size validation."""
-        sanitizer = AppleScriptSanitizer(MockLogger())
         # Create a script larger than MAX_SCRIPT_SIZE
         huge_script = 'tell application "Music" to ' + ("get name of track " * 10000)
 
         if len(huge_script) > MAX_SCRIPT_SIZE:
+            sanitizer = AppleScriptSanitizer(MockLogger())
             # Should raise or handle gracefully
             try:
                 sanitizer.validate_script_code(huge_script)
@@ -393,54 +392,6 @@ Track 3|Artist 3|Album 3|2022|Pop"""
         cmd = client.sanitizer.create_safe_command(script, arguments=args_with_ampersand)
         assert "Seek & Destroy" in cmd
         assert "Rock & Roll" in cmd
-
-    @pytest.mark.asyncio
-    async def test_rate_limiter_validation(self) -> None:
-        """Test rate limiter parameter validation."""
-        with pytest.raises(ValueError, match="requests_per_window must be a positive integer"):
-            EnhancedRateLimiter(requests_per_window=0, window_size=1.0)
-
-        with pytest.raises(ValueError, match="window_size must be a positive number"):
-            EnhancedRateLimiter(requests_per_window=10, window_size=0)
-
-        with pytest.raises(ValueError, match="max_concurrent must be a positive integer"):
-            EnhancedRateLimiter(requests_per_window=10, window_size=1.0, max_concurrent=0)
-        limiter = EnhancedRateLimiter(requests_per_window=10, window_size=1.0)
-        await limiter.initialize()
-        assert limiter.semaphore is not None
-        assert limiter.total_requests == 0
-
-    @pytest.mark.asyncio
-    async def test_rate_limiter_acquire_release(self) -> None:
-        """Test rate limiter acquire and release."""
-        limiter = EnhancedRateLimiter(requests_per_window=2, window_size=1.0, max_concurrent=1)
-        await limiter.initialize()
-        # First two requests should not wait
-        wait_time1 = await limiter.acquire()
-        assert wait_time1 == 0.0
-        limiter.release()
-
-        wait_time2 = await limiter.acquire()
-        assert wait_time2 == 0.0
-        limiter.release()
-
-        # Third request should trigger rate limiting
-        # This will wait for the window to expire
-        start_time = asyncio.get_event_loop().time()
-        await limiter.acquire()
-        elapsed = asyncio.get_event_loop().time() - start_time
-
-        # Should have waited approximately 1 second (window_size)
-        assert elapsed >= 0.9  # Allow some timing variance
-        limiter.release()
-        uninit_limiter = EnhancedRateLimiter(requests_per_window=10, window_size=1.0)
-        with pytest.raises(RuntimeError, match="RateLimiter not initialized"):
-            await uninit_limiter.acquire()
-        stats = limiter.get_stats()
-        assert "total_requests" in stats
-        assert "total_wait_time" in stats
-        assert stats["total_requests"] == 3
-        assert stats["total_wait_time"] > 0
 
     def test_reserved_words_validation(self) -> None:
         """Test validation of AppleScript reserved words."""
