@@ -143,3 +143,297 @@ def test_missing_config_yields_no_mapping(tmp_path: Path) -> None:
     )
 
     assert renamer.has_mapping is False
+
+
+def test_invalid_yaml_syntax(tmp_path: Path) -> None:
+    """Invalid YAML syntax should result in empty mapping with error log."""
+    config_path = tmp_path / "invalid.yaml"
+    config_path.write_text("invalid: yaml: syntax: [unclosed", encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    assert renamer.has_mapping is False
+    error_logger.exception.assert_called_once()
+
+
+def test_non_dict_yaml(tmp_path: Path) -> None:
+    """YAML that's not a dict should result in empty mapping with warning."""
+    config_path = tmp_path / "list.yaml"
+    config_path.write_text("- item1\n- item2\n", encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    assert renamer.has_mapping is False
+    error_logger.warning.assert_called_once()
+
+
+def test_non_string_key_value_skipped(tmp_path: Path) -> None:
+    """Non-string keys or values should be skipped with warning."""
+    config_path = tmp_path / "mixed.yaml"
+    # 123 as key and true as value are not strings
+    config_path.write_text(
+        '123: "Number Key"\nOther: true\nValid: "ValidValue"\n',
+        encoding="utf-8",
+    )
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    # Should have only the valid entry
+    assert renamer.has_mapping is True
+    # Two warnings for the invalid entries
+    assert error_logger.warning.call_count == 2
+
+
+def test_empty_key_value_skipped(tmp_path: Path) -> None:
+    """Empty keys or values should be skipped with debug log."""
+    config_path = tmp_path / "empty.yaml"
+    config_path.write_text('"": "EmptyKey"\nEmptyValue: ""\nValid: "ValidValue"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    # Should have only the valid entry
+    assert renamer.has_mapping is True
+    # Debug log for the empty entries
+    assert error_logger.debug.call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_empty_mapping_returns_empty(tmp_path: Path) -> None:
+    """When mapping is empty, rename_tracks should return empty list."""
+    config_path = tmp_path / "empty.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="Some Artist")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_track_without_id_skipped(tmp_path: Path) -> None:
+    """Track without ID should be skipped with warning."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    # Track with empty ID
+    track = _create_track(track_id="", artist="OldArtist")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert result == []
+    error_logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_empty_artist_skipped(tmp_path: Path) -> None:
+    """Track with empty artist should be skipped."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_processor_failure_returns_false(tmp_path: Path) -> None:
+    """When processor returns False, track should not be in updated list."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    # Processor that returns False
+    class FailingProcessor:
+        async def update_artist_async(self, *_args: Any, **_kwargs: Any) -> bool:
+            return False
+
+    processor: Any = FailingProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="OldArtist")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_processor_exception_logged(tmp_path: Path) -> None:
+    """When processor raises exception, error should be logged."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    # Processor that raises exception
+    class ExceptionProcessor:
+        async def update_artist_async(self, *_args: Any, **_kwargs: Any) -> bool:
+            raise RuntimeError("Processor failed")
+
+    processor: Any = ExceptionProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="OldArtist")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert result == []
+    error_logger.exception.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_same_normalized_name_skipped(tmp_path: Path) -> None:
+    """If new name normalizes to same as old, skip rename."""
+    config_path = tmp_path / "config.yaml"
+    # Mapping old to same name with different case
+    config_path.write_text('TestArtist: "TESTARTIST"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="TestArtist")
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    # Should skip because normalized names are the same
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_album_artist_updated_when_matching(tmp_path: Path) -> None:
+    """Album artist should be updated when it matches the old artist name."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="OldArtist")
+    track.__dict__["album_artist"] = "OldArtist"
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert len(result) == 1
+    assert track.artist == "NewArtist"
+    assert track.__dict__["album_artist"] == "NewArtist"
+
+
+@pytest.mark.asyncio
+async def test_album_artist_not_updated_when_different(tmp_path: Path) -> None:
+    """Album artist should NOT be updated when it differs from old artist."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
+
+    processor: Any = DummyTrackProcessor()
+    console_logger = MagicMock()
+    error_logger = MagicMock()
+
+    track = _create_track(artist="OldArtist")
+    track.__dict__["album_artist"] = "DifferentAlbumArtist"
+
+    renamer = ArtistRenamer(
+        processor,
+        console_logger,
+        error_logger,
+        config_path=config_path,
+    )
+
+    result = await renamer.rename_tracks([track])
+    assert len(result) == 1
+    assert track.artist == "NewArtist"
+    # Album artist should remain unchanged
+    assert track.__dict__["album_artist"] == "DifferentAlbumArtist"
