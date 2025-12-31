@@ -54,6 +54,9 @@ jobs:
       - name: Type check
         run: uv run ty check src/ main.py --python .venv
 
+      - name: Dead code check
+        run: uv run deadcode src/ --no-color
+
   security:
     name: Security
     runs-on: ubuntu-latest

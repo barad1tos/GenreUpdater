@@ -6,7 +6,6 @@ from services.cache.cache_config import (
     CacheContentType,
     CacheEvent,
     CacheEventType,
-    CachePolicy,
     EventDrivenCacheManager,
     InvalidationStrategy,
     SmartCacheConfig,
@@ -19,25 +18,6 @@ class TestSmartCacheConfig:
     def setup_method(self) -> None:
         """Set up test instance."""
         self.config = SmartCacheConfig()
-
-    def test_default_policies_creation(self) -> None:
-        """Test that default policies are created correctly."""
-        policies = self.config.get_all_policies()
-
-        # Check all content types have policies
-        expected_types = [
-            CacheContentType.TRACK_METADATA,
-            CacheContentType.SUCCESSFUL_API_METADATA,
-            CacheContentType.FAILED_API_LOOKUP,
-            CacheContentType.ALBUM_YEAR,
-            CacheContentType.NEGATIVE_RESULT,
-            CacheContentType.GENERIC,
-        ]
-
-        assert len(policies) == len(expected_types)
-        for content_type in expected_types:
-            assert content_type in policies
-            assert isinstance(policies[content_type], CachePolicy)
 
     def test_track_metadata_policy(self) -> None:
         """Test track metadata policy configuration."""
@@ -130,19 +110,6 @@ class TestSmartCacheConfig:
         # Generic cache should not be persistent
         assert not self.config.is_persistent_cache(CacheContentType.GENERIC)
 
-    def test_update_policy(self) -> None:
-        """Test policy updating."""
-        original_ttl = self.config.get_ttl(CacheContentType.GENERIC)
-
-        # Update TTL
-        new_ttl = 600  # 10 minutes
-        self.config.update_policy(CacheContentType.GENERIC, ttl_seconds=new_ttl)
-
-        # Check update took effect
-        updated_ttl = self.config.get_ttl(CacheContentType.GENERIC)
-        assert updated_ttl == new_ttl
-        assert updated_ttl != original_ttl
-
     def test_ttl_formatting(self) -> None:
         """Test TTL formatting for human readability."""
         # Note: _format_ttl is a private method, but we test it to ensure
@@ -153,12 +120,6 @@ class TestSmartCacheConfig:
         assert self.config._format_ttl(60 * 60) == "1h"
         assert self.config._format_ttl(60) == "1m"
         assert self.config._format_ttl(30) == "30s"
-
-    def test_cleanup_threshold(self) -> None:
-        """Test cleanup threshold getter."""
-        threshold = self.config.get_cleanup_threshold(CacheContentType.TRACK_METADATA)
-        assert 0.0 <= threshold <= 1.0
-        assert threshold == 0.8  # Default value
 
 
 class TestCacheEvent:

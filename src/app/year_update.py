@@ -145,24 +145,6 @@ class YearUpdateService:
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
 
-    async def update_all_years(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> None:
-        """Update years for all tracks (Step 4 of pipeline).
-
-        Args:
-            tracks: List of tracks to process.
-            force: Force all operations.
-            fresh: Fresh mode - invalidate cache before processing, implies force.
-        """
-        self._console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
-        self._console_logger.info("Step 4/4: Updating album years")
-        try:
-            await self._year_retriever.process_album_years(tracks, force=force, fresh=fresh)
-            self._snapshot_manager.update_tracks(self._year_retriever.get_last_updated_tracks())
-            self._console_logger.info("=== AFTER Step 4 completed successfully ===")
-        except Exception:
-            self._error_logger.exception("=== ERROR in Step 4 ===")
-            raise
-
     async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 

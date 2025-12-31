@@ -50,7 +50,6 @@ from metrics.track_sync import (
 __all__ = [
     # Public constants
     "ChangeType",
-    "Color",
     "Format",
     "Key",
     "Misc",
@@ -63,15 +62,6 @@ __all__ = [
     "save_unified_changes_report",
     "sync_track_list_with_current",
 ]
-
-
-class Color:
-    """ANSI color codes for console output."""
-
-    RED = "\033[31m"
-    YELLOW = "\033[33m"
-    GREEN = "\033[32m"
-    RESET = "\033[0m"
 
 
 class ChangeType:
@@ -672,21 +662,4 @@ def save_changes_report(
         console_logger,
         error_logger,
         compact_mode,
-    )
-
-
-def save_changes_csv(
-    changes: Sequence[dict[str, Any] | ChangeLogEntry],
-    file_path: str,
-    console_logger: logging.Logger | None = None,
-    error_logger: logging.Logger | None = None,
-    add_timestamp: bool = False,
-) -> None:
-    """Compatibility wrapper for saving change reports in CSV format."""
-    save_changes_report(
-        changes,
-        file_path,
-        console_logger,
-        error_logger,
-        add_timestamp,
     )

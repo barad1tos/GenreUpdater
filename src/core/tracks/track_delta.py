@@ -11,14 +11,17 @@ if TYPE_CHECKING:
     from core.models.track_models import TrackDict
 
 __all__ = [
+    "FIELD_SEPARATOR",
+    "LINE_SEPARATOR",
     "TrackDelta",
     "compute_track_delta",
+    "has_identity_changed",
     "has_track_changed",
 ]
 
-FIELD_SEPARATOR = "\x1e"  # ASCII 30
-LINE_SEPARATOR = "\x1d"  # ASCII 29
-EXPECTED_FIELD_COUNT = 4  # track_id, date_added, last_modified, track_status
+# AppleScript output delimiters (ASCII Record/Unit Separators)
+FIELD_SEPARATOR = "\x1e"  # ASCII 30 - separates fields within a record
+LINE_SEPARATOR = "\x1d"  # ASCII 29 - separates records (tracks)
 
 
 @dataclass(slots=True)
@@ -92,6 +95,32 @@ def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
     year_changed = _field_changed(current_year, stored_year)
 
     return bool(track_status_changed or genre_changed or year_changed)
+
+
+def has_identity_changed(current: TrackDict, stored: TrackDict) -> bool:
+    """Check if track identity (artist or album) has changed.
+
+    When artist or album changes, the API cache for the OLD artist/album
+    becomes stale and must be invalidated. This is separate from has_track_changed()
+    which only checks fields we manage (genre, year).
+
+    Used for headless daemon mode to automatically detect user edits in Music.app.
+
+    Args:
+        current: Current track from Apple Music
+        stored: Stored track from snapshot
+
+    Returns:
+        True if artist or album changed (requires cache invalidation for old values)
+
+    """
+    current_artist = (current.artist or "").strip().lower()
+    stored_artist = (stored.artist or "").strip().lower()
+
+    current_album = (current.album or "").strip().lower()
+    stored_album = (stored.album or "").strip().lower()
+
+    return current_artist != stored_artist or current_album != stored_album
 
 
 def compute_track_delta(

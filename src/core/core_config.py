@@ -31,6 +31,21 @@ LOG_LEVELS: list[str] = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NOTSE
 REQUIRED_ENV_VARS: list[str] = ["DISCOGS_TOKEN", "CONTACT_EMAIL"]
 
 
+class ConfigurationError(Exception):
+    """Raised when configuration loading or parsing fails."""
+
+    def __init__(self, message: str, config_path: str | None = None) -> None:
+        """Initialize the configuration error.
+
+        Args:
+            message: Error description
+            config_path: Path to the config file that caused the error
+
+        """
+        super().__init__(message)
+        self.config_path = config_path
+
+
 def resolve_env_vars(config: ConfigValue) -> ConfigValue:
     """Recursively resolve environment variables in config values.
 

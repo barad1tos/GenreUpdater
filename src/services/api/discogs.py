@@ -319,7 +319,13 @@ class DiscogsClient(BaseApiClient):
             Year string or None
 
         """
-        releases = await self.get_scored_releases(self._normalize_name(artist), self._normalize_name(album), None)
+        releases = await self.get_scored_releases(
+            self._normalize_name(artist),
+            self._normalize_name(album),
+            None,
+            artist_orig=artist,
+            album_orig=album,
+        )
 
         if releases:
             # Return the year from the highest scored release

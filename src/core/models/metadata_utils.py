@@ -25,6 +25,7 @@ from typing import Any
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from core.tracks.year_utils import normalize_collaboration_artist
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
@@ -154,8 +155,8 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
     :param error_logger: Logger for error output.
     :return: List of track dictionaries.
     """
-    field_separator = "\x1e" if "\x1e" in raw_data else "\t"
-    line_separator = "\x1d" if "\x1d" in raw_data else None
+    field_separator = FIELD_SEPARATOR if FIELD_SEPARATOR in raw_data else "\t"
+    line_separator = LINE_SEPARATOR if LINE_SEPARATOR in raw_data else None
 
     if not raw_data:
         error_logger.error("No data fetched from AppleScript.")

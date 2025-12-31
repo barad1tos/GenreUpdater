@@ -34,14 +34,6 @@ class ScoredRelease(TypedDict):
     source: str
 
 
-class CacheEntry(TypedDict):
-    """Type definition for cache entries with timestamp and data."""
-
-    timestamp: float
-    data: Any
-    api_source: str | None
-
-
 class EnhancedRateLimiter:
     """Advanced rate limiter using a moving window approach for API calls.
 
@@ -181,19 +173,36 @@ class BaseApiClient:
 
     @staticmethod
     def _normalize_name(name: str) -> str:
-        """Normalize an artist or album name for matching.
+        """Normalize an artist or album name for case-insensitive matching.
 
-        Converts to lowercase, removes special characters, normalizes whitespace,
-        and handles common variations like '&' vs 'and'.
+        Uses casefold() for proper Unicode handling (e.g., German ß → ss,
+        Turkish İ → i). Removes punctuation but preserves non-ASCII letters
+        for international artist names (Björk, 東京事変, Молчат Дома).
 
         Args:
             name: The name to normalize
 
         Returns:
-            Normalized name string
+            Normalized name string suitable for fuzzy matching
 
         """
-        return name
+        if not name:
+            return ""
+
+        # Use casefold() for Unicode-aware case-insensitive comparison
+        # (handles ß → ss, İ → i, etc. better than lower())
+        normalized = name.casefold()
+
+        # Replace '&' with 'and' for consistency
+        normalized = normalized.replace("&", "and")
+
+        # Remove punctuation but keep Unicode word chars (\w includes non-ASCII letters)
+        normalized = re.sub(r"[^\w\s]", "", normalized)
+
+        # Normalize whitespace (multiple spaces to single space)
+        normalized = re.sub(r"\s+", " ", normalized)
+
+        return normalized.strip()
 
     @staticmethod
     def _is_valid_year(year_str: str | None) -> bool:
@@ -240,26 +249,3 @@ class BaseApiClient:
                 return year
 
         return None
-
-    @staticmethod
-    def _clean_expired_cache(cache: dict[str, CacheEntry], cache_duration: float, max_cache_size: int = 5000) -> None:
-        """Clean expired entries from the cache and enforce size limit.
-
-        Args:
-            cache: Cache dictionary to clean
-            cache_duration: Maximum age of cache entries in seconds
-            max_cache_size: Maximum number of entries to keep
-
-        """
-        current_time = time.time()
-
-        # Remove expired entries
-        expired_keys = [key for key, entry in cache.items() if current_time - entry["timestamp"] > cache_duration]
-        for key in expired_keys:
-            del cache[key]
-
-        # Enforce size limit (remove oldest entries)
-        if len(cache) > max_cache_size:
-            sorted_entries = sorted(cache.items(), key=lambda x: x[1]["timestamp"])
-            for key, _ in sorted_entries[: len(cache) - max_cache_size]:
-                del cache[key]

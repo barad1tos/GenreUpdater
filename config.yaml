@@ -15,6 +15,14 @@ python_settings:
 # 2. EXECUTION AND PERFORMANCE
 # -----------------------------------------------------------------------
 apple_script_concurrency: 2
+
+# Rate limiting for AppleScript operations (optional, improves throughput stability)
+# Based on benchmarks: 10 req/s provides +13% throughput and more stable latency
+apple_script_rate_limit:
+  enabled: true
+  requests_per_window: 10  # Max requests per time window
+  window_size_seconds: 1.0  # Time window in seconds
+
 applescript_timeout_seconds: 3600
 
 applescript_timeouts:

@@ -180,54 +180,6 @@ class TrackCleaningService:
 
         return updated_track, change_entry
 
-    async def process_track_for_pipeline(self, track: TrackDict) -> TrackDict | None:
-        """Process a single track for pipeline cleaning (no change log).
-
-        Args:
-            track: Track data to process.
-
-        Returns:
-            Updated track or None if no update needed.
-        """
-        cleaned_track_name, cleaned_album_name = clean_names(
-            artist=str(track.get("artist", "")),
-            track_name=str(track.get("name", "")),
-            album_name=str(track.get("album", "")),
-            config=self._config,
-            console_logger=self._console_logger,
-            error_logger=self._error_logger,
-        )
-
-        track_name = track.get("name", "")
-        album_name = track.get("album", "")
-        track_name_normalized = _normalize_whitespace(str(track_name)) if track_name else ""
-        album_name_normalized = _normalize_whitespace(str(album_name)) if album_name else ""
-
-        if cleaned_track_name == track_name_normalized and cleaned_album_name == album_name_normalized:
-            return None
-
-        track_id = track.get("id", "")
-        if not track_id:
-            return None
-
-        success = await self._track_processor.update_track_async(
-            track_id=str(track_id),
-            new_track_name=(cleaned_track_name if cleaned_track_name != track_name_normalized else None),
-            new_album_name=(cleaned_album_name if cleaned_album_name != album_name_normalized else None),
-            track_status=track.track_status,
-            original_artist=str(track.get("artist", "")),
-            original_album=str(album_name) if album_name is not None else None,
-            original_track=str(track_name) if track_name is not None else None,
-        )
-
-        if not success:
-            return None
-
-        updated_track = track.copy()
-        updated_track.name = cleaned_track_name
-        updated_track.album = cleaned_album_name
-        return updated_track
-
     async def process_all_tracks(
         self,
         tracks: list[TrackDict],
@@ -253,27 +205,6 @@ class TrackCleaningService:
                 changes_log.append(change_entry)
 
         return updated_tracks, changes_log
-
-    async def clean_all_metadata(self, tracks: list[TrackDict]) -> list[TrackDict]:
-        """Clean metadata for all tracks (Step 1 of pipeline).
-
-        Args:
-            tracks: List of tracks to clean.
-
-        Returns:
-            List of tracks that were updated.
-        """
-        cleaned_tracks: list[TrackDict] = []
-
-        for track in tracks:
-            cleaned_track = await self.process_track_for_pipeline(track)
-            if cleaned_track:
-                cleaned_tracks.append(cleaned_track)
-
-        if cleaned_tracks:
-            self._console_logger.info("Cleaned metadata for %d tracks", len(cleaned_tracks))
-
-        return cleaned_tracks
 
     async def clean_all_metadata_with_logs(self, tracks: list[TrackDict]) -> list[ChangeLogEntry]:
         """Clean metadata for all tracks with change logging.

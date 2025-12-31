@@ -329,30 +329,6 @@ SCRIPT_DETECTORS = {
 }
 
 
-def get_all_scripts(text: str) -> list[ScriptType]:
-    """Get all scripts detected in text.
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        List of detected script types
-
-    Examples:
-        >>> get_all_scripts("МУР feat. John")  # noqa: RUF002
-        [ScriptType.CYRILLIC, ScriptType.LATIN]
-        >>> get_all_scripts("Pink Floyd")
-        [ScriptType.LATIN]
-        >>> get_all_scripts("音楽 Music")
-        [ScriptType.JAPANESE, ScriptType.LATIN]
-
-    """
-    if not text:
-        return []
-
-    return [script_type for script_type, detector in SCRIPT_DETECTORS.items() if detector(text)]
-
-
 def _handle_cjk_detection(text: str) -> ScriptType | None:
     """Handle special case for CJK script detection.
 
@@ -428,6 +404,20 @@ def _handle_latin_mixed_case(script_counts: dict[ScriptType, int], total_chars: 
         return ScriptType.LATIN
     # If both scripts have a significant presence, it's mixed
     return ScriptType.MIXED
+
+
+def get_all_scripts(text: str) -> list[ScriptType]:
+    """Get all scripts detected in text.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        List of detected script types
+    """
+    if not text:
+        return []
+    return [script_type for script_type, detector in SCRIPT_DETECTORS.items() if detector(text)]
 
 
 def detect_primary_script(text: str) -> ScriptType:

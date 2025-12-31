@@ -635,14 +635,6 @@ class TestLogMethods:
 
         assert "DB_VERIFY" in caplog.text or "tracks" in caplog.text.lower()
 
-    def test_log_batch_progress(self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log batch progress."""
-        with caplog.at_level(logging.INFO):
-            verifier._log_batch_progress(batch_num=1, total_batches=5, checked=20, valid=18, invalid=2)
-
-        # Verify some progress was logged
-        assert len(caplog.records) > 0
-
     def test_log_verify_complete(self, verifier: DatabaseVerifier, caplog: pytest.LogCaptureFixture) -> None:
         """Should log verification complete."""
         import time

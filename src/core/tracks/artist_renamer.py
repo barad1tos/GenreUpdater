@@ -83,10 +83,6 @@ class ArtistRenamer:
         """Return True when there is at least one rename rule."""
         return bool(self._mapping)
 
-    def reload(self) -> None:
-        """Reload mapping from the configuration file."""
-        self._mapping = _load_mapping(self._config_path, self.error_logger)
-
     async def rename_tracks(self, tracks: list[TrackDict]) -> list[TrackDict]:
         """Rename artists according to mapping. Returns list of updated tracks."""
         if not self._mapping:

@@ -67,39 +67,6 @@ class TestUnifiedHashService:
         assert len(result) == 64
         assert all(c in "0123456789abcdef" for c in result)
 
-    def test_hash_custom_key_args_only(self) -> None:
-        """Test custom key hashing with positional arguments only."""
-        result = UnifiedHashService.hash_custom_key("arg1", "arg2", "arg3")
-
-        assert len(result) == 64
-        assert all(c in "0123456789abcdef" for c in result)
-
-    def test_hash_custom_key_kwargs_only(self) -> None:
-        """Test custom key hashing with keyword arguments only."""
-        result = UnifiedHashService.hash_custom_key(key1="value1", key2="value2")
-
-        assert len(result) == 64
-        assert all(c in "0123456789abcdef" for c in result)
-
-    def test_hash_custom_key_mixed(self) -> None:
-        """Test custom key hashing with mixed arguments."""
-        result = UnifiedHashService.hash_custom_key("arg1", "arg2", key1="value1", key2="value2")
-
-        assert len(result) == 64
-        assert all(c in "0123456789abcdef" for c in result)
-
-    def test_hash_custom_key_consistency(self) -> None:
-        """Test that custom keys are consistent with same arguments."""
-        # Same arguments in same order should produce same hash
-        hash1 = UnifiedHashService.hash_custom_key("arg1", key="value")
-        hash2 = UnifiedHashService.hash_custom_key("arg1", key="value")
-
-        assert hash1 == hash2
-
-    def test_get_algorithm(self) -> None:
-        """Test algorithm getter."""
-        assert UnifiedHashService.get_algorithm() == "sha256"
-
     def test_deterministic_hashing(self) -> None:
         """Test that hashing is deterministic across calls."""
         # Test album key determinism
@@ -115,9 +82,4 @@ class TestUnifiedHashService:
         # Test generic key determinism
         hash1 = UnifiedHashService.hash_generic_key("generic_data")
         hash2 = UnifiedHashService.hash_generic_key("generic_data")
-        assert hash1 == hash2
-
-        # Test custom key determinism
-        hash1 = UnifiedHashService.hash_custom_key("custom", "args", key="value")
-        hash2 = UnifiedHashService.hash_custom_key("custom", "args", key="value")
         assert hash1 == hash2

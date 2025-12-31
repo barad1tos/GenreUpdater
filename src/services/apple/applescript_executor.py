@@ -15,12 +15,14 @@ from pathlib import Path
 import asyncio.subprocess
 from typing import TYPE_CHECKING
 
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from services.apple.file_validator import AppleScriptFileValidator
 
 if TYPE_CHECKING:
     import logging
 
     from core.retry_handler import DatabaseRetryHandler
+    from services.apple.rate_limiter import EnhancedRateLimiter
 
 
 # Constants for script execution
@@ -68,6 +70,7 @@ class AppleScriptExecutor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         retry_handler: DatabaseRetryHandler | None = None,
+        rate_limiter: EnhancedRateLimiter | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -77,12 +80,14 @@ class AppleScriptExecutor:
             console_logger: Logger for debug/info messages
             error_logger: Logger for error messages
             retry_handler: Optional retry handler for transient error recovery
+            rate_limiter: Optional rate limiter for enhanced throughput control
         """
         self.semaphore = semaphore
         self.apple_scripts_directory = apple_scripts_directory
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.retry_handler = retry_handler
+        self.rate_limiter = rate_limiter
 
     def update_semaphore(self, semaphore: asyncio.Semaphore) -> None:
         """Update the semaphore after async initialization.
@@ -91,6 +96,17 @@ class AppleScriptExecutor:
             semaphore: The initialized semaphore
         """
         self.semaphore = semaphore
+
+    def update_rate_limiter(self, rate_limiter: EnhancedRateLimiter) -> None:
+        """Update the rate limiter after async initialization.
+
+        When a rate limiter is set, it takes precedence over the semaphore
+        for concurrency control, providing both rate limiting and concurrency.
+
+        Args:
+            rate_limiter: The initialized rate limiter
+        """
+        self.rate_limiter = rate_limiter
 
     def log_script_success(self, label: str, script_result: str, elapsed: float) -> None:
         """Log successful script execution with appropriate formatting.
@@ -107,7 +123,7 @@ class AppleScriptExecutor:
 
         if label.startswith(("fetch_tracks.applescript", "fetch_tracks_by_ids.scpt")):
             # Count tracks by counting line separators (ASCII 29)
-            track_count = script_result.count("\x1d")
+            track_count = script_result.count(LINE_SEPARATOR)
             size_kb = len(script_result.encode()) / 1024
 
             self.console_logger.info(
@@ -128,9 +144,9 @@ class AppleScriptExecutor:
                 size_kb,
                 elapsed,
             )
-        elif "\x1d" in script_result or "\x1e" in script_result:
+        elif LINE_SEPARATOR in script_result or FIELD_SEPARATOR in script_result:
             # Other scripts with field/record separators - show count only
-            record_count = script_result.count("\x1d") or script_result.count("\x1e")
+            record_count = script_result.count(LINE_SEPARATOR) or script_result.count(FIELD_SEPARATOR)
             size_kb = len(script_result.encode()) / 1024
             self.console_logger.info(
                 "◁ %s: %d records (%.1fKB, %.1fs)",
@@ -299,6 +315,9 @@ class AppleScriptExecutor:
     ) -> str | None:
         """Run an osascript command and return output.
 
+        Uses rate limiter if configured (provides both rate limiting and concurrency),
+        otherwise falls back to semaphore-only concurrency control.
+
         Args:
             cmd: Command to execute as a list of strings
             label: Label for logging
@@ -307,6 +326,15 @@ class AppleScriptExecutor:
         Returns:
             Command output if successful, None otherwise
         """
+        # Use rate limiter if available (provides both rate limiting + concurrency)
+        if self.rate_limiter is not None:
+            try:
+                await self.rate_limiter.acquire()
+                return await self.handle_subprocess_execution(cmd, label, timeout_seconds)
+            finally:
+                self.rate_limiter.release()
+
+        # Fall back to semaphore-only concurrency control
         if self.semaphore is None:
             self.error_logger.error("AppleScriptExecutor semaphore not initialized.")
             return None

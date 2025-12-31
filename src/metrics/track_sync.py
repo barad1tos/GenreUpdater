@@ -450,10 +450,10 @@ def handle_osascript_error(
     stderr: bytes | None,
 ) -> None:
     """Handle and log osascript execution errors."""
+    logger = logging.getLogger(__name__)
     error_msg = stderr.decode() if stderr else "No error message"
-    print(f"DEBUG: osascript failed with return code {process_returncode}: {error_msg}")
-    print(f"DEBUG: stdout was: {stdout.decode() if stdout else 'None'}")
-    logging.getLogger(__name__).warning("osascript failed (return code %d): %s", process_returncode, error_msg)
+    logger.warning("osascript failed (return code %d): %s", process_returncode, error_msg)
+    logger.debug("osascript stdout was: %s", stdout.decode() if stdout else "None")
 
 
 async def execute_osascript_process(

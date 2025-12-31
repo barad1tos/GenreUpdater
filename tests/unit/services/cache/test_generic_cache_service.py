@@ -10,7 +10,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 import pytest
 
-from services.cache.generic_cache import GenericCacheService, is_generic_cache_entry
+from services.cache.generic_cache import GenericCacheService
 from services.cache.hash_service import UnifiedHashService
 
 
@@ -218,38 +218,6 @@ class TestGenericCacheService:
             assert service._cleanup_task is not None
             assert not service._cleanup_task.done()
         await service.stop_cleanup_task()
-
-    def test_is_generic_cache_entry(self) -> None:
-        """Test type guard for cache entries."""
-        assert is_generic_cache_entry(({"data": "value"}, 123.45)) is True
-        assert is_generic_cache_entry(("string_value", 100)) is True
-        assert is_generic_cache_entry((None, 0.0)) is True
-        assert is_generic_cache_entry("not_a_tuple") is False
-        assert is_generic_cache_entry(("missing_timestamp",)) is False
-        assert is_generic_cache_entry((1, 2, 3)) is False  # Too many elements
-        assert is_generic_cache_entry((100, "not_a_timestamp")) is False
-
-    @pytest.mark.asyncio
-    async def test_get_all_entries(self) -> None:
-        """Test getting all cache entries for debugging."""
-        service = TestGenericCacheService.create_service()
-        await service.initialize()
-
-        try:
-            service.set("key1", {"value": 1}, ttl=60)
-            service.set("key2", {"value": 2}, ttl=60)
-            service.set("key3", {"value": 3}, ttl=60)
-            entries = service.get_all_entries()
-            assert len(entries) == 3
-            # Each entry should be (truncated_key, value, timestamp)
-            for key, value, timestamp in entries:
-                assert isinstance(key, str)
-                assert len(key) <= 16  # Keys are truncated
-                assert isinstance(value, dict)
-                assert isinstance(timestamp, float)
-
-        finally:
-            await service.stop_cleanup_task()
 
     @pytest.mark.asyncio
     async def test_default_ttl(self) -> None:
