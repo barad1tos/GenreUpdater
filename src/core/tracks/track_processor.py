@@ -17,6 +17,7 @@ from core.utils.datetime_utils import datetime_to_applescript_timestamp
 from services.cache.snapshot import LibrarySnapshotService
 from core.models.metadata_utils import parse_tracks
 from core.models.track_models import TrackDict
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
 from core.models.validators import SecurityValidationError, SecurityValidator
 from metrics import Analytics
@@ -374,8 +375,8 @@ class TrackProcessor:
             self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
             if raw_output:
                 self.error_logger.info(f"DEBUG: First 200 chars: {raw_output[:200]}")
-                field_sep_found = "\x1e" in raw_output
-                line_sep_found = "\x1d" in raw_output
+                field_sep_found = FIELD_SEPARATOR in raw_output
+                line_sep_found = LINE_SEPARATOR in raw_output
                 self.error_logger.info(f"DEBUG: Raw output contains separators (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
 
             if not raw_output:

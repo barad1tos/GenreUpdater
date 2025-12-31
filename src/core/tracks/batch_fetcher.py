@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
+from core.tracks.track_delta import LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
@@ -128,12 +129,15 @@ class BatchTrackFetcher:
 
     async def _fetch_tracks_in_batches_with_analytics(self, batch_size: int) -> list[TrackDict]:
         """Batch fetch with analytics batch_mode (suppresses per-call console logs)."""
+        # Called only when self.analytics is not None (see fetch_tracks_in_batches)
+        assert self.analytics is not None
+
         all_tracks: list[TrackDict] = []
         offset = 1
         batch_number = 0
         consecutive_failures = 0
 
-        async with self.analytics.batch_mode("Fetching library...") as status:  # type: ignore[union-attr]
+        async with self.analytics.batch_mode("Fetching library...") as status:
             while True:
                 batch_number += 1
                 status.update(f"[cyan]Fetching library... (batch {batch_number}, {len(all_tracks)} tracks)[/cyan]")
@@ -320,8 +324,7 @@ class BatchTrackFetcher:
         """
         if not raw_output:
             return 0
-        record_separator = "\x1d"
-        rows = raw_output.strip().split(record_separator)
+        rows = raw_output.strip().split(LINE_SEPARATOR)
         return len([row for row in rows if row.strip()])
 
     def _update_failure_counter(

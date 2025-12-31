@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol
 
 from services.cache.json_utils import dumps_json, loads_json
-from core.tracks.track_delta import TrackDelta, has_track_changed
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
 from core.logger import ensure_directory, spinner
 from core.models.track_models import TrackDict
 
@@ -337,17 +337,14 @@ class LibrarySnapshotService:
             List of track dictionaries
 
         """
-        field_separator = "\x1e"  # ASCII 30
-        line_separator = "\x1d"  # ASCII 29
-
         tracks: list[dict[str, str]] = []
-        lines = raw_output.split(line_separator)
+        lines = raw_output.split(LINE_SEPARATOR)
 
         for line in lines:
             if not line.strip():
                 continue
 
-            fields = line.split(field_separator)
+            fields = line.split(FIELD_SEPARATOR)
 
             # Expected fields from AppleScript (fetch_tracks.applescript):
             # id, name, artist, album_artist, album, genre, date_added,
