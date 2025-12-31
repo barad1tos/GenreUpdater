@@ -1,25 +1,13 @@
 """Helper functions and utilities for Music Genre Updater."""
 
-import logging
+from __future__ import annotations
+
 import os
 import re
-from typing import Any, TypeGuard
+from typing import TYPE_CHECKING, Any, TypeGuard
 
-from core.models.track_models import CodeActionExtended as CodeAction
-from core.models.track_models import ScriptActionExtended as ScriptAction
-from core.models.track_models import TrackDict
-
-ActionType = ScriptAction | CodeAction
-
-
-def is_script_action(action: ActionType) -> TypeGuard[ScriptAction]:
-    """Type guard for ScriptAction."""
-    return action.type == "script"
-
-
-def is_code_action(action: ActionType) -> TypeGuard[CodeAction]:
-    """Type guard for CodeAction."""
-    return action.type == "code"
+if TYPE_CHECKING:
+    from core.models.track_models import TrackDict
 
 
 def resolve_env_vars(
@@ -62,19 +50,6 @@ def resolve_env_vars(
 
     # For int, float, bool, etc., return as-is
     return value
-
-
-def check_paths(paths: list[str], logger: logging.Logger) -> None:
-    """Check if specified paths exist and log warnings if not.
-
-    Args:
-        paths: List of file/directory paths to check
-        logger: Logger instance for warnings
-
-    """
-    for path in paths:
-        if not os.path.exists(path):
-            logger.warning("Path does not exist: %s", path)
 
 
 def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:

@@ -301,66 +301,6 @@ class TestProcessSingleTrack:
         assert call_kwargs["new_album_name"] == "Cleaned Album"
 
 
-# ========================= Process Track For Pipeline Tests =========================
-
-
-class TestProcessTrackForPipeline:
-    """Tests for process_track_for_pipeline method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_changes(self, service: TrackCleaningService, sample_track: TrackDict) -> None:
-        """Should return None when no changes needed."""
-        with patch("app.track_cleaning.clean_names") as mock_clean:
-            mock_clean.return_value = ("Track Name", "Album Name")
-            result = await service.process_track_for_pipeline(sample_track)
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_track_id(self, service: TrackCleaningService) -> None:
-        """Should return None when track has no ID."""
-        track = TrackDict(id="", name="Track", artist="Artist", album="Album")
-
-        with patch("app.track_cleaning.clean_names") as mock_clean:
-            mock_clean.return_value = ("Clean Track", "Clean Album")
-            result = await service.process_track_for_pipeline(track)
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_updated_track(
-        self,
-        service: TrackCleaningService,
-        mock_track_processor: MagicMock,
-        sample_track: TrackDict,
-    ) -> None:
-        """Should return updated track when changes needed."""
-        with patch("app.track_cleaning.clean_names") as mock_clean:
-            mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            result = await service.process_track_for_pipeline(sample_track)
-
-        assert result is not None
-        assert result.name == "Cleaned Track"
-        assert result.album == "Cleaned Album"
-        mock_track_processor.update_track_async.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_update_fails(
-        self,
-        service: TrackCleaningService,
-        mock_track_processor: MagicMock,
-        sample_track: TrackDict,
-    ) -> None:
-        """Should return None when update fails."""
-        mock_track_processor.update_track_async = AsyncMock(return_value=False)
-
-        with patch("app.track_cleaning.clean_names") as mock_clean:
-            mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            result = await service.process_track_for_pipeline(sample_track)
-
-        assert result is None
-
-
 # ========================= Process All Tracks Tests =========================
 
 
@@ -408,53 +348,6 @@ class TestProcessAllTracks:
 
         assert len(updated_tracks) == 1
         assert len(changes_log) == 1
-
-
-# ========================= Clean All Metadata Tests =========================
-
-
-class TestCleanAllMetadata:
-    """Tests for clean_all_metadata method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_cleaned_tracks(self, service: TrackCleaningService) -> None:
-        """Should return list of cleaned tracks."""
-        tracks = [
-            TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
-        ]
-
-        with patch("app.track_cleaning.clean_names") as mock_clean:
-            mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            result = await service.clean_all_metadata(tracks)
-
-        assert len(result) == 1
-        assert result[0].name == "Cleaned Track"
-
-    @pytest.mark.asyncio
-    async def test_logs_count_when_tracks_cleaned(
-        self,
-        service: TrackCleaningService,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Should log count when tracks are cleaned."""
-        tracks = [
-            TrackDict(id="1", name="Track 1", artist="Artist", album="Album 1"),
-        ]
-
-        with (
-            patch("app.track_cleaning.clean_names") as mock_clean,
-            caplog.at_level(logging.INFO),
-        ):
-            mock_clean.return_value = ("Cleaned Track", "Cleaned Album")
-            await service.clean_all_metadata(tracks)
-
-        assert "Cleaned metadata for 1 tracks" in caplog.text
-
-    @pytest.mark.asyncio
-    async def test_handles_empty_list(self, service: TrackCleaningService) -> None:
-        """Should handle empty track list."""
-        result = await service.clean_all_metadata([])
-        assert result == []
 
 
 # ========================= Clean All Metadata With Logs Tests =========================
