@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - CodeQL security scanning workflow
 - Integration & E2E tests in GitHub Actions (nightly)
 - Dependabot for automated dependency updates
@@ -23,16 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test coverage enforcement (--cov-fail-under=70)
 
 ### Changed
+
 - Upgraded GitHub Actions to latest versions (checkout v6, setup-uv v7, upload-artifact v5, codeql v4)
 - README Python badge updated to 3.13+
 
 ### Fixed
+
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
 
 ## [2.0.0] - 2025-09-04
 
 ### Added
+
 - Complete async/await rewrite for all I/O operations
 - Multi-tier caching system (Memory → Disk → Snapshot)
 - Library snapshot with SHA-256 verification for delta updates
@@ -47,12 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pending verification service for year changes
 
 ### Changed
+
 - Architecture refactored to clean architecture (core/app/services/metrics layers)
 - Configuration moved to YAML format
 - Dependency injection via DependencyContainer
 - Protocol-based interfaces for testability
 
 ### Fixed
+
 - Race conditions in concurrent AppleScript operations
 - Cache key collisions with normalized hashing
 - Memory leaks in large library processing
@@ -60,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2024-01-15
 
 ### Added
+
 - Initial release
 - Basic genre updating from external APIs
 - Apple Music integration via AppleScript

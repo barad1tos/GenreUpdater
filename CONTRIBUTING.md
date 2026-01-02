@@ -15,17 +15,20 @@ project.
 ### Development Setup
 
 1. **Fork and clone the repository**
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/GenreUpdater.git
    cd GenreUpdater
    ```
 
 2. **Install dependencies**
+
    ```bash
    uv sync
    ```
 
 3. **Create your config file**
+
    ```bash
    cp config.yaml my-config.yaml
    # Edit my-config.yaml with your settings
@@ -48,6 +51,7 @@ project.
 ### Making Changes
 
 1. **Create a feature branch from `dev`**
+
    ```bash
    git checkout dev
    git pull origin dev
@@ -55,11 +59,12 @@ project.
    ```
 
 2. **Make your changes**
-    - Follow the existing code style
-    - Add tests for new functionality
-    - Update documentation if needed
+   - Follow the existing code style
+   - Add tests for new functionality
+   - Update documentation if needed
 
 3. **Run quality checks**
+
    ```bash
    # Linting
    uv run ruff check src/ tests/
@@ -75,6 +80,7 @@ project.
    ```
 
 4. **Commit your changes**
+
    ```bash
    git add .
    git commit -m "feat(scope): description"
@@ -99,8 +105,9 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ### Types
 
+```bash
 | Type       | Description                                             |
-|------------|---------------------------------------------------------|
+| ---------- | ------------------------------------------------------- |
 | `feat`     | New feature                                             |
 | `fix`      | Bug fix                                                 |
 | `docs`     | Documentation only                                      |
@@ -110,6 +117,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 | `test`     | Adding or updating tests                                |
 | `ci`       | CI/CD changes                                           |
 | `chore`    | Maintenance tasks                                       |
+```
 
 ### Examples
 
@@ -134,7 +142,7 @@ test(api): add MusicBrainz timeout tests
 
 The codebase follows clean architecture:
 
-```
+```bash
 src/
 ├── core/       # Business logic and domain models
 ├── app/        # Application layer (CLI, orchestration)
@@ -180,17 +188,17 @@ uv run pytest -m "not slow"
 ## Pull Request Process
 
 1. **Ensure all checks pass**
-    - Lint (ruff)
-    - Format (ruff format)
-    - Type check (mypy)
-    - Tests (pytest)
+   - Lint (ruff)
+   - Format (ruff format)
+   - Type check (mypy)
+   - Tests (pytest)
 
 2. **Update documentation** if needed
 
 3. **Fill out the PR template** with:
-    - Summary of changes
-    - Test plan
-    - Related issues
+   - Summary of changes
+   - Test plan
+   - Related issues
 
 4. **Request review** from maintainers
 
