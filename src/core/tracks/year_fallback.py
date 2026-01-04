@@ -15,6 +15,7 @@ from core.models.album_type import (
     detect_album_type,
 )
 from core.models.validators import is_empty_year
+from services.pending_verification import VerificationReason
 
 if TYPE_CHECKING:
     import logging
@@ -288,7 +289,7 @@ class YearFallbackHandler:
         await self.pending_verification.mark_for_verification(
             artist=artist,
             album=album,
-            reason="very_low_confidence_no_existing",
+            reason=VerificationReason.VERY_LOW_CONFIDENCE_NO_EXISTING.value,
             metadata={
                 "proposed_year": proposed_year,
                 "confidence_score": confidence_score,
@@ -481,7 +482,7 @@ class YearFallbackHandler:
             await self.pending_verification.mark_for_verification(
                 artist=artist,
                 album=album,
-                reason="implausible_matching_year",
+                reason=VerificationReason.IMPLAUSIBLE_MATCHING_YEAR.value,
                 metadata={
                     "year": year,
                     "artist_start_year": artist_start,
@@ -619,7 +620,7 @@ class YearFallbackHandler:
             await self.pending_verification.mark_for_verification(
                 artist=artist,
                 album=album,
-                reason="implausible_proposed_year",
+                reason=VerificationReason.IMPLAUSIBLE_PROPOSED_YEAR.value,
                 metadata={
                     "existing_year": existing_year,
                     "proposed_year": proposed_year,
