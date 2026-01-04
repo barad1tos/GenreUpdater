@@ -144,11 +144,7 @@ class AppleMusicClient:
             )
 
             # Get results from search API
-            results = response_data.get("results", []) if response_data else []
-
-            # FALLBACK: If search returns no results, try lookup API
-            if not results:
-                results = await self._try_lookup_fallback(artist_norm, search_term)
+            results = (response_data.get("results", []) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
 
             if not results:
                 self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
@@ -495,8 +491,9 @@ class AppleMusicClient:
         results = response_data.get("results", [])
         for result in results:
             result_artist = normalize_for_matching(result.get("artistName", ""))
-            # Match if artist names are similar
-            if result_artist == artist_norm or artist_norm in result_artist or result_artist in artist_norm:
+            # Exact match only - no substring matching to avoid cross-artist pollution
+            # e.g., "madonna" should NOT match "madonna remixers"
+            if result_artist == artist_norm:
                 artist_id = result.get("artistId")
                 self.console_logger.debug(
                     "[itunes] Found artist ID %s for '%s' (matched: '%s')",
