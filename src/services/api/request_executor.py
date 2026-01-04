@@ -83,13 +83,11 @@ class ApiRequestExecutor:
         self.request_counts: dict[str, int] = {
             "discogs": 0,
             "musicbrainz": 0,
-            "lastfm": 0,
             "itunes": 0,
         }
         self.api_call_durations: dict[str, list[float]] = {
             "discogs": [],
             "musicbrainz": [],
-            "lastfm": [],
             "itunes": [],
         }
 

@@ -33,6 +33,20 @@ def _add_update_years_command(subparsers: Any) -> None:
     )
 
 
+def _add_update_genres_command(subparsers: Any) -> None:
+    """Add update genres command."""
+    parser = subparsers.add_parser(
+        "update_genres",
+        aliases=["genres"],
+        help="Update genres for tracks",
+        description="Fetch and update genres from external APIs",
+    )
+    parser.add_argument(
+        "--artist",
+        help="Update only specific artist's genres (optional, processes all if not specified)",
+    )
+
+
 def _add_revert_years_command(subparsers: Any) -> None:
     """Add revert years command."""
     parser = subparsers.add_parser(
@@ -147,6 +161,9 @@ Examples:
 
         # Update years command
         _add_update_years_command(subparsers)
+
+        # Update genres command
+        _add_update_genres_command(subparsers)
 
         # Revert years command
         _add_revert_years_command(subparsers)

@@ -66,7 +66,7 @@ class TestScoringConfig:
         # Check source bonuses
         assert config.get("source_mb_bonus") == 5
         assert config.get("source_discogs_bonus") == 2
-        assert config.get("source_lastfm_penalty") == -5
+        assert config.get("source_itunes_bonus") == 4
 
     def test_custom_configuration(self) -> None:
         """Test custom scoring configuration."""

@@ -137,7 +137,7 @@ class TestCacheOrchestrator:
         orchestrator = self.create_orchestrator()
 
         with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.store_api_result("Artist", "Album", "lastfm", {"data": "value"})
+            await orchestrator.store_api_result("Artist", "Album", "discogs", {"data": "value"})
 
             mock_set.assert_called_once()
 

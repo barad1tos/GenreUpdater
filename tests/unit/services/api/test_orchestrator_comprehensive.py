@@ -91,14 +91,12 @@ class TestExternalApiOrchestrator:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp/1.0",
                     "contact_email": "test@example.com",
                 },
                 "rate_limits": {
                     "discogs_requests_per_minute": 25,
                     "musicbrainz_requests_per_second": 1,
-                    "lastfm_requests_per_second": 5,
                     "itunes_requests_per_second": 10,
                 },
                 "processing": {
@@ -179,7 +177,6 @@ class TestExternalApiOrchestrator:
         assert orchestrator.request_counts == {
             "discogs": 0,
             "musicbrainz": 0,
-            "lastfm": 0,
             "itunes": 0,
         }
 
@@ -203,7 +200,6 @@ class TestExternalApiOrchestrator:
         assert isinstance(orchestrator.rate_limiters, dict)
         assert "musicbrainz" in orchestrator.rate_limiters
         assert "discogs" in orchestrator.rate_limiters
-        assert "lastfm" in orchestrator.rate_limiters
         assert "itunes" in orchestrator.rate_limiters
 
     @pytest.mark.asyncio
@@ -223,7 +219,6 @@ class TestExternalApiOrchestrator:
         await orchestrator.initialize()
         assert hasattr(orchestrator, "musicbrainz_client")
         assert hasattr(orchestrator, "discogs_client")
-        assert hasattr(orchestrator, "lastfm_client")
         assert hasattr(orchestrator, "applemusic_client")
         # Check initialization status using session
         assert orchestrator.session is not None
@@ -367,14 +362,12 @@ class TestGetArtistStartYear:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp/1.0",
                     "contact_email": "test@example.com",
                 },
                 "rate_limits": {
                     "discogs_requests_per_minute": 25,
                     "musicbrainz_requests_per_second": 1,
-                    "lastfm_requests_per_second": 5,
                     "itunes_requests_per_second": 10,
                 },
                 "processing": {

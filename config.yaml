@@ -56,7 +56,7 @@ cleaning:
   album_suffixes_to_remove:
     - Remaster
     - Remastered
-    # Last.fm-specific album patterns (Issue #106) - moved from remaster_keywords
+    # Album patterns (Issue #106) - moved from remaster_keywords
     - The 12 Singles
     - The 12" Singles
 
@@ -133,13 +133,10 @@ year_retrieval:
     discogs_token: ${DISCOGS_TOKEN}
     musicbrainz_app_name: MusicGenreUpdater/2.0
     contact_email: ${CONTACT_EMAIL}
-    use_lastfm: true
-    lastfm_api_key: ${LASTFM_API_KEY}
 
   rate_limits:
     discogs_requests_per_minute: 55
     musicbrainz_requests_per_second: 1
-    lastfm_requests_per_second: 5
     concurrent_api_calls: 2
 
   processing:
@@ -176,23 +173,23 @@ year_retrieval:
   script_api_priorities:
     default:
       primary: ["musicbrainz", "discogs"]
-      fallback: ["lastfm", "itunes"]
+      fallback: ["itunes"]
     # Cyrillic scripts (Ukrainian, Russian, etc.) - iTunes handles well with transliterated artists
     cyrillic:
       primary: ["itunes", "musicbrainz"]
-      fallback: ["discogs", "lastfm"]
+      fallback: ["discogs"]
     # Japanese - iTunes has good coverage
     japanese:
       primary: ["itunes", "musicbrainz"]
-      fallback: ["discogs", "lastfm"]
+      fallback: ["discogs"]
     # Korean - iTunes has good coverage
     korean:
       primary: ["itunes", "musicbrainz"]
-      fallback: ["discogs", "lastfm"]
+      fallback: ["discogs"]
     # Chinese - iTunes has good coverage
     chinese:
       primary: ["itunes", "musicbrainz"]
-      fallback: ["discogs", "lastfm"]
+      fallback: ["discogs"]
 
   scoring:
     base_score: 10
@@ -226,7 +223,6 @@ year_retrieval:
     country_major_market_bonus: 5
     source_mb_bonus: 25
     source_discogs_bonus: 2
-    source_lastfm_penalty: -5
     source_itunes_penalty: -10
     future_year_penalty: -10
 

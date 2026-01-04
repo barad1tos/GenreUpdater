@@ -614,9 +614,10 @@ class DiscogsClient(BaseApiClient):
         title_artist, title_album = DiscogsClient._extract_artist_from_title(item.get("title", ""))
 
         # Create a scored release
+        # Use master_year as PRIMARY (original release year), fall back to individual release year
         release_info: ScoredRelease = {
             "title": title_album if title_album is not None else item.get("title", ""),
-            "year": year_str,
+            "year": str(master_year) if master_year else year_str,
             "score": 0.0,
             "artist": title_artist if title_artist is not None else artist_norm,
             "album_type": item.get("type", "Album"),

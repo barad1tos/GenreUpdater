@@ -111,7 +111,6 @@ class ScoringConfig(TypedDict, total=False):
     source_mb_bonus: int
     source_discogs_bonus: int
     source_itunes_bonus: int
-    source_lastfm_penalty: int
 
 
 class ReleaseScorer:
@@ -221,7 +220,6 @@ class ReleaseScorer:
             "source_mb_bonus": 5,
             "source_discogs_bonus": 2,
             "source_itunes_bonus": 4,
-            "source_lastfm_penalty": -5,
             # Future year penalty
             "future_year_penalty": -10,
         }
@@ -860,8 +858,6 @@ class ReleaseScorer:
             source_adjustment = int(scoring_cfg.get("source_discogs_bonus", 2))
         elif source == "itunes":
             source_adjustment = int(scoring_cfg.get("source_itunes_bonus", 4))
-        elif source == "lastfm":
-            source_adjustment = int(scoring_cfg.get("source_lastfm_penalty", -5))
 
         if source_adjustment != 0:
             score_components.append(f"Source {source.title()}: {source_adjustment:+}")
@@ -887,14 +883,14 @@ class ReleaseScorer:
         1. Core match quality (artist/album name matching)
         2. Release characteristics (type, status, reissue indicators)
         3. Contextual factors (year validation, artist activity period)
-        4. Source reliability (MusicBrainz > Discogs > Last.fm)
+        4. Source reliability (MusicBrainz > iTunes > Discogs)
 
         Args:
             release: Dictionary containing release metadata
             artist_norm: Normalized artist name for matching
             album_norm: Normalized album name for matching
             artist_region: Artist's region/country for bonus scoring
-            source: Source of the release data (musicbrainz, discogs, lastfm)
+            source: Source of the release data (musicbrainz, discogs, itunes)
             album_orig: Original album name with parentheses for edition stripping
 
         Returns:

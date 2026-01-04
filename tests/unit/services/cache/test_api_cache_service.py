@@ -122,14 +122,14 @@ class TestApiCacheService:
         artist = "Led Zeppelin"
         album = "IV"
         await service.set_cached_result(artist, album, "spotify", True, {"year": "1971"})
-        await service.set_cached_result(artist, album, "lastfm", True, {"year": "1971"})
+        await service.set_cached_result(artist, album, "musicbrainz", True, {"year": "1971"})
         await service.set_cached_result(artist, album, "discogs", True, {"year": "1971"})
 
         # Also add entry for different album
         await service.set_cached_result(artist, "Physical Graffiti", "spotify", True, {"year": "1975"})
         await service.invalidate_for_album(artist, album)
         assert await service.get_cached_result(artist, album, "spotify") is None
-        assert await service.get_cached_result(artist, album, "lastfm") is None
+        assert await service.get_cached_result(artist, album, "musicbrainz") is None
         assert await service.get_cached_result(artist, album, "discogs") is None
         result = await service.get_cached_result(artist, "Physical Graffiti", "spotify")
         assert result is not None
@@ -176,7 +176,7 @@ class TestApiCacheService:
         service = TestApiCacheService.create_service()
         await service.initialize()
         await service.set_cached_result("Queen", "A Night at the Opera", "spotify", True, {"year": "1975"})
-        await service.set_cached_result("Queen", "News of the World", "lastfm", True, {"year": "1977"})
+        await service.set_cached_result("Queen", "News of the World", "musicbrainz", True, {"year": "1977"})
 
         mock_file = MagicMock()
 
@@ -231,7 +231,7 @@ class TestApiCacheService:
         artist = "Radiohead"
         album = "OK Computer"
         await service.set_cached_result(artist, album, "spotify", True, {"year": "1997"})
-        await service.set_cached_result(artist, album, "lastfm", True, {"year": "1997"})
+        await service.set_cached_result(artist, album, "musicbrainz", True, {"year": "1997"})
         event = CacheEvent(event_type=CacheEventType.TRACK_REMOVED, track_id="track123", metadata={"artist": artist, "album": album})
 
         service.event_manager.emit_event(event)
@@ -240,7 +240,7 @@ class TestApiCacheService:
         await asyncio.sleep(0.1)
         # The entries should be removed
         assert await service.get_cached_result(artist, album, "spotify") is None
-        assert await service.get_cached_result(artist, album, "lastfm") is None
+        assert await service.get_cached_result(artist, album, "musicbrainz") is None
 
     def test_handle_track_modified_event_without_metadata(self) -> None:
         """Test handling track modified event without metadata does nothing."""
@@ -408,7 +408,7 @@ class TestApiCacheService:
                 "artist": "Artist2",
                 "album": "Album2",
                 "year": None,
-                "source": "lastfm",
+                "source": "musicbrainz",
                 "timestamp": 0.0,  # Expired timestamp
                 "metadata": {},
                 "api_response": None,

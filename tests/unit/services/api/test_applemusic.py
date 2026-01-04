@@ -218,9 +218,11 @@ class TestGetScoredReleases:
         self,
         client: AppleMusicClient,
         mock_api_request_func: AsyncMock,
+        sample_itunes_result: dict[str, Any],
     ) -> None:
         """Test makes correct API call with parameters."""
-        mock_api_request_func.return_value = {"results": []}
+        # Return valid results to avoid triggering the lookup fallback
+        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
 
         await client.get_scored_releases("pink floyd", "dark side")
 
@@ -231,6 +233,56 @@ class TestGetScoredReleases:
         assert "pink floyd dark side" in call_kwargs["params"]["term"]
         assert call_kwargs["params"]["country"] == "US"
         assert call_kwargs["params"]["entity"] == "album"
+
+    @pytest.mark.asyncio
+    async def test_lookup_fallback_when_search_empty(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test fallback to artist lookup when search returns no results."""
+        # First call: search returns empty
+        # Second call: artist search returns artist ID
+        # Third call: lookup returns albums
+        album_result = {
+            "wrapperType": "collection",
+            "artistName": "Korn",
+            "collectionName": "Issues",
+            "releaseDate": "1999-11-16T08:00:00Z",
+        }
+        mock_api_request_func.side_effect = [
+            {"results": []},  # Search: no results
+            {"results": [{"artistId": 466532, "artistName": "Korn"}]},  # Artist search
+            {"results": [{"wrapperType": "artist"}, album_result]},  # Lookup: artist + album
+        ]
+        mock_score_func.return_value = 85.0
+
+        result = await client.get_scored_releases("korn", "issues")
+
+        # Should have made 3 API calls
+        assert mock_api_request_func.call_count == 3
+        # Should return the album from lookup
+        assert len(result) == 1
+        assert result[0]["title"] == "Issues"
+        assert result[0]["year"] == "1999"
+
+    @pytest.mark.asyncio
+    async def test_lookup_fallback_no_artist_found(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+    ) -> None:
+        """Test returns empty when search and artist lookup both fail."""
+        mock_api_request_func.side_effect = [
+            {"results": []},  # Search: no results
+            {"results": []},  # Artist search: no matching artist
+        ]
+
+        result = await client.get_scored_releases("unknown artist", "unknown album")
+
+        assert mock_api_request_func.call_count == 2
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_handles_api_error(

@@ -84,12 +84,14 @@ class YearScoreResolver:
         self,
         year_scores: defaultdict[str, list[int]],
         all_releases: list[ScoredRelease] | None = None,
+        existing_year: str | None = None,
     ) -> tuple[str, bool, int]:
         """Select the best year from aggregated scores and determine if definitive.
 
         Args:
             year_scores: Mapping of year to list of scores
             all_releases: Optional list of all scored releases for keyword detection
+            existing_year: Current year from library (for stability boost)
 
         Returns:
             Tuple of (best_year, is_definitive, confidence_score)
@@ -106,6 +108,9 @@ class YearScoreResolver:
             return "", False, 0
 
         self._log_ranked_years(sorted_years)
+
+        if boost_result := self._apply_existing_year_boost(existing_year, final_year_scores, sorted_years):
+            return boost_result
 
         best_year, best_score, best_year_is_future = self._determine_best_year_candidate(sorted_years, all_releases)
 
@@ -139,6 +144,40 @@ class YearScoreResolver:
     def _sort_years_by_score(final_year_scores: dict[str, int]) -> list[tuple[str, int]]:
         """Sort years primarily by score (desc), secondarily by year (asc)."""
         return sorted(final_year_scores.items(), key=lambda item: (-item[1], int(item[0])))
+
+    def _apply_existing_year_boost(
+        self,
+        existing_year: str | None,
+        final_year_scores: dict[str, int],
+        sorted_years: list[tuple[str, int]],
+    ) -> tuple[str, bool, int] | None:
+        """Apply boost to existing year if it has good API support.
+
+        If existing year appears in API results with >= 90% of best score,
+        prefer stability over change.
+
+        Returns:
+            Tuple of (year, is_definitive, score) if boost applied, None otherwise.
+        """
+        if not existing_year or existing_year not in final_year_scores:
+            return None
+
+        existing_score = final_year_scores[existing_year]
+        best_candidate_score = sorted_years[0][1] if sorted_years else 0
+
+        # If existing year has >= 90% of best score, prefer stability
+        if existing_score >= best_candidate_score * 0.9:
+            self.console_logger.info(
+                "[EXISTING_YEAR_BOOST] Preferring existing year %s (score %d) over candidate %s (score %d)",
+                existing_year,
+                existing_score,
+                sorted_years[0][0] if sorted_years else "none",
+                best_candidate_score,
+            )
+            is_definitive = existing_score >= 75
+            return existing_year, is_definitive, existing_score
+
+        return None
 
     def _log_ranked_years(self, sorted_years: list[tuple[str, int]]) -> None:
         """Log the ranked years for debugging."""

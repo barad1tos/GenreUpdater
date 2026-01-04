@@ -50,7 +50,6 @@ class PreferredApi(str, Enum):
 
     MUSICBRAINZ = "musicbrainz"
     DISCOGS = "discogs"
-    LASTFM = "lastfm"
     ITUNES = "itunes"
 
 
@@ -162,8 +161,6 @@ class ApiAuthConfig(BaseModel):
     discogs_token: str
     musicbrainz_app_name: str
     contact_email: str
-    use_lastfm: bool
-    lastfm_api_key: str
 
 
 class RateLimitsConfig(BaseModel):
@@ -171,7 +168,6 @@ class RateLimitsConfig(BaseModel):
 
     discogs_requests_per_minute: int = Field(ge=1)
     musicbrainz_requests_per_second: float = Field(ge=0)
-    lastfm_requests_per_second: float = Field(ge=0)
     concurrent_api_calls: int = Field(ge=1)
 
 
@@ -228,7 +224,6 @@ class ScoringConfig(BaseModel):
     country_major_market_bonus: float
     source_mb_bonus: float
     source_discogs_bonus: float
-    source_lastfm_penalty: float = Field(le=0)
 
 
 class YearRetrievalConfig(BaseModel):
@@ -394,7 +389,7 @@ class CachedApiResult(BaseModel):
     artist: str
     album: str
     year: str | None  # Year as string
-    source: str  # "musicbrainz", "discogs", "lastfm"
+    source: str  # "musicbrainz", "discogs"
     timestamp: float
     ttl: int | None = None  # seconds, None for permanent
     metadata: dict[str, Any] = Field(default_factory=dict)  # additional data from API
@@ -517,48 +512,3 @@ class DiscogsSearchResult(BaseModel):
 
     results: list[DiscogsRelease] = Field(default_factory=list)
     pagination: dict[str, Any] = Field(default_factory=dict)
-
-
-# Last.fm API Response Models
-
-
-class LastFmImage(BaseModel):
-    """Last.fm image information."""
-
-    size: str
-    text: str = Field(alias="#text")
-
-
-class LastFmAlbum(BaseModel):
-    """Last.fm album information."""
-
-    name: str
-    artist: str
-    url: str | None = None
-    image: list[LastFmImage] = Field(default_factory=list)
-    listeners: str | None = None
-    playcount: str | None = None
-    wiki: dict[str, Any] | None = None
-
-    @staticmethod
-    def extract_published_date(v: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Extract published date from wiki if available."""
-        return v
-
-
-class LastFmSearchResult(BaseModel):
-    """Last.fm search result."""
-
-    # Field name matches Last.fm API response format exactly
-    albummatches: dict[str, Any] = Field(default_factory=dict)
-
-    @property
-    def albums(self) -> list[LastFmAlbum]:
-        """Get albums from search results."""
-        album_data = self.albummatches.get("album", [])
-        # Last.fm returns dict for single result, list for multiple
-        if isinstance(album_data, dict):
-            album_data = [album_data]
-        elif not isinstance(album_data, list):
-            return []
-        return [LastFmAlbum(**album) for album in album_data]

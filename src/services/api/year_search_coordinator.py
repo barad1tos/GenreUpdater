@@ -1,7 +1,7 @@
 """Year search coordination logic extracted from ExternalApiOrchestrator.
 
 This module handles the coordination of API calls to fetch release year
-information from multiple providers (MusicBrainz, Discogs, Last.fm, Apple Music).
+information from multiple providers (MusicBrainz, Discogs, Apple Music).
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from services.api.applemusic import AppleMusicClient
     from services.api.api_base import ScoredRelease
     from services.api.discogs import DiscogsClient
-    from services.api.lastfm import LastFmClient
     from services.api.musicbrainz import MusicBrainzClient
     from services.api.year_scoring import ReleaseScorer
 
@@ -57,10 +56,8 @@ class YearSearchCoordinator:
         error_logger: logging.Logger,
         config: dict[str, Any],
         preferred_api: str,
-        use_lastfm: bool,
         musicbrainz_client: MusicBrainzClient,
         discogs_client: DiscogsClient,
-        lastfm_client: LastFmClient,
         applemusic_client: AppleMusicClient,
         release_scorer: ReleaseScorer,
     ) -> None:
@@ -71,10 +68,8 @@ class YearSearchCoordinator:
             error_logger: Logger for error output
             config: Full application config dict
             preferred_api: Preferred API name for ordering
-            use_lastfm: Whether to include Last.fm in searches
             musicbrainz_client: MusicBrainz API client
             discogs_client: Discogs API client
-            lastfm_client: Last.fm API client
             applemusic_client: Apple Music API client
             release_scorer: Release scoring service
 
@@ -83,10 +78,8 @@ class YearSearchCoordinator:
         self.error_logger = error_logger
         self.config = config
         self.preferred_api = preferred_api
-        self.use_lastfm = use_lastfm
         self.musicbrainz_client = musicbrainz_client
         self.discogs_client = discogs_client
-        self.lastfm_client = lastfm_client
         self.applemusic_client = applemusic_client
         self.release_scorer = release_scorer
 
@@ -166,10 +159,10 @@ class YearSearchCoordinator:
         """Get script-specific API priorities from config."""
         script_priorities = self._get_script_config_priorities(script_type)
         primary_raw = script_priorities.get("primary", ["musicbrainz"])
-        fallback_raw = script_priorities.get("fallback", ["lastfm"])
+        fallback_raw = script_priorities.get("fallback", ["discogs"])
 
         primary = primary_raw if isinstance(primary_raw, list) else ["musicbrainz"]
-        fallback = fallback_raw if isinstance(fallback_raw, list) else ["lastfm"]
+        fallback = fallback_raw if isinstance(fallback_raw, list) else ["discogs"]
 
         return {
             "primary": self._apply_preferred_order(primary),
@@ -256,7 +249,7 @@ class YearSearchCoordinator:
 
     @staticmethod
     async def _call_api_with_proper_params(
-        api_client: MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient,
+        api_client: MusicBrainzClient | DiscogsClient | AppleMusicClient,
         api_name: str,
         artist_norm: str,
         album_norm: str,
@@ -265,7 +258,7 @@ class YearSearchCoordinator:
         """Call API with proper parameters based on what the API accepts.
 
         MusicBrainz and Discogs accept artist_region parameter.
-        LastFm and AppleMusic don't accept artist_region parameter.
+        AppleMusic doesn't accept artist_region parameter.
         """
         if api_name in {"musicbrainz", "discogs"}:
             # Cast to protocol that accepts artist_region
@@ -273,12 +266,11 @@ class YearSearchCoordinator:
         # Cast to protocol that doesn't accept artist_region
         return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
 
-    def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient | None:
+    def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
         """Get API client by name."""
-        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | LastFmClient | AppleMusicClient] = {
+        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | AppleMusicClient] = {
             "musicbrainz": self.musicbrainz_client,
             "discogs": self.discogs_client,
-            "lastfm": self.lastfm_client,
             "itunes": self.applemusic_client,
             "applemusic": self.applemusic_client,
         }
@@ -293,7 +285,7 @@ class YearSearchCoordinator:
         log_album: str,
     ) -> list[ScoredRelease]:
         """Execute standard concurrent API search across all providers."""
-        api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"] + (["lastfm"] if self.use_lastfm else []))
+        api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"])
         api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = [
             self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
             for api_name in api_order

@@ -163,14 +163,11 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     discogs_token: ${DISCOGS_TOKEN}
     musicbrainz_app_name: MusicGenreUpdater/2.0
     contact_email: ${CONTACT_EMAIL}
-    use_lastfm: true
-    lastfm_api_key: ${LASTFM_API_KEY}
 
   # --- API Rate Limits & Concurrency ---
   rate_limits:
     discogs_requests_per_minute: 55
     musicbrainz_requests_per_second: 1
-    lastfm_requests_per_second: 5
     concurrent_api_calls: 2
 
   # --- Processing Control ---
@@ -252,40 +249,40 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
   script_api_priorities:
     cyrillic:
       primary: [ "itunes", "applemusic" ] # Local services for CIS region
-      fallback: [ "musicbrainz", "discogs", "lastfm" ]
+      fallback: [ "musicbrainz", "discogs" ]
     chinese:
       primary: [ "musicbrainz" ] # Chinese music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     japanese:
       primary: [ "musicbrainz" ] # Japanese music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     korean:
       primary: [ "musicbrainz" ] # Korean music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     arabic:
       primary: [ "musicbrainz" ] # Arabic music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     hebrew:
       primary: [ "musicbrainz" ] # Hebrew music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     greek:
       primary: [ "musicbrainz" ] # Greek music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     thai:
       primary: [ "musicbrainz" ] # Thai music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     devanagari:
       primary: [ "musicbrainz" ] # Indian music databases would go here
-      fallback: [ "itunes", "discogs", "lastfm" ]
+      fallback: [ "itunes", "discogs" ]
     latin:
-      primary: [ "musicbrainz", "discogs", "lastfm" ]
+      primary: [ "musicbrainz", "discogs" ]
       fallback: [ "itunes" ]
     mixed:
       primary: [ "musicbrainz", "discogs" ]
-      fallback: [ "lastfm", "itunes" ]
+      fallback: [ "itunes" ]
     default:
       primary: [ "musicbrainz", "discogs" ]
-      fallback: [ "lastfm", "itunes" ]
+      fallback: [ "itunes" ]
 
   # --- Scoring Parameters ---
   scoring: # Values adjusted based on previous analysis
@@ -317,7 +314,6 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     # Source Reliability
     source_mb_bonus: 25
     source_discogs_bonus: 2
-    source_lastfm_penalty: -5
     source_itunes_penalty: -10
     # Future year penalty (for reissue detection)
     future_year_penalty: -10

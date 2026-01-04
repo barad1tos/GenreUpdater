@@ -125,7 +125,7 @@ class ApiCacheService:
         Args:
             artist: Artist name
             album: Album name
-            source: API source (spotify, lastfm, etc.)
+            source: API source (musicbrainz, discogs, etc.)
 
         Returns:
             Cached API result if found and valid, None otherwise

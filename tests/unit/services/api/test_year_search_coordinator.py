@@ -39,14 +39,6 @@ def mock_discogs_client() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_lastfm_client() -> AsyncMock:
-    """Create mock Last.fm client."""
-    client = AsyncMock()
-    client.get_scored_releases = AsyncMock(return_value=[])
-    return client
-
-
-@pytest.fixture
 def mock_applemusic_client() -> AsyncMock:
     """Create mock Apple Music client."""
     client = AsyncMock()
@@ -68,11 +60,11 @@ def default_config() -> dict[str, Any]:
             "script_api_priorities": {
                 "default": {
                     "primary": ["musicbrainz"],
-                    "fallback": ["lastfm"],
+                    "fallback": ["discogs"],
                 },
                 "cyrillic": {
                     "primary": ["discogs", "musicbrainz"],
-                    "fallback": ["lastfm"],
+                    "fallback": ["itunes"],
                 },
             }
         }
@@ -86,7 +78,6 @@ def coordinator(
     default_config: dict[str, Any],
     mock_musicbrainz_client: AsyncMock,
     mock_discogs_client: AsyncMock,
-    mock_lastfm_client: AsyncMock,
     mock_applemusic_client: AsyncMock,
     mock_release_scorer: MagicMock,
 ) -> YearSearchCoordinator:
@@ -96,10 +87,8 @@ def coordinator(
         error_logger=error_logger,
         config=default_config,
         preferred_api="musicbrainz",
-        use_lastfm=True,
         musicbrainz_client=mock_musicbrainz_client,
         discogs_client=mock_discogs_client,
-        lastfm_client=mock_lastfm_client,
         applemusic_client=mock_applemusic_client,
         release_scorer=mock_release_scorer,
     )
@@ -115,7 +104,6 @@ class TestInitialization:
         default_config: dict[str, Any],
         mock_musicbrainz_client: AsyncMock,
         mock_discogs_client: AsyncMock,
-        mock_lastfm_client: AsyncMock,
         mock_applemusic_client: AsyncMock,
         mock_release_scorer: MagicMock,
     ) -> None:
@@ -125,16 +113,13 @@ class TestInitialization:
             error_logger=error_logger,
             config=default_config,
             preferred_api="discogs",
-            use_lastfm=False,
             musicbrainz_client=mock_musicbrainz_client,
             discogs_client=mock_discogs_client,
-            lastfm_client=mock_lastfm_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
         )
 
         assert coordinator.preferred_api == "discogs"
-        assert coordinator.use_lastfm is False
 
 
 class TestNormalizeApiName:
@@ -162,21 +147,21 @@ class TestApplyPreferredOrder:
 
     def test_moves_preferred_to_front(self, coordinator: YearSearchCoordinator) -> None:
         """Test preferred API is moved to front."""
-        api_list = ["discogs", "musicbrainz", "lastfm"]
+        api_list = ["discogs", "musicbrainz", "itunes"]
 
         result = coordinator._apply_preferred_order(api_list)
 
         assert result[0] == "musicbrainz"
         assert "discogs" in result
-        assert "lastfm" in result
+        assert "itunes" in result
 
     def test_no_change_when_not_in_list(self, coordinator: YearSearchCoordinator) -> None:
         """Test no change when preferred API not in list."""
-        api_list = ["discogs", "lastfm"]
+        api_list = ["discogs", "itunes"]
 
         result = coordinator._apply_preferred_order(api_list)
 
-        assert result == ["discogs", "lastfm"]
+        assert result == ["discogs", "itunes"]
 
     def test_no_preferred_api(
         self,
@@ -185,7 +170,6 @@ class TestApplyPreferredOrder:
         default_config: dict[str, Any],
         mock_musicbrainz_client: AsyncMock,
         mock_discogs_client: AsyncMock,
-        mock_lastfm_client: AsyncMock,
         mock_applemusic_client: AsyncMock,
         mock_release_scorer: MagicMock,
     ) -> None:
@@ -195,10 +179,8 @@ class TestApplyPreferredOrder:
             error_logger=error_logger,
             config=default_config,
             preferred_api="",
-            use_lastfm=True,
             musicbrainz_client=mock_musicbrainz_client,
             discogs_client=mock_discogs_client,
-            lastfm_client=mock_lastfm_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
         )
@@ -229,15 +211,6 @@ class TestGetApiClient:
         """Test getting Discogs client."""
         client = coordinator._get_api_client("discogs")
         assert client is mock_discogs_client
-
-    def test_get_lastfm_client(
-        self,
-        coordinator: YearSearchCoordinator,
-        mock_lastfm_client: AsyncMock,
-    ) -> None:
-        """Test getting Last.fm client."""
-        client = coordinator._get_api_client("lastfm")
-        assert client is mock_lastfm_client
 
     def test_get_itunes_client(
         self,

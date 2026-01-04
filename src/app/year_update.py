@@ -18,7 +18,9 @@ if TYPE_CHECKING:
     from typing import Any
 
     from app.pipeline_snapshot import PipelineSnapshotManager
+    from app.track_cleaning import TrackCleaningService
     from core.models.track_models import TrackDict
+    from core.tracks.artist_renamer import ArtistRenamer
     from core.tracks.track_processor import TrackProcessor
     from core.tracks.year_retriever import YearRetriever
 
@@ -37,6 +39,8 @@ class YearUpdateService:
         config: dict[str, Any],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        cleaning_service: TrackCleaningService | None = None,
+        artist_renamer: ArtistRenamer | None = None,
     ) -> None:
         """Initialize the year update service.
 
@@ -47,6 +51,8 @@ class YearUpdateService:
             config: Application configuration.
             console_logger: Logger for console output.
             error_logger: Logger for error output.
+            cleaning_service: Optional service for cleaning track metadata.
+            artist_renamer: Optional service for renaming artists.
         """
         self._track_processor = track_processor
         self._year_retriever = year_retriever
@@ -54,6 +60,17 @@ class YearUpdateService:
         self._config = config
         self._console_logger = console_logger
         self._error_logger = error_logger
+        self._cleaning_service = cleaning_service
+        self._artist_renamer = artist_renamer
+        self._test_artists: set[str] | None = None
+
+    def set_test_artists(self, test_artists: set[str] | None) -> None:
+        """Set test artists for filtering.
+
+        Args:
+            test_artists: Set of artist names to filter to, or None to process all.
+        """
+        self._test_artists = test_artists
 
     async def get_tracks_for_year_update(self, artist: str | None) -> list[TrackDict] | None:
         """Get tracks for year update based on artist filter.
@@ -71,6 +88,16 @@ class YearUpdateService:
             fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
         else:
             fetched_tracks = await self._track_processor.fetch_tracks_async(artist=artist)
+
+        # Filter by test_artists if in test mode
+        if self._test_artists and fetched_tracks:
+            fetched_tracks = [t for t in fetched_tracks if t.get("artist") in self._test_artists]
+            self._console_logger.info(
+                "Test mode: filtered to %d tracks for %d test artists",
+                len(fetched_tracks),
+                len(self._test_artists),
+            )
+
         if not fetched_tracks:
             self._console_logger.warning("No tracks found")
             return None
@@ -92,6 +119,16 @@ class YearUpdateService:
         tracks = await self.get_tracks_for_year_update(artist)
         if not tracks:
             return
+
+        # Preprocessing - clean metadata first
+        if self._cleaning_service:
+            self._console_logger.info("Preprocessing: Cleaning metadata...")
+            await self._cleaning_service.clean_all_metadata_with_logs(tracks)
+
+        # Preprocessing - rename artists
+        if self._artist_renamer and self._artist_renamer.has_mapping:
+            self._console_logger.info("Preprocessing: Renaming artists...")
+            await self._artist_renamer.rename_tracks(tracks)
 
         # Process album years
         success = await self._year_retriever.process_album_years(tracks, force=force, fresh=fresh)

@@ -118,6 +118,87 @@ class TestYearUpdateServiceInit:
         """Should store snapshot manager."""
         assert service._snapshot_manager is mock_snapshot_manager
 
+    def test_stores_optional_cleaning_service(
+        self,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_snapshot_manager: MagicMock,
+        mock_config: dict[str, Any],
+        console_logger: logging.Logger,
+        error_logger: logging.Logger,
+    ) -> None:
+        """Should store optional cleaning service."""
+        mock_cleaning = MagicMock()
+        service = YearUpdateService(
+            track_processor=mock_track_processor,
+            year_retriever=mock_year_retriever,
+            snapshot_manager=mock_snapshot_manager,
+            config=mock_config,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            cleaning_service=mock_cleaning,
+        )
+        assert service._cleaning_service is mock_cleaning
+
+    def test_stores_optional_artist_renamer(
+        self,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_snapshot_manager: MagicMock,
+        mock_config: dict[str, Any],
+        console_logger: logging.Logger,
+        error_logger: logging.Logger,
+    ) -> None:
+        """Should store optional artist renamer."""
+        mock_renamer = MagicMock()
+        service = YearUpdateService(
+            track_processor=mock_track_processor,
+            year_retriever=mock_year_retriever,
+            snapshot_manager=mock_snapshot_manager,
+            config=mock_config,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            artist_renamer=mock_renamer,
+        )
+        assert service._artist_renamer is mock_renamer
+
+    def test_test_artists_defaults_to_none(
+        self,
+        service: YearUpdateService,
+    ) -> None:
+        """Should default test_artists to None."""
+        assert service._test_artists is None
+
+
+class TestSetTestArtists:
+    """Tests for set_test_artists method."""
+
+    def test_set_test_artists_stores_set(
+        self,
+        service: YearUpdateService,
+    ) -> None:
+        """Should store test artists set."""
+        test_artists = {"Artist1", "Artist2"}
+        service.set_test_artists(test_artists)
+        assert service._test_artists == test_artists
+
+    def test_set_test_artists_can_set_none(
+        self,
+        service: YearUpdateService,
+    ) -> None:
+        """Should allow setting None to disable filtering."""
+        service.set_test_artists({"Artist1"})
+        service.set_test_artists(None)
+        assert service._test_artists is None
+
+    def test_set_test_artists_empty_set(
+        self,
+        service: YearUpdateService,
+    ) -> None:
+        """Should handle empty set."""
+        service.set_test_artists(set())
+        assert service._test_artists == set()
+
 
 class TestGetTracksForYearUpdate:
     """Tests for get_tracks_for_year_update method."""
@@ -162,6 +243,63 @@ class TestGetTracksForYearUpdate:
         await service.get_tracks_for_year_update(artist=None)
 
         mock_track_processor.fetch_tracks_in_batches.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filters_by_test_artists_when_set(
+        self,
+        service: YearUpdateService,
+        mock_track_processor: MagicMock,
+    ) -> None:
+        """Should filter tracks by test_artists when set."""
+        all_tracks: list[TrackDict] = [
+            TrackDict(id="1", name="Track 1", artist="Artist1", album="A", genre="Rock", year="2020"),
+            TrackDict(id="2", name="Track 2", artist="Artist2", album="B", genre="Pop", year="2021"),
+            TrackDict(id="3", name="Track 3", artist="OtherArtist", album="C", genre="Jazz", year="2019"),
+        ]
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=all_tracks)
+
+        service.set_test_artists({"Artist1", "Artist2"})
+        result = await service.get_tracks_for_year_update(artist=None)
+
+        assert result is not None
+        assert len(result) == 2
+        assert all(t.get("artist") in {"Artist1", "Artist2"} for t in result)
+
+    @pytest.mark.asyncio
+    async def test_does_not_filter_when_test_artists_none(
+        self,
+        service: YearUpdateService,
+        mock_track_processor: MagicMock,
+    ) -> None:
+        """Should not filter tracks when test_artists is None."""
+        all_tracks: list[TrackDict] = [
+            TrackDict(id="1", name="Track 1", artist="Artist1", album="A", genre="Rock", year="2020"),
+            TrackDict(id="2", name="Track 2", artist="Artist2", album="B", genre="Pop", year="2021"),
+        ]
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=all_tracks)
+
+        service.set_test_artists(None)
+        result = await service.get_tracks_for_year_update(artist=None)
+
+        assert result is not None
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_test_artists_filters_all(
+        self,
+        service: YearUpdateService,
+        mock_track_processor: MagicMock,
+    ) -> None:
+        """Should return None when test_artists filters all tracks."""
+        all_tracks: list[TrackDict] = [
+            TrackDict(id="1", name="Track 1", artist="OtherArtist", album="A", genre="Rock", year="2020"),
+        ]
+        mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=all_tracks)
+
+        service.set_test_artists({"NonExistent"})
+        result = await service.get_tracks_for_year_update(artist=None)
+
+        assert result is None
 
 
 class TestRunUpdateYears:

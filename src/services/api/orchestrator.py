@@ -1,9 +1,9 @@
 """External API Service Orchestrator.
 
 This module provides the main coordination layer for fetching album release years
-from multiple API providers (MusicBrainz, Discogs, Last.fm). It replaces the
-legacy external API service with a modular architecture that maintains
-backward compatibility while providing better separation of concerns.
+from multiple API providers (MusicBrainz, Discogs). It replaces the legacy
+external API service with a modular architecture that maintains backward
+compatibility while providing better separation of concerns.
 
 The orchestrator handles:
 - HTTP session management and connection pooling
@@ -32,11 +32,11 @@ from core.debug_utils import debug
 from core.logger import LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
+from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from metrics import Analytics
 from services.api.api_base import EnhancedRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
-from services.api.lastfm import LastFmClient
 from services.api.musicbrainz import MusicBrainzClient
 from services.api.request_executor import ApiRequestExecutor
 from services.api.year_score_resolver import YearScoreResolver
@@ -128,13 +128,13 @@ class ScoreThresholds(TypedDict):
 class ExternalApiOrchestrator:
     """External API service orchestrator.
 
-    Coordinates API calls across multiple providers (MusicBrainz, Discogs, Last.fm)
+    Coordinates API calls across multiple providers (MusicBrainz, Discogs)
     to determine the original release year for music albums. Provides rate limiting,
     caching, authentication, and sophisticated scoring to identify the most likely
     original release.
 
     This class implements a modular architecture for external API services,
-    providing unified access to MusicBrainz, Last.fm, and Discogs APIs.
+    providing unified access to MusicBrainz and Discogs APIs.
 
     Attributes:
         config: Configuration dictionary
@@ -182,7 +182,7 @@ class ExternalApiOrchestrator:
         name = str(api_name).strip().lower()
         if name in {"applemusic", "itunes"}:
             return "itunes"
-        if name not in {"musicbrainz", "discogs", "itunes", "lastfm"}:
+        if name not in {"musicbrainz", "discogs", "itunes"}:
             return "musicbrainz"
         return name
 
@@ -230,7 +230,6 @@ class ExternalApiOrchestrator:
         # Initialize API client references (will be set in _initialize_api_clients)
         self.discogs_client: DiscogsClient
         self.musicbrainz_client: MusicBrainzClient
-        self.lastfm_client: LastFmClient
         self.applemusic_client: AppleMusicClient
 
         # Initialize SecureConfig for encrypted token storage
@@ -310,11 +309,6 @@ class ExternalApiOrchestrator:
             "discogs_token",
             "DISCOGS_TOKEN",
         )
-        self.lastfm_api_key = self._load_secure_token(
-            api_auth_config,
-            "lastfm_api_key",
-            "LASTFM_API_KEY",
-        )
 
         # Load MusicBrainz identification
         self.musicbrainz_app_name = api_auth_config.get(
@@ -355,7 +349,6 @@ class ExternalApiOrchestrator:
         preferred_api_raw = year_config.get("preferred_api", "musicbrainz")
         self.preferred_api = self._normalize_api_name(preferred_api_raw)
 
-        self.use_lastfm = bool(self.lastfm_api_key) and bool(api_auth_config.get("use_lastfm", year_config.get("use_lastfm", True)))
         self.cache_ttl_days = processing_config.get("cache_ttl_days", 30)
         self.skip_prerelease = bool(processing_config.get("skip_prerelease", True))
         self.future_year_threshold = self._coerce_non_negative_int(processing_config.get("future_year_threshold"), default=1)
@@ -448,13 +441,6 @@ class ExternalApiOrchestrator:
                     ),
                     window_seconds=1.0,
                 ),
-                "lastfm": EnhancedRateLimiter(
-                    requests_per_window=max(
-                        1,
-                        int(self.rate_limits_config.get("lastfm_requests_per_second", 5)),
-                    ),
-                    window_seconds=1.0,
-                ),
                 "itunes": EnhancedRateLimiter(
                     requests_per_window=max(
                         1,
@@ -524,16 +510,6 @@ class ExternalApiOrchestrator:
             cache_service=self.cache_service,
         )
 
-        # Initialize Last.fm client
-        self.lastfm_client = LastFmClient(
-            api_key=self.lastfm_api_key,
-            console_logger=self.console_logger,
-            error_logger=self.error_logger,
-            make_api_request_func=make_api_request_func,
-            score_release_func=score_release_func,
-            config=self.config,
-        )
-
         # Initialize Apple Music Search API client
         self.applemusic_client = AppleMusicClient(
             console_logger=self.console_logger,
@@ -574,10 +550,8 @@ class ExternalApiOrchestrator:
             error_logger=self.error_logger,
             config=self.config,
             preferred_api=self.preferred_api,
-            use_lastfm=self.use_lastfm,
             musicbrainz_client=self.musicbrainz_client,
             discogs_client=self.discogs_client,
-            lastfm_client=self.lastfm_client,
             applemusic_client=self.applemusic_client,
             release_scorer=self.release_scorer,
         )
@@ -791,6 +765,30 @@ class ExternalApiOrchestrator:
                 e,
             )
 
+    async def _get_attempt_count(self, artist: str, album: str) -> int:
+        """Get current verification attempt count for an album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Number of verification attempts made (0 if not tracked or service unavailable).
+
+        """
+        if not self.pending_verification_service:
+            return 0
+        try:
+            return await self.pending_verification_service.get_attempt_count(artist=artist, album=album)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
+            self.error_logger.warning(
+                "Failed to get attempt count for '%s - %s': %s",
+                artist,
+                album,
+                e,
+            )
+            return 0
+
     @staticmethod
     def _count_prerelease_tracks(tracks: list[dict[str, str]]) -> int:
         """Count tracks marked as prerelease."""
@@ -947,9 +945,8 @@ class ExternalApiOrchestrator:
 
         self.console_logger.info("Processing %s artist", script_type.value)
         self.console_logger.info(
-            "Token status: Discogs=%s, LastFM=%s",
+            "Token status: Discogs=%s",
             "LOADED" if self.discogs_token else "MISSING",
-            "LOADED" if self.lastfm_api_key else "MISSING",
         )
 
         # Get script-specific API priorities from config
@@ -1176,12 +1173,51 @@ class ExternalApiOrchestrator:
             return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
-        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores, all_releases=all_releases)
+        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(
+            year_scores,
+            all_releases=all_releases,
+            existing_year=current_library_year,
+        )
 
         self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 
-        if not is_definitive:
-            await self._safe_mark_for_verification(artist, album)
+        # Rule 1: Trust matching years - if API year matches existing year, skip verification
+        # Even with low confidence, a match confirms the existing year is correct
+        if best_year and current_library_year and best_year == current_library_year:
+            self.console_logger.debug(
+                "Year matches existing (%s) for '%s - %s', trusting match",
+                best_year,
+                log_artist,
+                log_album,
+            )
+            await self._safe_remove_from_pending(artist, album)
+        elif not is_definitive:
+            # Rule 2: Check attempt count for escalation before marking
+            attempt_count = await self._get_attempt_count(artist, album)
+
+            if attempt_count >= MAX_VERIFICATION_ATTEMPTS:
+                # Escalation: After N attempts, accept best result if available
+                if best_year is not None:
+                    self.console_logger.warning(
+                        "Verification limit reached for '%s - %s'. Accepting year %s after %d attempts",
+                        log_artist,
+                        log_album,
+                        best_year,
+                        attempt_count,
+                    )
+                    await self._safe_remove_from_pending(artist, album)
+                else:
+                    # No usable result after N attempts - log as unresolvable
+                    self.console_logger.warning(
+                        "Verification unresolvable for '%s - %s' after %d attempts, no API result",
+                        log_artist,
+                        log_album,
+                        attempt_count,
+                    )
+                    # Don't mark again - it's already in pending with attempt count
+            else:
+                # Under the limit - mark for verification (increments attempt count)
+                await self._safe_mark_for_verification(artist, album)
         else:
             await self._safe_remove_from_pending(artist, album)
 

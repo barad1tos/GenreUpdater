@@ -63,7 +63,6 @@ def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "EnhancedRateL
         {
             "discogs": mock_rate_limiter,
             "musicbrainz": mock_rate_limiter,
-            "lastfm": mock_rate_limiter,
             "itunes": mock_rate_limiter,
         },
     )
@@ -134,7 +133,6 @@ class TestInitialization:
         """Test request counts are initialized."""
         assert "discogs" in executor.request_counts
         assert "musicbrainz" in executor.request_counts
-        assert "lastfm" in executor.request_counts
         assert "itunes" in executor.request_counts
         assert all(v == 0 for v in executor.request_counts.values())
 
@@ -195,8 +193,8 @@ class TestBuildCacheKey:
 
     def test_build_cache_key_deterministic(self) -> None:
         """Test cache key is deterministic."""
-        key1 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
-        key2 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
+        key1 = ApiRequestExecutor._build_cache_key("discogs", "https://api.example.com", {"param": "value"})
+        key2 = ApiRequestExecutor._build_cache_key("discogs", "https://api.example.com", {"param": "value"})
 
         assert key1 == key2
 
