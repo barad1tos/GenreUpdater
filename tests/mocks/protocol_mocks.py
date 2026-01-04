@@ -584,6 +584,21 @@ class MockPendingVerificationService:
                 return entry
         return None
 
+    async def get_attempt_count(self, artist: str, album: str) -> int:
+        """Get current verification attempt count for an album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Number of verification attempts (0 if not in pending list).
+        """
+        for entry in self.pending_albums:
+            if entry.artist == artist and entry.album == album:
+                return entry.attempt_count
+        return 0
+
     async def generate_problematic_albums_report(
         self,
         min_attempts: int = 3,
