@@ -294,8 +294,6 @@ def validate_api_auth(api_auth: dict[str, Any]) -> None:
         missing_fields.append("DISCOGS_TOKEN")
     if not api_auth.get("contact_email"):
         missing_fields.append("CONTACT_EMAIL")
-    if api_auth.get("use_lastfm") and not api_auth.get("lastfm_api_key"):
-        missing_fields.append("LASTFM_API_KEY (required when use_lastfm is enabled)")
 
     for field in missing_fields:
         logger.warning("%s is not set in environment", field)

@@ -179,7 +179,7 @@ class Orchestrator:
             Dictionary of decrypted tokens
 
         """
-        sensitive_keys: list[str] = ["discogs_token", "lastfm_api_key"]
+        sensitive_keys: list[str] = ["discogs_token"]
         current_tokens: dict[str, str] = {}
 
         for key in sensitive_keys:
