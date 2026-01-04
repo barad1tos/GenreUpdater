@@ -351,6 +351,38 @@ class TestYearRetrieverAllure:
         assert len(mock_external_api.get_album_year_calls) == 1
         assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None, None)
 
+    @pytest.mark.asyncio
+    async def test_determine_album_year_force_mode_passes_dominant_year(self) -> None:
+        """Test that force mode still passes dominant_year for year-match comparison.
+
+        Regression test: When force=True, the orchestrator needs to know the existing
+        year to apply the year-match rule (skip verification if API year == existing year).
+        Previously, force mode would set current_library_year=None, breaking this check.
+        """
+        mock_external_api = _MockExternalApiService()
+        expected_year = "1999"
+        mock_external_api.get_album_year_response = (expected_year, True, 85, {expected_year: 85})
+        retriever = self.create_year_retriever(external_api=mock_external_api)
+
+        # Tracks with existing year (dominant year = 1999)
+        album_tracks = [
+            _DummyTrackData.create(name="Song 1", year="1999"),
+            _DummyTrackData.create(track_id="2", name="Song 2", year="1999"),
+            _DummyTrackData.create(track_id="3", name="Song 3", year="1999"),
+        ]
+
+        # Call with force=True
+        determined_year = await retriever._year_determinator.determine_album_year("Test Artist", "Test Album", album_tracks, force=True)
+        assert determined_year == expected_year
+
+        # Verify API was called with dominant_year (not None!)
+        assert len(mock_external_api.get_album_year_calls) == 1
+        call_args = mock_external_api.get_album_year_calls[0]
+        assert call_args[0] == "Test Artist"
+        assert call_args[1] == "Test Album"
+        # KEY: current_library_year should be "1999", not None
+        assert call_args[2] == "1999", f"Force mode should pass dominant_year for year-match check, got: {call_args[2]}"
+
     @pytest.mark.parametrize(
         ("artist_input", "expected_output"),
         [
