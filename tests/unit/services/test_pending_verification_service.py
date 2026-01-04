@@ -341,7 +341,7 @@ async def test_malformed_attempt_count_defaults_to_zero(
     csv_dir.mkdir(parents=True, exist_ok=True)
     csv_file = csv_dir / "pending_verification.csv"
     csv_file.write_text(
-        "artist,album,timestamp,reason,metadata,attempt_count\nTest Artist,Test Album,2024-01-01T00:00:00,no_year_found,,foo\n",
+        "artist,album,timestamp,reason,metadata,attempt_count\nTest Artist,Test Album,2024-01-01 00:00:00,no_year_found,,foo\n",
         encoding="utf-8",
     )
 

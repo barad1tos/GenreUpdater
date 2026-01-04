@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.models.track_models import TrackDict
-from core.tracks.year_fallback import YearFallbackHandler
+from core.tracks.year_fallback import (
+    DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
+    MAX_VERIFICATION_ATTEMPTS,
+    YearFallbackHandler,
+)
 
 if TYPE_CHECKING:
     from core.models.protocols import PendingVerificationServiceProtocol
@@ -55,7 +59,7 @@ def fallback_handler(
         fallback_enabled=True,
         absurd_year_threshold=1970,
         year_difference_threshold=5,
-        min_confidence_for_new_year=30,
+        min_confidence_for_new_year=DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
         api_orchestrator=api_orchestrator,
     )
 
@@ -379,20 +383,23 @@ class TestEscalationLogic:
         When:
         - No existing year (new album)
         - Low confidence (below min_confidence_for_new_year threshold)
-        - attempt_count >= MAX_VERIFICATION_ATTEMPTS (3)
+        - attempt_count >= MAX_VERIFICATION_ATTEMPTS
         -> Accept the year instead of blocking forever
         """
-        # Mock attempt count at escalation threshold (3 = MAX_VERIFICATION_ATTEMPTS)
-        pending_verification.get_attempt_count = AsyncMock(return_value=3)
+        # Mock attempt count at escalation threshold
+        pending_verification.get_attempt_count = AsyncMock(return_value=MAX_VERIFICATION_ATTEMPTS)
 
         # Track with no existing year
         tracks = [make_track("Test Artist", "New Album", year=None)]
+
+        # Use confidence below threshold to trigger escalation path
+        low_confidence = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR - 10
 
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
-            confidence_score=20,  # Below min_confidence_for_new_year (30)
+            confidence_score=low_confidence,
             artist="Test Artist",
             album="New Album",
         )
@@ -417,17 +424,20 @@ class TestEscalationLogic:
         - attempt_count < MAX_VERIFICATION_ATTEMPTS
         -> Mark for verification and reject (return None)
         """
-        # Mock attempt count below threshold
+        # Mock attempt count below escalation threshold
         pending_verification.get_attempt_count = AsyncMock(return_value=1)
 
         # Track with no existing year
         tracks = [make_track("Test Artist", "New Album", year=None)]
 
+        # Use confidence below threshold to trigger verification
+        low_confidence = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR - 10
+
         result = await fallback_handler.apply_year_fallback(
             proposed_year="2020",
             album_tracks=tracks,
             is_definitive=False,
-            confidence_score=20,  # Below min_confidence_for_new_year (30)
+            confidence_score=low_confidence,
             artist="Test Artist",
             album="New Album",
         )
@@ -442,5 +452,5 @@ class TestEscalationLogic:
         assert call_kwargs["album"] == "New Album"
         assert call_kwargs["reason"] == "very_low_confidence_no_existing"
         assert call_kwargs["metadata"]["proposed_year"] == "2020"
-        assert call_kwargs["metadata"]["confidence_score"] == 20
-        assert call_kwargs["metadata"]["threshold"] == 30
+        assert call_kwargs["metadata"]["confidence_score"] == low_confidence
+        assert call_kwargs["metadata"]["threshold"] == DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR

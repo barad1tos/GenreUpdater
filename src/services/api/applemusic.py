@@ -143,8 +143,10 @@ class AppleMusicClient:
                 "data" if response_data else "None/empty",
             )
 
-            # Get results from search API
-            results = (response_data.get("results", []) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
+            # Get results from search API, fallback to artist lookup if empty
+            results = response_data.get("results", []) if response_data else []
+            if not results:
+                results = await self._try_lookup_fallback(artist_norm, search_term)
 
             if not results:
                 self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
