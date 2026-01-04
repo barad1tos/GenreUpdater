@@ -82,7 +82,10 @@ class AppleMusicClient:
         artist_norm: str,
         album_norm: str,
     ) -> list[ScoredRelease]:
-        """Get scored releases from iTunes Search API.
+        """Get scored releases from iTunes Search API with lookup fallback.
+
+        Uses the search API first. If no results are found, falls back to
+        looking up the artist and fetching all their albums.
 
         Args:
             artist_norm: Normalized artist name
@@ -140,12 +143,35 @@ class AppleMusicClient:
                 "data" if response_data else "None/empty",
             )
 
-            if not response_data:
-                self.console_logger.info("[itunes] No response data for '%s'", search_term)
-                return []
+            # Get results from search API
+            results = response_data.get("results", []) if response_data else []
 
-            # Parse results
-            results = response_data.get("results", [])
+            # FALLBACK: If search returns no results, try lookup API
+            if not results:
+                self.console_logger.debug(
+                    "[itunes] Search returned no results for '%s', trying artist lookup fallback",
+                    search_term,
+                )
+                artist_id = await self._find_artist_id(artist_norm)
+                if artist_id:
+                    results = await self._lookup_artist_albums(artist_id)
+                    if results:
+                        self.console_logger.info(
+                            "[itunes] Lookup fallback found %d albums for artist '%s'",
+                            len(results),
+                            artist_norm,
+                        )
+                    else:
+                        self.console_logger.debug(
+                            "[itunes] Lookup fallback returned no albums for artist ID %s",
+                            artist_id,
+                        )
+                else:
+                    self.console_logger.debug(
+                        "[itunes] Could not find artist ID for '%s', no fallback possible",
+                        artist_norm,
+                    )
+
             if not results:
                 self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
                 return []
@@ -402,6 +428,95 @@ class AppleMusicClient:
             return None
 
         return response_data
+
+    async def _find_artist_id(self, artist_norm: str) -> int | None:
+        """Find iTunes artist ID by searching for artist.
+
+        Args:
+            artist_norm: Normalized artist name
+
+        Returns:
+            iTunes artist ID or None if not found
+
+        """
+        params = {
+            "term": artist_norm,
+            "country": self.country_code,
+            "entity": "musicArtist",
+            "limit": "5",
+        }
+
+        response_data = await self.make_api_request_func(
+            api_name="itunes",
+            url=self.base_url,
+            params=params,
+            max_retries=2,
+            base_delay=0.5,
+        )
+
+        if not response_data:
+            self.console_logger.debug("[itunes] No response finding artist ID for: '%s'", artist_norm)
+            return None
+
+        results = response_data.get("results", [])
+        for result in results:
+            result_artist = normalize_for_matching(result.get("artistName", ""))
+            # Match if artist names are similar
+            if result_artist == artist_norm or artist_norm in result_artist or result_artist in artist_norm:
+                artist_id = result.get("artistId")
+                self.console_logger.debug(
+                    "[itunes] Found artist ID %s for '%s' (matched: '%s')",
+                    artist_id,
+                    artist_norm,
+                    result.get("artistName"),
+                )
+                return artist_id
+
+        self.console_logger.debug("[itunes] No matching artist ID found for: '%s'", artist_norm)
+        return None
+
+    async def _lookup_artist_albums(self, artist_id: int) -> list[dict[str, Any]]:
+        """Get all albums for an artist using lookup API.
+
+        This uses the /lookup endpoint which is more reliable than /search
+        for getting all albums by an artist.
+
+        Args:
+            artist_id: iTunes artist ID
+
+        Returns:
+            List of album results
+
+        """
+        lookup_url = "https://itunes.apple.com/lookup"
+        params = {
+            "id": str(artist_id),
+            "entity": "album",
+            "limit": "200",
+        }
+
+        response_data = await self.make_api_request_func(
+            api_name="itunes",
+            url=lookup_url,
+            params=params,
+            max_retries=2,
+            base_delay=0.5,
+        )
+
+        if not response_data:
+            self.console_logger.debug("[itunes] No response from lookup for artist ID: %s", artist_id)
+            return []
+
+        # First result is artist info, rest are albums (wrapperType == "collection")
+        results = response_data.get("results", [])
+        albums = [r for r in results if r.get("wrapperType") == "collection"]
+
+        self.console_logger.debug(
+            "[itunes] Lookup found %d albums for artist ID %s",
+            len(albums),
+            artist_id,
+        )
+        return albums
 
     def _extract_release_years(self, results: list[dict[str, Any]], artist_norm: str) -> list[int]:
         """Extract valid release years from iTunes search results.
