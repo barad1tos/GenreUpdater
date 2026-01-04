@@ -363,3 +363,84 @@ class TestPendingVerificationCalls:
 
         # Should NOT have called mark_for_verification (confident existing was wrong)
         pending_verification.mark_for_verification.assert_not_called()
+
+
+class TestEscalationLogic:
+    """Tests for escalation logic after MAX_VERIFICATION_ATTEMPTS."""
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_accepted_after_max_attempts(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """After MAX_VERIFICATION_ATTEMPTS, low-confidence year is accepted.
+
+        When:
+        - No existing year (new album)
+        - Low confidence (below min_confidence_for_new_year threshold)
+        - attempt_count >= MAX_VERIFICATION_ATTEMPTS (3)
+        -> Accept the year instead of blocking forever
+        """
+        # Mock attempt count at escalation threshold (3 = MAX_VERIFICATION_ATTEMPTS)
+        pending_verification.get_attempt_count = AsyncMock(return_value=3)
+
+        # Track with no existing year
+        tracks = [make_track("Test Artist", "New Album", year=None)]
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=20,  # Below min_confidence_for_new_year (30)
+            artist="Test Artist",
+            album="New Album",
+        )
+
+        # Should accept the year after escalation
+        assert result == "2020"
+
+        # Should NOT call mark_for_verification (escalation bypasses it)
+        pending_verification.mark_for_verification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_marked_for_verification_below_max(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """Below MAX_VERIFICATION_ATTEMPTS, low-confidence marks for verification.
+
+        When:
+        - No existing year (new album)
+        - Low confidence (below min_confidence_for_new_year threshold)
+        - attempt_count < MAX_VERIFICATION_ATTEMPTS
+        -> Mark for verification and reject (return None)
+        """
+        # Mock attempt count below threshold
+        pending_verification.get_attempt_count = AsyncMock(return_value=1)
+
+        # Track with no existing year
+        tracks = [make_track("Test Artist", "New Album", year=None)]
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2020",
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=20,  # Below min_confidence_for_new_year (30)
+            artist="Test Artist",
+            album="New Album",
+        )
+
+        # Should return None (not accepted)
+        assert result is None
+
+        # Should have called mark_for_verification
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert call_kwargs["artist"] == "Test Artist"
+        assert call_kwargs["album"] == "New Album"
+        assert call_kwargs["reason"] == "very_low_confidence_no_existing"
+        assert call_kwargs["metadata"]["proposed_year"] == "2020"
+        assert call_kwargs["metadata"]["confidence_score"] == 20
+        assert call_kwargs["metadata"]["threshold"] == 30
