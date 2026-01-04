@@ -1156,7 +1156,17 @@ class ExternalApiOrchestrator:
 
         self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 
-        if not is_definitive:
+        # Rule 1: Trust matching years - if API year matches existing year, skip verification
+        # Even with low confidence, a match confirms the existing year is correct
+        if best_year and current_library_year and best_year == current_library_year:
+            self.console_logger.debug(
+                "Year matches existing (%s) for '%s - %s', trusting match",
+                best_year,
+                log_artist,
+                log_album,
+            )
+            await self._safe_remove_from_pending(artist, album)
+        elif not is_definitive:
             await self._safe_mark_for_verification(artist, album)
         else:
             await self._safe_remove_from_pending(artist, album)
