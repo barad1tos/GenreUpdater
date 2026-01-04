@@ -69,6 +69,11 @@ class VerificationReason(str, Enum):
     SPECIAL_ALBUM_REISSUE = "special_album_reissue"
     SUSPICIOUS_ALBUM_NAME = "suspicious_album_name"
 
+    # Additional rejection reasons from year_fallback.py
+    VERY_LOW_CONFIDENCE_NO_EXISTING = "very_low_confidence_no_existing"
+    IMPLAUSIBLE_MATCHING_YEAR = "implausible_matching_year"
+    IMPLAUSIBLE_PROPOSED_YEAR = "implausible_proposed_year"
+
     @classmethod
     def from_string(cls, value: str) -> "VerificationReason":
         """Convert string to VerificationReason, defaulting to NO_YEAR_FOUND."""
