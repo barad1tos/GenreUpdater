@@ -59,7 +59,6 @@ def fallback_handler(
         fallback_enabled=True,
         absurd_year_threshold=1970,
         year_difference_threshold=5,
-        min_confidence_for_new_year=DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
         api_orchestrator=api_orchestrator,
     )
 
@@ -390,7 +389,7 @@ class TestEscalationLogic:
         pending_verification.get_attempt_count = AsyncMock(return_value=MAX_VERIFICATION_ATTEMPTS)
 
         # Track with no existing year
-        tracks = [make_track("Test Artist", "New Album", year=None)]
+        tracks = [make_track("Test Artist", "New Album")]
 
         # Use confidence below threshold to trigger escalation path
         low_confidence = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR - 10
@@ -428,7 +427,7 @@ class TestEscalationLogic:
         pending_verification.get_attempt_count = AsyncMock(return_value=1)
 
         # Track with no existing year
-        tracks = [make_track("Test Artist", "New Album", year=None)]
+        tracks = [make_track("Test Artist", "New Album")]
 
         # Use confidence below threshold to trigger verification
         low_confidence = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR - 10
