@@ -98,22 +98,6 @@ class PendingAlbumEntry:
     metadata: str = ""
     attempt_count: int = 0
 
-    def to_tuple(self) -> tuple[datetime, str, str, str, str]:
-        """Convert to legacy tuple format for backward compatibility."""
-        return self.timestamp, self.artist, self.album, self.reason.value, self.metadata
-
-    @classmethod
-    def from_tuple(cls, data: tuple[datetime, str, str, str, str]) -> "PendingAlbumEntry":
-        """Create from legacy tuple format."""
-        timestamp, artist, album, reason_str, metadata = data
-        return cls(
-            timestamp=timestamp,
-            artist=artist,
-            album=album,
-            reason=VerificationReason.from_string(reason_str),
-            metadata=metadata,
-        )
-
 
 class Logger(Protocol):
     """Protocol defining the interface for loggers used in the application.
