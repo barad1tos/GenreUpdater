@@ -293,9 +293,11 @@ class TestGetScoredReleases:
     ) -> None:
         """Test fallback triggers when API returns None instead of empty results.
 
-        Covers the branch: `response_data.get(...) if response_data else []`
+        Covers the full expression: `response_data.get(...) if response_data else [] or
+        await self._try_lookup_fallback(...)`.
         When make_api_request_func returns None (network issue, timeout, etc.),
-        the code should still attempt fallback lookup.
+        the empty list result from the conditional expression should trigger the
+        fallback lookup.
 
         Context for debugging:
         - Who: iTunes Search API client
