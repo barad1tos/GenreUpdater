@@ -88,6 +88,7 @@ class PendingAlbumEntry:
         album: Album name
         reason: Why the album needs verification
         metadata: JSON-encoded metadata string
+        attempt_count: Number of verification attempts made
     """
 
     timestamp: datetime
@@ -95,6 +96,7 @@ class PendingAlbumEntry:
     album: str
     reason: VerificationReason
     metadata: str = ""
+    attempt_count: int = 0
 
     def to_tuple(self) -> tuple[datetime, str, str, str, str]:
         """Convert to legacy tuple format for backward compatibility."""
@@ -314,6 +316,7 @@ class PendingVerificationService:
         timestamp_str = row.get("timestamp", "").strip()
         reason_str = row.get("reason", "").strip()
         metadata = row.get("metadata", "").strip()
+        attempt_count_str = row.get("attempt_count", "0").strip()
 
         if not (artist and album and timestamp_str):
             self._error_callback(f"WARNING: Skipping malformed row in pending file: {row}")
@@ -323,6 +326,12 @@ class PendingVerificationService:
         if timestamp is None:
             return None
 
+        # Parse attempt_count with fallback for legacy CSVs without this column
+        try:
+            attempt_count = int(attempt_count_str) if attempt_count_str else 0
+        except ValueError:
+            attempt_count = 0
+
         try:
             key_hash = self.generate_album_key(artist, album)
             entry = PendingAlbumEntry(
@@ -331,6 +340,7 @@ class PendingVerificationService:
                 album=album,
                 reason=VerificationReason.from_string(reason_str),
                 metadata=metadata,
+                attempt_count=attempt_count,
             )
             return key_hash, entry
         except (ValueError, TypeError) as row_e:
@@ -415,7 +425,7 @@ class PendingVerificationService:
             Path(self.pending_file_path).parent.mkdir(parents=True, exist_ok=True)
 
             with Path(temp_file).open("w", newline="", encoding="utf-8") as f:
-                fieldnames = ["artist", "album", "timestamp", "reason", "metadata"]
+                fieldnames = ["artist", "album", "timestamp", "reason", "metadata", "attempt_count"]
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
 
@@ -427,6 +437,7 @@ class PendingVerificationService:
                             "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                             "reason": entry.reason.value,
                             "metadata": entry.metadata,
+                            "attempt_count": str(entry.attempt_count),
                         }
                     )
 
@@ -466,6 +477,7 @@ class PendingVerificationService:
         """Mark an album for future verification with reason and optional metadata.
 
         Uses a hash key for storage. Saves asynchronously.
+        If the album is already pending, increments the attempt counter.
 
         Args:
             artist: Artist name
@@ -487,6 +499,10 @@ class PendingVerificationService:
             # Generate the hash key for the album
             key_hash = self._generate_album_key(artist, album)
 
+            # Check if entry already exists to get previous attempt count
+            existing_entry = self.pending_albums.get(key_hash)
+            new_attempt_count = (existing_entry.attempt_count + 1) if existing_entry else 1
+
             # Serialize metadata dict to JSON string to preserve type information
             metadata_payload: dict[str, Any] = {}
             if metadata:
@@ -497,13 +513,14 @@ class PendingVerificationService:
 
             metadata_str = json.dumps(metadata_payload) if metadata_payload else ""
 
-            # Store the entry using PendingAlbumEntry
+            # Store the entry using PendingAlbumEntry with updated attempt count
             self.pending_albums[key_hash] = PendingAlbumEntry(
                 timestamp=datetime.now(UTC),
                 artist=artist.strip(),
                 album=album.strip(),
                 reason=reason_enum,
                 metadata=metadata_str,
+                attempt_count=new_attempt_count,
             )
 
         # Log with the appropriate message based on reason
@@ -511,11 +528,16 @@ class PendingVerificationService:
 
         if reason_enum == VerificationReason.PRERELEASE:
             self.console_logger.info(
-                f"Marked prerelease album '{artist} - {album}' for future verification in {effective_interval} days",
+                f"Marked prerelease album '{artist} - {album}' for future verification in {effective_interval} days (attempt #{new_attempt_count})",
             )
         else:
             self.console_logger.info(
-                f"Marked '{artist} - {album}' for verification in {effective_interval} days (reason: {reason_enum.value})",
+                "Marked '%s - %s' for verification in %d days (reason: %s, attempt #%d)",
+                artist,
+                album,
+                effective_interval,
+                reason_enum.value,
+                new_attempt_count,
             )
 
         # Save asynchronously after modifying the cache
@@ -535,6 +557,22 @@ class PendingVerificationService:
         async with self._lock:
             album_key = self._generate_album_key(artist, album)
             return self.pending_albums.get(album_key)
+
+    async def get_attempt_count(self, artist: str, album: str) -> int:
+        """Get current verification attempt count for an album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Number of verification attempts made (0 if not in pending list).
+
+        """
+        async with self._lock:
+            album_key = self._generate_album_key(artist, album)
+            entry = self.pending_albums.get(album_key)
+            return entry.attempt_count if entry else 0
 
     # is_verification_needed is now an async method because it acquires the lock
     async def is_verification_needed(self, artist: str, album: str) -> bool:
