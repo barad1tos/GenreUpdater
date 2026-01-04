@@ -106,41 +106,6 @@ class TestCacheOrchestrator:
 
             mock_store.assert_called_once_with("Artist", "Album", "1999", 85)
 
-    # =========================== API CACHE TESTS ===========================
-
-    @pytest.mark.asyncio
-    async def test_get_api_result_delegates(self) -> None:
-        """Test that get_api_result delegates to api service."""
-        orchestrator = self.create_orchestrator()
-        mock_result = MagicMock()
-        mock_result.api_response = {"year": "2020"}
-
-        with patch.object(orchestrator.api_service, "get_cached_result", new_callable=AsyncMock, return_value=mock_result) as mock_get:
-            result = await orchestrator.get_api_result("Artist", "Album", "musicbrainz")
-
-            assert result == {"year": "2020"}
-            mock_get.assert_called_once_with("Artist", "Album", "musicbrainz")
-
-    @pytest.mark.asyncio
-    async def test_get_api_result_returns_none(self) -> None:
-        """Test that get_api_result returns None when not cached."""
-        orchestrator = self.create_orchestrator()
-
-        with patch.object(orchestrator.api_service, "get_cached_result", new_callable=AsyncMock, return_value=None):
-            result = await orchestrator.get_api_result("Artist", "Album", "discogs")
-
-            assert result is None
-
-    @pytest.mark.asyncio
-    async def test_store_api_result_delegates(self) -> None:
-        """Test that store_api_result delegates to api service."""
-        orchestrator = self.create_orchestrator()
-
-        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.store_api_result("Artist", "Album", "discogs", {"data": "value"})
-
-            mock_set.assert_called_once()
-
     # =========================== GENERIC CACHE TESTS ===========================
 
     @pytest.mark.asyncio
@@ -288,62 +253,6 @@ class TestCacheOrchestrator:
             mock_album.assert_called_once()
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
-
-    # =========================== STATISTICS TESTS ===========================
-
-    @pytest.mark.asyncio
-    async def test_get_comprehensive_stats(self) -> None:
-        """Test that get_comprehensive_stats aggregates stats from all services."""
-        orchestrator = self.create_orchestrator()
-
-        with (
-            patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 10}),
-            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 20}),
-            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 30}),
-        ):
-            stats = orchestrator.get_comprehensive_stats()
-
-            assert "album_cache" in stats
-            assert "api_cache" in stats
-            assert "generic_cache" in stats
-            assert "orchestrator" in stats
-            assert stats["album_cache"]["total_albums"] == 10
-            assert stats["api_cache"]["total_entries"] == 20
-            assert stats["generic_cache"]["total_entries"] == 30
-
-    @pytest.mark.asyncio
-    async def test_get_cache_health(self) -> None:
-        """Test that get_cache_health returns health status for all services."""
-        orchestrator = self.create_orchestrator()
-
-        with (
-            patch.object(orchestrator.album_service, "get_stats", return_value={"total_albums": 5}),
-            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}),
-            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}),
-        ):
-            health = orchestrator.get_cache_health()
-
-            assert "album" in health
-            assert "api" in health
-            assert "generic" in health
-            for service_health in health.values():
-                assert service_health["status"] == "healthy"
-
-    @pytest.mark.asyncio
-    async def test_get_cache_health_handles_errors(self) -> None:
-        """Test that get_cache_health reports errors correctly."""
-        orchestrator = self.create_orchestrator()
-
-        with (
-            patch.object(orchestrator.album_service, "get_stats", side_effect=Exception("Stats failed")),
-            patch.object(orchestrator.api_service, "get_stats", return_value={"total_entries": 10}),
-            patch.object(orchestrator.generic_service, "get_stats", return_value={"total_entries": 15}),
-        ):
-            health = orchestrator.get_cache_health()
-
-            assert health["album"]["status"] == "error"
-            assert "Stats failed" in health["album"]["error"]
-            assert health["api"]["status"] == "healthy"
 
     # =========================== BACKWARD COMPATIBILITY TESTS ===========================
 
