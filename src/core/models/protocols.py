@@ -511,6 +511,23 @@ class PendingVerificationServiceProtocol(Protocol):
         """
         ...
 
+    async def get_attempt_count(
+        self,
+        artist: str,
+        album: str,
+    ) -> int:
+        """Get current verification attempt count for an album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Number of verification attempts made (0 if not in pending list).
+
+        """
+        ...
+
     async def is_verification_needed(
         self,
         artist: str,

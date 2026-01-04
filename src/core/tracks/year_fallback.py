@@ -154,27 +154,9 @@ class YearFallbackHandler:
             return None
 
         # Rule 2.5: Very low confidence with no existing year (Issue #105)
-        # When no existing year to validate against, require minimum confidence
+        # Delegate to helper to keep main function return count under limit
         if not existing_year and confidence_score < self.min_confidence_for_new_year:
-            await self.pending_verification.mark_for_verification(
-                artist=artist,
-                album=album,
-                reason="very_low_confidence_no_existing",
-                metadata={
-                    "proposed_year": proposed_year,
-                    "confidence_score": confidence_score,
-                    "threshold": self.min_confidence_for_new_year,
-                },
-            )
-            self.console_logger.warning(
-                "[FALLBACK] Skipping year %s for %s - %s (confidence %d%% below %d%% threshold, no existing year)",
-                proposed_year,
-                artist,
-                album,
-                confidence_score,
-                self.min_confidence_for_new_year,
-            )
-            return None
+            return await self._handle_low_confidence_no_existing_year(proposed_year, confidence_score, artist, album)
 
         # Rule 3: No existing year - nothing to preserve (year passed absurd check and confidence check)
         if not existing_year:
@@ -268,6 +250,60 @@ class YearFallbackHandler:
             )
             return True
         return False
+
+    async def _handle_low_confidence_no_existing_year(
+        self,
+        proposed_year: str,
+        confidence_score: int,
+        artist: str,
+        album: str,
+    ) -> str | None:
+        """Handle low confidence year when no existing year exists.
+
+        Implements escalation: after MAX_VERIFICATION_ATTEMPTS, accept the year
+        rather than blocking forever.
+
+        Returns:
+            proposed_year if should apply (after escalation),
+            None if should skip (mark for verification)
+
+        """
+        # Check attempt count for escalation
+        attempt_count = await self.pending_verification.get_attempt_count(artist, album)
+
+        if attempt_count >= MAX_VERIFICATION_ATTEMPTS:
+            # Escalation: After N attempts, accept low-confidence year rather than block forever
+            self.console_logger.warning(
+                "[FALLBACK] Accepting low-confidence year %s for %s - %s after %d attempts (confidence %d%%, threshold %d%%)",
+                proposed_year,
+                artist,
+                album,
+                attempt_count,
+                confidence_score,
+                self.min_confidence_for_new_year,
+            )
+            return proposed_year
+
+        # Under the limit - mark for verification and reject
+        await self.pending_verification.mark_for_verification(
+            artist=artist,
+            album=album,
+            reason="very_low_confidence_no_existing",
+            metadata={
+                "proposed_year": proposed_year,
+                "confidence_score": confidence_score,
+                "threshold": self.min_confidence_for_new_year,
+            },
+        )
+        self.console_logger.warning(
+            "[FALLBACK] Skipping year %s for %s - %s (confidence %d%% below %d%% threshold, no existing year)",
+            proposed_year,
+            artist,
+            album,
+            confidence_score,
+            self.min_confidence_for_new_year,
+        )
+        return None
 
     async def _handle_special_album_type(
         self,
