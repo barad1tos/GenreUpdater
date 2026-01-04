@@ -487,7 +487,7 @@ class TestIntegration:
         releases = [
             create_scored_release("2020", 85, source="musicbrainz"),
             create_scored_release("2020", 90, source="discogs"),
-            create_scored_release("2021", 75, source="lastfm"),
+            create_scored_release("2021", 75, source="itunes"),
         ]
 
         year_scores = resolver.aggregate_year_scores(releases)

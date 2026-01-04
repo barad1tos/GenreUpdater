@@ -193,8 +193,8 @@ class TestBuildCacheKey:
 
     def test_build_cache_key_deterministic(self) -> None:
         """Test cache key is deterministic."""
-        key1 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
-        key2 = ApiRequestExecutor._build_cache_key("lastfm", "https://api.example.com", {"param": "value"})
+        key1 = ApiRequestExecutor._build_cache_key("discogs", "https://api.example.com", {"param": "value"})
+        key2 = ApiRequestExecutor._build_cache_key("discogs", "https://api.example.com", {"param": "value"})
 
         assert key1 == key2
 
