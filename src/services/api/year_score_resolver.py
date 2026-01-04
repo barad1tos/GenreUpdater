@@ -109,9 +109,7 @@ class YearScoreResolver:
 
         self._log_ranked_years(sorted_years)
 
-        # Apply existing year boost if applicable
-        boost_result = self._apply_existing_year_boost(existing_year, final_year_scores, sorted_years)
-        if boost_result:
+        if boost_result := self._apply_existing_year_boost(existing_year, final_year_scores, sorted_years):
             return boost_result
 
         best_year, best_score, best_year_is_future = self._determine_best_year_candidate(sorted_years, all_releases)
