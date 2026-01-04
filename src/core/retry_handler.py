@@ -10,9 +10,8 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, TypedDict, TypeVar, cast
+from typing import TypedDict, TypeVar, cast
 
-from core.core_config import ConfigurationError
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")
@@ -29,7 +28,6 @@ class RetryMetadata(TypedDict, total=False):
     table: str  # Database table name
 
     # Timing metadata
-    created_at: str  # ISO format timestamp
     timestamp: str  # ISO format timestamp
 
     # Music metadata fields
@@ -433,64 +431,3 @@ class DatabaseRetryHandler:
             retry_policy.operation_timeout_seconds,
         )
         raise timeout_error
-
-
-class ConfigurationRetryHandler:
-    """Configuration-specific retry handler with fallback mechanisms.
-
-    Provides retry logic specifically for configuration loading operations
-    with support for fallback configuration files and transient error handling.
-    """
-
-    def __init__(self, logger: logging.Logger) -> None:
-        """Initialize configuration retry handler.
-
-        Args:
-            logger: Logger instance for retry operation tracking
-
-        """
-        self.logger = logger
-        self.retry_policy = RetryPolicy(base_delay_seconds=0.5, max_delay_seconds=10.0)
-
-    def load_config_with_fallback(self, config_path: str, fallback_paths: list[str] | None = None) -> dict[str, Any]:
-        """Load configuration with fallback mechanism.
-
-        Attempts to load primary configuration file, falling back to
-        alternate configurations if the primary fails.
-
-        Args:
-            config_path: Primary configuration file path
-            fallback_paths: List of fallback configuration file paths
-
-        Returns:
-            Dictionary containing loaded configuration
-
-        Raises:
-            ConfigurationError: If all configuration sources fail
-
-        """
-        # Lazy import to avoid circular dependency
-        from core.core_config import load_config  # noqa: PLC0415
-
-        # Try primary configuration
-        try:
-            self.logger.info("Attempting to load primary config: %s", config_path)
-            return load_config(config_path)
-        except (OSError, ValueError, TypeError, ImportError, KeyError) as e:
-            self.logger.warning("Primary config failed: %s", e)
-
-            # Try fallback configurations
-            if fallback_paths:
-                for fallback_path in fallback_paths:
-                    try:
-                        self.logger.info("Attempting fallback config: %s", fallback_path)
-                        return load_config(fallback_path)
-                    except (OSError, ValueError, TypeError, ImportError, KeyError) as fallback_error:
-                        self.logger.warning("Fallback config %s failed: %s", fallback_path, fallback_error)
-                        continue
-
-            # All configurations failed
-            paths_tried = [config_path] + (fallback_paths or [])
-            error_message = f"All configuration sources failed. Tried: {paths_tried}"
-            self.logger.exception(error_message)
-            raise ConfigurationError(error_message) from e

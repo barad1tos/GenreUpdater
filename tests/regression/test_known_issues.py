@@ -94,7 +94,14 @@ class TestKnownMissingYearAlbums:
         These albums have old release years but were added recently (year gap > 10).
         The system correctly returns None to trigger API verification.
         This documents EXPECTED behavior, not a bug.
+
+        Skips if none of the known albums are present in the snapshot (CI fixtures).
         """
+        # Count how many known albums are in the snapshot
+        albums_in_snapshot = sum(1 for artist, album, _ in KNOWN_MISSING_YEAR_ALBUMS if (artist, album) in albums_with_tracks)
+        if albums_in_snapshot == 0:
+            pytest.skip(f"None of {len(KNOWN_MISSING_YEAR_ALBUMS)} known albums present in snapshot. This is expected in CI with test fixtures.")
+
         checker = YearConsistencyChecker(console_logger=console_logger)
         correctly_flagged: list[tuple[str, str, str]] = []
         incorrectly_returned: list[tuple[str, str, str, str]] = []

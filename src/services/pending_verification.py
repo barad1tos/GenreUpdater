@@ -69,6 +69,11 @@ class VerificationReason(str, Enum):
     SPECIAL_ALBUM_REISSUE = "special_album_reissue"
     SUSPICIOUS_ALBUM_NAME = "suspicious_album_name"
 
+    # Additional rejection reasons from year_fallback.py
+    VERY_LOW_CONFIDENCE_NO_EXISTING = "very_low_confidence_no_existing"
+    IMPLAUSIBLE_MATCHING_YEAR = "implausible_matching_year"
+    IMPLAUSIBLE_PROPOSED_YEAR = "implausible_proposed_year"
+
     @classmethod
     def from_string(cls, value: str) -> "VerificationReason":
         """Convert string to VerificationReason, defaulting to NO_YEAR_FOUND."""
@@ -97,22 +102,6 @@ class PendingAlbumEntry:
     reason: VerificationReason
     metadata: str = ""
     attempt_count: int = 0
-
-    def to_tuple(self) -> tuple[datetime, str, str, str, str]:
-        """Convert to legacy tuple format for backward compatibility."""
-        return self.timestamp, self.artist, self.album, self.reason.value, self.metadata
-
-    @classmethod
-    def from_tuple(cls, data: tuple[datetime, str, str, str, str]) -> "PendingAlbumEntry":
-        """Create from legacy tuple format."""
-        timestamp, artist, album, reason_str, metadata = data
-        return cls(
-            timestamp=timestamp,
-            artist=artist,
-            album=album,
-            reason=VerificationReason.from_string(reason_str),
-            metadata=metadata,
-        )
 
 
 class Logger(Protocol):

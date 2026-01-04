@@ -111,34 +111,6 @@ class CacheOrchestrator(CacheServiceProtocol):
         """
         await self.album_service.store_album_year(artist, album, year, confidence)
 
-    # =========================== API CACHE API ===========================
-
-    async def get_api_result(self, artist: str, album: str, source: str) -> dict[str, Any] | None:
-        """Get API result from cache.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            source: API source name
-
-        Returns:
-            Cached API result if found and valid, None otherwise
-        """
-        cached_result = await self.api_service.get_cached_result(artist, album, source)
-        return cached_result.api_response if cached_result else None
-
-    async def store_api_result(self, artist: str, album: str, source: str, result: dict[str, Any], success: bool = True) -> None:
-        """Store API result in cache.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            source: API source name
-            result: API response data
-            success: Whether the API call was successful
-        """
-        await self.api_service.set_cached_result(artist, album, source, success, data=result)
-
     # =========================== GENERIC CACHE API ===========================
 
     async def get_async(  # type: ignore[override]
@@ -272,45 +244,6 @@ class CacheOrchestrator(CacheServiceProtocol):
         self.generic_service.invalidate_all()
 
         self.logger.info("All cache entries invalidated")
-
-    # =========================== STATISTICS & MONITORING ===========================
-
-    def get_comprehensive_stats(self) -> dict[str, Any]:
-        """Get comprehensive statistics from all cache services.
-
-        Returns:
-            Dictionary containing statistics from all services
-        """
-        return {
-            "album_cache": self.album_service.get_stats(),
-            "api_cache": self.api_service.get_stats(),
-            "generic_cache": self.generic_service.get_stats(),
-            "orchestrator": {
-                "services_count": len(self._services),
-                "config_policies": len(self.config.get("caching", {})) if isinstance(self.config.get("caching"), dict) else 0,
-            },
-        }
-
-    def get_cache_health(self) -> dict[str, Any]:
-        """Check the health status of all cache services.
-
-        Returns:
-            Dictionary containing health information for each service
-        """
-        health_status = {}
-
-        for service_name, service in self._services.items():
-            try:
-                stats = service.get_stats() if hasattr(service, "get_stats") else {"total_entries": 0}
-                health_status[service_name] = {
-                    "status": "healthy",
-                    "entries": stats.get("total_entries", stats.get("total_albums", 0)),
-                    "last_check": "active",
-                }
-            except Exception as e:
-                health_status[service_name] = {"status": "error", "error": str(e), "last_check": "failed"}
-
-        return health_status
 
     # =========================== BACKWARD COMPATIBILITY ===========================
 

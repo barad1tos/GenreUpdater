@@ -2,13 +2,10 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
-from core.core_config import ConfigurationError
 from core.retry_handler import (
-    ConfigurationRetryHandler,
     DatabaseRetryHandler,
     RetryOperationContext,
     RetryPolicy,
@@ -25,12 +22,6 @@ def logger() -> logging.Logger:
 def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
     """Create a DatabaseRetryHandler instance."""
     return DatabaseRetryHandler(logger)
-
-
-@pytest.fixture
-def config_retry_handler(logger: logging.Logger) -> ConfigurationRetryHandler:
-    """Create a ConfigurationRetryHandler instance."""
-    return ConfigurationRetryHandler(logger)
 
 
 class TestRetryPolicy:
@@ -274,56 +265,6 @@ class TestExecuteWithRetry:
 
         result = await retry_handler.execute_with_retry(operation, "test_op")
         assert result == "success"
-
-
-class TestConfigurationRetryHandler:
-    """Tests for ConfigurationRetryHandler."""
-
-    def test_load_config_success(self, config_retry_handler: ConfigurationRetryHandler) -> None:
-        """Test successful config load."""
-        with patch("core.core_config.load_config") as mock_load:
-            mock_load.return_value = {"key": "value"}
-
-            result = config_retry_handler.load_config_with_fallback("config.yaml")
-
-            assert result == {"key": "value"}
-            mock_load.assert_called_once_with("config.yaml")
-
-    def test_load_config_fallback(self, config_retry_handler: ConfigurationRetryHandler) -> None:
-        """Test fallback when primary fails."""
-        with patch("core.core_config.load_config") as mock_load:
-            # First call fails, second succeeds
-            mock_load.side_effect = [
-                OSError("File not found"),
-                {"fallback": "config"},
-            ]
-
-            result = config_retry_handler.load_config_with_fallback(
-                "config.yaml",
-                fallback_paths=["fallback.yaml"],
-            )
-
-            assert result == {"fallback": "config"}
-            assert mock_load.call_count == 2
-
-    def test_load_config_all_fail(self, config_retry_handler: ConfigurationRetryHandler) -> None:
-        """Test ConfigurationError when all configs fail."""
-        with patch("core.core_config.load_config") as mock_load:
-            mock_load.side_effect = OSError("File not found")
-
-            with pytest.raises(ConfigurationError, match="All configuration sources failed"):
-                config_retry_handler.load_config_with_fallback(
-                    "config.yaml",
-                    fallback_paths=["fallback1.yaml", "fallback2.yaml"],
-                )
-
-    def test_load_config_no_fallback_paths(self, config_retry_handler: ConfigurationRetryHandler) -> None:
-        """Test failure with no fallback paths."""
-        with patch("core.core_config.load_config") as mock_load:
-            mock_load.side_effect = OSError("File not found")
-
-            with pytest.raises(ConfigurationError):
-                config_retry_handler.load_config_with_fallback("config.yaml")
 
 
 class TestDatabaseRetryHandlerInit:

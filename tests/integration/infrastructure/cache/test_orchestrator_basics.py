@@ -97,11 +97,3 @@ async def test_album_year_roundtrip(orchestrator: CacheOrchestrator) -> None:
     """Album year storage and retrieval delegate to album cache service."""
     await orchestrator.store_album_year("Artist", "Album", "1999")
     assert await orchestrator.get_album_year("Artist", "Album") == "1999"
-
-
-async def test_api_result_roundtrip(orchestrator: CacheOrchestrator) -> None:
-    """API result caching delegates to API cache service."""
-    payload = {"result": "data"}
-    await orchestrator.store_api_result("Artist", "Album", "discogs", payload)
-    cached = await orchestrator.get_api_result("Artist", "Album", "discogs")
-    assert cached == payload
