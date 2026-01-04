@@ -285,6 +285,46 @@ class TestGetScoredReleases:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_fallback_when_api_returns_none(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+    ) -> None:
+        """Test fallback triggers when API returns None instead of empty results.
+
+        Covers the branch: `response_data.get(...) if response_data else []`
+        When make_api_request_func returns None (network issue, timeout, etc.),
+        the code should still attempt fallback lookup.
+
+        Context for debugging:
+        - Who: iTunes Search API client
+        - What: Primary search returned None, fallback to artist lookup
+        - Why: Network issues or API returning null response
+        """
+        album_result = {
+            "wrapperType": "collection",
+            "artistName": "Tool",
+            "collectionName": "Lateralus",
+            "releaseDate": "2001-05-15T07:00:00Z",
+        }
+        mock_api_request_func.side_effect = [
+            None,  # Primary search: None response (network issue/timeout)
+            {"results": [{"artistId": 54619, "artistName": "Tool"}]},  # Artist search
+            {"results": [{"wrapperType": "artist"}, album_result]},  # Lookup: albums
+        ]
+        mock_score_func.return_value = 90.0
+
+        result = await client.get_scored_releases("tool", "lateralus")
+
+        # Should have made 3 API calls: primary search (None) + artist search + lookup
+        assert mock_api_request_func.call_count == 3
+        # Should return the album from fallback lookup
+        assert len(result) == 1
+        assert result[0]["title"] == "Lateralus"
+        assert result[0]["year"] == "2001"
+
+    @pytest.mark.asyncio
     async def test_handles_api_error(
         self,
         client: AppleMusicClient,
