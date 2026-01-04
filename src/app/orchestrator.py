@@ -79,6 +79,8 @@ class Orchestrator:
                 await self._run_clean_artist(args)
             case "update_years" | "years":
                 await self._run_update_years(args)
+            case "update_genres" | "genres":
+                await self._run_update_genres(args)
             case "revert_years" | "revert":
                 await self._run_revert_years(args)
             case "verify_database" | "verify-db":
@@ -106,6 +108,13 @@ class Orchestrator:
             artist=getattr(args, "artist", None),
             force=args.force,
             fresh=getattr(args, "fresh", False),
+        )
+
+    async def _run_update_genres(self, args: argparse.Namespace) -> None:
+        """Run the update genres command."""
+        await self.music_updater.run_update_genres(
+            artist=getattr(args, "artist", None),
+            force=args.force,
         )
 
     async def _run_revert_years(self, args: argparse.Namespace) -> None:
