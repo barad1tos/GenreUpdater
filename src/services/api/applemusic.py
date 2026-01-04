@@ -155,42 +155,7 @@ class AppleMusicClient:
                 return []
 
             # Filter and score results
-            scored_releases: list[ScoredRelease] = []
-            skipped_count = 0
-            for result in results:
-                try:
-                    if scored_release := self._process_itunes_result(result, artist_norm, album_norm):
-                        scored_releases.append(scored_release)
-                    else:
-                        skipped_count += 1
-                except (KeyError, ValueError, TypeError) as e:
-                    # Expected errors from malformed API responses or missing fields
-                    self.error_logger.warning(
-                        "[itunes] Expected error processing result for '%s': %s (type: %s)",
-                        search_term,
-                        e,
-                        type(e).__name__,
-                    )
-                    skipped_count += 1
-                    continue
-                except Exception as e:
-                    # Unexpected errors that need investigation
-                    self.error_logger.exception(
-                        "[itunes] Unexpected error processing result for '%s': %s (type: %s)\n%s",
-                        search_term,
-                        e,
-                        type(e).__name__,
-                        traceback.format_exc(),
-                    )
-                    skipped_count += 1
-                    continue
-
-            self.console_logger.debug(
-                "[itunes] Processed %d results, returning %d scored releases (%d skipped)",
-                len(results),
-                len(scored_releases),
-                skipped_count,
-            )
+            return self._process_api_results(results, artist_norm, album_norm, search_term)
 
         except (OSError, ValueError, RuntimeError) as e:
             self.error_logger.warning(
@@ -200,8 +165,6 @@ class AppleMusicClient:
                 e,
             )
             return []
-
-        return scored_releases
 
     async def _try_lookup_fallback(
         self,
@@ -242,6 +205,59 @@ class AppleMusicClient:
                 artist_id,
             )
         return results
+
+    def _process_api_results(
+        self,
+        results: list[dict[str, Any]],
+        artist_norm: str,
+        album_norm: str,
+        search_term: str,
+    ) -> list[ScoredRelease]:
+        """Process API results into scored releases with error handling.
+
+        Args:
+            results: Raw API results to process
+            artist_norm: Normalized artist name for scoring
+            album_norm: Normalized album name for scoring
+            search_term: Original search term for logging
+
+        Returns:
+            List of successfully processed ScoredRelease objects
+        """
+        scored_releases: list[ScoredRelease] = []
+        skipped_count = 0
+
+        for result in results:
+            try:
+                if scored_release := self._process_itunes_result(result, artist_norm, album_norm):
+                    scored_releases.append(scored_release)
+                else:
+                    skipped_count += 1
+            except (KeyError, ValueError, TypeError) as e:
+                self.error_logger.warning(
+                    "[itunes] Expected error processing result for '%s': %s (type: %s)",
+                    search_term,
+                    e,
+                    type(e).__name__,
+                )
+                skipped_count += 1
+            except Exception as e:
+                self.error_logger.exception(
+                    "[itunes] Unexpected error processing result for '%s': %s (type: %s)\n%s",
+                    search_term,
+                    e,
+                    type(e).__name__,
+                    traceback.format_exc(),
+                )
+                skipped_count += 1
+
+        self.console_logger.debug(
+            "[itunes] Processed %d results, returning %d scored releases (%d skipped)",
+            len(results),
+            len(scored_releases),
+            skipped_count,
+        )
+        return scored_releases
 
     def _process_itunes_result(self, result: dict[str, Any], target_artist_norm: str, target_album_norm: str) -> ScoredRelease | None:
         """Process a single iTunes Search API result into a ScoredRelease.
