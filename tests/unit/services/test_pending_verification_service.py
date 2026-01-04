@@ -212,3 +212,114 @@ async def test_thread_safety_handles_concurrent_writes(service: PendingVerificat
 
     pending_entries = await service.get_all_pending_albums()
     assert len(pending_entries) == 5
+
+
+# ============================================================================
+# Attempt Count Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_attempt_count_starts_at_one(service: PendingVerificationService) -> None:
+    """First mark_for_verification should set attempt_count to 1."""
+    await service.initialize()
+    await service.mark_for_verification("Artist", "Album")
+
+    count = await service.get_attempt_count("Artist", "Album")
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_attempt_count_increments_on_subsequent_marks(
+    service: PendingVerificationService,
+) -> None:
+    """Each mark_for_verification should increment attempt_count."""
+    await service.initialize()
+
+    await service.mark_for_verification("Artist", "Album")
+    assert await service.get_attempt_count("Artist", "Album") == 1
+
+    await service.mark_for_verification("Artist", "Album")
+    assert await service.get_attempt_count("Artist", "Album") == 2
+
+    await service.mark_for_verification("Artist", "Album")
+    assert await service.get_attempt_count("Artist", "Album") == 3
+
+
+@pytest.mark.asyncio
+async def test_get_attempt_count_returns_zero_for_unknown_album(
+    service: PendingVerificationService,
+) -> None:
+    """get_attempt_count should return 0 for albums not in pending list."""
+    await service.initialize()
+
+    count = await service.get_attempt_count("Unknown Artist", "Unknown Album")
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_attempt_count_persisted_to_csv(service: PendingVerificationService) -> None:
+    """attempt_count should be persisted and loaded from CSV."""
+    await service.initialize()
+
+    # Mark multiple times to increment counter
+    await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+
+    # Read CSV content directly
+    csv_content = Path(service.pending_file_path).read_text(encoding="utf-8")
+    assert "attempt_count" in csv_content  # Column should exist
+    assert ",3" in csv_content or ",3\n" in csv_content  # Value should be 3
+
+
+@pytest.mark.asyncio
+async def test_attempt_count_loaded_from_csv(
+    service: PendingVerificationService,
+) -> None:
+    """attempt_count should be loaded correctly from existing CSV."""
+    pending_file = Path(service.pending_file_path)
+    pending_file.parent.mkdir(parents=True, exist_ok=True)
+    pending_file.write_text(
+        "artist,album,timestamp,reason,metadata,attempt_count\nArtist,Album,2024-01-01 00:00:00,no_year_found,,5\n",
+        encoding="utf-8",
+    )
+
+    await service.initialize()
+
+    count = await service.get_attempt_count("Artist", "Album")
+    assert count == 5
+
+
+@pytest.mark.asyncio
+async def test_legacy_csv_without_attempt_count_defaults_to_zero(
+    service: PendingVerificationService,
+) -> None:
+    """Legacy CSV without attempt_count column should default to 0."""
+    pending_file = Path(service.pending_file_path)
+    pending_file.parent.mkdir(parents=True, exist_ok=True)
+    pending_file.write_text(
+        "artist,album,timestamp,reason,metadata\nArtist,Album,2024-01-01 00:00:00,no_year_found,\n",
+        encoding="utf-8",
+    )
+
+    await service.initialize()
+
+    # Legacy entry without attempt_count should default to 0
+    count = await service.get_attempt_count("Artist", "Album")
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_remove_from_pending_resets_attempt_count(
+    service: PendingVerificationService,
+) -> None:
+    """Removing from pending should reset attempt count to 0."""
+    await service.initialize()
+
+    await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+    assert await service.get_attempt_count("Artist", "Album") == 2
+
+    await service.remove_from_pending("Artist", "Album")
+    assert await service.get_attempt_count("Artist", "Album") == 0
