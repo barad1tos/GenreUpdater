@@ -653,9 +653,11 @@ class MusicBrainzClient(BaseApiClient):
             ScoredRelease object with all fields populated
 
         """
-        year_str = self._extract_year_from_date(release.get("date")) or self._extract_year_from_date(
+        # Use release group's first-release-date as PRIMARY (original release year)
+        # Fall back to individual release date only if RG date unavailable
+        year_str = self._extract_year_from_date(
             rg_info.get("first-release-date"),
-        )
+        ) or self._extract_year_from_date(release.get("date"))
 
         return {
             "title": release.get("title", "") or "",

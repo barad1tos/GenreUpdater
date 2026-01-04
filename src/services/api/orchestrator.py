@@ -1176,7 +1176,11 @@ class ExternalApiOrchestrator:
             return fallback_year, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
-        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(year_scores, all_releases=all_releases)
+        best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(
+            year_scores,
+            all_releases=all_releases,
+            existing_year=current_library_year,
+        )
 
         self.console_logger.info("Selected year: %s. Definitive? %s (confidence: %d%%)", best_year, is_definitive, confidence_score)
 
