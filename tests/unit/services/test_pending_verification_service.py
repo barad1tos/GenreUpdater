@@ -323,3 +323,32 @@ async def test_remove_from_pending_resets_attempt_count(
 
     await service.remove_from_pending("Artist", "Album")
     assert await service.get_attempt_count("Artist", "Album") == 0
+
+
+@pytest.mark.asyncio
+async def test_malformed_attempt_count_defaults_to_zero(
+    config: dict[str, Any],
+    console_logger: MagicMock,
+    error_logger: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Invalid attempt_count in CSV should default to 0."""
+    # Update config to use tmp_path for logs
+    config["logs_base_dir"] = str(tmp_path)
+
+    # Create CSV with malformed attempt_count (non-integer value)
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = csv_dir / "pending_verification.csv"
+    csv_file.write_text(
+        "artist,album,timestamp,reason,metadata,attempt_count\nTest Artist,Test Album,2024-01-01T00:00:00,no_year_found,,foo\n",
+        encoding="utf-8",
+    )
+
+    # Create new service and initialize
+    service = PendingVerificationService(config, console_logger, error_logger)
+    await service.initialize()
+
+    # Should default to 0, not crash
+    count = await service.get_attempt_count("Test Artist", "Test Album")
+    assert count == 0
