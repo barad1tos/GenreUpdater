@@ -32,6 +32,7 @@ from core.debug_utils import debug
 from core.logger import LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
+from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from metrics import Analytics
 from services.api.api_base import EnhancedRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
@@ -764,6 +765,30 @@ class ExternalApiOrchestrator:
                 e,
             )
 
+    async def _get_attempt_count(self, artist: str, album: str) -> int:
+        """Get current verification attempt count for an album.
+
+        Args:
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            Number of verification attempts made (0 if not tracked or service unavailable).
+
+        """
+        if not self.pending_verification_service:
+            return 0
+        try:
+            return await self.pending_verification_service.get_attempt_count(artist=artist, album=album)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
+            self.error_logger.warning(
+                "Failed to get attempt count for '%s - %s': %s",
+                artist,
+                album,
+                e,
+            )
+            return 0
+
     @staticmethod
     def _count_prerelease_tracks(tracks: list[dict[str, str]]) -> int:
         """Count tracks marked as prerelease."""
@@ -1167,7 +1192,32 @@ class ExternalApiOrchestrator:
             )
             await self._safe_remove_from_pending(artist, album)
         elif not is_definitive:
-            await self._safe_mark_for_verification(artist, album)
+            # Rule 2: Check attempt count for escalation before marking
+            attempt_count = await self._get_attempt_count(artist, album)
+
+            if attempt_count >= MAX_VERIFICATION_ATTEMPTS:
+                # Escalation: After N attempts, accept best result if available
+                if best_year is not None:
+                    self.console_logger.warning(
+                        "Verification limit reached for '%s - %s'. Accepting year %s after %d attempts",
+                        log_artist,
+                        log_album,
+                        best_year,
+                        attempt_count,
+                    )
+                    await self._safe_remove_from_pending(artist, album)
+                else:
+                    # No usable result after N attempts - log as unresolvable
+                    self.console_logger.warning(
+                        "Verification unresolvable for '%s - %s' after %d attempts, no API result",
+                        log_artist,
+                        log_album,
+                        attempt_count,
+                    )
+                    # Don't mark again - it's already in pending with attempt count
+            else:
+                # Under the limit - mark for verification (increments attempt count)
+                await self._safe_mark_for_verification(artist, album)
         else:
             await self._safe_remove_from_pending(artist, album)
 

@@ -31,6 +31,9 @@ DEFAULT_TRUST_API_SCORE_THRESHOLD = 70  # Trust API if confidence >= this
 # Minimum confidence to apply year when no existing year to validate against (Issue #105)
 DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR = 30
 
+# Maximum verification attempts before escalation (accept best result or give up)
+MAX_VERIFICATION_ATTEMPTS = 3
+
 
 class YearFallbackHandler:
     """Handles fallback logic for year decisions.
