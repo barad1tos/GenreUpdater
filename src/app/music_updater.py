@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.features.verify.database_verifier import DatabaseVerifier
+from app.genre_update import GenreUpdateService
 from app.pipeline_snapshot import PipelineSnapshotManager
 from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
@@ -138,6 +139,17 @@ class MusicUpdater:
             artist_renamer=self.artist_renamer,
         )
 
+        # Genre update service
+        self.genre_service = GenreUpdateService(
+            track_processor=self.track_processor,
+            genre_manager=self.genre_manager,
+            config=deps.config,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
+            cleaning_service=self.cleaning_service,
+            artist_renamer=self.artist_renamer,
+        )
+
         # Dry run context
         self.dry_run_mode = ""
         self.dry_run_test_artists: set[str] = set()
@@ -156,6 +168,8 @@ class MusicUpdater:
         self.track_processor.set_dry_run_context(mode, test_artists)
         # Propagate test artists to year_service for filtering
         self.year_service.set_test_artists(test_artists)
+        # Propagate test artists to genre_service for filtering
+        self.genre_service.set_test_artists(test_artists)
 
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
         """Resolve absolute path to artist rename configuration file."""
@@ -255,6 +269,15 @@ class MusicUpdater:
             fresh: Fresh mode - invalidate cache before processing, implies force
         """
         await self.year_service.run_update_years(artist, force, fresh)
+
+    async def run_update_genres(self, artist: str | None, force: bool) -> None:
+        """Update genres for all or specific artist.
+
+        Args:
+            artist: Optional artist filter.
+            force: Force update even if genre exists.
+        """
+        await self.genre_service.run_update_genres(artist, force)
 
     async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
         """Verify and update a single pending album.
