@@ -112,10 +112,6 @@ class GenreUpdateService:
 
         # Update genres
         self._console_logger.info("Updating genres...")
-        await self._genre_manager.update_genres_by_artist_async(
-            tracks,
-            last_run_time=None,  # Process all
-            force=force,
-        )
+        await self._genre_manager.update_genres_by_artist_async(tracks, force=force)
 
         self._console_logger.info("Genre update operation completed")

@@ -341,7 +341,6 @@ class TestRunUpdateGenres:
 
         mock_genre_manager.update_genres_by_artist_async.assert_called_once_with(
             sample_tracks,
-            last_run_time=None,
             force=True,
         )
 
