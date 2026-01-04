@@ -183,49 +183,68 @@ class TestArtistDataQuality:
 
 @pytest.mark.regression
 class TestDataIntegrity:
-    """Test data integrity constraints."""
+    """Test data integrity constraints.
+
+    Note: Tests comparing against production baselines (track/artist/album counts)
+    use `production_*` fixtures which skip gracefully when running with test fixtures.
+    This is intentional - baseline comparisons need real data to be meaningful.
+    """
 
     def test_snapshot_size_reasonable(
         self,
-        library_tracks: list[TrackDict],
+        production_sized_snapshot: list[TrackDict],
     ) -> None:
         """Snapshot should have reasonable track count.
 
         Fails if snapshot is suspiciously small (possible corruption)
         or suspiciously large (possible duplication).
+
+        Skips in CI where only test fixtures are available.
         """
-        count = len(library_tracks)
+        count = len(production_sized_snapshot)
         min_expected = int(Baseline.TOTAL_TRACKS * 0.8)  # 80% of baseline
         max_expected = int(Baseline.TOTAL_TRACKS * 1.5)  # 150% of baseline
 
         assert min_expected <= count <= max_expected, (
-            f"Unexpected track count: {count}\nExpected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_TRACKS})"
+            f"Unexpected track count: {count}\n"
+            f"Expected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_TRACKS})\n"
+            f"Action: Check if library snapshot is corrupted or contains duplicates"
         )
 
     def test_artist_count_reasonable(
         self,
-        artists_with_tracks: dict[str, list[TrackDict]],
+        production_artists: dict[str, list[TrackDict]],
     ) -> None:
-        """Artist count should be reasonable."""
-        count = len(artists_with_tracks)
+        """Artist count should be reasonable.
+
+        Skips in CI where only test fixtures are available.
+        """
+        count = len(production_artists)
         min_expected = int(Baseline.TOTAL_ARTISTS * 0.8)
         max_expected = int(Baseline.TOTAL_ARTISTS * 1.5)
 
         assert min_expected <= count <= max_expected, (
-            f"Unexpected artist count: {count}\nExpected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_ARTISTS})"
+            f"Unexpected artist count: {count}\n"
+            f"Expected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_ARTISTS})\n"
+            f"Action: Check if library snapshot has artist metadata issues"
         )
 
     def test_album_count_reasonable(
         self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
+        production_albums: dict[tuple[str, str], list[TrackDict]],
     ) -> None:
-        """Album count should be reasonable."""
-        count = len(albums_with_tracks)
+        """Album count should be reasonable.
+
+        Skips in CI where only test fixtures are available.
+        """
+        count = len(production_albums)
         min_expected = int(Baseline.TOTAL_ALBUMS * 0.8)
         max_expected = int(Baseline.TOTAL_ALBUMS * 1.5)
 
         assert min_expected <= count <= max_expected, (
-            f"Unexpected album count: {count}\nExpected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_ALBUMS})"
+            f"Unexpected album count: {count}\n"
+            f"Expected: {min_expected}-{max_expected} (based on baseline {Baseline.TOTAL_ALBUMS})\n"
+            f"Action: Check if library snapshot has album metadata issues"
         )
 
     def test_all_tracks_have_id(
