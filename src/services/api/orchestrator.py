@@ -574,10 +574,8 @@ class ExternalApiOrchestrator:
             error_logger=self.error_logger,
             config=self.config,
             preferred_api=self.preferred_api,
-            use_lastfm=self.use_lastfm,
             musicbrainz_client=self.musicbrainz_client,
             discogs_client=self.discogs_client,
-            lastfm_client=self.lastfm_client,
             applemusic_client=self.applemusic_client,
             release_scorer=self.release_scorer,
         )
