@@ -54,6 +54,15 @@ class YearUpdateService:
         self._config = config
         self._console_logger = console_logger
         self._error_logger = error_logger
+        self._test_artists: set[str] | None = None
+
+    def set_test_artists(self, test_artists: set[str] | None) -> None:
+        """Set test artists for filtering.
+
+        Args:
+            test_artists: Set of artist names to filter to, or None to process all.
+        """
+        self._test_artists = test_artists
 
     async def get_tracks_for_year_update(self, artist: str | None) -> list[TrackDict] | None:
         """Get tracks for year update based on artist filter.
@@ -71,6 +80,16 @@ class YearUpdateService:
             fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
         else:
             fetched_tracks = await self._track_processor.fetch_tracks_async(artist=artist)
+
+        # Filter by test_artists if in test mode
+        if self._test_artists and fetched_tracks:
+            fetched_tracks = [t for t in fetched_tracks if t.get("artist") in self._test_artists]
+            self._console_logger.info(
+                "Test mode: filtered to %d tracks for %d test artists",
+                len(fetched_tracks),
+                len(self._test_artists),
+            )
+
         if not fetched_tracks:
             self._console_logger.warning("No tracks found")
             return None
