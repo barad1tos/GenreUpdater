@@ -148,29 +148,7 @@ class AppleMusicClient:
 
             # FALLBACK: If search returns no results, try lookup API
             if not results:
-                self.console_logger.debug(
-                    "[itunes] Search returned no results for '%s', trying artist lookup fallback",
-                    search_term,
-                )
-                artist_id = await self._find_artist_id(artist_norm)
-                if artist_id:
-                    results = await self._lookup_artist_albums(artist_id)
-                    if results:
-                        self.console_logger.info(
-                            "[itunes] Lookup fallback found %d albums for artist '%s'",
-                            len(results),
-                            artist_norm,
-                        )
-                    else:
-                        self.console_logger.debug(
-                            "[itunes] Lookup fallback returned no albums for artist ID %s",
-                            artist_id,
-                        )
-                else:
-                    self.console_logger.debug(
-                        "[itunes] Could not find artist ID for '%s', no fallback possible",
-                        artist_norm,
-                    )
+                results = await self._try_lookup_fallback(artist_norm, search_term)
 
             if not results:
                 self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
@@ -224,6 +202,46 @@ class AppleMusicClient:
             return []
 
         return scored_releases
+
+    async def _try_lookup_fallback(
+        self,
+        artist_norm: str,
+        search_term: str,
+    ) -> list[dict[str, Any]]:
+        """Try artist lookup as fallback when search returns no results.
+
+        Args:
+            artist_norm: Normalized artist name
+            search_term: Original search term for logging
+
+        Returns:
+            List of album results from lookup, or empty list if fallback fails
+        """
+        self.console_logger.debug(
+            "[itunes] Search returned no results for '%s', trying artist lookup fallback",
+            search_term,
+        )
+        artist_id = await self._find_artist_id(artist_norm)
+        if not artist_id:
+            self.console_logger.debug(
+                "[itunes] Could not find artist ID for '%s', no fallback possible",
+                artist_norm,
+            )
+            return []
+
+        results = await self._lookup_artist_albums(artist_id)
+        if results:
+            self.console_logger.info(
+                "[itunes] Lookup fallback found %d albums for artist '%s'",
+                len(results),
+                artist_norm,
+            )
+        else:
+            self.console_logger.debug(
+                "[itunes] Lookup fallback returned no albums for artist ID %s",
+                artist_id,
+            )
+        return results
 
     def _process_itunes_result(self, result: dict[str, Any], target_artist_norm: str, target_album_norm: str) -> ScoredRelease | None:
         """Process a single iTunes Search API result into a ScoredRelease.
