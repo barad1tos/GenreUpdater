@@ -147,6 +147,27 @@ class YearConsistencyChecker:
                 years.append(str(year))
         return years
 
+    @staticmethod
+    def get_most_common_year(tracks: list[TrackDict]) -> str | None:
+        """Get most common year among tracks for comparison purposes.
+
+        Unlike get_dominant_year(), this method returns the most common year
+        without any trust checks (suspicious year detection, dominance threshold).
+        Used specifically for year-match comparison with API results.
+
+        Args:
+            tracks: List of tracks to analyze
+
+        Returns:
+            Most common year string, or None if no valid years found
+        """
+        years = YearConsistencyChecker._collect_valid_years(tracks)
+        if not years:
+            return None
+
+        year_counts: Counter[str] = Counter(years)
+        return year_counts.most_common(1)[0][0]
+
     def _check_majority_dominance(self, most_common: tuple[str, int], total_tracks: int, tracks: list[TrackDict]) -> tuple[str | None, bool]:
         """Check if most common year has clear majority (>50% of all tracks).
 

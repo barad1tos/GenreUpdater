@@ -212,10 +212,12 @@ class YearDeterminator:
         if not force and (local_year := await self._try_local_sources(artist, album, album_tracks)):
             return local_year
 
-        # Fallback to API - always pass dominant_year for year-match comparison
-        # (even in force mode, orchestrator needs it to detect matching years)
-        dominant_year = self.consistency_checker.get_dominant_year(album_tracks)
-        return await self._fetch_from_api(artist, album, album_tracks, dominant_year)
+        # Fallback to API - pass current year for year-match comparison
+        # Use get_most_common_year (not get_dominant_year) because:
+        # - get_dominant_year returns None for "suspicious" years (old albums added recently)
+        # - Orchestrator needs the actual year to detect year-match and skip verification
+        current_year = self.consistency_checker.get_most_common_year(album_tracks)
+        return await self._fetch_from_api(artist, album, album_tracks, current_year)
 
     async def should_skip_album(
         self,
