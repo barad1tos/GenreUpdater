@@ -41,14 +41,12 @@ class TestExternalApiOrchestratorAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
                 "rate_limits": {
                     "discogs_requests_per_minute": 25,
                     "musicbrainz_requests_per_second": 1,
-                    "lastfm_requests_per_second": 5,
                     "itunes_requests_per_second": 10,
                 },
                 "processing": {
@@ -63,14 +61,12 @@ class TestExternalApiOrchestratorAllure:
                     "base_score": 50,
                     "exact_match_bonus": 30,
                 },
-                "use_lastfm": True,
             },
             "external_apis": {
                 "timeout": 30,
                 "max_concurrent_requests": 10,
                 "musicbrainz": {"enabled": True},
                 "discogs": {"enabled": True},
-                "lastfm": {"enabled": True},
                 "applemusic": {"enabled": False},
             },
         }
@@ -94,7 +90,6 @@ class TestExternalApiOrchestratorAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
@@ -108,7 +103,6 @@ class TestExternalApiOrchestratorAllure:
                 "max_concurrent_requests": 15,
                 "musicbrainz": {"enabled": True, "rate_limit": 1.0, "base_url": "https://musicbrainz.org"},
                 "discogs": {"enabled": True, "rate_limit": 0.5, "token": "test_token"},
-                "lastfm": {"enabled": True, "api_key": "test_key"},
                 "applemusic": {"enabled": False},
             },
         }
@@ -152,7 +146,6 @@ class TestExternalApiOrchestratorAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "",  # Empty token effectively disables it
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
@@ -164,7 +157,6 @@ class TestExternalApiOrchestratorAllure:
             "external_apis": {
                 "musicbrainz": {"enabled": True},
                 "discogs": {"enabled": False},  # Disabled
-                "lastfm": {"enabled": True},
                 "applemusic": {"enabled": False},
             },
         }
@@ -172,7 +164,6 @@ class TestExternalApiOrchestratorAllure:
         # Verify configuration is stored
         assert orchestrator.config["external_apis"]["musicbrainz"]["enabled"] is True
         assert orchestrator.config["external_apis"]["discogs"]["enabled"] is False
-        assert orchestrator.config["external_apis"]["lastfm"]["enabled"] is True
         assert orchestrator.config["external_apis"]["applemusic"]["enabled"] is False
 
         enabled_providers = [
@@ -181,7 +172,7 @@ class TestExternalApiOrchestratorAllure:
             if isinstance(settings, dict) and settings.get("enabled", False)
         ]
 
-        assert len(enabled_providers) == 2  # MusicBrainz and Last.fm
+        assert len(enabled_providers) == 1  # MusicBrainz only
 
     @pytest.mark.asyncio
     async def test_cache_integration_comprehensive(self) -> None:
@@ -261,7 +252,6 @@ class TestExternalApiOrchestratorAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
@@ -274,7 +264,6 @@ class TestExternalApiOrchestratorAllure:
                 config_key: config_value,
                 "musicbrainz": {"enabled": True},
                 "discogs": {"enabled": True},
-                "lastfm": {"enabled": True},
             },
         }
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
@@ -301,14 +290,13 @@ class TestExternalApiOrchestratorAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
                 "rate_limits": {
                     "discogs_requests_per_minute": 30,  # 30 requests per minute
                     "musicbrainz_requests_per_second": 1,  # 1 request per second
-                    "lastfm_requests_per_second": 2,  # 2 requests per second
+                    "itunes_requests_per_second": 10,  # 10 requests per second
                 },
                 "processing": {},
                 "logic": {},
@@ -323,9 +311,9 @@ class TestExternalApiOrchestratorAllure:
                     "enabled": True,
                     "rate_limit": 0.5,  # 2 seconds between requests
                 },
-                "lastfm": {
+                "itunes": {
                     "enabled": True,
-                    "rate_limit": 2.0,  # 2 requests per second
+                    "rate_limit": 10.0,  # 10 requests per second
                 },
             },
         }
@@ -335,7 +323,7 @@ class TestExternalApiOrchestratorAllure:
         # Verify rate limits are configured
         assert api_config["musicbrainz"]["rate_limit"] == 1.0
         assert api_config["discogs"]["rate_limit"] == 0.5
-        assert api_config["lastfm"]["rate_limit"] == 2.0
+        assert api_config["itunes"]["rate_limit"] == 10.0
 
         rate_limits = {
             provider: settings.get("rate_limit", 0)

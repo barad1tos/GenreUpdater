@@ -24,14 +24,12 @@ def mock_config() -> dict[str, Any]:
         "year_retrieval": {
             "api_auth": {
                 "discogs_token": "test_token",
-                "lastfm_api_key": "test_key",
                 "musicbrainz_app_name": "TestApp/1.0",
                 "contact_email": "test@example.com",
             },
             "rate_limits": {
                 "discogs_requests_per_minute": 25,
                 "musicbrainz_requests_per_second": 1,
-                "lastfm_requests_per_second": 5,
                 "itunes_requests_per_second": 10,
             },
             "processing": {
@@ -109,17 +107,17 @@ class TestApplyPreferredOrder:
     @pytest.mark.asyncio
     async def test_puts_preferred_api_first(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Should move preferred API to the front of the list."""
-        api_list = ["discogs", "musicbrainz", "lastfm"]
+        api_list = ["discogs", "musicbrainz", "itunes"]
         result = orchestrator._apply_preferred_order(api_list)
 
         assert result[0] == "musicbrainz"
         assert "discogs" in result
-        assert "lastfm" in result
+        assert "itunes" in result
 
     @pytest.mark.asyncio
     async def test_deduplicates_apis(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Should remove duplicate API entries."""
-        api_list = ["discogs", "musicbrainz", "discogs", "lastfm", "musicbrainz"]
+        api_list = ["discogs", "musicbrainz", "discogs", "itunes", "musicbrainz"]
         result = orchestrator._apply_preferred_order(api_list)
 
         assert len(result) == 3
@@ -129,15 +127,15 @@ class TestApplyPreferredOrder:
     @pytest.mark.asyncio
     async def test_handles_missing_preferred_api(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Should work when preferred API is not in the list."""
-        api_list = ["discogs", "lastfm"]
+        api_list = ["discogs", "itunes"]
         result = orchestrator._apply_preferred_order(api_list)
 
-        assert result == ["discogs", "lastfm"]
+        assert result == ["discogs", "itunes"]
 
     @pytest.mark.asyncio
     async def test_normalizes_api_names(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Should normalize API names."""
-        api_list = ["MusicBrainz", "DISCOGS", "LastFM"]
+        api_list = ["MusicBrainz", "DISCOGS", "iTunes"]
         result = orchestrator._apply_preferred_order(api_list)
 
         assert result[0] == "musicbrainz"
@@ -475,7 +473,7 @@ class TestNormalizeApiName:
         """Should normalize API name to lowercase."""
         assert orchestrator._normalize_api_name("MusicBrainz") == "musicbrainz"
         assert orchestrator._normalize_api_name("DISCOGS") == "discogs"
-        assert orchestrator._normalize_api_name("LastFM") == "lastfm"
+        assert orchestrator._normalize_api_name("iTunes") == "itunes"
 
     @pytest.mark.asyncio
     async def test_normalizes_unknown_to_musicbrainz(self, orchestrator: ExternalApiOrchestrator) -> None:

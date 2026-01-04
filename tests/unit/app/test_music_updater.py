@@ -50,14 +50,12 @@ class TestMusicUpdaterAllure:
             "year_retrieval": {
                 "api_auth": {
                     "discogs_token": "test_token",
-                    "lastfm_api_key": "test_key",
                     "musicbrainz_app_name": "TestApp",
                     "contact_email": "test@example.com",
                 },
                 "rate_limits": {
                     "discogs_requests_per_minute": 25,
                     "musicbrainz_requests_per_second": 1,
-                    "lastfm_requests_per_second": 5,
                     "itunes_requests_per_second": 10,
                 },
                 "processing": {"cache_ttl_days": 30},
@@ -67,7 +65,6 @@ class TestMusicUpdaterAllure:
                     "definitive_score_diff": 15,
                 },
                 "scoring": {"base_score": 50, "exact_match_bonus": 30},
-                "use_lastfm": True,
             },
             "genre_processing": {
                 "dominant_genre_threshold": 0.5,

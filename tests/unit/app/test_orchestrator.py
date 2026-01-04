@@ -275,7 +275,6 @@ class TestOrchestratorAllure:
                 return_value={
                     "api_authentication": {
                         "discogs_token": "encrypted_token",
-                        "lastfm_api_key": "encrypted_key",
                     }
                 },
             ),

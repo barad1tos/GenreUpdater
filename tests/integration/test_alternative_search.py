@@ -20,7 +20,6 @@ class TestAlternativeSearchFallback:
         config = {
             "year_retrieval": {
                 "preferred_api": "musicbrainz",
-                "api_auth": {"use_lastfm": False},
             },
             "album_type_detection": {
                 "soundtrack_patterns": ["soundtrack", "OST"],
@@ -33,10 +32,8 @@ class TestAlternativeSearchFallback:
             error_logger=mock_logger,
             config=config,
             preferred_api="musicbrainz",
-            use_lastfm=False,
             musicbrainz_client=AsyncMock(),
             discogs_client=AsyncMock(),
-            lastfm_client=AsyncMock(),
             applemusic_client=AsyncMock(),
             release_scorer=MagicMock(),
         )

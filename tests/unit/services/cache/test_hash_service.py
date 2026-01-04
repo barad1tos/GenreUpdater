@@ -41,9 +41,9 @@ class TestUnifiedHashService:
     def test_hash_api_key_source_differentiation(self) -> None:
         """Test that different sources produce different hashes."""
         hash_spotify = UnifiedHashService.hash_api_key("Artist", "Album", "spotify")
-        hash_lastfm = UnifiedHashService.hash_api_key("Artist", "Album", "lastfm")
+        hash_discogs = UnifiedHashService.hash_api_key("Artist", "Album", "discogs")
 
-        assert hash_spotify != hash_lastfm
+        assert hash_spotify != hash_discogs
 
     def test_hash_generic_key_string(self) -> None:
         """Test generic key hashing with strings."""

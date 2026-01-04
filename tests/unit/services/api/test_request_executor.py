@@ -63,7 +63,6 @@ def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "EnhancedRateL
         {
             "discogs": mock_rate_limiter,
             "musicbrainz": mock_rate_limiter,
-            "lastfm": mock_rate_limiter,
             "itunes": mock_rate_limiter,
         },
     )
@@ -134,7 +133,6 @@ class TestInitialization:
         """Test request counts are initialized."""
         assert "discogs" in executor.request_counts
         assert "musicbrainz" in executor.request_counts
-        assert "lastfm" in executor.request_counts
         assert "itunes" in executor.request_counts
         assert all(v == 0 for v in executor.request_counts.values())
 

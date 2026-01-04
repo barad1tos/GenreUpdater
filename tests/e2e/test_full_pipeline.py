@@ -46,7 +46,6 @@ class TestFullApplicationPipelineE2E:
             "external_apis": {
                 "musicbrainz": {"use_musicbrainz": True, "rate_limit_delay": 0.1},
                 "discogs": {"use_discogs": True, "rate_limit_delay": 0.1},
-                "lastfm": {"use_lastfm": True},
             },
             "caching": {"ttl_days": 7, "force_cache_refresh": False},
         } | overrides

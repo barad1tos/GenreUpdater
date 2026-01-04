@@ -162,7 +162,6 @@ class TestApiOrchestratorInitialization:
         clients = [
             api_orchestrator.musicbrainz_client,
             api_orchestrator.discogs_client,
-            api_orchestrator.lastfm_client,
         ]
         assert any(c is not None for c in clients), "At least one API client should be initialized"
 

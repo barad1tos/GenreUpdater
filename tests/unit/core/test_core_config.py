@@ -280,35 +280,11 @@ class TestValidateApiAuth:
         with pytest.raises(ValueError, match="CONTACT_EMAIL"):
             validate_api_auth(api_auth)
 
-    def test_raises_for_missing_lastfm_key_when_enabled(self) -> None:
-        """Should raise ValueError when use_lastfm is True but key is missing."""
-        api_auth: dict[str, Any] = {
-            "discogs_token": "token123",
-            "contact_email": "test@example.com",
-            "use_lastfm": True,
-        }
-
-        with pytest.raises(ValueError, match="LASTFM_API_KEY"):
-            validate_api_auth(api_auth)
-
     def test_accepts_valid_complete_auth(self) -> None:
         """Should not raise for complete valid auth."""
         api_auth: dict[str, Any] = {
             "discogs_token": "token123",
             "contact_email": "test@example.com",
-            "use_lastfm": True,
-            "lastfm_api_key": "lastfm_key",
-        }
-
-        # Should not raise
-        validate_api_auth(api_auth)
-
-    def test_accepts_auth_without_lastfm(self) -> None:
-        """Should not raise when lastfm is disabled."""
-        api_auth: dict[str, Any] = {
-            "discogs_token": "token123",
-            "contact_email": "test@example.com",
-            "use_lastfm": False,
         }
 
         # Should not raise

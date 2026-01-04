@@ -38,7 +38,6 @@ class TestDependencyContainer:
             "api": {
                 "musicbrainz": {"enabled": True},
                 "discogs": {"enabled": True},
-                "lastfm": {"enabled": True},
             },
             "cache": {
                 "ttl": 3600,
