@@ -134,6 +134,8 @@ class MusicUpdater:
             config=deps.config,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
+            cleaning_service=self.cleaning_service,
+            artist_renamer=self.artist_renamer,
         )
 
         # Dry run context
@@ -152,6 +154,8 @@ class MusicUpdater:
         self.dry_run_test_artists = test_artists
         # Also set context on track_processor
         self.track_processor.set_dry_run_context(mode, test_artists)
+        # Propagate test artists to year_service for filtering
+        self.year_service.set_test_artists(test_artists)
 
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
         """Resolve absolute path to artist rename configuration file."""
