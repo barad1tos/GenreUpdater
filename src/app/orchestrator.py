@@ -138,6 +138,9 @@ class Orchestrator:
         # Auto-verify database if threshold days passed (before main workflow)
         await self._maybe_auto_verify()
 
+        # Auto-verify pending albums if threshold days passed
+        await self._maybe_auto_verify_pending()
+
         # Check if in test mode
         if getattr(args, "test_mode", False):
             await self._run_test_mode(args)
@@ -154,6 +157,16 @@ class Orchestrator:
         )
         if should_verify:
             await self.music_updater.run_verify_database()
+
+    async def _maybe_auto_verify_pending(self) -> None:
+        """Run automatic pending verification if threshold days have passed."""
+        should_verify = await self.music_updater.deps.pending_verification_service.should_auto_verify()
+        self.console_logger.info(
+            "Auto-verify pending check: %s",
+            "running verification" if should_verify else "not needed yet",
+        )
+        if should_verify:
+            await self.music_updater.run_verify_pending()
 
     async def _run_test_mode(self, args: argparse.Namespace) -> None:
         """Run in test mode with a limited artist set."""
