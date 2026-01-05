@@ -630,6 +630,14 @@ class MockPendingVerificationService:
         """
         self.year_updates.append((artist, album, year))
 
+    async def update_verification_timestamp(self) -> None:
+        """Update the last verification timestamp.
+
+        This is called after verify_pending completes to track when
+        verification was last run.
+        """
+        # No-op for mock - just needs to exist for protocol compliance
+
 
 if TYPE_CHECKING:
     # Type checking to ensure mock implementations conform to protocols
