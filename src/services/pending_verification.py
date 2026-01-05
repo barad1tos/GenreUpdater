@@ -44,9 +44,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
-from core.logger import get_full_log_path
+from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import clean_names
 from services.cache.hash_service import UnifiedHashService
+
+# Suffix for the file that tracks the last auto-verification timestamp
+PENDING_LAST_VERIFY_SUFFIX = "_last_verify.txt"
 
 
 class VerificationReason(str, Enum):
@@ -861,3 +864,63 @@ class PendingVerificationService:
                 e,
             )
             return 0
+
+    async def should_auto_verify(self) -> bool:
+        """Check if automatic pending verification should run.
+
+        Returns True if:
+        - auto_verify_days has passed since last verification
+        - No previous verification exists
+        - auto_verify_days > 0 (feature enabled)
+
+        Returns:
+            True if auto-verify should run, False otherwise
+
+        """
+        pending_config = self.config.get("pending_verification", {})
+        auto_verify_days = pending_config.get("auto_verify_days", 14)
+
+        if auto_verify_days <= 0:
+            return False
+
+        last_verify_file = self.pending_file_path.replace(".csv", PENDING_LAST_VERIFY_SUFFIX)
+        last_verify_path = Path(last_verify_file)
+
+        if not last_verify_path.exists():
+            self.console_logger.debug("No previous pending verification found, auto-verify needed")
+            return True
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            def _read_last_verify() -> str:
+                with last_verify_path.open(encoding="utf-8") as f:
+                    return f.read().strip()
+
+            last_verify_str = await loop.run_in_executor(None, _read_last_verify)
+            last_verify = datetime.fromisoformat(last_verify_str)
+
+            if last_verify.tzinfo is None:
+                last_verify = last_verify.replace(tzinfo=UTC)
+
+            days_since = (datetime.now(tz=UTC) - last_verify).days
+
+            if days_since >= auto_verify_days:
+                self.console_logger.info(
+                    "%s needed: %s days since last check %s",
+                    LogFormat.label("AUTO-VERIFY-PENDING"),
+                    LogFormat.number(days_since),
+                    LogFormat.dim(f"(threshold: {auto_verify_days})"),
+                )
+                return True
+
+            self.console_logger.debug(
+                "Auto-verify pending not needed: %d days since last check (threshold: %d)",
+                days_since,
+                auto_verify_days,
+            )
+            return False
+
+        except (OSError, ValueError, RuntimeError) as e:
+            self.error_logger.warning("Error checking auto-verify pending status: %s", e)
+            return True  # Run verification if we can't determine last run

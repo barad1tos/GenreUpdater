@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -352,3 +352,58 @@ async def test_malformed_attempt_count_defaults_to_zero(
     # Should default to 0, not crash
     count = await service.get_attempt_count("Test Artist", "Test Album")
     assert count == 0
+
+
+# ============================================================================
+# Should Auto Verify Tests
+# ============================================================================
+
+
+class TestShouldAutoVerify:
+    """Tests for should_auto_verify method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_no_previous_verification(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True when no timestamp file exists."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_threshold_passed(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True when auto_verify_days have passed."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        old_time = datetime.now(tz=UTC) - timedelta(days=20)
+        last_verify_file.write_text(old_time.isoformat())
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_recently_verified(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return False when within threshold."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        recent_time = datetime.now(tz=UTC) - timedelta(days=2)
+        last_verify_file.write_text(recent_time.isoformat())
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_disabled(self, service: PendingVerificationService) -> None:
+        """Should return False when auto_verify_days is 0."""
+        service.config["pending_verification"] = {"auto_verify_days": 0}
+        await service.initialize()
+        result = await service.should_auto_verify()
+        assert result is False
