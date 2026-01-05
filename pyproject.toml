@@ -24,8 +24,8 @@ dependencies = [
     "pydantic==2.12.5",
     "python-dotenv==1.2.1",
     "pyyaml==6.0.3",
-    "aiohttp==3.13.2",
-    "certifi==2025.11.12",
+    "aiohttp==3.13.3",
+    "certifi==2026.1.4",
     "cryptography==46.0.3",
     "orjson==3.11.5",
     "rich==14.2.0",
@@ -37,8 +37,8 @@ dependencies = [
 dev = [
     # Linting & formatting
     "ruff==0.14.10",
-    "ty==0.0.8",
-    "basedpyright==1.36.2", # IDE support - ty is used for pre-commit
+    "ty==0.0.9",
+    "basedpyright==1.37.0", # IDE support - ty is used for pre-commit
     "sourcery==1.41.1; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.2",
     "pip-audit==2.10.0",
@@ -344,7 +344,7 @@ skips = ["B101", "B311", "B404", "B603"]
 [tool.deadcode]
 exclude = [
     "tests",
-    "src/core/models/protocols.py",  # Protocol definitions (duck typing)
+    "src/core/models/protocols.py", # Protocol definitions (duck typing)
 ]
 # Ignore decorated functions (called dynamically via decorators)
 ignore-definitions-if-decorated-with = [

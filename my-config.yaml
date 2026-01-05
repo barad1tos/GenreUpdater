@@ -85,6 +85,10 @@ database_verification:
   auto_verify_days: 7
   batch_size: 10
 
+# Pending verification auto-run settings
+pending_verification:
+  auto_verify_days: 14  # 0 = disabled
+
 # Development and testing settings
 development:
   test_artists: [ ] # List of artists to test with
