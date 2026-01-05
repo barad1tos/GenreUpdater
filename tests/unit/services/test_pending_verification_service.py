@@ -407,3 +407,29 @@ class TestShouldAutoVerify:
         await service.initialize()
         result = await service.should_auto_verify()
         assert result is False
+
+
+# ============================================================================
+# Update Verification Timestamp Tests
+# ============================================================================
+
+
+class TestUpdateVerificationTimestamp:
+    """Tests for update_verification_timestamp method."""
+
+    @pytest.mark.asyncio
+    async def test_writes_timestamp_file(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should write ISO timestamp to file."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            await service.update_verification_timestamp()
+
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        assert last_verify_file.exists()
+        content = last_verify_file.read_text().strip()
+        # Should be valid ISO format
+        parsed = datetime.fromisoformat(content)
+        assert parsed.tzinfo is not None

@@ -924,3 +924,22 @@ class PendingVerificationService:
         except (OSError, ValueError, RuntimeError) as e:
             self.error_logger.warning("Error checking auto-verify pending status: %s", e)
             return True  # Run verification if we can't determine last run
+
+    async def update_verification_timestamp(self) -> None:
+        """Update the last pending verification timestamp file."""
+        last_verify_file = self.pending_file_path.replace(".csv", PENDING_LAST_VERIFY_SUFFIX)
+        last_verify_path = Path(last_verify_file)
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            def _write_last_verify() -> None:
+                with last_verify_path.open("w", encoding="utf-8") as f:
+                    f.write(datetime.now(tz=UTC).isoformat())
+
+            await loop.run_in_executor(None, _write_last_verify)
+        except (OSError, ValueError, RuntimeError) as e:
+            self.error_logger.warning(
+                "Error updating last pending verification date: %s",
+                e,
+            )
