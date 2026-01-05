@@ -891,7 +891,7 @@ class PendingVerificationService:
             return True
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _read_last_verify() -> str:
                 with last_verify_path.open(encoding="utf-8") as f:
@@ -927,7 +927,7 @@ class PendingVerificationService:
                 last_verify_path,
                 e,
             )
-            return True  # Run verification if we can't determine last run
+            return True  # Run verification if we can't determine last run  # Run verification if we can't determine last run
 
     async def update_verification_timestamp(self) -> None:
         """Update the last pending verification timestamp file."""
@@ -935,7 +935,7 @@ class PendingVerificationService:
         last_verify_path = Path(last_verify_file)
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _write_last_verify() -> None:
                 with last_verify_path.open("w", encoding="utf-8") as f:
