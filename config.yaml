@@ -70,6 +70,9 @@ database_verification:
   auto_verify_days: 7
   batch_size: 10
 
+pending_verification:
+  auto_verify_days: 14  # 0 = disabled
+
 development:
   test_artists: []
 
