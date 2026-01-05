@@ -571,6 +571,24 @@ class PendingVerificationServiceProtocol(Protocol):
         """
         ...
 
+    async def should_auto_verify(self) -> bool:
+        """Check if automatic pending verification should run.
+
+        Returns True if:
+        - auto_verify_days has passed since last verification
+        - No previous verification exists
+        - auto_verify_days > 0 (feature enabled)
+
+        Returns:
+            True if auto-verify should run, False otherwise.
+
+        """
+        ...
+
+    async def update_verification_timestamp(self) -> None:
+        """Update the last pending verification timestamp file."""
+        ...
+
 
 @runtime_checkable
 class RateLimiterProtocol(Protocol):

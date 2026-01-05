@@ -368,6 +368,9 @@ class MusicUpdater:
             else:
                 failed_count += 1
 
+        # Update last verification timestamp
+        await self.deps.pending_verification_service.update_verification_timestamp()
+
         duration = time.time() - start_time
         if verified_count > 0:
             self.console_logger.info(

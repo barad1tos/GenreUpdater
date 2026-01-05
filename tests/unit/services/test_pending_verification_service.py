@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -352,3 +352,145 @@ async def test_malformed_attempt_count_defaults_to_zero(
     # Should default to 0, not crash
     count = await service.get_attempt_count("Test Artist", "Test Album")
     assert count == 0
+
+
+# ============================================================================
+# Should Auto Verify Tests
+# ============================================================================
+
+
+class TestShouldAutoVerify:
+    """Tests for should_auto_verify method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_no_previous_verification(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True when no timestamp file exists."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_threshold_passed(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True when auto_verify_days have passed."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        old_time = datetime.now(tz=UTC) - timedelta(days=20)
+        last_verify_file.write_text(old_time.isoformat())
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_recently_verified(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return False when within threshold."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        recent_time = datetime.now(tz=UTC) - timedelta(days=2)
+        last_verify_file.write_text(recent_time.isoformat())
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_disabled(self, service: PendingVerificationService) -> None:
+        """Should return False when auto_verify_days is 0."""
+        service.config["pending_verification"] = {"auto_verify_days": 0}
+        await service.initialize()
+        result = await service.should_auto_verify()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_timestamp_file_malformed(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True (fail-open) when timestamp file contains invalid data."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        last_verify_file.write_text("not-a-valid-iso-timestamp")
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        # Should return True (run verification) when we can't parse timestamp
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_handles_naive_datetime_in_timestamp_file(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should handle naive datetime by assuming UTC."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        # Write naive datetime (no timezone info) - should be treated as UTC
+        naive_time = datetime.now(tz=UTC) - timedelta(days=2)
+        last_verify_file.write_text(naive_time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            result = await service.should_auto_verify()
+        # Within threshold (2 days < 14 days default), should return False
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_file_read_fails(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should return True (fail-open) when file read raises OSError."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        last_verify_file.write_text("2024-01-01T00:00:00+00:00")
+
+        with (
+            patch.object(service, "pending_file_path", str(csv_file)),
+            patch("pathlib.Path.open", side_effect=OSError("Permission denied")),
+        ):
+            result = await service.should_auto_verify()
+        # Should return True when file read fails
+        assert result is True
+
+
+# ============================================================================
+# Update Verification Timestamp Tests
+# ============================================================================
+
+
+class TestUpdateVerificationTimestamp:
+    """Tests for update_verification_timestamp method."""
+
+    @pytest.mark.asyncio
+    async def test_writes_timestamp_file(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should write ISO timestamp to file."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+
+        with patch.object(service, "pending_file_path", str(csv_file)):
+            await service.update_verification_timestamp()
+
+        last_verify_file = tmp_path / "pending_last_verify.txt"
+        assert last_verify_file.exists()
+        content = last_verify_file.read_text().strip()
+        # Should be valid ISO format
+        parsed = datetime.fromisoformat(content)
+        assert parsed.tzinfo is not None
+
+    @pytest.mark.asyncio
+    async def test_handles_write_failure_gracefully(self, service: PendingVerificationService, tmp_path: Path) -> None:
+        """Should not raise when file write fails."""
+        await service.initialize()
+        csv_file = tmp_path / "pending.csv"
+        csv_file.write_text("")
+
+        with (
+            patch.object(service, "pending_file_path", str(csv_file)),
+            patch("pathlib.Path.open", side_effect=OSError("Disk full")),
+        ):
+            # Should not raise despite the underlying OSError
+            await service.update_verification_timestamp()

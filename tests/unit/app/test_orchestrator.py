@@ -121,6 +121,9 @@ class TestOrchestratorAllure:
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
         orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
 
         args = self.create_mock_args(dry_run=dry_run, test_mode=test_mode)
 
@@ -211,6 +214,9 @@ class TestOrchestratorAllure:
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
         orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
 
         args = self.create_mock_args()
 
@@ -327,6 +333,9 @@ class TestOrchestratorAllure:
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
         orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
 
         args = self.create_mock_args(test_mode=True)
 
@@ -351,6 +360,9 @@ class TestOrchestratorAllure:
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
         orchestrator.music_updater.database_verifier.should_auto_verify = AsyncMock(return_value=False)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
 
         # Normal mode but with test_artists in config
         args = self.create_mock_args()
@@ -365,3 +377,60 @@ class TestOrchestratorAllure:
             "Using test_artists from config in normal mode: %s",
             ["Test Artist 1", "Test Artist 2"],
         )
+
+
+class TestMaybeAutoVerifyPending:
+    """Tests for _maybe_auto_verify_pending method."""
+
+    @staticmethod
+    def create_mock_deps() -> Mock:
+        """Create a mock DependencyContainer."""
+        deps = Mock()
+        deps.config = {"development": {"test_artists": ["Test Artist 1", "Test Artist 2"]}}
+        deps.console_logger = Mock()
+        deps.error_logger = Mock()
+        deps.config_path = Path("/test/config.yaml")
+        deps.analytics = Mock()
+        deps.ap_client = Mock()
+        deps.cache_service = Mock()
+        deps.dry_run = False
+        deps.api_client = Mock()
+        deps.database_verifier = Mock()
+        deps.run_tracking_manager = Mock()
+        deps.csv_manager = Mock()
+        deps.external_api_orchestrator = Mock()
+        deps.incremental_filter_service = Mock()
+        deps.year_retriever = Mock()
+        deps.pending_verifier = Mock()
+        deps.pending_verification_service = Mock()
+        return deps
+
+    @pytest.mark.asyncio
+    async def test_runs_verify_when_needed(self) -> None:
+        """Should run verify_pending when should_auto_verify returns True."""
+        deps = self.create_mock_deps()
+        orchestrator = Orchestrator(deps)
+        orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=True)
+        orchestrator.music_updater.run_verify_pending = AsyncMock()
+
+        await orchestrator._maybe_auto_verify_pending()
+
+        orchestrator.music_updater.run_verify_pending.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_verify_when_not_needed(self) -> None:
+        """Should skip verify_pending when should_auto_verify returns False."""
+        deps = self.create_mock_deps()
+        orchestrator = Orchestrator(deps)
+        orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.deps = Mock()
+        orchestrator.music_updater.deps.pending_verification_service = Mock()
+        orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
+        orchestrator.music_updater.run_verify_pending = AsyncMock()
+
+        await orchestrator._maybe_auto_verify_pending()
+
+        orchestrator.music_updater.run_verify_pending.assert_not_called()
