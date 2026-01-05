@@ -922,7 +922,11 @@ class PendingVerificationService:
             return False
 
         except (OSError, ValueError, RuntimeError) as e:
-            self.error_logger.warning("Error checking auto-verify pending status: %s", e)
+            self.error_logger.warning(
+                "Error checking auto-verify pending status for %s: %s",
+                last_verify_path,
+                e,
+            )
             return True  # Run verification if we can't determine last run
 
     async def update_verification_timestamp(self) -> None:
@@ -940,6 +944,7 @@ class PendingVerificationService:
             await loop.run_in_executor(None, _write_last_verify)
         except (OSError, ValueError, RuntimeError) as e:
             self.error_logger.warning(
-                "Error updating last pending verification date: %s",
+                "Error updating last pending verification date at %s: %s",
+                last_verify_path,
                 e,
             )
