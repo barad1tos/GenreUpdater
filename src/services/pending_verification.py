@@ -923,11 +923,11 @@ class PendingVerificationService:
 
         except (OSError, ValueError, RuntimeError) as e:
             self.error_logger.warning(
-                "Error checking auto-verify pending status for %s: %s",
+                "Error checking auto-verify pending status for %s; auto-verify fallback due to error: %s",
                 last_verify_path,
                 e,
             )
-            return True  # Run verification if we can't determine last run  # Run verification if we can't determine last run
+            return True  # Run verification if we can't determine last run
 
     async def update_verification_timestamp(self) -> None:
         """Update the last pending verification timestamp file."""
