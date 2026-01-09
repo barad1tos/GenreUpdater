@@ -318,7 +318,7 @@ year_retrieval: # NOTE: Keep this top-level key as the code expects config.get('
     # Source Reliability
     source_mb_bonus: 25
     source_discogs_bonus: 2
-    source_itunes_penalty: -10
+    source_itunes_bonus: -10
     # Future year penalty (for reissue detection)
     future_year_penalty: -10
 
