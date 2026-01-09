@@ -18,6 +18,7 @@ import contextlib
 import logging
 import traceback
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from typing import Any
 
 from core.models.normalization import normalize_for_matching
@@ -297,7 +298,18 @@ class AppleMusicClient:
                 )
                 return None
 
+            # Reissue detection BEFORE scoring: iTunes returns catalog/reissue dates, not original
+            # Mark recent years as potential reissues to apply reissue_penalty (-30) during scoring
+            is_reissue = False
+            try:
+                current_year = datetime.now(UTC).year
+                if int(release_year) >= current_year - 1:
+                    is_reissue = True
+            except (ValueError, TypeError):
+                pass
+
             # Score the release using the injected scoring function
+            # IMPORTANT: is_reissue must be in the release dict for penalty to apply
             try:
                 score = self.score_release_func(
                     release={
@@ -310,6 +322,7 @@ class AppleMusicClient:
                         "format": "Digital",  # iTunes is digital distribution
                         "label": result.get("copyright", ""),
                         "genre": result.get("primaryGenreName", ""),
+                        "is_reissue": is_reissue,  # For reissue_penalty (-30)
                     },
                     artist_norm=target_artist_norm,
                     album_norm=target_album_norm,
@@ -344,6 +357,10 @@ class AppleMusicClient:
                 "disambiguation": result.get("collectionCensoredName") or None,
                 "source": "itunes",
             }
+
+            # Include is_reissue flag if set (reissue detection done before scoring)
+            if is_reissue:
+                scored_release["is_reissue"] = True
 
             # Filter out releases with zero or negative scores (same as MusicBrainz, Discogs, Last.fm)
             if score <= 0:
