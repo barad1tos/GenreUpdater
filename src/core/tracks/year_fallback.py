@@ -700,7 +700,7 @@ class YearFallbackHandler:
             self.year_difference_threshold,
             confidence_score,
         )
-        return True  # Signals caller to propagate existing_year  # Signals caller to propagate existing_year
+        return True  # Signals caller to propagate existing_year
 
     @staticmethod
     def get_existing_year_from_tracks(tracks: list[TrackDict]) -> str | None:
