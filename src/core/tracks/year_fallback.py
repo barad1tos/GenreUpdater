@@ -94,6 +94,7 @@ class YearFallbackHandler:
         artist: str,
         album: str,
         year_scores: dict[str, int] | None = None,
+        release_year: str | None = None,
     ) -> str | None:
         """Apply fallback logic for year decisions.
 
@@ -105,6 +106,7 @@ class YearFallbackHandler:
             artist: Artist name
             album: Album name
             year_scores: Mapping of year to max score from API results (Issue #93)
+            release_year: Original release year from Apple Music (read-only, more authoritative)
 
         Returns:
             Year to apply (proposed or existing), or None to skip update
@@ -170,7 +172,7 @@ class YearFallbackHandler:
             return proposed_year
 
         # Delegate remaining rules to helper method
-        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album, year_scores)
+        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album, year_scores, release_year)
 
     async def _apply_existing_year_rules(
         self,
@@ -180,6 +182,7 @@ class YearFallbackHandler:
         artist: str,
         album: str,
         year_scores: dict[str, int] | None = None,
+        release_year: str | None = None,
     ) -> str:
         """Apply rules when existing year is present.
 
@@ -192,6 +195,7 @@ class YearFallbackHandler:
             artist: Artist name
             album: Album name
             year_scores: Mapping of year to max score from API results (Issue #93)
+            release_year: Original release year from Apple Music (read-only, more authoritative)
 
         Returns:
             Year to apply (proposed or existing)
@@ -204,7 +208,7 @@ class YearFallbackHandler:
             return special_result if special_result != "" else existing_year
 
         # Rule 5: Check for dramatic year change (now considers confidence score and suspicious years)
-        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album, year_scores):
+        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album, year_scores, release_year):
             # Propagate existing year to all tracks instead of skipping entirely
             return existing_year
 
@@ -554,6 +558,7 @@ class YearFallbackHandler:
         artist: str,
         album: str,
         year_scores: dict[str, int] | None = None,
+        release_year: str | None = None,
     ) -> bool:
         """Handle dramatic year changes. Returns True if should skip update.
 
@@ -567,12 +572,15 @@ class YearFallbackHandler:
                 Used to validate if existing_year has any API support (Issue #93).
                 If existing_year is NOT in year_scores, we trust the API year
                 rather than preserving a potentially incorrect existing year.
+            release_year: Original release year from Apple Music (read-only, more authoritative).
+                If provided and differs dramatically from proposed_year, we reject the API year.
 
         Returns:
             True: Skip update, preserve existing year
             False: Apply proposed year from API
 
         Logic:
+            0. NEW: If release_year conflicts dramatically with proposed → reject API year
             1. Not dramatic change → apply API year
             2. High confidence API (>=70%) → trust API, apply year
             3. Issue #93: Check if existing year is in API results → if NOT → apply API year
@@ -580,6 +588,31 @@ class YearFallbackHandler:
             5. Low confidence + dramatic + plausible → preserve existing, mark for verification
 
         """
+        # Rule 0: Check release_year from Apple Music (more authoritative than editable year field)
+        # This catches cases like Crematory where year=2025 (wrong) but release_year=1997 (correct)
+        if release_year and self.is_year_change_dramatic(release_year, proposed_year):
+            self.console_logger.warning(
+                "[FALLBACK] API proposed %s conflicts with Apple Music release_year %s for %s - %s (confidence %d%%) - rejecting API year",
+                proposed_year,
+                release_year,
+                artist,
+                album,
+                confidence_score,
+            )
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="api_conflicts_with_release_year",
+                metadata={
+                    "proposed_year": proposed_year,
+                    "release_year": release_year,
+                    "existing_year": existing_year,
+                    "confidence_score": confidence_score,
+                    "note": "Apple Music release_year is read-only and more authoritative",
+                },
+            )
+            return True  # Skip update, preserve existing year
+
         if not self.is_year_change_dramatic(existing_year, proposed_year):
             return False
 

@@ -310,11 +310,15 @@ class TrackProcessor:
                     "year": track.year,
                     "date_added": track.date_added,
                     "track_status": track.track_status,
+                    "last_modified": track.last_modified,
+                    "release_year": track.release_year,
+                    "year_before_mgu": track.year_before_mgu,
+                    "year_set_by_mgu": track.year_set_by_mgu,
                 }
                 # Preserve album_artist if present (extra field on TrackDict)
-                aa = track.get("album_artist")
-                if aa is not None:
-                    track_dict["album_artist"] = aa
+                album_artist_value = track.get("album_artist")
+                if album_artist_value is not None:
+                    track_dict["album_artist"] = album_artist_value
                 validated_dict = self.security_validator.validate_track_data(track_dict)
                 # ONLY TrackDict, not dict
                 validated_track = TrackDict(**validated_dict)

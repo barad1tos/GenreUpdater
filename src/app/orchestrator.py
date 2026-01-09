@@ -83,6 +83,8 @@ class Orchestrator:
                 await self._run_update_genres(args)
             case "revert_years" | "revert":
                 await self._run_revert_years(args)
+            case "restore_release_years" | "restore":
+                await self._run_restore_release_years(args)
             case "verify_database" | "verify-db":
                 await self._run_verify_database(args)
             case "verify_pending" | "pending":
@@ -123,6 +125,22 @@ class Orchestrator:
             artist=args.artist,
             album=getattr(args, "album", None),
             backup_csv=getattr(args, "backup_csv", None),
+        )
+
+    async def _run_restore_release_years(self, args: argparse.Namespace) -> None:
+        """Run the restore release years command."""
+        artist = getattr(args, "artist", None)
+        album = getattr(args, "album", None)
+
+        # Validate: --album requires --artist
+        if album and not artist:
+            self.error_logger.error("--album requires --artist to be specified")
+            return
+
+        await self.music_updater.run_restore_release_years(
+            artist=artist,
+            album=album,
+            threshold=getattr(args, "threshold", 5),
         )
 
     async def _run_verify_database(self, args: argparse.Namespace) -> None:
