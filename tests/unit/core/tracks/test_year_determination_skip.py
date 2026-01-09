@@ -38,6 +38,7 @@ def _create_track(
     year: str | None = None,
     year_before_mgu: str | None = None,
     year_set_by_mgu: str | None = None,
+    release_year: str | None = None,
 ) -> TrackDict:
     """Create a test TrackDict with specified values."""
     return TrackDict(
@@ -48,6 +49,7 @@ def _create_track(
         year=year,
         year_before_mgu=year_before_mgu,
         year_set_by_mgu=year_set_by_mgu,
+        release_year=release_year,
     )
 
 
@@ -527,3 +529,125 @@ class TestPreCheckPriority:
         # Should skip with "recently_rejected:...", not "year_consistent"
         assert should_skip is True
         assert reason.startswith("recently_rejected:")
+
+
+@pytest.mark.unit
+class TestShouldSkipAlbumReissueDetection:
+    """Tests for reissue detection in pre-check 3 (year_consistent).
+
+    Issue #163: Albums with recent year (current year or last year) and no
+    release_year validation should trigger API verification to detect
+    iTunes reissue dates vs original release dates.
+    """
+
+    @pytest.mark.asyncio
+    async def test_does_not_skip_when_recent_year_without_release_year(self) -> None:
+        """Should NOT skip when year is recent and no release_year to validate."""
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        cache_service = _create_mock_cache_service()
+        determinator = _create_year_determinator(cache_service=cache_service)
+        # All tracks have current year but no release_year
+        tracks = [
+            _create_track(year=current_year),
+            _create_track("2", year=current_year),
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        # Should NOT skip - needs API verification for potential reissue
+        assert should_skip is False
+        assert reason == "needs_api_verification"
+
+    @pytest.mark.asyncio
+    async def test_does_not_skip_when_last_year_without_release_year(self) -> None:
+        """Should NOT skip when year is last year and no release_year to validate."""
+        from datetime import UTC, datetime
+
+        last_year = str(datetime.now(UTC).year - 1)
+        cache_service = _create_mock_cache_service()
+        determinator = _create_year_determinator(cache_service=cache_service)
+        tracks = [
+            _create_track(year=last_year),
+            _create_track("2", year=last_year),
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        # Should NOT skip - last year is also suspicious
+        assert should_skip is False
+        assert reason == "needs_api_verification"
+
+    @pytest.mark.asyncio
+    async def test_skips_when_recent_year_with_release_year_validation(self) -> None:
+        """Should skip when year is recent but has release_year validation."""
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        determinator = _create_year_determinator()
+        # All tracks have current year AND release_year for validation
+        tracks = [
+            _create_track(year=current_year, release_year=current_year),
+            _create_track("2", year=current_year, release_year=current_year),
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        # Should skip - release_year validates it's not a reissue
+        assert should_skip is True
+        assert reason == "year_consistent"
+
+    @pytest.mark.asyncio
+    async def test_skips_when_old_year_without_release_year(self) -> None:
+        """Should skip when year is old (not recent) even without release_year."""
+        determinator = _create_year_determinator()
+        # Year is from 2 years ago - not suspicious
+        tracks = [
+            _create_track(year="2020"),
+            _create_track("2", year="2020"),
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        # Should skip - old years don't need reissue verification
+        assert should_skip is True
+        assert reason == "year_consistent"
+
+    @pytest.mark.asyncio
+    async def test_partial_release_year_still_validates(self) -> None:
+        """Should skip when at least one track has release_year for validation."""
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        determinator = _create_year_determinator()
+        # Only first track has release_year, but that's enough for validation
+        tracks = [
+            _create_track(year=current_year, release_year=current_year),
+            _create_track("2", year=current_year),  # No release_year
+            _create_track("3", year=current_year),  # No release_year
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        # Should skip - at least one release_year validates the album
+        assert should_skip is True
+        assert reason == "year_consistent"
+
+    @pytest.mark.asyncio
+    async def test_force_bypasses_reissue_detection(self) -> None:
+        """Should NOT skip when force=True regardless of reissue detection."""
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        determinator = _create_year_determinator()
+        tracks = [
+            _create_track(year=current_year),
+            _create_track("2", year=current_year),
+        ]
+
+        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album", force=True)
+
+        # Should NOT skip due to force mode
+        assert should_skip is False
+        assert reason == ""
