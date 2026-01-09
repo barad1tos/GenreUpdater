@@ -6,6 +6,7 @@ from various sources: local data, cache, and external APIs.
 
 from __future__ import annotations
 
+import contextlib
 from collections import Counter
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -382,7 +383,7 @@ class YearDeterminator:
             # Reissue detection: current year without release_year validation is suspicious
             # iTunes returns reissue/catalog dates, not original release dates
             if dominant is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     is_recent_year = int(dominant) >= datetime.now(UTC).year - 1
                     has_no_release_year = not any(t.get("release_year") for t in album_tracks)
                     if is_recent_year and has_no_release_year:
@@ -393,9 +394,6 @@ class YearDeterminator:
                             dominant,
                         )
                         return False, "needs_api_verification"  # Don't skip, force API query
-                except (ValueError, TypeError):
-                    pass
-
             self.console_logger.debug(
                 "[PRE-CHECK] Skip %s - %s: year consistent (%s)",
                 artist,
