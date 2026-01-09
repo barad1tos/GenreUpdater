@@ -13,7 +13,7 @@ import re
 import time
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class ScoredRelease(TypedDict):
@@ -32,6 +32,7 @@ class ScoredRelease(TypedDict):
     barcode: str | None
     disambiguation: str | None
     source: str
+    is_reissue: NotRequired[bool]  # Optional: True if detected as reissue/remaster
 
 
 class EnhancedRateLimiter:

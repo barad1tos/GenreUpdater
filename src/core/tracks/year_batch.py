@@ -354,9 +354,12 @@ class YearBatchProcessor:
             self.console_logger.info("[SKIP] %s - %s: %s", artist, album, skip_reason)
             return
 
+        # Force API query if reissue detection triggered (year=current but no release_year)
+        force_api = force or skip_reason == "needs_api_verification"
+
         # Determine the year for this album (handles dominant year, cache, and API)
         # Note: force=True bypasses dominant year and cache checks, always queries API
-        year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force)
+        year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force_api)
 
         if not year:
             self._handle_no_year_found(artist, album, album_tracks)

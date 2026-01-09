@@ -226,7 +226,7 @@ year_retrieval:
     country_major_market_bonus: 5
     source_mb_bonus: 25
     source_discogs_bonus: 2
-    source_itunes_penalty: -10
+    source_itunes_bonus: -10
     future_year_penalty: -10
 
   fallback:
