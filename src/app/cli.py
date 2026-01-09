@@ -74,6 +74,35 @@ def _add_revert_years_command(subparsers: Any) -> None:
     )
 
 
+def _add_restore_release_years_command(subparsers: Any) -> None:
+    """Add restore release years command."""
+    parser = subparsers.add_parser(
+        "restore_release_years",
+        aliases=["restore"],
+        help="Restore year from Apple Music's release_year field",
+        description=(
+            "Find albums where 'year' differs dramatically from 'release_year' (Apple Music's read-only field) "
+            "and restore year to match release_year. Useful for fixing albums that received wrong reissue years."
+        ),
+    )
+    parser.add_argument(
+        "--artist",
+        required=False,
+        help="Artist name to restore (if omitted, scans all artists)",
+    )
+    parser.add_argument(
+        "--album",
+        required=False,
+        help="Album name to restore (requires --artist)",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=5,
+        help="Year difference threshold to consider as 'wrong' (default: 5 years)",
+    )
+
+
 class CLI:
     """Command-line interface handler."""
 
@@ -167,6 +196,9 @@ Examples:
 
         # Revert years command
         _add_revert_years_command(subparsers)
+
+        # Restore release years command
+        _add_restore_release_years_command(subparsers)
 
         # Verify database command
         CLI._add_verify_database_command(subparsers)

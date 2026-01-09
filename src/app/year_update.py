@@ -182,6 +182,229 @@ class YearUpdateService:
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
 
+    @staticmethod
+    def _format_restore_target(artist: str | None, album: str | None) -> str:
+        """Format the target description for restore logging."""
+        if not artist:
+            return " for all artists"
+        return f" for '{artist}' - {album}" if album else f" for '{artist}'"
+
+    @staticmethod
+    def _should_restore_track(
+        track: TrackDict,
+        threshold: int,
+    ) -> tuple[bool, str | None]:
+        """Check if track needs year restoration.
+
+        Returns:
+            Tuple of (should_restore, release_year) where release_year is None if shouldn't restore.
+
+        """
+        release_year = track.get("release_year")
+        if not release_year:
+            return False, None
+
+        track_year = track.get("year")
+        if track_year and release_year:
+            try:
+                diff = abs(int(track_year) - int(release_year))
+                if diff <= threshold:
+                    return False, None
+            except (ValueError, TypeError):
+                return False, None
+
+        return True, str(release_year)
+
+    def _find_albums_needing_restoration(
+        self,
+        tracks: list[TrackDict],
+        threshold: int,
+    ) -> dict[tuple[str, str], list[tuple[TrackDict, str]]]:
+        """Find albums where year differs dramatically from release_year."""
+        albums_to_restore: dict[tuple[str, str], list[tuple[TrackDict, str]]] = {}
+
+        for track in tracks:
+            should_restore, release_year = self._should_restore_track(track, threshold)
+            if not should_restore or release_year is None:
+                continue
+
+            artist_name = str(track.get("artist", ""))
+            album_name = str(track.get("album", ""))
+            key = (artist_name, album_name)
+            if key not in albums_to_restore:
+                albums_to_restore[key] = []
+            albums_to_restore[key].append((track, release_year))
+
+        return albums_to_restore
+
+    async def _update_single_track_year(
+        self,
+        track: TrackDict,
+        consensus_release_year: str,
+        artist: str,
+        album: str,
+    ) -> ChangeLogEntry | None:
+        """Update a single track's year and return change log entry if successful."""
+        track_id = str(track.id)
+        old_year = str(track.get("year", ""))
+        track_name = str(track.get("name", ""))
+
+        if old_year == consensus_release_year:
+            return None
+
+        success = await self._track_processor.update_track_async(
+            track_id=track_id,
+            new_year=consensus_release_year,
+            original_artist=artist,
+            original_album=album,
+            original_track=track_name,
+        )
+
+        if not success:
+            return None
+
+        now = datetime.now(UTC)
+        return ChangeLogEntry(
+            timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
+            change_type="year_restored_from_release_year",
+            track_id=track_id,
+            artist=artist,
+            album_name=album,
+            track_name=track_name,
+            year_before_mgu=old_year,
+            year_set_by_mgu=consensus_release_year,
+        )
+
+    async def run_restore_release_years(
+        self,
+        artist: str | None = None,
+        album: str | None = None,
+        threshold: int = 5,
+    ) -> None:
+        """Restore year from Apple Music's release_year field.
+
+        Finds albums where 'year' differs dramatically from 'release_year'
+        and updates year to match release_year.
+
+        Args:
+            artist: Optional artist name filter.
+            album: Optional album name filter (requires artist).
+            threshold: Year difference threshold (default: 5 years).
+
+        """
+        target_msg = self._format_restore_target(artist, album)
+        self._console_logger.info(
+            "Starting restore_release_years%s (threshold: %d years)",
+            target_msg,
+            threshold,
+        )
+
+        tracks = await self._get_filtered_tracks_for_restore(artist, album)
+        if not tracks:
+            return
+
+        albums_to_restore = self._find_albums_needing_restoration(tracks, threshold)
+        if not albums_to_restore:
+            self._console_logger.info("No albums found needing year restoration")
+            return
+
+        self._console_logger.info("Found %d albums needing year restoration:", len(albums_to_restore))
+
+        changes_log, updated_count, failed_count = await self._process_album_restorations(albums_to_restore)
+
+        self._console_logger.info(
+            "Restore complete: %d tracks updated, %d failed",
+            updated_count,
+            failed_count,
+        )
+
+        self._save_restore_changes_report(changes_log)
+
+    async def _get_filtered_tracks_for_restore(
+        self,
+        artist: str | None,
+        album: str | None,
+    ) -> list[TrackDict] | None:
+        """Fetch and filter tracks for restoration."""
+        tracks = await self.get_tracks_for_year_update(artist)
+        if not tracks:
+            return None
+
+        if album:
+            tracks = [t for t in tracks if t.get("album") == album]
+            if not tracks:
+                self._console_logger.warning("No tracks found for album '%s'", album)
+                return None
+
+        return tracks
+
+    async def _process_album_restorations(
+        self,
+        albums_to_restore: dict[tuple[str, str], list[tuple[TrackDict, str]]],
+    ) -> tuple[list[ChangeLogEntry], int, int]:
+        """Process all album restorations and return results."""
+        changes_log: list[ChangeLogEntry] = []
+        updated_count = 0
+        failed_count = 0
+
+        for (art, alb), track_data in albums_to_restore.items():
+            consensus_release_year = self._get_consensus_year(track_data)
+            if not consensus_release_year:
+                continue
+
+            self._log_album_restoration(art, alb, track_data, consensus_release_year)
+
+            for track, _ in track_data:
+                change_entry = await self._update_single_track_year(track, consensus_release_year, art, alb)
+                if change_entry:
+                    changes_log.append(change_entry)
+                    updated_count += 1
+                elif change_entry is None and str(track.get("year", "")) != consensus_release_year:
+                    failed_count += 1
+
+        return changes_log, updated_count, failed_count
+
+    @staticmethod
+    def _get_consensus_year(
+        track_data: list[tuple[TrackDict, str]],
+    ) -> str | None:
+        """Get the most common release_year from track data."""
+        if release_years := [ry for _, ry in track_data if ry]:
+            return max(set(release_years), key=release_years.count)
+        return None
+
+    def _log_album_restoration(
+        self,
+        artist: str,
+        album: str,
+        track_data: list[tuple[TrackDict, str]],
+        consensus_release_year: str,
+    ) -> None:
+        """Log album restoration details."""
+        current_years = [str(t.get("year", "")) for t, _ in track_data]
+        current_year = max(set(current_years), key=current_years.count) if current_years else ""
+
+        self._console_logger.info(
+            "  • %s - %s: year=%s → release_year=%s (%d tracks)",
+            artist,
+            album,
+            current_year or "(empty)",
+            consensus_release_year,
+            len(track_data),
+        )
+
+    def _save_restore_changes_report(self, changes_log: list[ChangeLogEntry]) -> None:
+        """Save changes report if there are changes."""
+        if changes_log:
+            restore_path = get_full_log_path(self._config, "changes_report_file", "csv/changes_restore.csv")
+            save_changes_report(
+                changes=changes_log,
+                file_path=restore_path,
+                console_logger=self._console_logger,
+                error_logger=self._error_logger,
+            )
+            self._console_logger.info("Restore changes report saved to %s", restore_path)
+
     async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 

@@ -393,9 +393,18 @@ class ApiRequestExecutor:
 
             self._ensure_session()
             assert self.session is not None  # _ensure_session() guarantees this
+
+            # iTunes API requires %20 for spaces, not + (which aiohttp uses by default)
+            if api_name == "itunes" and params:
+                request_url = self._encode_url_for_itunes(url, params)
+                request_params = None  # Already encoded in URL
+            else:
+                request_url = url
+                request_params = params
+
             async with self.session.get(
-                url,
-                params=params,
+                request_url,
+                params=request_params,
                 headers=request_headers,
                 timeout=request_timeout,
             ) as response:
@@ -413,6 +422,19 @@ class ApiRequestExecutor:
         if self.session is None or self.session.closed:
             msg = "HTTP session not initialized or closed"
             raise RuntimeError(msg)
+
+    @staticmethod
+    def _encode_url_for_itunes(url: str, params: dict[str, str] | None) -> str:
+        """Encode URL with %20 for spaces (required by iTunes API).
+
+        iTunes API doesn't recognize '+' as space, requires '%20'.
+        Standard aiohttp uses '+' which causes 0 results for queries with spaces.
+        """
+        if not params:
+            return url
+        # Use quote_via=urllib.parse.quote to get %20 instead of +
+        encoded = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+        return f"{url}?{encoded}"
 
     async def _process_response(
         self,

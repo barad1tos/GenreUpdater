@@ -228,6 +228,25 @@ class MusicUpdater:
         """
         await self.year_service.run_revert_years(artist, album, backup_csv)
 
+    async def run_restore_release_years(
+        self,
+        artist: str | None = None,
+        album: str | None = None,
+        threshold: int = 5,
+    ) -> None:
+        """Restore year from Apple Music's release_year field.
+
+        Finds albums where 'year' differs dramatically from 'release_year'
+        and updates year to match release_year.
+
+        Args:
+            artist: Optional artist name filter.
+            album: Optional album name filter (requires artist).
+            threshold: Year difference threshold (default: 5 years).
+
+        """
+        await self.year_service.run_restore_release_years(artist, album, threshold)
+
     async def _save_clean_results(self, changes_log: list[ChangeLogEntry]) -> None:
         """Save cleaning results to CSV and changes report.
 

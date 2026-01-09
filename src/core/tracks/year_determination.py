@@ -158,6 +158,9 @@ class YearDeterminator:
         if not year_result:
             return None
 
+        # Get consensus release_year from Apple Music (read-only, more authoritative than editable year field)
+        consensus_release_year = self.consistency_checker.get_consensus_release_year(album_tracks)
+
         validated_year = await self.fallback_handler.apply_year_fallback(
             proposed_year=year_result,
             album_tracks=album_tracks,
@@ -166,6 +169,7 @@ class YearDeterminator:
             artist=artist,
             album=album,
             year_scores=year_scores,
+            release_year=consensus_release_year,
         )
 
         if validated_year is not None:
