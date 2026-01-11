@@ -85,51 +85,39 @@ Year lookup queries three sources and uses scoring to pick the most accurate:
 
 - :material-rocket-launch:{ .lg .middle } **Getting Started**
 
-  ---
+    Install and run your first genre update in 2 minutes
 
-  Install and run your first genre update in 2 minutes
-
-  [:octicons-arrow-right-24: Installation](getting-started/installation.md)
+    [:octicons-arrow-right-24: Installation](getting-started/installation.md)
 
 - :material-console:{ .lg .middle } **User Guide**
 
-  ---
+    CLI commands, automation with launchctl, and advanced usage
 
-  CLI commands, automation with launchctl, and advanced usage
-
-  [:octicons-arrow-right-24: CLI Commands](guide/cli.md)
+    [:octicons-arrow-right-24: CLI Commands](guide/cli.md)
 
 - :material-cog:{ .lg .middle } **Configuration**
 
-  ---
+    Full YAML reference with all options explained
 
-  Full YAML reference with all options explained
-
-  [:octicons-arrow-right-24: Configuration](getting-started/configuration.md)
+    [:octicons-arrow-right-24: Configuration](getting-started/configuration.md)
 
 - :material-sitemap:{ .lg .middle } **Architecture**
 
-  ---
+    C4 diagrams, data flow, and design patterns
 
-  C4 diagrams, data flow, and design patterns
-
-  [:octicons-arrow-right-24: Architecture](architecture/overview.md)
+    [:octicons-arrow-right-24: Architecture](architecture/overview.md)
 
 - :material-code-braces:{ .lg .middle } **API Reference**
 
-  ---
+    Auto-generated documentation from source code
 
-  Auto-generated documentation from source code
-
-  [:octicons-arrow-right-24: API Docs](api/index.md)
+    [:octicons-arrow-right-24: API Docs](api/index.md)
 
 - :material-help-circle:{ .lg .middle } **Troubleshooting**
 
-  ---
+    Common issues, diagnostic commands, and FAQ
 
-  Common issues, diagnostic commands, and FAQ
-
-  [:octicons-arrow-right-24: Troubleshooting](guide/troubleshooting.md)
+    [:octicons-arrow-right-24: Troubleshooting](guide/troubleshooting.md)
 
 </div>
 
