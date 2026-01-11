@@ -1029,6 +1029,10 @@ def get_loggers(
     Sets up multiple loggers with different purposes and a shared queue listener
     for efficient file I/O. Uses RichHandler for colorized console output.
 
+    Note:
+        This function never raises exceptions. On setup failure, it returns
+        fallback loggers with basic StreamHandler configuration.
+
     Args:
         config: Application configuration dictionary with logging section.
 
@@ -1039,9 +1043,6 @@ def get_loggers(
         - analytics_logger: Logger for analytics/metrics (separate file)
         - db_verify_logger: Logger for database verification (separate file)
         - listener: SafeQueueListener managing file handlers (None on failure)
-
-    Raises:
-        No exceptions raised - returns fallback loggers on setup failure.
 
     """
     try:
