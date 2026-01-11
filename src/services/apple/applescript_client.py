@@ -218,18 +218,27 @@ class AppleScriptClient(AppleScriptClientProtocol):
         context_track: str | None = None,
         label: str | None = None,
     ) -> str | None:
-        """Execute an AppleScript asynchronously and return its output.
+        """Execute an AppleScript file and return its output.
 
-        Requires initialize() to have been called.
+        Requires initialize() to be called first to set up the AppleScript
+        directory path.
 
-        :param script_name: The name of the AppleScript file to execute.
-        :param arguments: List of arguments to pass to the script.
-        :param timeout: Timeout in seconds for script execution
-        :param context_artist: Artist name for contextual logging (optional)
-        :param context_album: Album name for contextual logging (optional)
-        :param context_track: Track name for contextual logging (optional)
-        :param label: Custom label for logging (defaults to script_name)
-        :return: The output of the script, or None if an error occurred
+        Args:
+            script_name: Name of the AppleScript file to execute.
+            arguments: Optional list of arguments to pass to the script.
+            timeout: Optional timeout in seconds. Uses default from config if not specified.
+            context_artist: Artist name for contextual logging.
+            context_album: Album name for contextual logging.
+            context_track: Track name for contextual logging.
+            label: Custom label for logging (defaults to script_name).
+
+        Returns:
+            The stdout output from the AppleScript execution, or None if an error occurred.
+
+        Raises:
+            TimeoutError: If script execution times out.
+            OSError: If script execution fails.
+
         """
         self.console_logger.debug("run_script called: script='%s'", script_name)
 
