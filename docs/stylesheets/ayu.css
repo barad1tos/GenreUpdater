@@ -300,16 +300,26 @@
   font-family: "Roboto", sans-serif;
 }
 
-/* Dark theme text color */
-[data-md-color-scheme="slate"] .mermaid text {
+/* Node labels - dark text on light node backgrounds (SVG uses 'fill', not 'color') */
+[data-md-color-scheme="slate"] .mermaid .nodeLabel,
+[data-md-color-scheme="slate"] .mermaid .label,
+[data-md-color-scheme="slate"] .mermaid .label div,
+[data-md-color-scheme="slate"] .mermaid .label span,
+[data-md-color-scheme="slate"] .mermaid .label foreignObject div {
+  color: #1F2430 !important;
+  fill: #1F2430 !important;
+}
+
+/* Cluster/subgraph labels - light text on dark backgrounds */
+[data-md-color-scheme="slate"] .mermaid .cluster-label span,
+[data-md-color-scheme="slate"] .mermaid .cluster-label .nodeLabel {
+  color: #CBCCC6 !important;
   fill: #CBCCC6 !important;
 }
 
-/* Node labels - dark text on light node backgrounds */
-[data-md-color-scheme="slate"] .mermaid .nodeLabel,
-[data-md-color-scheme="slate"] .mermaid .label div,
-[data-md-color-scheme="slate"] .mermaid .cluster-label span {
-  color: #1F2430 !important;
+/* Edge labels and other text - light on dark background */
+[data-md-color-scheme="slate"] .mermaid text:not(.nodeLabel) {
+  fill: #CBCCC6 !important;
 }
 
 /* Default nodes - Ayu accent colors */
