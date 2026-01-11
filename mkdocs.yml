@@ -1,0 +1,160 @@
+# MkDocs configuration for Music Genre Updater
+# Documentation: https://www.mkdocs.org/
+
+site_name: Music Genre Updater
+site_description: Automatically update genres and release years for Apple Music tracks
+site_author: Roman Borodavkin
+site_url: https://barad1tos.github.io/GenreUpdater/
+
+repo_name: barad1tos/GenreUpdater
+repo_url: https://github.com/barad1tos/GenreUpdater
+edit_uri: edit/main/docs/
+
+# Theme configuration
+theme:
+  name: material
+  language: en
+  palette:
+    # Ayu Mirage (Dark - default)
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to Ayu Light
+    # Ayu Light
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to Ayu Mirage
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+  - gen-files:
+      scripts:
+        - docs/gen_diagrams.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            heading_level: 2
+            members_order: source
+            separate_signature: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+            show_if_no_docstring: false
+
+# Markdown extensions
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - CLI Commands: guide/cli.md
+      - Genre Updates: guide/genres.md
+      - Year Updates: guide/years.md
+      - Automation: guide/automation.md
+      - Troubleshooting: guide/troubleshooting.md
+      - FAQ: guide/faq.md
+  - API Reference:
+      - Overview: api/index.md
+      - Application:
+          - Overview: api/app/index.md
+          - Orchestrator: api/app/orchestrator.md
+          - CLI: api/app/cli.md
+          - Features: api/app/features.md
+      - Core:
+          - Genre Manager: api/core/genre_manager.md
+          - Year Retriever: api/core/year_retriever.md
+          - Track Processor: api/core/track_processor.md
+          - Logger: api/core/logger.md
+          - Dry Run: api/core/dry_run.md
+          - Utilities: api/core/utils.md
+          - Configuration: api/core/config.md
+      - Services:
+          - Apple Services: api/services/apple.md
+          - API Clients: api/services/api_clients.md
+          - Cache: api/services/cache.md
+          - Library Snapshot: api/services/snapshot.md
+          - Verification: api/services/verification.md
+      - Models:
+          - Track Models: api/models/track.md
+          - Protocols: api/models/protocols.md
+      - Metrics:
+          - Overview: api/metrics/index.md
+          - Analytics: api/metrics/analytics.md
+          - HTML Reports: api/metrics/reports.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Data Flow: architecture/data-flow.md
+      - Caching: architecture/caching.md
+      - Class Diagrams: architecture/class-diagrams.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/barad1tos
+    - icon: fontawesome/solid/envelope
+      link: mailto:roman.borodavkin@gmail.com
+  generator: false
+
+# Custom CSS
+extra_css:
+  - stylesheets/ayu.css
+
+# Copyright
+copyright: Copyright &copy; 2024-2026 Roman Borodavkin

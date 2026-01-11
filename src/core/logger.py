@@ -277,11 +277,25 @@ class LoggerFilter:
     """Filter that only allows records from specific logger names."""
 
     def __init__(self, allowed_loggers: list[str]) -> None:
-        """Initialize filter with allowed logger names."""
+        """Initialize filter with allowed logger names.
+
+        Args:
+            allowed_loggers: List of logger names that should pass the filter.
+                Child loggers (e.g., "main_logger.child") also pass if parent is allowed.
+
+        """
         self.allowed_loggers = set(allowed_loggers)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Filter records based on logger name or child loggers."""
+        """Filter log records based on logger name.
+
+        Args:
+            record: The log record to filter.
+
+        Returns:
+            True if record's logger name matches or is child of allowed loggers.
+
+        """
         return any(record.name == logger or record.name.startswith(f"{logger}.") for logger in self.allowed_loggers)
 
 
@@ -289,21 +303,43 @@ class RunHandler:
     """Handles tracking of script runs, adding separators between runs, and limiting logs to max number of runs."""
 
     def __init__(self, max_runs: int = 3) -> None:
-        """Initialize the RunHandler."""
+        """Initialize the RunHandler for log run tracking.
+
+        Args:
+            max_runs: Maximum number of runs to keep in log files.
+                Older runs are trimmed during log cleanup.
+
+        """
         self.max_runs = max_runs
         self.current_run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         self.run_start_time = time.monotonic()  # Use monotonic for duration
 
     @staticmethod
     def format_run_header(logger_name: str) -> str:
-        """Create a formatted header for a new run."""
+        """Create a formatted header for a new run.
+
+        Args:
+            logger_name: Name of the logger starting the run.
+
+        Returns:
+            Formatted header string with timestamp and visual separators.
+
+        """
         # Use local time for now.
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         # Use ANSI colors for file headers for readability in terminals that support them
         return f"\n\n{BLUE}{'=' * 80}{RESET}\n\ue05e NEW RUN: {logger_name} - {now_str}\n{BLUE}{'=' * 80}{RESET}\n\n"
 
     def format_run_footer(self, logger_name: str) -> str:
-        """Create a formatted footer for the end of a run."""
+        """Create a formatted footer for the end of a run.
+
+        Args:
+            logger_name: Name of the logger ending the run.
+
+        Returns:
+            Formatted footer string with elapsed time and visual separators.
+
+        """
         elapsed = time.monotonic() - self.run_start_time
         # Use ANSI colors for file footers
         return f"\n\n{BLUE}{'=' * 80}{RESET}\n\ue05e END RUN: {logger_name} - Total time: {elapsed:.2f}s\n{BLUE}{'=' * 80}{RESET}\n\n"
@@ -372,7 +408,20 @@ def ensure_directory(path: str, error_logger: logging.Logger | None = None) -> N
 
 
 def convert_path_value_to_string(path_value: str | int | None, default: str, error_logger: logging.Logger | None) -> str:
-    """Convert a config path value to string, with fallback and error handling."""
+    """Convert a config path value to string with fallback and error handling.
+
+    Handles various input types from YAML config and provides safe conversion
+    with logging on failure.
+
+    Args:
+        path_value: The path value from config (str, int, or None).
+        default: Default string to return if conversion fails.
+        error_logger: Optional logger for error reporting.
+
+    Returns:
+        String representation of path_value, or default on failure.
+
+    """
     if path_value is None:
         return default
     if isinstance(path_value, str):
@@ -386,7 +435,21 @@ def convert_path_value_to_string(path_value: str | int | None, default: str, err
 
 
 def get_path_from_config(config: dict[str, Any], key: str, default: str, error_logger: logging.Logger | None) -> str:
-    """Extract relative path from logging config section."""
+    """Extract relative path from the logging config section.
+
+    Safely retrieves a path value from the nested logging configuration,
+    with validation and error handling.
+
+    Args:
+        config: Application configuration dictionary.
+        key: Key to look up in the logging section.
+        default: Default path if key is missing or invalid.
+        error_logger: Optional logger for error reporting.
+
+    Returns:
+        Path string from config, or default if not found/invalid.
+
+    """
     if "logging" not in config:
         if error_logger is not None:
             error_logger.error("Invalid or missing 'logging' section in config.")
@@ -437,7 +500,19 @@ def get_full_log_path(
 
 
 def build_config_alias_map(config: dict[str, Any] | None) -> list[tuple[str, str]]:
-    """Build alias mapping from config directories."""
+    """Build alias mapping from config directories for path shortening.
+
+    Creates ordered list of (directory, alias) tuples used by shorten_path()
+    to replace long paths with readable aliases like $SCRIPTS, $LOGS.
+
+    Args:
+        config: Application configuration dictionary with directory paths.
+
+    Returns:
+        List of (resolved_path, alias) tuples ordered by replacement priority.
+        Returns empty list if config is None or invalid.
+
+    """
     if not isinstance(config, dict):
         return []
 
@@ -454,7 +529,20 @@ def build_config_alias_map(config: dict[str, Any] | None) -> list[tuple[str, str
 
 
 def try_config_alias_replacement(norm_path: str, config: dict[str, Any] | None) -> str | None:
-    """Try to replace path with config-based aliases."""
+    """Attempt to replace path with config-based aliases.
+
+    Checks if the normalized path starts with any configured directory
+    and returns the aliased version if found.
+
+    Args:
+        norm_path: Normalized (os.path.normpath) absolute path.
+        config: Application configuration with directory paths.
+
+    Returns:
+        Aliased path string (e.g., "$SCRIPTS/fetch.scpt") if match found,
+        None otherwise.
+
+    """
     alias_map = build_config_alias_map(config)
 
     for base_dir, alias in alias_map:
@@ -466,7 +554,19 @@ def try_config_alias_replacement(norm_path: str, config: dict[str, Any] | None) 
 
 
 def try_home_directory_replacement(norm_path: str, error_logger: logging.Logger | None) -> str | None:
-    """Try to replace path with home directory shortcut."""
+    """Attempt to replace path with home directory shortcut (~).
+
+    Safely resolves home directory and replaces it with ~ for readability.
+    Handles OSError if home directory cannot be determined.
+
+    Args:
+        norm_path: Normalized absolute path to process.
+        error_logger: Optional logger for warning on home resolution failure.
+
+    Returns:
+        Path with home directory replaced by ~, or None if no replacement made.
+
+    """
     try:
         home_dir = str(Path.home())
         if norm_path.startswith(home_dir):
@@ -669,7 +769,15 @@ class RunTrackingHandler(logging.FileHandler):
         self._closed: bool = False  # Track if handler is closed
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Emit a record. Writes the run header before the first record of a new run."""
+        """Emit a log record with run tracking.
+
+        Writes the run header before the first record of a new run.
+        Handles header write failures gracefully.
+
+        Args:
+            record: The log record to emit.
+
+        """
         if self.run_handler and not self._header_written:
             try:
                 # FIX: Add a check to ensure the stream is open before writing
@@ -696,7 +804,12 @@ class RunTrackingHandler(logging.FileHandler):
             super().emit(record)
 
     def close(self) -> None:
-        """Close the stream, writes run footer, and trims the log file."""
+        """Close the handler with run cleanup.
+
+        Writes the run footer, closes the file stream, and trims the log
+        to maintain max_runs limit. Handles errors at each stage.
+
+        """
         # Check if already closed to prevent recursion or multiple writes
         # Use a flag to prevent multiple close calls
         if getattr(self, "_closed", False):
@@ -751,7 +864,21 @@ class Loggable:
 
 
 def get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
-    """Extract log levels from config for different loggers."""
+    """Extract log levels from config for different logger targets.
+
+    Parses the logging.levels section of config and converts string level
+    names to logging module constants.
+
+    Args:
+        config: Application configuration dictionary with logging section.
+
+    Returns:
+        Dictionary mapping target names to logging level constants:
+        - "console": Level for RichHandler console output
+        - "main_file": Level for main application log file
+        - "analytics_file": Level for analytics log file
+
+    """
     logging_config = config.get("logging", {})
     levels_config = logging_config.get("levels", {})
 
@@ -783,7 +910,21 @@ def get_log_levels_from_config(config: dict[str, Any]) -> dict[str, int]:
 
 
 def get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
-    """Get all log file paths from config."""
+    """Get all log file paths from config with defaults.
+
+    Resolves full paths for each log file by combining logs_base_dir
+    with relative paths from logging config section.
+
+    Args:
+        config: Application configuration dictionary.
+
+    Returns:
+        Dictionary mapping log type to absolute file path:
+        - "main": Main application log
+        - "analytics": Analytics/metrics log
+        - "db_verify": Database verification log
+
+    """
     return {
         "main": get_full_log_path(config, "main_log_file", "main/main.log"),
         "analytics": get_full_log_path(config, "analytics_log_file", "analytics/analytics.log"),
@@ -792,7 +933,18 @@ def get_log_file_paths(config: dict[str, Any]) -> dict[str, str]:
 
 
 def create_console_logger(levels: dict[str, int]) -> logging.Logger:
-    """Create and configure the console logger."""
+    """Create and configure the console logger with RichHandler.
+
+    Sets up a logger named "console_logger" with Rich formatting for
+    colorized, readable console output. Only adds handler if not already present.
+
+    Args:
+        levels: Dictionary with "console" key containing logging level constant.
+
+    Returns:
+        Configured console logger instance with RichHandler attached.
+
+    """
     console_logger = logging.getLogger("console_logger")
     if not console_logger.handlers:
         ch = RichHandler(
@@ -872,12 +1024,25 @@ def setup_queue_logging(
 def get_loggers(
     config: dict[str, Any],
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener | None]:
-    """Create and returns loggers using QueueHandler for non-blocking file logging, and RichHandler for console output.
+    """Create and return loggers with QueueHandler for non-blocking file logging.
+
+    Sets up multiple loggers with different purposes and a shared queue listener
+    for efficient file I/O. Uses RichHandler for colorized console output.
+
+    Note:
+        This function never raises exceptions. On setup failure, it returns
+        fallback loggers with basic StreamHandler configuration.
+
+    Args:
+        config: Application configuration dictionary with logging section.
 
     Returns:
-        tuple: (console_logger, error_logger, analytics_logger, db_verify_logger, listener)
-
-    Ensures log directories exist and sets levels based on config.
+        Tuple containing:
+        - console_logger: Logger for user-facing console output (RichHandler)
+        - error_logger: Logger for error messages (file output via queue)
+        - analytics_logger: Logger for analytics/metrics (separate file)
+        - db_verify_logger: Logger for database verification (separate file)
+        - listener: SafeQueueListener managing file handlers (None on failure)
 
     """
     try:
@@ -897,7 +1062,20 @@ def get_loggers(
 def create_fallback_loggers(
     e: Exception,
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, None]:
-    """Create fallback loggers when main logger setup fails."""
+    """Create fallback loggers when main logger setup fails.
+
+    Configures basic logging as a safety net when QueueListener or RichHandler
+    initialization fails. Logs the original error and returns simple StreamHandler
+    loggers.
+
+    Args:
+        e: The exception that caused main logger setup to fail.
+
+    Returns:
+        Tuple of (console_logger, error_logger, analytics_logger, db_verify_logger, None).
+        The listener is None since queue-based logging failed.
+
+    """
     print(
         f"FATAL ERROR: Failed to configure custom logging with QueueListener and RichHandler: {e}",
         file=sys.stderr,

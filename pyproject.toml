@@ -35,10 +35,16 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # Documentation
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+    "mkdocs-gen-files>=0.6.0",
+    "mkdocs-literate-nav>=0.6.2",
     # Linting & formatting
-    "ruff==0.14.10",
-    "ty==0.0.9",
-    "basedpyright==1.37.0", # IDE support - ty is used for pre-commit
+    "ruff==0.14.11",
+    "ty==0.0.11",
+    "basedpyright==1.37.1", # IDE support - ty is used for pre-commit
     "sourcery==1.41.1; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.2",
     "pip-audit==2.10.0",
@@ -57,6 +63,7 @@ dev = [
     "pre-commit==4.5.1",
     "pytest-rerunfailures>=16.1",
     "deadcode>=2.4.1",
+    "pylint>=4.0.4",
 ]
 
 [tool.setuptools.packages.find]
@@ -207,6 +214,10 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "RUF002", # Allow ambiguous Unicode in docstrings
     "RUF003", # Allow ambiguous Unicode in comments
 ]
+"docs/*.py" = [
+    "S603", # subprocess calls use hardcoded trusted paths from constants
+    "INP001", # docs/ is a namespace package for mkdocs gen-files plugin
+]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ty configuration - Fast type checker from Astral (Ruff/uv team)
@@ -229,8 +240,9 @@ exclude = [
 unresolved-import = "warn"
 
 [tool.pyright]
-include = ["src", "main.py", "tests"]
+include = ["src", "main.py", "tests", "docs"]
 extraPaths = ["src"]
+stubPath = "stubs"
 exclude = ["venv", "**/__pycache__", "**/node_modules"]
 venvPath = "."
 venv = ".venv"

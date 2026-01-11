@@ -140,20 +140,24 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     )
 
     if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):
-        track.__dict__["album_artist"] = album_artist_value
+        track.album_artist = album_artist_value
 
     return track
 
 
 def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]:
-    """Parse the raw data from AppleScript into a list of track dictionaries.
+    """Parse raw AppleScript output into a list of track dictionaries.
 
     Uses the Record Separator (U+001E) as the field delimiter and
     Group Separator (U+001D) as the line delimiter.
 
-    :param raw_data: Raw string data from AppleScript.
-    :param error_logger: Logger for error output.
-    :return: List of track dictionaries.
+    Args:
+        raw_data: Raw string data from AppleScript.
+        error_logger: Logger for error output.
+
+    Returns:
+        List of TrackDict instances parsed from the input data.
+
     """
     field_separator = FIELD_SEPARATOR if FIELD_SEPARATOR in raw_data else "\t"
     line_separator = LINE_SEPARATOR if LINE_SEPARATOR in raw_data else None
@@ -198,8 +202,12 @@ def group_tracks_by_artist(
     Uses album_artist when available to properly handle collaboration tracks.
     Falls back to normalized artist when album_artist is empty.
 
-    :param tracks: List of track dictionaries.
-    :return: Dictionary mapping artist names to lists of their tracks.
+    Args:
+        tracks: List of track dictionaries to group.
+
+    Returns:
+        Dictionary mapping normalized artist names to lists of their tracks.
+
     """
     artists: defaultdict[str, list[TrackDict]] = defaultdict(list)
     for track in tracks:
@@ -221,18 +229,20 @@ def determine_dominant_genre_for_artist(
     artist_tracks: Sequence[TrackDict],
     error_logger: logging.Logger,
 ) -> str:
-    """Determine the dominant genre for an artist based on the earliest genre of their tracks.
-
-    Does not require injected services, but logs errors.
+    """Determine the dominant genre for an artist based on earliest album.
 
     Algorithm:
-        1. Find the earliest track for each album (by dateAdded).
-        2. Determines the earliest album (by dateAdded of its earliest track).
-        3. Uses the genre of the earliest track in that album as the dominant genre.
+        1. Find the earliest track for each album (by date_added).
+        2. Determine the earliest album (by date_added of its earliest track).
+        3. Use the genre of the earliest track in that album as dominant.
 
-    :param artist_tracks: List of track dictionaries for a single artist.
-    :param error_logger: Logger for error output.
-    :return: The dominant genre string, or "Unknown" on error or if no tracks.
+    Args:
+        artist_tracks: List of track dictionaries for a single artist.
+        error_logger: Logger for error output.
+
+    Returns:
+        The dominant genre string, or "Unknown" if no tracks or on error.
+
     """
     if not artist_tracks:
         return "Unknown"
@@ -353,7 +363,7 @@ def _get_earliest_track_per_album(
 ) -> dict[str, TrackDict]:
     """Find the earliest track for each album in a list of tracks.
 
-    Arguments:
+    Args:
         artist_tracks: List of track dictionaries for a single artist.
         error_logger: Logger for error output.
 
@@ -528,14 +538,35 @@ def _clean_text_segments(name: str, keywords: list[str], console_logger: logging
 
 
 def _is_cleaning_exception(artist: str, album_name: str, exceptions: list[dict[str, Any]]) -> bool:
-    """Return True if the artist/album pair is explicitly excluded from cleaning."""
+    """Check if artist/album pair is explicitly excluded from cleaning.
+
+    Args:
+        artist: Artist name to check.
+        album_name: Album name to check.
+        exceptions: List of exception dicts with "artist" and "album" keys.
+
+    Returns:
+        True if the pair matches any exception entry (case-insensitive).
+
+    """
     artist_lower = artist.lower()
     album_lower = album_name.lower()
     return any(entry.get("artist", "").lower() == artist_lower and entry.get("album", "").lower() == album_lower for entry in exceptions)
 
 
 def _compile_suffix_patterns(album_suffixes_raw: list[str]) -> list[tuple[str, re.Pattern[str]]]:
-    """Compile configured album suffixes into ordered regex patterns."""
+    """Compile configured album suffixes into ordered regex patterns.
+
+    Deduplicates and sorts suffixes by length (longest first) to ensure
+    greedy matching. Handles both word-boundary and exact-match patterns.
+
+    Args:
+        album_suffixes_raw: Raw list of suffix strings from config.
+
+    Returns:
+        List of (original_suffix, compiled_pattern) tuples for matching.
+
+    """
     deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
     # Lambda preserves str type (key=len makes ty infer Sized)
     suffixes = sorted(deduped_suffixes, key=lambda s: len(s), reverse=True)
@@ -555,7 +586,20 @@ def _compile_suffix_patterns(album_suffixes_raw: list[str]) -> list[tuple[str, r
 
 
 def _strip_album_suffixes(album: str, suffix_patterns: list[tuple[str, re.Pattern[str]]], console_logger: logging.Logger) -> str:
-    """Remove configured suffix patterns from album titles."""
+    """Remove configured suffix patterns from album titles.
+
+    Iteratively removes matching suffixes until no more matches are found.
+    Cleans up trailing whitespace and separators after each removal.
+
+    Args:
+        album: Album title to clean.
+        suffix_patterns: Compiled patterns from _compile_suffix_patterns.
+        console_logger: Logger for debug output.
+
+    Returns:
+        Cleaned album title with matching suffixes removed.
+
+    """
     if not suffix_patterns:
         return album
 
@@ -588,19 +632,22 @@ def clean_names(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> tuple[str, str]:
-    """Clean track and album names per config: remove remaster segments & suffixes.
+    """Clean track and album names per config: remove remaster segments and suffixes.
 
-    Skips artist+album pairs in exceptions; collapses whitespace.
+    Skips artist+album pairs in exceptions list. Collapses excess whitespace.
 
     Args:
-        error_logger ():
-        artist: Artist name.
-        track_name: Raw track title.
-        album_name: Raw album title.
-        config: Dict with exceptions.track_cleaning, cleaning.remaster_keywords, cleaning.album_suffixes_to_remove.
-        console_logger: Logger for debug/info output. error_logger: Logger for error reporting.
+        artist: Artist name (used for exception checking).
+        track_name: Raw track title to clean.
+        album_name: Raw album title to clean.
+        config: Dict with exceptions.track_cleaning, cleaning.remaster_keywords,
+            and cleaning.album_suffixes_to_remove sections.
+        console_logger: Logger for debug/info output.
+        error_logger: Logger for error reporting.
+
     Returns:
-        Tuple (cleaned_track_name, cleaned_album_name).
+        Tuple of (cleaned_track_name, cleaned_album_name).
+
     """
     if track_name or album_name:
         console_logger.debug(

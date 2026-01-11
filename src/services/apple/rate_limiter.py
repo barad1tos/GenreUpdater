@@ -23,7 +23,18 @@ class EnhancedRateLimiter:
         max_concurrent: int = 3,
         logger: logging.Logger | None = None,
     ) -> None:
-        """Initialize the rate limiter."""
+        """Initialize the rate limiter with configurable limits.
+
+        Args:
+            requests_per_window: Maximum requests allowed per time window.
+            window_size: Duration of the sliding window in seconds.
+            max_concurrent: Maximum concurrent requests (semaphore limit).
+            logger: Optional logger instance for debug output.
+
+        Raises:
+            ValueError: If any numeric parameter is not positive.
+
+        """
         if requests_per_window <= 0:
             msg = "requests_per_window must be a positive integer"
             raise ValueError(msg)
@@ -44,7 +55,12 @@ class EnhancedRateLimiter:
         self.total_wait_time: float = 0.0
 
     async def initialize(self) -> None:
-        """Initialize the rate limiter."""
+        """Initialize the rate limiter for async operation.
+
+        Creates the asyncio semaphore for concurrency control. Must be called
+        before using acquire/release in an async context.
+
+        """
         if self.semaphore is None:
             try:
                 self.semaphore = asyncio.Semaphore(self.max_concurrent)
@@ -56,7 +72,15 @@ class EnhancedRateLimiter:
                 raise
 
     async def acquire(self) -> float:
-        """Acquire permission to make a request, waiting if necessary due to rate limits or concurrency limits."""
+        """Acquire permission to make a request.
+
+        Waits if necessary to respect rate limits, then acquires the semaphore.
+        Records the request timestamp for sliding window calculation.
+
+        Returns:
+            Wait time in seconds (0.0 if no wait was needed).
+
+        """
         if self.semaphore is None:
             msg = "RateLimiter not initialized"
             raise RuntimeError(msg)
@@ -67,12 +91,26 @@ class EnhancedRateLimiter:
         return rate_limit_wait_time
 
     def release(self) -> None:
-        """Release the semaphore, allowing another request to proceed."""
+        """Release the semaphore after request completion.
+
+        Should be called after each request finishes to allow other
+        concurrent requests to proceed.
+
+        """
         if self.semaphore is None:
             return
         self.semaphore.release()
 
     async def _wait_if_needed(self) -> float:
+        """Wait if rate limit would be exceeded.
+
+        Checks if adding a new request would exceed requests_per_window.
+        If so, waits until the oldest request falls outside the window.
+
+        Returns:
+            Actual wait time in seconds (0.0 if no wait was needed).
+
+        """
         now = time.monotonic()
         while self.request_timestamps and now - self.request_timestamps[0] > self.window_size:
             self.request_timestamps.popleft()
@@ -87,7 +125,17 @@ class EnhancedRateLimiter:
         return 0.0
 
     def get_stats(self) -> dict[str, Any]:
-        """Get statistics about rate limiter usage."""
+        """Get current rate limiter statistics.
+
+        Returns:
+            Dictionary containing:
+            - "total_requests": Total requests processed
+            - "total_wait_time": Cumulative wait time in seconds
+            - "avg_wait_time": Average wait time per request
+            - "current_window_usage": Current requests within sliding window
+            - "max_requests_per_window": Configured request limit
+
+        """
         now = time.monotonic()
         self.request_timestamps = deque(ts for ts in self.request_timestamps if now - ts <= self.window_size)
         return {

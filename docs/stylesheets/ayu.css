@@ -1,0 +1,211 @@
+/* Ayu Theme for MkDocs Material */
+
+/* ============================================
+   Ayu Mirage (Dark Theme)
+   ============================================ */
+[data-md-color-scheme="slate"] {
+  /* Base colors */
+  --md-default-bg-color: #1F2430;
+  --md-default-fg-color: #CBCCC6;
+  --md-default-fg-color--light: #707A8C;
+  --md-default-fg-color--lighter: #5C6773;
+  --md-default-fg-color--lightest: #3D424D;
+
+  /* Primary (header, nav) */
+  --md-primary-fg-color: #232834;
+  --md-primary-fg-color--light: #2D3440;
+  --md-primary-fg-color--dark: #1A1F29;
+  --md-primary-bg-color: #CBCCC6;
+  --md-primary-bg-color--light: #E6E7E3;
+
+  /* Accent (links, highlights) */
+  --md-accent-fg-color: #FFCC66;
+  --md-accent-fg-color--transparent: rgba(255, 204, 102, 0.1);
+  --md-accent-bg-color: #FFCC66;
+  --md-accent-bg-color--light: rgba(255, 204, 102, 0.1);
+
+  /* Code blocks */
+  --md-code-fg-color: #CBCCC6;
+  --md-code-bg-color: #272D38;
+  --md-code-hl-color: rgba(255, 204, 102, 0.2);
+  --md-code-hl-number-color: #FFCC66;
+  --md-code-hl-special-color: #FF7733;
+  --md-code-hl-function-color: #FFD580;
+  --md-code-hl-constant-color: #D4BFFF;
+  --md-code-hl-keyword-color: #FFA759;
+  --md-code-hl-string-color: #BAE67E;
+  --md-code-hl-name-color: #73D0FF;
+  --md-code-hl-operator-color: #F29E74;
+  --md-code-hl-punctuation-color: #CBCCC6;
+  --md-code-hl-comment-color: #5C6773;
+  --md-code-hl-generic-color: #FF7733;
+  --md-code-hl-variable-color: #CBCCC6;
+
+  /* Typeset */
+  --md-typeset-color: #CBCCC6;
+  --md-typeset-a-color: #73D0FF;
+
+  /* Footer */
+  --md-footer-fg-color: #707A8C;
+  --md-footer-fg-color--light: #5C6773;
+  --md-footer-fg-color--lighter: #3D424D;
+  --md-footer-bg-color: #1A1F29;
+  --md-footer-bg-color--dark: #151920;
+}
+
+/* Dark theme adjustments */
+[data-md-color-scheme="slate"] .md-header {
+  background-color: #232834;
+}
+
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #1A1F29;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #FFCC66;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  color: #FFCC66;
+}
+
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: #272D38;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a {
+  color: #73D0FF;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover {
+  color: #FFCC66;
+}
+
+/* ============================================
+   Ayu Light Theme
+   ============================================ */
+[data-md-color-scheme="default"] {
+  /* Base colors */
+  --md-default-bg-color: #FAFAFA;
+  --md-default-fg-color: #575F66;
+  --md-default-fg-color--light: #8A9199;
+  --md-default-fg-color--lighter: #ABB0B6;
+  --md-default-fg-color--lightest: #D9D9D9;
+
+  /* Primary (header, nav) */
+  --md-primary-fg-color: #F3F4F5;
+  --md-primary-fg-color--light: #FAFAFA;
+  --md-primary-fg-color--dark: #E8E9EB;
+  --md-primary-bg-color: #575F66;
+  --md-primary-bg-color--light: #8A9199;
+
+  /* Accent (links, highlights) */
+  --md-accent-fg-color: #FF9940;
+  --md-accent-fg-color--transparent: rgba(255, 153, 64, 0.1);
+  --md-accent-bg-color: #FF9940;
+  --md-accent-bg-color--light: rgba(255, 153, 64, 0.1);
+
+  /* Code blocks */
+  --md-code-fg-color: #575F66;
+  --md-code-bg-color: #F0F0F0;
+  --md-code-hl-color: rgba(255, 153, 64, 0.2);
+  --md-code-hl-number-color: #FF9940;
+  --md-code-hl-special-color: #F07171;
+  --md-code-hl-function-color: #F2AE49;
+  --md-code-hl-constant-color: #A37ACC;
+  --md-code-hl-keyword-color: #FA8D3E;
+  --md-code-hl-string-color: #86B300;
+  --md-code-hl-name-color: #399EE6;
+  --md-code-hl-operator-color: #ED9366;
+  --md-code-hl-punctuation-color: #575F66;
+  --md-code-hl-comment-color: #ABB0B6;
+  --md-code-hl-generic-color: #F07171;
+  --md-code-hl-variable-color: #575F66;
+
+  /* Typeset */
+  --md-typeset-color: #575F66;
+  --md-typeset-a-color: #399EE6;
+
+  /* Footer */
+  --md-footer-fg-color: #8A9199;
+  --md-footer-fg-color--light: #ABB0B6;
+  --md-footer-fg-color--lighter: #D9D9D9;
+  --md-footer-bg-color: #E8E9EB;
+  --md-footer-bg-color--dark: #D9D9D9;
+}
+
+/* Light theme adjustments */
+[data-md-color-scheme="default"] .md-header {
+  background-color: #F3F4F5;
+  color: #575F66;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-md-color-scheme="default"] .md-header__title {
+  color: #575F66;
+}
+
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #E8E9EB;
+}
+
+[data-md-color-scheme="default"] .md-tabs__link {
+  color: #575F66;
+}
+
+[data-md-color-scheme="default"] .md-tabs__link--active {
+  color: #FF9940;
+}
+
+[data-md-color-scheme="default"] .md-nav__link:hover {
+  color: #FF9940;
+}
+
+[data-md-color-scheme="default"] .md-nav__link--active {
+  color: #FF9940;
+}
+
+[data-md-color-scheme="default"] .md-search__input {
+  background-color: #FFFFFF;
+  border: 1px solid #E8E9EB;
+}
+
+[data-md-color-scheme="default"] .md-typeset a {
+  color: #399EE6;
+}
+
+[data-md-color-scheme="default"] .md-typeset a:hover {
+  color: #FF9940;
+}
+
+/* ============================================
+   Common Styles
+   ============================================ */
+
+/* Smooth transitions */
+.md-header,
+.md-tabs,
+.md-nav__link,
+.md-typeset a {
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Better code block styling */
+.md-typeset code {
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+
+.md-typeset pre > code {
+  border-radius: 6px;
+}
+
+/* Admonition styling */
+[data-md-color-scheme="slate"] .md-typeset .admonition {
+  border-color: #3D424D;
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition {
+  border-color: #E8E9EB;
+}

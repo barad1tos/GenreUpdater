@@ -61,13 +61,21 @@ def resolve_env_vars(config: ConfigValue) -> ConfigValue:
     if isinstance(config, list):
         return [resolve_env_vars(item) for item in config]
     if isinstance(config, str):
-        # First, handle ${VAR} syntax
+        # Handle pure ${VAR} syntax - return empty string if var not set
         if config.startswith("${") and config.endswith("}"):
             var_name = config[2:-1]
             return os.getenv(var_name, "")
-        # Then, expand any $VAR or ${VAR} in paths using os.path.expandvars
-        if "$" in config:
-            return os.path.expandvars(config)
+        # Handle path expansion patterns: ~, $VAR, ${VAR}
+        if "~" in config or "$" in config:
+            result = config
+            # First, expand environment variables ($VAR and ${VAR})
+            if "$" in result:
+                result = os.path.expandvars(result)
+            # Then, expand user home directory (~) using getpwuid (works without HOME env var)
+            # This also handles cases where ${HOME} wasn't expanded due to missing env var
+            if "~" in result or result.startswith("${HOME}"):
+                result = str(pathlib.Path(result).expanduser())
+            return result
     return config
 
 
@@ -133,7 +141,23 @@ def _validate_config_path(path: str) -> pathlib.Path:
 
 
 def _read_and_parse_config(path: pathlib.Path) -> dict[str, Any] | list[Any] | str | int | float | bool | None:
-    """Read and parse the YAML config file with size validation."""
+    """Read and parse the YAML config file with size validation.
+
+    Reads the config file content and parses it as YAML. Enforces a maximum
+    file size to prevent DoS via oversized config files.
+
+    Args:
+        path: Validated pathlib.Path to the configuration file.
+
+    Returns:
+        Parsed YAML content (typically a dict for valid configs).
+
+    Raises:
+        ValueError: If config file exceeds maximum size (1MB).
+        yaml.YAMLError: If YAML parsing fails.
+        OSError: If file cannot be read.
+
+    """
     max_size = 1024 * 1024  # 1MB
     if path.stat().st_size > max_size:
         msg = f"Config file {path} is too large (max {max_size} bytes)"
