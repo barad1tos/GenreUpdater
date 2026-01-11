@@ -209,3 +209,84 @@
 [data-md-color-scheme="default"] .md-typeset .admonition {
   border-color: #E8E9EB;
 }
+
+/* ============================================
+   Grid Cards (replaces Insiders-only feature)
+   ============================================ */
+
+/* Grid container */
+.md-typeset .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.8rem;
+  margin: 1em 0;
+}
+
+/* Cards modifier - remove list styling */
+.md-typeset .grid.cards > ul {
+  display: contents;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Individual card items */
+.md-typeset .grid.cards > ul > li {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.2rem;
+  border-radius: 0.3rem;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Card hover effect */
+.md-typeset .grid.cards > ul > li:hover {
+  transform: translateY(-2px);
+}
+
+/* Card icon styling */
+.md-typeset .grid.cards > ul > li > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Large icon modifier */
+.md-typeset .grid.cards .lg {
+  font-size: 1.6rem;
+}
+
+/* Middle alignment modifier */
+.md-typeset .grid.cards .middle {
+  vertical-align: middle;
+}
+
+/* Link styling in cards */
+.md-typeset .grid.cards > ul > li a {
+  margin-top: auto;
+}
+
+/* Dark theme card colors (Ayu Mirage) */
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li {
+  background-color: #272D38;
+  border: 1px solid #3D424D;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #FFCC66;
+}
+
+/* Light theme card colors (Ayu Light) */
+[data-md-color-scheme="default"] .md-typeset .grid.cards > ul > li {
+  background-color: #FFFFFF;
+  border: 1px solid #E8E9EB;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+[data-md-color-scheme="default"] .md-typeset .grid.cards > ul > li:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #FF9940;
+}
