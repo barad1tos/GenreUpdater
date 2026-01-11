@@ -1,14 +1,11 @@
 // Mermaid theme configuration for Ayu color scheme
 // This runs after page load to configure Mermaid with proper colors
 
-document.addEventListener("DOMContentLoaded", function() {
-  // Wait for mermaid to be available
-  if (typeof mermaid === "undefined") {
-    return;
-  }
+(function() {
+  "use strict";
 
   // Ayu Mirage (dark) theme colors
-  const ayuMirage = {
+  var ayuMirage = {
     theme: "base",
     themeVariables: {
       // Background
@@ -74,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function() {
   };
 
   // Ayu Light theme colors
-  const ayuLight = {
+  var ayuLight = {
     theme: "base",
     themeVariables: {
       // Background
@@ -141,43 +138,87 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Function to get current theme
   function getCurrentTheme() {
-    const scheme = document.body.getAttribute("data-md-color-scheme");
+    var scheme = document.body.getAttribute("data-md-color-scheme");
     return scheme === "slate" ? ayuMirage : ayuLight;
   }
 
   // Initialize Mermaid with current theme
   function initMermaid() {
-    const config = getCurrentTheme();
+    if (typeof mermaid === "undefined") {
+      return;
+    }
+
+    var config = getCurrentTheme();
     mermaid.initialize({
       startOnLoad: false,
-      ...config,
-      securityLevel: "loose"
+      theme: config.theme,
+      themeVariables: config.themeVariables
+      // Using default securityLevel (strict) for XSS protection
     });
 
-    // Re-render all mermaid diagrams
-    document.querySelectorAll(".mermaid").forEach(function(el) {
-      const code = el.textContent;
+    // Re-render all mermaid diagrams safely using textContent
+    var diagrams = document.querySelectorAll(".mermaid");
+    diagrams.forEach(function(el) {
+      var code = el.textContent;
       el.removeAttribute("data-processed");
-      el.innerHTML = code;
+      // Clear element safely and set text content
+      while (el.firstChild) {
+        el.removeChild(el.firstChild);
+      }
+      el.textContent = code;
     });
 
     mermaid.init(undefined, ".mermaid");
   }
 
-  // Initialize on load
-  initMermaid();
+  // Wait for mermaid to be available with polling
+  function waitForMermaid(callback, maxAttempts) {
+    var attempts = 0;
+    var checkInterval = 100; // ms
 
-  // Re-initialize when theme changes
-  const observer = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-      if (mutation.attributeName === "data-md-color-scheme") {
-        initMermaid();
+    function check() {
+      attempts++;
+      if (typeof mermaid !== "undefined") {
+        callback();
+      } else if (attempts < maxAttempts) {
+        setTimeout(check, checkInterval);
       }
-    });
-  });
+      // Stop silently after max attempts - mermaid not available
+    }
 
-  observer.observe(document.body, {
-    attributes: true,
-    attributeFilter: ["data-md-color-scheme"]
-  });
-});
+    check();
+  }
+
+  // Setup theme observer
+  function setupThemeObserver() {
+    var observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.attributeName === "data-md-color-scheme") {
+          initMermaid();
+        }
+      });
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-md-color-scheme"]
+    });
+  }
+
+  // Initialize when DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() {
+      // Poll for mermaid availability (max 50 attempts = 5 seconds)
+      waitForMermaid(function() {
+        initMermaid();
+        setupThemeObserver();
+      }, 50);
+    });
+  } else {
+    // DOM already loaded
+    waitForMermaid(function() {
+      initMermaid();
+      setupThemeObserver();
+    }, 50);
+  }
+})();

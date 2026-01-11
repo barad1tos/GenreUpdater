@@ -315,10 +315,7 @@ src/
 ├── app/                        # Presentation layer
 │   ├── cli.py                  # CLI argument parsing
 │   ├── orchestrator.py         # Command routing
-│   ├── music_updater.py        # Main update pipeline
-│   ├── full_sync.py            # Full library sync
-│   ├── year_update.py          # Year-only updates
-│   ├── genre_update.py         # Genre-only updates
+│   ├── *_update.py             # Pipeline modules (music, genre, year, full_sync)
 │   ├── track_cleaning.py       # Metadata cleanup
 │   └── features/               # Feature modules
 │       ├── batch/              # Batch processing
@@ -329,48 +326,18 @@ src/
 │   ├── core_config.py          # Configuration loading
 │   ├── logger.py               # Logging setup
 │   ├── dry_run.py              # Dry-run simulation
-│   ├── models/                 # Data models
-│   │   ├── track_models.py     # TrackDict, Track
-│   │   ├── protocols.py        # Interface definitions
-│   │   ├── validators.py       # Input validation
-│   │   ├── metadata_utils.py   # Metadata parsing
-│   │   └── year_repair.py      # Year correction
-│   ├── tracks/                 # Track processing
-│   │   ├── track_processor.py  # Main processor
-│   │   ├── genre_manager.py    # Dominant genre logic
-│   │   ├── year_retriever.py   # Year lookup
-│   │   ├── incremental_filter.py
-│   │   ├── update_executor.py  # Apply changes
-│   │   └── year_*.py           # Year utilities
+│   ├── models/                 # Data models (Track, protocols, validators)
+│   ├── tracks/                 # Track processing (processor, genre, year)
 │   └── utils/                  # Shared utilities
 │
 ├── services/                   # External integrations
 │   ├── dependency_container.py # DI container
-│   ├── pending_verification.py # Pending year checks
-│   ├── apple/                  # Music.app integration
-│   │   ├── applescript_client.py
-│   │   ├── applescript_executor.py
-│   │   ├── rate_limiter.py
-│   │   └── sanitizer.py
-│   ├── api/                    # External APIs
-│   │   ├── orchestrator.py     # API coordination
-│   │   ├── musicbrainz.py
-│   │   ├── discogs.py
-│   │   ├── applemusic.py
-│   │   ├── year_scoring.py     # Score-based selection
-│   │   └── year_search_coordinator.py
-│   └── cache/                  # Multi-tier caching
-│       ├── orchestrator.py     # Cache coordination
-│       ├── snapshot.py         # Library snapshots
-│       ├── album_cache.py      # Album metadata
-│       ├── api_cache.py        # API responses
-│       └── hash_service.py     # Cache keys
+│   ├── apple/                  # Music.app AppleScript integration
+│   ├── api/                    # External APIs (MusicBrainz, Discogs, etc.)
+│   └── cache/                  # Multi-tier caching (snapshot, album, API)
 │
 └── metrics/                    # Analytics & reporting
-    ├── analytics.py            # Performance tracking
-    ├── html_reports.py         # HTML report generation
-    ├── change_reports.py       # Change summaries
-    └── csv_utils.py            # CSV export
+    └── *.py                    # Reports (HTML, CSV, analytics)
 ```
 
 ## Layer Responsibilities
