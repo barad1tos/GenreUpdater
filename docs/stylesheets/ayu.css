@@ -295,10 +295,14 @@
    Mermaid Diagrams - Ayu Mirage (Dark)
    ============================================ */
 
-/* Base text styling for dark theme */
+/* Base text styling - shared font */
+.mermaid text {
+  font-family: "Roboto", sans-serif;
+}
+
+/* Dark theme text color */
 [data-md-color-scheme="slate"] .mermaid text {
   fill: #CBCCC6 !important;
-  font-family: "Roboto", sans-serif !important;
 }
 
 /* Node labels - dark text on light node backgrounds */
@@ -431,7 +435,9 @@
 }
 
 [data-md-color-scheme="default"] .mermaid .node rect,
-[data-md-color-scheme="default"] .mermaid .node circle {
+[data-md-color-scheme="default"] .mermaid .node circle,
+[data-md-color-scheme="default"] .mermaid .node polygon,
+[data-md-color-scheme="default"] .mermaid .node path {
   fill: #E8F4FD !important;
   stroke: #399EE6 !important;
 }
@@ -443,8 +449,33 @@
 
 [data-md-color-scheme="default"] .mermaid .edgeLabel {
   background-color: #FAFAFA !important;
+  color: #575F66 !important;
 }
 
 [data-md-color-scheme="default"] .mermaid .edgePath path {
   stroke: #8A9199 !important;
+}
+
+/* Class diagrams (Ayu Light) */
+[data-md-color-scheme="default"] .mermaid .classGroup rect {
+  fill: #FFFFFF !important;
+  stroke: #399EE6 !important;
+}
+
+[data-md-color-scheme="default"] .mermaid .classGroup line {
+  stroke: #E8E9EB !important;
+}
+
+[data-md-color-scheme="default"] .mermaid .classLabel .box {
+  fill: #FFFFFF !important;
+  stroke: none !important;
+}
+
+[data-md-color-scheme="default"] .mermaid .classLabel .label {
+  fill: #FA8D3E !important;
+}
+
+[data-md-color-scheme="default"] .mermaid .classTitle {
+  fill: #399EE6 !important;
+  font-weight: bold !important;
 }
