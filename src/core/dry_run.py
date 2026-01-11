@@ -46,7 +46,12 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         self.apple_scripts_dir: str = config.get("apple_scripts_dir", "")  # For type checking
 
     async def initialize(self) -> None:
-        """Initialize the DryRunAppleScriptClient."""
+        """Initialize the DryRunAppleScriptClient.
+
+        Delegates initialization to the underlying real client to ensure
+        all fetch operations work correctly in dry-run mode.
+
+        """
         await self._real_client.initialize()
 
     async def run_script(
@@ -147,5 +152,12 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         return await self._real_client.fetch_all_track_ids(timeout=timeout)
 
     def get_actions(self) -> list[dict[str, Any]]:
-        """Get the list of actions performed during the dry run."""
+        """Get the list of actions recorded during the dry run.
+
+        Returns:
+            List of dictionaries, each containing:
+            - "script": Name of the AppleScript that would have been executed
+            - "args": List of arguments that would have been passed
+
+        """
         return self.actions
