@@ -6,6 +6,7 @@ for key modules in the codebase.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -15,7 +16,8 @@ import mkdocs_gen_files
 
 # Security: All values are hardcoded constants, not user input
 # pyreverse is a trusted tool from pylint package (installed via pyproject.toml)
-_PYREVERSE_EXECUTABLE: Final[str] = "/opt/homebrew/bin/pyreverse"
+# Use shutil.which() for cross-platform PATH resolution (works on macOS, Linux CI)
+_PYREVERSE_EXECUTABLE: Final[str | None] = shutil.which("pyreverse")
 
 # Module configurations - all values are trusted constants
 _DIAGRAM_CONFIGS: Final[tuple[tuple[str, str, str], ...]] = (
@@ -30,12 +32,13 @@ _DIAGRAM_CONFIGS: Final[tuple[tuple[str, str, str], ...]] = (
 
 
 # noinspection PyArgumentEqualDefault
-def _run_pyreverse(output_dir: str, project_name: str, source_path: str) -> subprocess.CompletedProcess[str]:
+def _run_pyreverse(executable: str, output_dir: str, project_name: str, source_path: str) -> subprocess.CompletedProcess[str]:
     """Execute pyreverse with trusted arguments.
 
     All arguments are validated to be from _DIAGRAM_CONFIGS constant.
 
     Args:
+        executable: Path to pyreverse executable (from shutil.which)
         output_dir: Temporary directory for output (from tempfile)
         project_name: Project name from _DIAGRAM_CONFIGS
         source_path: Source module path from _DIAGRAM_CONFIGS
@@ -45,9 +48,9 @@ def _run_pyreverse(output_dir: str, project_name: str, source_path: str) -> subp
     """
     # S603: All arguments come from _DIAGRAM_CONFIGS (hardcoded constants) and tempfile.
     # This is a build script, not runtime code, and pyreverse is a trusted tool.
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
-            _PYREVERSE_EXECUTABLE,
+            executable,
             "-o",
             "mmd",
             "-p",
@@ -74,14 +77,18 @@ def _generate_single_diagram(source_path: str, project_name: str) -> str | None:
     Returns:
         Mermaid diagram content or None if generation failed
     """
-    # Check if pyreverse exists
-    pyreverse_path = Path(_PYREVERSE_EXECUTABLE)
+    # Check if pyreverse is available in PATH (local var enables type narrowing)
+    executable = _PYREVERSE_EXECUTABLE
+    if executable is None:
+        return None
+
+    pyreverse_path = Path(executable)
     if not pyreverse_path.exists():
         return None
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = _run_pyreverse(tmpdir, project_name, source_path)
+            result = _run_pyreverse(executable, tmpdir, project_name, source_path)
 
             if result.returncode != 0:
                 return None
