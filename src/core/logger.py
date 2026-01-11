@@ -277,11 +277,25 @@ class LoggerFilter:
     """Filter that only allows records from specific logger names."""
 
     def __init__(self, allowed_loggers: list[str]) -> None:
-        """Initialize filter with allowed logger names."""
+        """Initialize filter with allowed logger names.
+
+        Args:
+            allowed_loggers: List of logger names that should pass the filter.
+                Child loggers (e.g., "main_logger.child") also pass if parent is allowed.
+
+        """
         self.allowed_loggers = set(allowed_loggers)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Filter records based on logger name or child loggers."""
+        """Filter log records based on logger name.
+
+        Args:
+            record: The log record to filter.
+
+        Returns:
+            True if record's logger name matches or is child of allowed loggers.
+
+        """
         return any(record.name == logger or record.name.startswith(f"{logger}.") for logger in self.allowed_loggers)
 
 
@@ -289,21 +303,43 @@ class RunHandler:
     """Handles tracking of script runs, adding separators between runs, and limiting logs to max number of runs."""
 
     def __init__(self, max_runs: int = 3) -> None:
-        """Initialize the RunHandler."""
+        """Initialize the RunHandler for log run tracking.
+
+        Args:
+            max_runs: Maximum number of runs to keep in log files.
+                Older runs are trimmed during log cleanup.
+
+        """
         self.max_runs = max_runs
         self.current_run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         self.run_start_time = time.monotonic()  # Use monotonic for duration
 
     @staticmethod
     def format_run_header(logger_name: str) -> str:
-        """Create a formatted header for a new run."""
+        """Create a formatted header for a new run.
+
+        Args:
+            logger_name: Name of the logger starting the run.
+
+        Returns:
+            Formatted header string with timestamp and visual separators.
+
+        """
         # Use local time for now.
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         # Use ANSI colors for file headers for readability in terminals that support them
         return f"\n\n{BLUE}{'=' * 80}{RESET}\n\ue05e NEW RUN: {logger_name} - {now_str}\n{BLUE}{'=' * 80}{RESET}\n\n"
 
     def format_run_footer(self, logger_name: str) -> str:
-        """Create a formatted footer for the end of a run."""
+        """Create a formatted footer for the end of a run.
+
+        Args:
+            logger_name: Name of the logger ending the run.
+
+        Returns:
+            Formatted footer string with elapsed time and visual separators.
+
+        """
         elapsed = time.monotonic() - self.run_start_time
         # Use ANSI colors for file footers
         return f"\n\n{BLUE}{'=' * 80}{RESET}\n\ue05e END RUN: {logger_name} - Total time: {elapsed:.2f}s\n{BLUE}{'=' * 80}{RESET}\n\n"
@@ -733,7 +769,15 @@ class RunTrackingHandler(logging.FileHandler):
         self._closed: bool = False  # Track if handler is closed
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Emit a record. Writes the run header before the first record of a new run."""
+        """Emit a log record with run tracking.
+
+        Writes the run header before the first record of a new run.
+        Handles header write failures gracefully.
+
+        Args:
+            record: The log record to emit.
+
+        """
         if self.run_handler and not self._header_written:
             try:
                 # FIX: Add a check to ensure the stream is open before writing
@@ -760,7 +804,12 @@ class RunTrackingHandler(logging.FileHandler):
             super().emit(record)
 
     def close(self) -> None:
-        """Close the stream, writes run footer, and trims the log file."""
+        """Close the handler with run cleanup.
+
+        Writes the run footer, closes the file stream, and trims the log
+        to maintain max_runs limit. Handles errors at each stage.
+
+        """
         # Check if already closed to prevent recursion or multiple writes
         # Use a flag to prevent multiple close calls
         if getattr(self, "_closed", False):
@@ -975,12 +1024,24 @@ def setup_queue_logging(
 def get_loggers(
     config: dict[str, Any],
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener | None]:
-    """Create and returns loggers using QueueHandler for non-blocking file logging, and RichHandler for console output.
+    """Create and return loggers with QueueHandler for non-blocking file logging.
+
+    Sets up multiple loggers with different purposes and a shared queue listener
+    for efficient file I/O. Uses RichHandler for colorized console output.
+
+    Args:
+        config: Application configuration dictionary with logging section.
 
     Returns:
-        tuple: (console_logger, error_logger, analytics_logger, db_verify_logger, listener)
+        Tuple containing:
+        - console_logger: Logger for user-facing console output (RichHandler)
+        - error_logger: Logger for error messages (file output via queue)
+        - analytics_logger: Logger for analytics/metrics (separate file)
+        - db_verify_logger: Logger for database verification (separate file)
+        - listener: SafeQueueListener managing file handlers (None on failure)
 
-    Ensures log directories exist and sets levels based on config.
+    Raises:
+        No exceptions raised - returns fallback loggers on setup failure.
 
     """
     try:
