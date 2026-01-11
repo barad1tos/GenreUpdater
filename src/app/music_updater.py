@@ -172,7 +172,18 @@ class MusicUpdater:
         self.genre_service.set_test_artists(test_artists)
 
     def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
-        """Resolve absolute path to artist rename configuration file."""
+        """Resolve absolute path to artist rename configuration file.
+
+        Handles both absolute and relative paths from config. For relative paths,
+        resolves against the parent directory of the main config file.
+
+        Args:
+            deps: Dependency container with config_path attribute.
+
+        Returns:
+            Absolute Path to the artist rename YAML configuration file.
+
+        """
         config_entry = self.config.get("artist_renamer", {}).get("config_path", "artist-renames.yaml")
         candidate = Path(config_entry)
         if candidate.is_absolute():
