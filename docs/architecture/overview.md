@@ -310,39 +310,67 @@ graph LR
 
 ## Directory Structure
 
-```
+```text
 src/
-├── app/                    # Presentation layer
-│   ├── cli.py             # Command-line interface
-│   ├── orchestrator.py    # Command routing
-│   └── features/          # Feature modules
+├── app/                        # Presentation layer
+│   ├── cli.py                  # CLI argument parsing
+│   ├── orchestrator.py         # Command routing
+│   ├── music_updater.py        # Main update pipeline
+│   ├── full_sync.py            # Full library sync
+│   ├── year_update.py          # Year-only updates
+│   ├── genre_update.py         # Genre-only updates
+│   ├── track_cleaning.py       # Metadata cleanup
+│   └── features/               # Feature modules
+│       ├── batch/              # Batch processing
+│       ├── crypto/             # API key encryption
+│       └── verify/             # Database verification
 │
-├── core/                   # Business logic
-│   ├── models/            # Pydantic data models
-│   │   ├── track_models.py
-│   │   ├── protocols.py
-│   │   └── validators.py
-│   ├── tracks/            # Track processing
-│   │   ├── genre_manager.py
-│   │   ├── year_retriever.py
-│   │   └── track_processor.py
-│   └── utils/             # Shared utilities
+├── core/                       # Business logic
+│   ├── core_config.py          # Configuration loading
+│   ├── logger.py               # Logging setup
+│   ├── dry_run.py              # Dry-run simulation
+│   ├── models/                 # Data models
+│   │   ├── track_models.py     # TrackDict, Track
+│   │   ├── protocols.py        # Interface definitions
+│   │   ├── validators.py       # Input validation
+│   │   ├── metadata_utils.py   # Metadata parsing
+│   │   └── year_repair.py      # Year correction
+│   ├── tracks/                 # Track processing
+│   │   ├── track_processor.py  # Main processor
+│   │   ├── genre_manager.py    # Dominant genre logic
+│   │   ├── year_retriever.py   # Year lookup
+│   │   ├── incremental_filter.py
+│   │   ├── update_executor.py  # Apply changes
+│   │   └── year_*.py           # Year utilities
+│   └── utils/                  # Shared utilities
 │
-├── services/              # External integrations
-│   ├── applescript_client.py
-│   ├── api/               # API clients
-│   │   ├── orchestrator.py
+├── services/                   # External integrations
+│   ├── dependency_container.py # DI container
+│   ├── pending_verification.py # Pending year checks
+│   ├── apple/                  # Music.app integration
+│   │   ├── applescript_client.py
+│   │   ├── applescript_executor.py
+│   │   ├── rate_limiter.py
+│   │   └── sanitizer.py
+│   ├── api/                    # External APIs
+│   │   ├── orchestrator.py     # API coordination
 │   │   ├── musicbrainz.py
 │   │   ├── discogs.py
-│   │   └── applemusic.py
-│   ├── cache/             # Caching
-│   │   ├── album_cache.py
-│   │   └── snapshot.py
-│   └── dependency_container.py
+│   │   ├── applemusic.py
+│   │   ├── year_scoring.py     # Score-based selection
+│   │   └── year_search_coordinator.py
+│   └── cache/                  # Multi-tier caching
+│       ├── orchestrator.py     # Cache coordination
+│       ├── snapshot.py         # Library snapshots
+│       ├── album_cache.py      # Album metadata
+│       ├── api_cache.py        # API responses
+│       └── hash_service.py     # Cache keys
 │
-└── metrics/               # Analytics & reporting
-    ├── analytics.py
-    └── html_reports.py
+└── metrics/                    # Analytics & reporting
+    ├── analytics.py            # Performance tracking
+    ├── html_reports.py         # HTML report generation
+    ├── change_reports.py       # Change summaries
+    └── csv_utils.py            # CSV export
 ```
 
 ## Layer Responsibilities
