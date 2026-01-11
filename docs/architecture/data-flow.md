@@ -85,7 +85,7 @@ flowchart TD
     F --> H
     G --> H
 
-    H --> I{Score >= 50?}
+    H --> I{Score >= 70?}
     I -->|Yes| J[Apply Year]
     I -->|No| K[Mark Pending]
 
