@@ -140,7 +140,7 @@ def _create_track_from_fields(fields: list[str]) -> TrackDict:
     )
 
     if album_artist_value := _extract_optional_field(fields, idx.ALBUM_ARTIST):
-        track.__dict__["album_artist"] = album_artist_value
+        track.album_artist = album_artist_value
 
     return track
 

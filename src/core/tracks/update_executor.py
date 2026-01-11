@@ -429,7 +429,7 @@ class TrackUpdateExecutor:
         )
 
         if original_artist:
-            payload.__dict__["original_artist"] = original_artist.strip()
+            payload.original_artist = original_artist.strip()
 
         try:
             await self.cache_service.invalidate_for_track(payload)

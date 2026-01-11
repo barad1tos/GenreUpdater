@@ -182,7 +182,7 @@ class ArtistRenamer:
         # Keep local model in sync even if processor does not mutate it (e.g., tests, dry-run)
         track.artist = new_artist
         if should_update_album_artist:
-            track.__dict__["album_artist"] = new_artist
+            track.album_artist = new_artist
         track.original_artist = current_artist
 
         self.console_logger.info(
