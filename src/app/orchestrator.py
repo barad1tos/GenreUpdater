@@ -42,7 +42,7 @@ class Orchestrator:
         """Execute the appropriate command based on arguments.
 
         Args:
-            args: Parsed command-line arguments
+            args: Parsed command-line arguments from argparse.
 
         """
         # Reset per-run state

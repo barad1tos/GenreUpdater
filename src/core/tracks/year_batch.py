@@ -113,10 +113,10 @@ class YearBatchProcessor:
         """Process albums in batches with rate limiting.
 
         Args:
-            grouped_albums: Dictionary of albums grouped by (artist, album) key
-            updated_tracks: List to append updated tracks to
-            changes_log: List to append change entries to
-            force: If True, bypass skip checks and re-query API for all albums
+            grouped_albums: Dictionary mapping (artist, album) tuples to lists of tracks.
+            updated_tracks: List to append updated tracks to.
+            changes_log: List to append change entries to.
+            force: If True, bypass skip checks and re-query API for all albums.
 
         """
         year_config = self.config.get("year_retrieval", {})
