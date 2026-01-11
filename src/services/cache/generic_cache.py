@@ -59,7 +59,18 @@ class GenericCacheService:
         self.logger.info("%s initialized with %ds default TTL", LogFormat.entity("GenericCacheService"), self.default_ttl)
 
     def _resolve_default_ttl(self) -> int:
-        """Resolve default TTL from configuration sources."""
+        """Resolve default TTL from configuration sources.
+
+        Checks multiple config locations in order:
+        1. config.cache_ttl_seconds
+        2. config.cache_ttl
+        3. config.caching.default_ttl_seconds
+        4. Falls back to SmartCacheConfig default for GENERIC type
+
+        Returns:
+            TTL in seconds as positive integer.
+
+        """
         fallback = self.cache_config.get_ttl(CacheContentType.GENERIC)
 
         candidate_values: list[Any] = [
@@ -84,7 +95,14 @@ class GenericCacheService:
         return fallback
 
     def _start_cleanup_task(self) -> None:
-        """Start periodic cleanup task for expired entries."""
+        """Start periodic cleanup task for expired cache entries.
+
+        Creates an asyncio task that runs cleanup_expired() and enforce_size_limits()
+        at regular intervals (default: 5 minutes). Only one cleanup task runs at a time.
+
+        The task handles cancellation gracefully and logs any errors during cleanup.
+
+        """
         cleanup_interval = self.config.get("cleanup_interval", 300)  # 5 minutes default
 
         if self._cleanup_task and not self._cleanup_task.done():

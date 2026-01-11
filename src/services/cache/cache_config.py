@@ -76,10 +76,14 @@ class SmartCacheConfig:
         self._policies = self._create_default_policies()
 
     def _get_negative_result_ttl(self) -> int:
-        """Get TTL for negative results from config or use default.
+        """Get TTL for negative results (failed lookups) from config.
+
+        Reads caching.negative_result_ttl from config, falling back to
+        DEFAULT_NEGATIVE_RESULT_TTL (30 days) if not set or invalid.
 
         Returns:
-            TTL in seconds for caching failed lookups
+            TTL in seconds for caching failed lookup results.
+
         """
         caching_config = self._config.get("caching", {})
         value = caching_config.get("negative_result_ttl", self.DEFAULT_NEGATIVE_RESULT_TTL)
@@ -94,7 +98,20 @@ class SmartCacheConfig:
             return self.DEFAULT_NEGATIVE_RESULT_TTL
 
     def _create_default_policies(self) -> dict[CacheContentType, CachePolicy]:
-        """Create default cache policies for different content types."""
+        """Create default cache policies for different content types.
+
+        Defines TTL and invalidation strategies optimized for each content type:
+        - TRACK_METADATA: Infinite TTL, event-driven invalidation
+        - SUCCESSFUL_API_METADATA: Infinite TTL, event-driven invalidation
+        - FAILED_API_LOOKUP: 1 hour TTL for retry opportunities
+        - ALBUM_YEAR: 30 days TTL, hybrid invalidation
+        - NEGATIVE_RESULT: Configurable TTL (default 30 days)
+        - GENERIC: 5 minutes TTL for safety
+
+        Returns:
+            Dictionary mapping CacheContentType to CachePolicy instances.
+
+        """
         return {
             CacheContentType.TRACK_METADATA: CachePolicy(
                 content_type=CacheContentType.TRACK_METADATA,
