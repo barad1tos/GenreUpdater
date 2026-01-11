@@ -123,8 +123,8 @@ class ApiCacheService:
         """Get cached API result.
 
         Args:
-            artist: Artist name
-            album: Album name
+            artist: The artist name for cache key generation.
+            album: The album name for cache key generation.
             source: API source (musicbrainz, discogs, etc.)
 
         Returns:
@@ -179,12 +179,12 @@ class ApiCacheService:
         """Store API result in cache.
 
         Args:
-            artist: Artist name
-            album: Album name
-            source: API source
-            success: Whether the API call was successful
-            data: API response data (if successful)
-            metadata: Additional metadata
+            artist: The artist name for cache key generation.
+            album: The album name for cache key generation.
+            source: API source identifier.
+            success: Whether the API call was successful.
+            data: API response data (if successful).
+            metadata: Additional metadata to store.
         """
         await asyncio.sleep(0)  # Make function truly async
         key = UnifiedHashService.hash_api_key(artist, album, source)
@@ -218,8 +218,8 @@ class ApiCacheService:
         """Invalidate all API cache entries for specific album.
 
         Args:
-            artist: Artist name
-            album: Album name
+            artist: The artist name for cache key generation.
+            album: The album name for cache key generation.
         """
         await asyncio.sleep(0)  # Make function truly async
         # Find all keys for this artist/album across all sources
