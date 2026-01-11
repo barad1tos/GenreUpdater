@@ -71,7 +71,7 @@ Each API result receives a score based on:
 | Factor | Points |
 |--------|--------|
 | Reissue detected | -30 |
-| Compilation/live album | -35 |
+| Compilation/live album | -25 |
 | Bootleg status | -50 |
 | Year far from release group | -5 to -40 |
 | Album name mismatch | -5 to -40 |
