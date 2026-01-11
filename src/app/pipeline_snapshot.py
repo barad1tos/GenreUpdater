@@ -97,7 +97,7 @@ class PipelineSnapshotManager:
                 try:
                     setattr(current_track, field, value)
                 except (AttributeError, TypeError, ValueError):
-                    current_track.__dict__[field] = value
+                    object.__setattr__(current_track, field, value)
 
     def get_snapshot(self) -> list[TrackDict] | None:
         """Return the currently cached pipeline track snapshot."""
