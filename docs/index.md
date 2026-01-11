@@ -107,7 +107,7 @@ Year lookup queries three sources and uses scoring to pick the most accurate:
 
   [:octicons-arrow-right-24: Configuration](getting-started/configuration.md)
 
-- :material-graph:{ .lg .middle } **Architecture**
+- :material-sitemap:{ .lg .middle } **Architecture**
 
   ---
 
@@ -115,7 +115,7 @@ Year lookup queries three sources and uses scoring to pick the most accurate:
 
   [:octicons-arrow-right-24: Architecture](architecture/overview.md)
 
-- :material-api:{ .lg .middle } **API Reference**
+- :material-code-braces:{ .lg .middle } **API Reference**
 
   ---
 
@@ -123,7 +123,7 @@ Year lookup queries three sources and uses scoring to pick the most accurate:
 
   [:octicons-arrow-right-24: API Docs](api/index.md)
 
-- :material-frequently-asked-questions:{ .lg .middle } **Troubleshooting**
+- :material-help-circle:{ .lg .middle } **Troubleshooting**
 
   ---
 
