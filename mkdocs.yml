@@ -156,9 +156,5 @@ extra:
 extra_css:
   - stylesheets/ayu.css
 
-# Custom JavaScript
-extra_javascript:
-  - javascripts/mermaid-theme.js
-
 # Copyright
 copyright: Copyright &copy; 2024-2026 Roman Borodavkin
