@@ -310,39 +310,34 @@ graph LR
 
 ## Directory Structure
 
-```
+```text
 src/
-├── app/                    # Presentation layer
-│   ├── cli.py             # Command-line interface
-│   ├── orchestrator.py    # Command routing
-│   └── features/          # Feature modules
+├── app/                        # Presentation layer
+│   ├── cli.py                  # CLI argument parsing
+│   ├── orchestrator.py         # Command routing
+│   ├── *_update.py             # Pipeline modules (music, genre, year, full_sync)
+│   ├── track_cleaning.py       # Metadata cleanup
+│   └── features/               # Feature modules
+│       ├── batch/              # Batch processing
+│       ├── crypto/             # API key encryption
+│       └── verify/             # Database verification
 │
-├── core/                   # Business logic
-│   ├── models/            # Pydantic data models
-│   │   ├── track_models.py
-│   │   ├── protocols.py
-│   │   └── validators.py
-│   ├── tracks/            # Track processing
-│   │   ├── genre_manager.py
-│   │   ├── year_retriever.py
-│   │   └── track_processor.py
-│   └── utils/             # Shared utilities
+├── core/                       # Business logic
+│   ├── core_config.py          # Configuration loading
+│   ├── logger.py               # Logging setup
+│   ├── dry_run.py              # Dry-run simulation
+│   ├── models/                 # Data models (Track, protocols, validators)
+│   ├── tracks/                 # Track processing (processor, genre, year)
+│   └── utils/                  # Shared utilities
 │
-├── services/              # External integrations
-│   ├── applescript_client.py
-│   ├── api/               # API clients
-│   │   ├── orchestrator.py
-│   │   ├── musicbrainz.py
-│   │   ├── discogs.py
-│   │   └── applemusic.py
-│   ├── cache/             # Caching
-│   │   ├── album_cache.py
-│   │   └── snapshot.py
-│   └── dependency_container.py
+├── services/                   # External integrations
+│   ├── dependency_container.py # DI container
+│   ├── apple/                  # Music.app AppleScript integration
+│   ├── api/                    # External APIs (MusicBrainz, Discogs, etc.)
+│   └── cache/                  # Multi-tier caching (snapshot, album, API)
 │
-└── metrics/               # Analytics & reporting
-    ├── analytics.py
-    └── html_reports.py
+└── metrics/                    # Analytics & reporting
+    └── *.py                    # Reports (HTML, CSV, analytics)
 ```
 
 ## Layer Responsibilities

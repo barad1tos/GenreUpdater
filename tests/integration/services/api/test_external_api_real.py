@@ -60,9 +60,23 @@ def error_logger() -> logging.Logger:
     return logger
 
 
+def _check_required_secrets() -> list[str]:
+    """Check for required API secrets in environment."""
+    import os
+
+    required = ["DISCOGS_TOKEN", "CONTACT_EMAIL"]
+    return [v for v in required if not os.environ.get(v)]
+
+
 @pytest.fixture
 def app_config() -> dict[str, Any]:
-    """Load real application config."""
+    """Load real application config.
+
+    Skips test if required secrets are missing (e.g., Dependabot PRs).
+    """
+    missing = _check_required_secrets()
+    if missing:
+        pytest.skip(f"Missing required secrets: {', '.join(missing)}")
     config = Config()
     return config.load()
 
