@@ -635,7 +635,35 @@ class ExternalApiOrchestrator:
             self.session = self._create_client_session()
 
     async def close(self) -> None:
-        """Close the aiohttp ClientSession and log API usage statistics."""
+        """Close the orchestrator and clean up resources gracefully.
+
+        This method:
+        1. Waits for pending fire-and-forget tasks to complete (5s timeout)
+        2. Cancels any tasks that don't complete in time
+        3. Clears the _pending_tasks set
+        4. Logs API statistics
+        5. Closes the HTTP session
+        """
+        # Wait for pending tasks with timeout
+        if self._pending_tasks:
+            self.console_logger.debug(
+                "Waiting for %d pending tasks to complete...",
+                len(self._pending_tasks),
+            )
+            _done, pending = await asyncio.wait(
+                self._pending_tasks,
+                timeout=5.0,
+                return_when=asyncio.ALL_COMPLETED,
+            )
+
+            # Cancel any tasks that didn't complete in time
+            for task in pending:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+            self._pending_tasks.clear()
+
         if self.session is None or self.session.closed:
             return
 
