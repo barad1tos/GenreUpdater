@@ -255,27 +255,25 @@ class GenericCacheService:
         return timestamp <= time.time()
 
     def enforce_size_limits(self) -> int:
-        """Enforce cache size limits by removing oldest entries.
+        """Enforce cache size limits by removing LRU (least recently used) entries.
+
+        Uses OrderedDict iteration order where first = oldest (LRU).
 
         Returns:
             Number of entries removed
         """
-        max_entries = self.config.get("max_generic_entries", 10000)
-
-        if len(self.cache) <= max_entries:
+        if len(self.cache) <= self.max_size:
             return 0
 
-        # Sort by timestamp (oldest first) and remove excess
-        sorted_items = sorted(self.cache.items(), key=lambda x: x[1][1])
-        entries_to_remove = len(self.cache) - max_entries
-
+        entries_to_remove = len(self.cache) - self.max_size
         removed_count = 0
-        for key, _ in sorted_items[:entries_to_remove]:
-            del self.cache[key]
+
+        for _ in range(entries_to_remove):
+            self.cache.popitem(last=False)  # Remove LRU (oldest in OrderedDict)
             removed_count += 1
 
         if removed_count > 0:
-            self.logger.info("Enforced size limit: removed %d oldest entries", removed_count)
+            self.logger.info("Enforced size limit: removed %d LRU entries", removed_count)
 
         return removed_count
 
@@ -322,7 +320,7 @@ class GenericCacheService:
             "default_ttl": self.default_ttl,
             "ttl_policy": policy.ttl_seconds,
             "invalidation_strategy": policy.invalidation_strategy.value,
-            "max_entries": self.config.get("max_generic_entries", 10000),
+            "max_entries": self.max_size,
             "cleanup_running": self._cleanup_task is not None and not self._cleanup_task.done(),
         }
 
