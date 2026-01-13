@@ -317,3 +317,88 @@ class TestGenericCacheService:
 
         finally:
             await service.stop_cleanup_task()
+
+    @pytest.mark.asyncio
+    async def test_cache_evicts_lru_when_max_size_exceeded(self) -> None:
+        """Cache should evict LRU entries when max_size is exceeded."""
+        config = {"max_generic_entries": 3}  # Small size for testing
+        service = TestGenericCacheService.create_service(config)
+        await service.initialize()
+
+        try:
+            # Add 4 items to a cache with max_size=3
+            service.set("key1", {"value": 1})
+            service.set("key2", {"value": 2})
+            service.set("key3", {"value": 3})
+            service.set("key4", {"value": 4})  # Should evict key1 (LRU - oldest)
+
+            # key1 should be evicted (LRU)
+            assert service.get("key1") is None
+            # Remaining keys should exist
+            assert service.get("key2") == {"value": 2}
+            assert service.get("key3") == {"value": 3}
+            assert service.get("key4") == {"value": 4}
+
+        finally:
+            await service.stop_cleanup_task()
+
+    @pytest.mark.asyncio
+    async def test_get_updates_lru_order(self) -> None:
+        """Accessing an entry via get() should update its LRU position."""
+        config = {"max_generic_entries": 3}
+        service = TestGenericCacheService.create_service(config)
+        await service.initialize()
+
+        try:
+            # Add 3 items
+            service.set("key1", {"value": 1})
+            service.set("key2", {"value": 2})
+            service.set("key3", {"value": 3})
+
+            # Access key1 - this should move it to "most recently used"
+            _ = service.get("key1")
+
+            # Now add key4 - should evict key2 (now the oldest) instead of key1
+            service.set("key4", {"value": 4})
+
+            # key2 should be evicted (was LRU after key1 was accessed)
+            assert service.get("key2") is None
+            # key1, key3, key4 should exist
+            assert service.get("key1") == {"value": 1}
+            assert service.get("key3") == {"value": 3}
+            assert service.get("key4") == {"value": 4}
+
+        finally:
+            await service.stop_cleanup_task()
+
+    @pytest.mark.asyncio
+    async def test_set_existing_key_updates_lru_order(self) -> None:
+        """Re-setting an existing key should update its LRU position without eviction."""
+        config = {"max_generic_entries": 3}
+        service = TestGenericCacheService.create_service(config)
+        await service.initialize()
+
+        try:
+            # Add 3 items
+            service.set("key1", {"value": 1})
+            service.set("key2", {"value": 2})
+            service.set("key3", {"value": 3})
+
+            # Update key1 - this should move it to "most recently used"
+            service.set("key1", {"value": "updated"})
+
+            # Size should still be 3 (no eviction on update)
+            assert len(service.cache) == 3
+
+            # Now add key4 - should evict key2 (oldest after key1 update)
+            service.set("key4", {"value": 4})
+
+            # key2 should be evicted
+            assert service.get("key2") is None
+            # Others should exist
+            assert service.get("key1") == {"value": "updated"}
+            assert service.get("key3") == {"value": 3}
+            assert service.get("key4") == {"value": 4}
+
+        finally:
+            await service.stop_cleanup_task()
