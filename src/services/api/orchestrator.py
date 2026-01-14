@@ -99,6 +99,7 @@ HTTP_SERVER_ERROR = 500
 YEAR_LENGTH = 4
 API_RESPONSE_LOG_LIMIT = 500  # Unified limit for all API response logging
 ACTIVITY_PERIOD_TUPLE_LENGTH = 2  # Expected length for activity period tuple
+PENDING_TASKS_SHUTDOWN_TIMEOUT = 5.0  # Timeout for pending tasks during graceful shutdown
 SECURE_RANDOM = __import__("random").SystemRandom()
 
 
@@ -593,6 +594,8 @@ class ExternalApiOrchestrator:
                 if self.session and not self.session.closed:
                     await self.session.close()
                 self.session = None
+                # Clear request executor's session reference to prevent stale session usage
+                self.request_executor.set_session(None)
                 raise
 
             forced_text = " (forced)" if force else ""
@@ -651,7 +654,7 @@ class ExternalApiOrchestrator:
         """Close the orchestrator and clean up resources gracefully.
 
         This method:
-        1. Waits for pending fire-and-forget tasks to complete (5s timeout)
+        1. Waits for pending fire-and-forget tasks to complete (PENDING_TASKS_SHUTDOWN_TIMEOUT)
         2. Cancels any tasks that don't complete in time
         3. Clears the _pending_tasks set
         4. Logs API statistics
@@ -665,7 +668,7 @@ class ExternalApiOrchestrator:
             )
             done, pending = await asyncio.wait(
                 self._pending_tasks,
-                timeout=5.0,
+                timeout=PENDING_TASKS_SHUTDOWN_TIMEOUT,
                 return_when=asyncio.ALL_COMPLETED,
             )
             # Mark done set as intentionally unused (we only need pending for cancellation)

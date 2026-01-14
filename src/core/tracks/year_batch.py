@@ -330,8 +330,10 @@ class YearBatchProcessor:
                 # One album failure won't crash the entire batch
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # Log any exceptions that occurred
+                # Log any exceptions that occurred (skip CancelledError - it's graceful shutdown)
                 for album_entry, result in zip(batch_slice, results, strict=True):
+                    if isinstance(result, asyncio.CancelledError):
+                        continue  # Skip canceled tasks - not a failure, just shutdown
                     if isinstance(result, BaseException):
                         album_key, _ = album_entry
                         artist_name, album_name = album_key

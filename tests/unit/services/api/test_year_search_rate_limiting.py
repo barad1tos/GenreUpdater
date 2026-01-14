@@ -57,10 +57,21 @@ class TestYearSearchRateLimiting:
     async def test_semaphore_uses_configured_limit(self) -> None:
         """Semaphore should use the configured max concurrent calls."""
         coordinator = _create_coordinator(max_concurrent_api_calls=5)
+        semaphore = coordinator._api_semaphore
 
-        # Semaphore's internal counter should match the limit
-        # Note: _value is internal but useful for testing
-        assert coordinator._api_semaphore._value == 5
+        # Behavioral test: acquire limit times should succeed, limit+1 should block
+        # Acquire 5 times (the configured limit)
+        for _ in range(5):
+            acquired = await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
+            assert acquired
+
+        # 6th acquire should timeout (semaphore is exhausted)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
+
+        # Cleanup: release all acquired permits
+        for _ in range(5):
+            semaphore.release()
 
     async def test_api_calls_respect_semaphore_limit(self) -> None:
         """API calls should not exceed the semaphore limit."""
@@ -120,5 +131,25 @@ class TestYearSearchRateLimiting:
             applemusic_client=_create_mock_client(),
             release_scorer=MagicMock(),
         )
+        semaphore = coordinator._api_semaphore
 
-        assert coordinator._api_semaphore._value == 50
+        # Behavioral test: verify default limit is 50 by acquiring all permits
+        acquired_count = 0
+        for _ in range(50):
+            try:
+                acquired = await asyncio.wait_for(semaphore.acquire(), timeout=0.01)
+                if acquired:
+                    acquired_count += 1
+            except TimeoutError:
+                break
+
+        # Should have acquired exactly 50 permits
+        assert acquired_count == 50, f"Expected 50 permits, got {acquired_count}"
+
+        # 51st acquire should timeout (semaphore is exhausted)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(semaphore.acquire(), timeout=0.01)
+
+        # Cleanup: release all acquired permits
+        for _ in range(acquired_count):
+            semaphore.release()
