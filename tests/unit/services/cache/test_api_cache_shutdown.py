@@ -104,3 +104,40 @@ class TestApiCacheShutdown:
         # Verify early return logged nothing (debug logs only when tasks exist)
         # Just ensure no exception was raised
         assert len(service._background_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_shutdown_is_idempotent(self) -> None:
+        """Test that calling shutdown() multiple times is safe.
+
+        Idempotent shutdown ensures that even if close() is called multiple
+        times (e.g., from different error handlers), the service remains
+        in a consistent state without raising exceptions.
+        """
+        service = TestApiCacheShutdown.create_service()
+
+        # Add a background task
+        task_completed = False
+
+        async def background_task() -> None:
+            """Simulate a background task that completes after a short delay."""
+            nonlocal task_completed
+            await asyncio.sleep(0.05)
+            task_completed = True
+
+        task = asyncio.create_task(background_task())
+        service._background_tasks.add(task)
+        task.add_done_callback(service._background_tasks.discard)
+
+        # First shutdown should wait for task and complete
+        await service.shutdown()
+        assert task_completed, "First shutdown should complete the task"
+        assert len(service._background_tasks) == 0
+        assert service._shutting_down is True
+
+        # Second shutdown should be a no-op (idempotent)
+        await service.shutdown()
+        assert len(service._background_tasks) == 0
+
+        # Third shutdown should also be safe
+        await service.shutdown()
+        assert len(service._background_tasks) == 0

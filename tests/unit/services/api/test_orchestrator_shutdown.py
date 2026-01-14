@@ -240,27 +240,36 @@ class TestOrchestratorGracefulShutdown:
 
     @pytest.mark.asyncio
     async def test_close_with_no_session(self) -> None:
-        """close() should handle case when session is None."""
+        """close() should handle pending tasks even when session is None.
+
+        The close() method processes pending tasks BEFORE checking session state,
+        ensuring proper cleanup regardless of session status.
+        """
         orchestrator = self.create_orchestrator()
 
         # Ensure session is None
         orchestrator.session = None
 
-        # Add a pending task (simulating orphaned task scenario)
+        # Track task completion
+        task_completed = False
+
         async def orphan_task() -> None:
             """Simulate an orphaned task that runs without active session."""
+            nonlocal task_completed
             await asyncio.sleep(0.01)
+            task_completed = True
 
         task = asyncio.create_task(orphan_task())
         orchestrator._pending_tasks.add(task)
         task.add_done_callback(orchestrator._pending_tasks.discard)
 
-        # Call close - should return early but still handle pending tasks
+        # Call close - should handle pending tasks before checking session
         await orchestrator.close()
 
-        # The current implementation returns early if session is None/closed
-        # This test documents that behavior - pending tasks may be orphaned
-        # if close() is called without a session
+        # Verify pending tasks were properly handled
+        assert task_completed, "Pending tasks should complete even without session"
+        assert len(orchestrator._pending_tasks) == 0, "Pending tasks should be cleared"
+        assert task.done(), "Task should be done after close()"
 
     @pytest.mark.asyncio
     async def test_close_logs_pending_task_count(self) -> None:
