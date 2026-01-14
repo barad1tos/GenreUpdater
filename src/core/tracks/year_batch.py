@@ -250,15 +250,31 @@ class YearBatchProcessor:
         changes_log: list[ChangeLogEntry],
         force: bool = False,
     ) -> None:
-        """Process a single album within concurrency limits and update progress."""
+        """Process a single album within concurrency limits and update progress.
+
+        Uses try/finally to ensure progress is always updated, even if
+        processing fails. Exceptions are allowed to propagate so they can
+        be caught by asyncio.gather in the caller.
+
+        Args:
+            album_entry: Tuple of ((artist, album), tracks).
+            semaphore: Concurrency limiting semaphore.
+            progress: Rich progress instance for UI updates.
+            task_id: Progress task ID for this batch.
+            updated_tracks: Shared list to append updated tracks to.
+            changes_log: Shared list to append change log entries to.
+            force: If True, bypass skip checks and re-query APIs.
+
+        """
         album_key, album_tracks = album_entry
         artist_name, album_name = album_key
 
-        async with semaphore:
-            self.console_logger.debug("Processing album '%s - %s'", artist_name, album_name)
-            await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
-
-        progress.update(task_id, advance=1)
+        try:
+            async with semaphore:
+                self.console_logger.debug("Processing album '%s - %s'", artist_name, album_name)
+                await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
+        finally:
+            progress.update(task_id, advance=1)
 
     async def _process_batches_concurrently(
         self,
@@ -270,7 +286,22 @@ class YearBatchProcessor:
         changes_log: list[ChangeLogEntry],
         force: bool = False,
     ) -> None:
-        """Process albums concurrently using adaptive pacing and shared semaphore."""
+        """Process albums concurrently with error resilience.
+
+        Uses asyncio.gather with return_exceptions=True so that one album
+        failure doesn't crash the entire batch. Failed albums are logged
+        but processing continues for remaining albums.
+
+        Args:
+            album_items: List of (album_key, tracks) tuples to process.
+            batch_size: Number of albums to process in each batch.
+            total_albums: Total number of albums for progress tracking.
+            concurrency_limit: Maximum concurrent album processing tasks.
+            updated_tracks: Shared list to append updated tracks to.
+            changes_log: Shared list to append change log entries to.
+            force: If True, bypass skip checks and re-query APIs.
+
+        """
         semaphore = asyncio.Semaphore(concurrency_limit)
 
         progress = _create_album_progress()
@@ -281,18 +312,36 @@ class YearBatchProcessor:
                 batch_end = min(batch_start + batch_size, total_albums)
                 batch_slice = album_items[batch_start:batch_end]
 
-                async with asyncio.TaskGroup() as task_group:
-                    for album_entry in batch_slice:
-                        task_group.create_task(
-                            self._process_album_entry(
-                                album_entry,
-                                semaphore,
-                                progress,
-                                task_id,
-                                updated_tracks,
-                                changes_log,
-                                force=force,
-                            )
+                # Create tasks for all albums in this batch
+                tasks = [
+                    self._process_album_entry(
+                        album_entry,
+                        semaphore,
+                        progress,
+                        task_id,
+                        updated_tracks,
+                        changes_log,
+                        force=force,
+                    )
+                    for album_entry in batch_slice
+                ]
+
+                # Use gather with return_exceptions for resilience
+                # One album failure won't crash the entire batch
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Log any exceptions that occurred (skip CancelledError - it's graceful shutdown)
+                for album_entry, result in zip(batch_slice, results, strict=True):
+                    if isinstance(result, asyncio.CancelledError):
+                        continue  # Skip canceled tasks - not a failure, just shutdown
+                    if isinstance(result, BaseException):
+                        album_key, _ = album_entry
+                        artist_name, album_name = album_key
+                        self.error_logger.warning(
+                            "Failed to process album %s/%s: %s",
+                            artist_name,
+                            album_name,
+                            result,
                         )
 
     async def _process_single_album(

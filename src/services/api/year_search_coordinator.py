@@ -60,6 +60,7 @@ class YearSearchCoordinator:
         discogs_client: DiscogsClient,
         applemusic_client: AppleMusicClient,
         release_scorer: ReleaseScorer,
+        max_concurrent_api_calls: int = 50,
     ) -> None:
         """Initialize the year search coordinator.
 
@@ -72,6 +73,8 @@ class YearSearchCoordinator:
             discogs_client: Discogs API client
             applemusic_client: Apple Music API client
             release_scorer: Release scoring service
+            max_concurrent_api_calls: Maximum concurrent API requests (default 50).
+                Prevents socket exhaustion on large libraries.
 
         """
         self.console_logger = console_logger
@@ -82,6 +85,7 @@ class YearSearchCoordinator:
         self.discogs_client = discogs_client
         self.applemusic_client = applemusic_client
         self.release_scorer = release_scorer
+        self._api_semaphore = asyncio.Semaphore(max_concurrent_api_calls)
 
     async def fetch_all_api_results(
         self,
@@ -247,8 +251,8 @@ class YearSearchCoordinator:
 
         return None
 
-    @staticmethod
     async def _call_api_with_proper_params(
+        self,
         api_client: MusicBrainzClient | DiscogsClient | AppleMusicClient,
         api_name: str,
         artist_norm: str,
@@ -259,12 +263,15 @@ class YearSearchCoordinator:
 
         MusicBrainz and Discogs accept artist_region parameter.
         AppleMusic doesn't accept artist_region parameter.
+
+        Uses semaphore to limit concurrent API requests.
         """
-        if api_name in {"musicbrainz", "discogs"}:
-            # Cast to protocol that accepts artist_region
-            return await cast(_RegionAwareApi, api_client).get_scored_releases(artist_norm, album_norm, artist_region)
-        # Cast to protocol that doesn't accept artist_region
-        return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
+        async with self._api_semaphore:
+            if api_name in {"musicbrainz", "discogs"}:
+                # Cast to protocol that accepts artist_region
+                return await cast(_RegionAwareApi, api_client).get_scored_releases(artist_norm, album_norm, artist_region)
+            # Cast to protocol that doesn't accept artist_region
+            return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
         """Get API client by name."""
@@ -293,7 +300,7 @@ class YearSearchCoordinator:
         ]
 
         # Execute all API calls concurrently
-        results = await asyncio.gather(*api_tasks, return_exceptions=True)
+        results = list(await asyncio.gather(*api_tasks, return_exceptions=True))
 
         # Process results
         return self._process_api_task_results(results, api_order, log_artist, log_album)

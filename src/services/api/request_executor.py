@@ -38,6 +38,12 @@ class ApiRequestExecutor:
     - Retry with exponential backoff
     - Response parsing and validation
     - Cache integration
+
+    Important:
+        Session lifecycle is managed by ExternalApiOrchestrator, NOT here.
+        This executor only holds a session reference set via set_session().
+        It may clear this reference on errors (e.g., event loop closed), but
+        it will NEVER close the session. Closing is the owner's responsibility.
     """
 
     def __init__(
@@ -350,7 +356,7 @@ class ApiRequestExecutor:
                 log_url=log_url,
             )
         except RuntimeError as rt:
-            return await self._handle_runtime_error(rt, api_name, attempt, max_retries, url)
+            return self._handle_runtime_error(rt, api_name, attempt, max_retries, url)
         except (TimeoutError, aiohttp.ClientError) as e:
             return await self._handle_client_error(e, api_name, attempt, max_retries, base_delay, url)
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
@@ -558,7 +564,7 @@ class ApiRequestExecutor:
         self.console_logger.debug(text_snippet)
         self.console_logger.debug("====== END %s RAW RESPONSE ======", api_name.upper())
 
-    async def _handle_runtime_error(
+    def _handle_runtime_error(
         self,
         exception: RuntimeError,
         api_name: str,
@@ -566,25 +572,36 @@ class ApiRequestExecutor:
         max_retries: int,
         url: str,
     ) -> dict[str, Any] | None:
-        """Handle RuntimeError exceptions."""
+        """Handle RuntimeError exceptions.
+
+        When encountering "Event loop is closed" errors, this method clears the
+        session reference but does NOT close the session. Session lifecycle is
+        managed by ExternalApiOrchestrator, not here. The executor only clears
+        its reference to signal that a new session is needed.
+
+        Args:
+            exception: The RuntimeError that occurred.
+            api_name: Name of the API for logging.
+            attempt: Current retry attempt number (0-indexed).
+            max_retries: Maximum number of retries allowed.
+            url: URL that was being requested.
+
+        Returns:
+            None always. Caller must handle session recreation if needed.
+        """
         if "Event loop is closed" not in str(exception) or attempt >= max_retries:
             self._log_final_failure(api_name, url, exception)
             return None
 
         self.error_logger.exception(
-            "[%s] Event loop is closed. Recreating ClientSession and retrying %d/%d",
+            "[%s] Event loop is closed. Clearing session reference and retrying %d/%d",
             api_name,
             attempt + 1,
             max_retries,
         )
-        try:
-            if self.session is not None and not self.session.closed:
-                await self.session.close()
-        except (aiohttp.ClientError, TimeoutError, RuntimeError):
-            self.error_logger.exception("Error closing existing session")
-
+        # Clear session reference but do NOT close it.
+        # Session lifecycle is managed by ExternalApiOrchestrator.
         self.session = None
-        # Caller must handle session recreation
         return None
 
     async def _handle_client_error(

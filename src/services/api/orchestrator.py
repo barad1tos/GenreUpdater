@@ -99,6 +99,7 @@ HTTP_SERVER_ERROR = 500
 YEAR_LENGTH = 4
 API_RESPONSE_LOG_LIMIT = 500  # Unified limit for all API response logging
 ACTIVITY_PERIOD_TUPLE_LENGTH = 2  # Expected length for activity period tuple
+PENDING_TASKS_SHUTDOWN_TIMEOUT = 5.0  # Timeout for pending tasks during graceful shutdown
 SECURE_RANDOM = __import__("random").SystemRandom()
 
 
@@ -570,24 +571,39 @@ class ExternalApiOrchestrator:
         raise RuntimeError(msg)
 
     async def initialize(self, force: bool = False) -> None:
-        """Initialize the aiohttp ClientSession and API clients."""
+        """Initialize the aiohttp ClientSession and API clients.
+
+        Args:
+            force: If True, close existing session and reinitialize.
+
+        Raises:
+            Exception: Re-raises any exception from initialization after cleanup.
+        """
         if force and self.session and not self.session.closed:
             await self.session.close()
             self.session = None
 
         if self.session is None:
             self.session = self._create_client_session()
-            self.request_executor.set_session(self.session)
+            try:
+                self.request_executor.set_session(self.session)
+                self._initialize_api_clients()
+                self._initialize_year_search_coordinator()
+            except Exception:
+                # Clean up session on initialization failure to prevent resource leak
+                if self.session and not self.session.closed:
+                    await self.session.close()
+                self.session = None
+                # Clear request executor's session reference to prevent stale session usage
+                self.request_executor.set_session(None)
+                raise
+
             forced_text = " (forced)" if force else ""
             self.console_logger.info(
                 "External API session initialized with User-Agent: %s%s",
                 self.user_agent,
                 forced_text,
             )
-
-            # Initialize API clients after the session is created
-            self._initialize_api_clients()
-            self._initialize_year_search_coordinator()
             self.console_logger.debug("API clients initialized")
 
             # Mark as initialized
@@ -635,7 +651,37 @@ class ExternalApiOrchestrator:
             self.session = self._create_client_session()
 
     async def close(self) -> None:
-        """Close the aiohttp ClientSession and log API usage statistics."""
+        """Close the orchestrator and clean up resources gracefully.
+
+        This method:
+        1. Waits for pending fire-and-forget tasks to complete (PENDING_TASKS_SHUTDOWN_TIMEOUT)
+        2. Cancels any tasks that don't complete in time
+        3. Clears the _pending_tasks set
+        4. Logs API statistics
+        5. Closes the HTTP session
+        """
+        # Wait for pending tasks with timeout
+        if self._pending_tasks:
+            self.console_logger.debug(
+                "Waiting for %d pending tasks to complete...",
+                len(self._pending_tasks),
+            )
+            done, pending = await asyncio.wait(
+                self._pending_tasks,
+                timeout=PENDING_TASKS_SHUTDOWN_TIMEOUT,
+                return_when=asyncio.ALL_COMPLETED,
+            )
+            # Mark done set as intentionally unused (we only need pending for cancellation)
+            _ = done
+
+            # Cancel any tasks that didn't complete in time
+            for task in pending:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+            self._pending_tasks.clear()
+
         if self.session is None or self.session.closed:
             return
 

@@ -8,6 +8,7 @@ import json
 import logging
 import tempfile
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -38,8 +39,12 @@ class GenericCacheService:
         self.logger = logger or logging.getLogger(__name__)
         self.cache_config = SmartCacheConfig(config)
 
-        # Generic cache: {hash_key: (value, timestamp)}
-        self.cache: dict[str, tuple[CacheableValue, float]] = {}
+        # LRU cache: OrderedDict maintains insertion/access order for LRU eviction.
+        # Each entry maps hash_key to (value, expires_at_timestamp) tuple.
+        self.cache: OrderedDict[str, tuple[CacheableValue, float]] = OrderedDict()
+
+        # Max cache size for LRU eviction (evicts on set() when exceeded)
+        self.max_size: int = config.get("max_generic_entries", 10000)
 
         # Cleanup task reference
         self._cleanup_task: asyncio.Task[None] | None = None
@@ -137,6 +142,8 @@ class GenericCacheService:
     def get(self, key_data: CacheableKey) -> CacheableValue | None:
         """Get value from generic cache.
 
+        Accessing an entry updates its LRU position (moves to end).
+
         Args:
             key_data: Cache key data
 
@@ -157,11 +164,17 @@ class GenericCacheService:
             del self.cache[key]
             return None
 
+        # Move to end to mark as recently used (LRU update)
+        self.cache.move_to_end(key)
+
         self.logger.debug("Generic cache hit: %s", key[:16])
         return value
 
     def set(self, key_data: CacheableKey, value: CacheableValue, ttl: int | None = None) -> None:
-        """Store value in generic cache.
+        """Store value in generic cache with LRU eviction.
+
+        If the cache is at capacity and the key is new, the least recently used
+        entry is evicted before adding the new entry.
 
         Args:
             key_data: Cache key data
@@ -170,11 +183,20 @@ class GenericCacheService:
         """
         key = UnifiedHashService.hash_generic_key(key_data)
 
+        # Evict LRU entry if at capacity and this is a new key
+        if len(self.cache) >= self.max_size and key not in self.cache:
+            # Remove oldest entry (first item in OrderedDict = LRU)
+            evicted_key, _ = self.cache.popitem(last=False)
+            self.logger.debug("LRU eviction: removed %s to make room", evicted_key[:16])
+
         # Use provided TTL or default
         actual_ttl = ttl if ttl is not None else self.default_ttl
         expires_at = time.time() + actual_ttl
 
         self.cache[key] = (value, expires_at)
+
+        # Move to end to mark as recently used (handles both new and updated keys)
+        self.cache.move_to_end(key)
 
         self.logger.debug("Stored in generic cache: %s (TTL: %ds)", key[:16], actual_ttl)
 
@@ -233,27 +255,25 @@ class GenericCacheService:
         return timestamp <= time.time()
 
     def enforce_size_limits(self) -> int:
-        """Enforce cache size limits by removing oldest entries.
+        """Enforce cache size limits by removing LRU (least recently used) entries.
+
+        Uses OrderedDict iteration order where first = oldest (LRU).
 
         Returns:
             Number of entries removed
         """
-        max_entries = self.config.get("max_generic_entries", 10000)
-
-        if len(self.cache) <= max_entries:
+        if len(self.cache) <= self.max_size:
             return 0
 
-        # Sort by timestamp (oldest first) and remove excess
-        sorted_items = sorted(self.cache.items(), key=lambda x: x[1][1])
-        entries_to_remove = len(self.cache) - max_entries
-
+        entries_to_remove = len(self.cache) - self.max_size
         removed_count = 0
-        for key, _ in sorted_items[:entries_to_remove]:
-            del self.cache[key]
+
+        for _ in range(entries_to_remove):
+            self.cache.popitem(last=False)  # Remove LRU (oldest in OrderedDict)
             removed_count += 1
 
         if removed_count > 0:
-            self.logger.info("Enforced size limit: removed %d oldest entries", removed_count)
+            self.logger.info("Enforced size limit: removed %d LRU entries", removed_count)
 
         return removed_count
 
@@ -300,7 +320,7 @@ class GenericCacheService:
             "default_ttl": self.default_ttl,
             "ttl_policy": policy.ttl_seconds,
             "invalidation_strategy": policy.invalidation_strategy.value,
-            "max_entries": self.config.get("max_generic_entries", 10000),
+            "max_entries": self.max_size,
             "cleanup_running": self._cleanup_task is not None and not self._cleanup_task.done(),
         }
 
@@ -338,17 +358,17 @@ class GenericCacheService:
             self.logger.debug("Generic cache file %s not found; starting fresh", self.cache_file)
             return
 
-        def blocking_load() -> dict[str, tuple[CacheableValue, float]]:
+        def blocking_load() -> OrderedDict[str, tuple[CacheableValue, float]]:
             """Load cache entries from disk within a worker thread."""
             try:
                 with self.cache_file.open(encoding="utf-8") as file_handle:
                     data = json.load(file_handle)
             except (json.JSONDecodeError, OSError) as e:
                 self.logger.warning("Failed to load generic cache file %s: %s", self.cache_file, e)
-                return {}
+                return OrderedDict()
 
             now = time.time()
-            restored: dict[str, tuple[CacheableValue, float]] = {}
+            restored: OrderedDict[str, tuple[CacheableValue, float]] = OrderedDict()
             for key, entry in data.items():
                 if not isinstance(entry, dict):
                     continue

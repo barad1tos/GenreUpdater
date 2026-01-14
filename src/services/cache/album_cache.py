@@ -51,6 +51,9 @@ class AlbumCacheService:
         # Album years cache: {hash_key: AlbumCacheEntry}
         self.album_years_cache: dict[str, AlbumCacheEntry] = {}
 
+        # Lock for thread-safe cache operations
+        self._cache_lock = asyncio.Lock()
+
         # Cache file paths - use get_full_log_path to ensure proper logs_base_dir integration
         self.album_years_cache_file = Path(get_full_log_path(config, "album_years_cache_file", "cache/album_years.csv"))
 
@@ -70,11 +73,13 @@ class AlbumCacheService:
         Returns:
             Album release year if found, None otherwise
         """
-        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
-        await asyncio.sleep(0)
-        key = UnifiedHashService.hash_album_key(artist, album)
+        async with self._cache_lock:
+            key = UnifiedHashService.hash_album_key(artist, album)
 
-        if key in self.album_years_cache:
+            if key not in self.album_years_cache:
+                self.logger.debug("Album year cache miss: %s - %s", artist, album)
+                return None
+
             entry = self.album_years_cache[key]
 
             # Validate cache entry consistency (detect true hash collision)
@@ -99,9 +104,6 @@ class AlbumCacheService:
             self.logger.debug("Album year cache hit: %s - %s = %s", artist, album, entry.year)
             return entry.year
 
-        self.logger.debug("Album year cache miss: %s - %s", artist, album)
-        return None
-
     async def get_album_year_entry(self, artist: str, album: str) -> AlbumCacheEntry | None:
         """Get full album cache entry (not just year).
 
@@ -114,10 +116,13 @@ class AlbumCacheService:
         Returns:
             Full AlbumCacheEntry if found and not expired, None otherwise
         """
-        await asyncio.sleep(0)
-        key = UnifiedHashService.hash_album_key(artist, album)
+        async with self._cache_lock:
+            key = UnifiedHashService.hash_album_key(artist, album)
 
-        if key in self.album_years_cache:
+            if key not in self.album_years_cache:
+                self.logger.debug("Album year cache miss: %s - %s", artist, album)
+                return None
+
             entry = self.album_years_cache[key]
 
             # Validate cache entry consistency (detect true hash collision)
@@ -147,9 +152,6 @@ class AlbumCacheService:
             )
             return entry
 
-        self.logger.debug("Album year cache miss: %s - %s", artist, album)
-        return None
-
     async def store_album_year(self, artist: str, album: str, year: str, confidence: int = 0) -> None:
         """Store album release year in cache.
 
@@ -159,29 +161,28 @@ class AlbumCacheService:
             year: Album release year
             confidence: Confidence score 0-100 (higher = more trustworthy)
         """
-        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
-        await asyncio.sleep(0)
-        key = UnifiedHashService.hash_album_key(artist, album)
+        async with self._cache_lock:
+            key = UnifiedHashService.hash_album_key(artist, album)
 
-        # Store with normalized values for consistency
-        normalized_artist = artist.strip()
-        normalized_album = album.strip()
-        normalized_year = year.strip()
+            # Store with normalized values for consistency
+            normalized_artist = artist.strip()
+            normalized_album = album.strip()
+            normalized_year = year.strip()
 
-        self.album_years_cache[key] = AlbumCacheEntry(
-            artist=normalized_artist,
-            album=normalized_album,
-            year=normalized_year,
-            timestamp=time.time(),
-            confidence=confidence,
-        )
-        self.logger.debug(
-            "Stored album year: %s - %s = %s (confidence %d%%)",
-            normalized_artist,
-            normalized_album,
-            normalized_year,
-            confidence,
-        )
+            self.album_years_cache[key] = AlbumCacheEntry(
+                artist=normalized_artist,
+                album=normalized_album,
+                year=normalized_year,
+                timestamp=time.time(),
+                confidence=confidence,
+            )
+            self.logger.debug(
+                "Stored album year: %s - %s = %s (confidence %d%%)",
+                normalized_artist,
+                normalized_album,
+                normalized_year,
+                confidence,
+            )
 
     async def invalidate_album(self, artist: str, album: str) -> None:
         """Invalidate specific album from cache.
@@ -190,21 +191,19 @@ class AlbumCacheService:
             artist: Artist name
             album: Album name
         """
-        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
-        await asyncio.sleep(0)
-        key = UnifiedHashService.hash_album_key(artist, album)
+        async with self._cache_lock:
+            key = UnifiedHashService.hash_album_key(artist, album)
 
-        if key in self.album_years_cache:
-            del self.album_years_cache[key]
-            self.logger.info("Invalidated album cache: %s - %s", artist, album)
+            if key in self.album_years_cache:
+                del self.album_years_cache[key]
+                self.logger.info("Invalidated album cache: %s - %s", artist, album)
 
     async def invalidate_all(self) -> None:
         """Clear all album cache entries."""
-        # Yield to event loop for proper async behavior (no actual I/O, but async interface required)
-        await asyncio.sleep(0)
-        count = len(self.album_years_cache)
-        self.album_years_cache.clear()
-        self.logger.info("Cleared all album cache entries (%d items)", count)
+        async with self._cache_lock:
+            count = len(self.album_years_cache)
+            self.album_years_cache.clear()
+            self.logger.info("Cleared all album cache entries (%d items)", count)
 
     async def save_to_disk(self) -> None:
         """Save album cache to CSV file."""
