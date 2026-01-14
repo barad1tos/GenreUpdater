@@ -12,7 +12,7 @@ These tests address CODE_AUDIT_2026-01 issue C2:
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -107,6 +107,7 @@ class TestOrchestratorGracefulShutdown:
         task_completed = False
 
         async def slow_task() -> None:
+            """Simulate a slow-running task that takes 0.1s to complete."""
             nonlocal task_completed
             await asyncio.sleep(0.1)  # Short delay
             task_completed = True
@@ -137,16 +138,17 @@ class TestOrchestratorGracefulShutdown:
 
         # Track task state
         task_started = False
-        task_cancelled = False
+        task_canceled = False
 
         async def very_slow_task() -> None:
-            nonlocal task_started, task_cancelled
+            """Simulate a task that takes longer than the timeout."""
+            nonlocal task_started, task_canceled
             task_started = True
             try:
                 # This task takes way longer than the 5s timeout
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
-                task_cancelled = True
+                task_canceled = True
                 raise
 
         # Add the slow task
@@ -162,15 +164,26 @@ class TestOrchestratorGracefulShutdown:
             timeout: float | None = None,
             return_when: str = asyncio.ALL_COMPLETED,
         ) -> tuple[set[asyncio.Task[Any]], set[asyncio.Task[Any]]]:
-            # Use 0.1s instead of 5s for faster tests
-            return await original_wait(tasks, timeout=0.1, return_when=return_when)
+            """Wrapper that uses 0.1s timeout instead of the real timeout.
+
+            Args:
+                tasks: Set of tasks to wait for.
+                timeout: Original timeout (ignored, uses 0.1s for fast tests).
+                return_when: Original return condition (ignored).
+
+            Returns:
+                Tuple of (done, pending) task sets.
+            """
+            # Mark parameters as intentionally unused (interface compatibility)
+            _ = timeout, return_when
+            return await original_wait(tasks, timeout=0.1, return_when=asyncio.ALL_COMPLETED)
 
         with patch("asyncio.wait", fast_timeout_wait):
             await orchestrator.close()
 
-        # Verify task was started and cancelled
+        # Verify task was started and canceled
         assert task_started, "Task should have started"
-        assert task_cancelled, "Task should have been cancelled due to timeout"
+        assert task_canceled, "Task should have been canceled due to timeout"
         assert len(orchestrator._pending_tasks) == 0, "Pending tasks should be cleared"
         mock_session.close.assert_called_once()
 
@@ -207,6 +220,7 @@ class TestOrchestratorGracefulShutdown:
 
         # Create multiple quick tasks
         async def quick_task() -> None:
+            """Simulate a fast task that completes in 0.01s."""
             await asyncio.sleep(0.01)
 
         tasks = []
@@ -233,12 +247,9 @@ class TestOrchestratorGracefulShutdown:
         orchestrator.session = None
 
         # Add a pending task (simulating orphaned task scenario)
-        task_completed = False
-
         async def orphan_task() -> None:
-            nonlocal task_completed
+            """Simulate an orphaned task that runs without active session."""
             await asyncio.sleep(0.01)
-            task_completed = True
 
         task = asyncio.create_task(orphan_task())
         orchestrator._pending_tasks.add(task)
@@ -264,6 +275,7 @@ class TestOrchestratorGracefulShutdown:
 
         # Add tasks
         async def quick_task() -> None:
+            """Simulate a quick task for logging test."""
             await asyncio.sleep(0.01)
 
         for _ in range(3):
@@ -275,8 +287,8 @@ class TestOrchestratorGracefulShutdown:
         await orchestrator.close()
 
         # Check that debug message was logged
-        debug_messages = orchestrator.console_logger.debug_messages
-        found_pending_log = any("pending tasks" in msg.lower() for msg in debug_messages)
+        mock_logger = cast(MockLogger, orchestrator.console_logger)
+        found_pending_log = any("pending tasks" in msg.lower() for msg in mock_logger.debug_messages)
         assert found_pending_log, "Should log pending task count"
 
     @pytest.mark.asyncio
@@ -291,19 +303,21 @@ class TestOrchestratorGracefulShutdown:
         orchestrator.session = mock_session
 
         fast_completed = 0
-        slow_cancelled = 0
+        slow_canceled = 0
 
         async def fast_task() -> None:
+            """Simulate a fast task that completes quickly."""
             nonlocal fast_completed
             await asyncio.sleep(0.01)
             fast_completed += 1
 
         async def slow_task() -> None:
-            nonlocal slow_cancelled
+            """Simulate a slow task that will be canceled."""
+            nonlocal slow_canceled
             try:
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
-                slow_cancelled += 1
+                slow_canceled += 1
                 raise
 
         # Add 2 fast tasks and 1 slow task
@@ -324,14 +338,26 @@ class TestOrchestratorGracefulShutdown:
             timeout: float | None = None,
             return_when: str = asyncio.ALL_COMPLETED,
         ) -> tuple[set[asyncio.Task[Any]], set[asyncio.Task[Any]]]:
-            return await original_wait(tasks, timeout=0.2, return_when=return_when)
+            """Wrapper that uses 0.2s timeout instead of the real timeout.
+
+            Args:
+                tasks: Set of tasks to wait for.
+                timeout: Original timeout (ignored, uses 0.2s for fast tests).
+                return_when: Original return condition (ignored).
+
+            Returns:
+                Tuple of (done, pending) task sets.
+            """
+            # Mark parameters as intentionally unused (interface compatibility)
+            _ = timeout, return_when
+            return await original_wait(tasks, timeout=0.2, return_when=asyncio.ALL_COMPLETED)
 
         with patch("asyncio.wait", fast_timeout_wait):
             await orchestrator.close()
 
         # Verify outcomes
         assert fast_completed == 2, "Fast tasks should have completed"
-        assert slow_cancelled == 1, "Slow task should have been cancelled"
+        assert slow_canceled == 1, "Slow task should have been canceled"
         assert len(orchestrator._pending_tasks) == 0
 
     @pytest.mark.asyncio
@@ -346,6 +372,7 @@ class TestOrchestratorGracefulShutdown:
         orchestrator.session = mock_session
 
         async def failing_task() -> None:
+            """Simulate a task that raises an exception."""
             await asyncio.sleep(0.01)
             raise ValueError("Task failed!")
 

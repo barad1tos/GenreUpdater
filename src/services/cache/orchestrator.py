@@ -348,5 +348,11 @@ class CacheOrchestrator(CacheServiceProtocol):
         await self.api_service.invalidate_all()
 
     async def shutdown(self) -> None:
-        """Gracefully shutdown background tasks for cache services."""
+        """Gracefully shutdown background tasks for cache services.
+
+        Shuts down:
+        1. ApiCacheService background tasks (cache invalidation, etc.)
+        2. GenericCacheService cleanup task
+        """
+        await self.api_service.shutdown()
         await self.generic_service.stop_cleanup_task()

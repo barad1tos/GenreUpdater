@@ -392,23 +392,14 @@ class DependencyContainer:
         return self._console_logger
 
     async def close(self) -> None:
-        """Async cleanup of resources and services."""
+        """Close all services in the correct order.
+
+        Order: API first (to flush pending tasks), then cache (to persist data).
+        This prevents API orchestrator from writing to a closed cache during shutdown.
+        """
         self._console_logger.debug("Closing %s...", LogFormat.entity("DependencyContainer"))
 
-        # Save cache before closing
-        if self._cache_service is not None:
-            try:
-                await self._cache_service.save_all_to_disk()
-                self._console_logger.debug("Cache saved successfully")
-            except Exception as e:
-                self._console_logger.warning(f"Failed to save cache: {e}")
-            finally:
-                try:
-                    await self._cache_service.shutdown()
-                except Exception as e:
-                    self._console_logger.warning(f"Failed to shutdown cache services: {e}")
-
-        # Close API Orchestrator's aiohttp session properly
+        # 1. FIRST: Close API orchestrator (flushes pending tasks)
         if self._api_orchestrator is not None:
             if not hasattr(self._api_orchestrator, "close"):
                 self._console_logger.error("API Orchestrator does not have a 'close' method. Possible interface change or initialization error.")
@@ -417,7 +408,20 @@ class DependencyContainer:
                     await self._api_orchestrator.close()
                     self._console_logger.debug("%s closed successfully", LogFormat.entity("ExternalApiOrchestrator"))
                 except (OSError, RuntimeError, asyncio.CancelledError) as e:
-                    self._console_logger.warning(f"Failed to close API Orchestrator: {e}")
+                    self._console_logger.warning("Failed to close API Orchestrator: %s", e)
+
+        # 2. THEN: Save and shutdown cache
+        if self._cache_service is not None:
+            try:
+                await self._cache_service.save_all_to_disk()
+                self._console_logger.debug("Cache saved successfully")
+            except Exception as e:
+                self._console_logger.warning("Failed to save cache: %s", e)
+            finally:
+                try:
+                    await self._cache_service.shutdown()
+                except Exception as e:
+                    self._console_logger.warning("Failed to shutdown cache services: %s", e)
 
         self._console_logger.debug("%s closed.", LogFormat.entity("DependencyContainer"))
 

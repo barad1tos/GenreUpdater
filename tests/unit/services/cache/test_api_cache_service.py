@@ -269,12 +269,9 @@ class TestApiCacheService:
         )
         service.event_manager.emit_event(event)
 
-        # Verify info log was called
+        # Verify info log was called (f-string format)
         cast(MagicMock, service.logger.info).assert_called_with(
-            "Track %s identity changed, invalidating cache for: %s - %s",
-            "track456",
-            "Old Artist",
-            "Old Album",
+            "Track track456 identity changed, invalidating cache for: Old Artist - Old Album",
         )
 
         # Wait for async task to complete

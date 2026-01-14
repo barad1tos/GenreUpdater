@@ -570,24 +570,37 @@ class ExternalApiOrchestrator:
         raise RuntimeError(msg)
 
     async def initialize(self, force: bool = False) -> None:
-        """Initialize the aiohttp ClientSession and API clients."""
+        """Initialize the aiohttp ClientSession and API clients.
+
+        Args:
+            force: If True, close existing session and reinitialize.
+
+        Raises:
+            Exception: Re-raises any exception from initialization after cleanup.
+        """
         if force and self.session and not self.session.closed:
             await self.session.close()
             self.session = None
 
         if self.session is None:
             self.session = self._create_client_session()
-            self.request_executor.set_session(self.session)
+            try:
+                self.request_executor.set_session(self.session)
+                self._initialize_api_clients()
+                self._initialize_year_search_coordinator()
+            except Exception:
+                # Clean up session on initialization failure to prevent resource leak
+                if self.session and not self.session.closed:
+                    await self.session.close()
+                self.session = None
+                raise
+
             forced_text = " (forced)" if force else ""
             self.console_logger.info(
                 "External API session initialized with User-Agent: %s%s",
                 self.user_agent,
                 forced_text,
             )
-
-            # Initialize API clients after the session is created
-            self._initialize_api_clients()
-            self._initialize_year_search_coordinator()
             self.console_logger.debug("API clients initialized")
 
             # Mark as initialized
@@ -650,11 +663,13 @@ class ExternalApiOrchestrator:
                 "Waiting for %d pending tasks to complete...",
                 len(self._pending_tasks),
             )
-            _done, pending = await asyncio.wait(
+            done, pending = await asyncio.wait(
                 self._pending_tasks,
                 timeout=5.0,
                 return_when=asyncio.ALL_COMPLETED,
             )
+            # Mark done set as intentionally unused (we only need pending for cancellation)
+            _ = done
 
             # Cancel any tasks that didn't complete in time
             for task in pending:

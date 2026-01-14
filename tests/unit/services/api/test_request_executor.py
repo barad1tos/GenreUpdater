@@ -784,7 +784,7 @@ class TestAttemptRequest:
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = RuntimeError("Event loop is closed")
 
-            with patch.object(configured_executor, "_handle_runtime_error", new_callable=AsyncMock) as mock_handler:
+            with patch.object(configured_executor, "_handle_runtime_error") as mock_handler:
                 mock_handler.return_value = None
 
                 result = await configured_executor._attempt_request(
@@ -1223,10 +1223,9 @@ class TestReadResponseText:
 
 
 class TestHandleRuntimeError:
-    """Tests for _handle_runtime_error method."""
+    """Tests for _handle_runtime_error method (synchronous)."""
 
-    @pytest.mark.asyncio
-    async def test_handle_runtime_error_event_loop_closed_retryable(
+    def test_handle_runtime_error_event_loop_closed_retryable(
         self,
         executor: ApiRequestExecutor,
         mock_session: MagicMock,
@@ -1235,54 +1234,83 @@ class TestHandleRuntimeError:
         executor.set_session(mock_session)
         error = RuntimeError("Event loop is closed")
 
-        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
+        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
         assert executor.session is None  # Session should be cleared
 
-    @pytest.mark.asyncio
-    async def test_handle_runtime_error_event_loop_closed_max_retries(
+    def test_handle_runtime_error_event_loop_closed_max_retries(
         self,
         executor: ApiRequestExecutor,
     ) -> None:
         """Test event loop closed error at max retries."""
         error = RuntimeError("Event loop is closed")
 
-        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=3, max_retries=3, url="https://api.example.com")
+        result = executor._handle_runtime_error(error, "musicbrainz", attempt=3, max_retries=3, url="https://api.example.com")
 
         assert result is None
 
-    @pytest.mark.asyncio
-    async def test_handle_runtime_error_other_error(
+    def test_handle_runtime_error_other_error(
         self,
         executor: ApiRequestExecutor,
     ) -> None:
         """Test other RuntimeError types."""
         error = RuntimeError("Some other runtime error")
 
-        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
+        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
 
-    @pytest.mark.asyncio
-    async def test_handle_runtime_error_session_close_fails(
+    def test_handle_runtime_error_clears_session_reference(
         self,
         executor: ApiRequestExecutor,
     ) -> None:
-        """Test handles failure to close session."""
-        # Create a session that fails to close
+        """Test that session reference is cleared without attempting to close.
+
+        When encountering "Event loop is closed" errors, the executor should
+        clear its session reference but NOT attempt to close it. Session
+        lifecycle is managed by ExternalApiOrchestrator.
+        """
         mock_session = MagicMock()
         mock_session.closed = False
-        mock_session.close = AsyncMock(side_effect=aiohttp.ClientError("Close failed"))
+        mock_session.close = AsyncMock()
         executor.set_session(mock_session)
 
         error = RuntimeError("Event loop is closed")
 
-        # Should not raise, handles close failure gracefully
-        result = await executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
+        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
+        # Session reference should be cleared
         assert executor.session is None
+        # But close() should NOT have been called
+        mock_session.close.assert_not_called()
+
+    def test_request_executor_does_not_close_session(
+        self,
+        executor: ApiRequestExecutor,
+        mock_session: MagicMock,
+    ) -> None:
+        """RequestExecutor should NOT close the session - that's the owner's job.
+
+        Session lifecycle is managed by ExternalApiOrchestrator, not by
+        RequestExecutor. Even when encountering errors like "Event loop is closed",
+        the executor should only clear its session reference without attempting
+        to close it (which could cause double-close or race conditions).
+        """
+        mock_session.close = AsyncMock()
+        executor.set_session(mock_session)
+
+        error = RuntimeError("Event loop is closed")
+
+        # Trigger error handling that previously would have closed the session
+        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
+
+        assert result is None
+        # Session reference should be cleared
+        assert executor.session is None
+        # But close() should NOT have been called - owner manages lifecycle
+        mock_session.close.assert_not_called()
 
 
 class TestHandleClientErrorIntegration:
