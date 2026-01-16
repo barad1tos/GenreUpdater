@@ -36,6 +36,7 @@ SUSPICIOUS_ALBUM_MIN_LEN = 3  # Album names with length <= 3 are suspicious
 SUSPICIOUS_MANY_YEARS = 3  # If >= 3 unique years present, skip auto updates
 CACHE_TRUST_THRESHOLD = 90  # Only trust cached year if confidence >= this value
 CONSENSUS_YEAR_CONFIDENCE = 80  # Confidence score for consensus release_year
+MIN_CONFIDENCE_TO_CACHE = 50  # Don't cache years with confidence below this (avoid BRITPOP→1987 bug)
 
 
 class YearDeterminator:
@@ -173,12 +174,20 @@ class YearDeterminator:
             release_year=consensus_release_year,
         )
 
-        if validated_year is not None:
+        if validated_year is not None and confidence_score >= MIN_CONFIDENCE_TO_CACHE:
             await self.cache_service.store_album_year_in_cache(
                 artist,
                 album,
                 validated_year,
                 confidence=confidence_score,
+            )
+        elif validated_year is not None:
+            self.console_logger.warning(
+                "Skipping cache for '%s - %s': confidence %d < %d threshold",
+                artist,
+                album,
+                confidence_score,
+                MIN_CONFIDENCE_TO_CACHE,
             )
 
         return validated_year
