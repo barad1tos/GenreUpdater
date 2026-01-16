@@ -90,6 +90,10 @@ class TestCLIE2E:
         mock_deps.pending_verification.add_track = MagicMock()
         mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
 
+        # Pending verification SERVICE mock (accessed via music_updater.deps.pending_verification_service)
+        mock_deps.pending_verification_service = MagicMock()
+        mock_deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
+
         # Library snapshot service mock
         mock_deps.library_snapshot_service = MagicMock()
         mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
