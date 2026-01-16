@@ -20,8 +20,8 @@ cd GenreUpdater
 # Install dependencies
 uv sync
 
-# Set up pre-commit hooks
-uv run pre-commit install
+# Set up prek hooks (pre-commit alternative)
+prek install
 ```
 
 ### Environment Variables
@@ -59,7 +59,7 @@ uv run ty check src/ --python .venv
 ### All Checks
 
 ```bash
-uv run pre-commit run --all-files
+prek run --all-files
 ```
 
 ## Testing
@@ -116,7 +116,7 @@ docs: update architecture documentation
 
 1. Create feature branch from `dev`
 2. Make changes
-3. Run all checks: `uv run pre-commit run --all-files`
+3. Run all checks: `prek run --all-files`
 4. Push and create PR to `dev`
 5. After review, squash merge to `dev`
 6. Periodically, `dev` is merged to `main` via PR
