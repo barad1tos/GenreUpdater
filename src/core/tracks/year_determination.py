@@ -39,6 +39,7 @@ CONSENSUS_YEAR_CONFIDENCE = 80  # Confidence score for consensus release_year
 MIN_CONFIDENCE_TO_CACHE = 50  # Don't cache years with confidence below this (avoid BRITPOP→1987 bug)
 
 
+# noinspection PyUnboundLocalVariable
 class YearDeterminator:
     """Determines album year from various sources.
 
