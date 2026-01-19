@@ -43,7 +43,7 @@ dev = [
     "mkdocs-literate-nav>=0.6.2",
     # Linting & formatting
     "ruff==0.14.11",
-    "ty==0.0.11",
+    "ty==0.0.12",
     "basedpyright==1.37.1", # IDE support - ty is used for pre-commit
     "sourcery==1.41.1; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.2",
