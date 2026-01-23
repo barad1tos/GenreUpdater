@@ -222,11 +222,14 @@ class TestApiOrchestratorProviderCoordination:
         mock_cache_orchestrator.get_year_from_all_caches = AsyncMock(return_value=("2019", 90))
 
         # The orchestrator should use the cached result
-        result = await mock_cache_orchestrator.get_year_from_all_caches(
-            artist="Test Artist",
-            album="Test Album",
+        result = cast(
+            tuple[str, int],
+            await mock_cache_orchestrator.get_year_from_all_caches(
+                artist="Test Artist",
+                album="Test Album",
+            ),
         )
-        cached_year, cached_score = cast(tuple[str, int], result)
+        cached_year, cached_score = result
 
         assert cached_year == "2019"
         assert cached_score == 90
@@ -335,9 +338,9 @@ class TestApiOrchestratorErrorHandling:
         mock_cache_orchestrator.get_year_from_all_caches = async_mock
 
         # No cached result means we need to try APIs
-        result: tuple[str, int] | None = await async_mock(
-            artist="Unknown Artist",
-            album="Unknown Album",
+        result = cast(
+            tuple[str, int] | None,
+            await async_mock(artist="Unknown Artist", album="Unknown Album"),
         )
 
         assert result is None
@@ -374,7 +377,7 @@ class TestApiOrchestratorConcurrency:
 
         # Execute concurrent lookups
         tasks = [mock_cache_orchestrator.get_year_from_all_caches(artist=a, album=b) for a, b in albums]
-        results: list[tuple[str, int] | None] = await asyncio.gather(*tasks)
+        results = cast(list[tuple[str, int] | None], await asyncio.gather(*tasks))
 
         # Verify all requests completed
         assert len(results) == 5
@@ -463,8 +466,8 @@ class TestApiOrchestratorArtistActivityPeriod:
         async_mock = AsyncMock(return_value=(1980, 1995))
         mock_cache_orchestrator.get_artist_activity_period = async_mock
 
-        period1: tuple[int, int] = await async_mock("Test Artist")
-        period2: tuple[int, int] = await async_mock("Test Artist")
+        period1 = cast(tuple[int, int], await async_mock("Test Artist"))
+        period2 = cast(tuple[int, int], await async_mock("Test Artist"))
 
         assert period1 == (1980, 1995)
         assert period2 == (1980, 1995)
