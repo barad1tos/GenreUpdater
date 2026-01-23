@@ -370,7 +370,6 @@ class YearFallbackHandler:
         Returns:
             None: Continue to next rule (not a fresh album or no conflict)
             release_year: Return release_year when fresh album detected with stale API
-            Empty string: Signal to skip update entirely
 
         """
         if not release_year:
@@ -701,33 +700,12 @@ class YearFallbackHandler:
             5. Low confidence + dramatic + plausible → preserve existing, mark for verification
 
         """
-        # Rule 0.1: Fresh album detection - if release_year == current year and API returns older year
+        # Rule 0.1: Fresh album detection - delegate to helper method
         # This catches cases like Poppy "Empty Hands" where release_year=2026 but API hasn't updated yet
-        current_year = datetime.now(UTC).year
-        if release_year:
-            with contextlib.suppress(ValueError, TypeError):
-                release_year_int = int(release_year)
-                proposed_year_int = int(proposed_year)
-                # For albums released THIS YEAR, ANY earlier API year is likely stale data
-                if release_year_int == current_year and proposed_year_int < release_year_int:
-                    self.console_logger.warning(
-                        "[FALLBACK] Fresh album detected: release_year=%s (current year) but API proposed %s - trusting release_year for %s - %s",
-                        release_year,
-                        proposed_year,
-                        artist,
-                        album,
-                    )
-                    await self.pending_verification.mark_for_verification(
-                        artist=artist,
-                        album=album,
-                        reason="stale_api_data_for_fresh_album",
-                        metadata={
-                            "release_year": release_year,
-                            "proposed_year": proposed_year,
-                            "current_year": current_year,
-                        },
-                    )
-                    return True  # Skip API year, preserve/use release_year
+        fresh_result = await self._check_fresh_album_stale_api(proposed_year, release_year, artist, album)
+        if fresh_result is not None:
+            return True  # Skip API year, preserve/use release_year
+
         # Rule 0: Check release_year from Apple Music (more authoritative than editable year field)
         # This catches cases like Crematory where year=2025 (wrong) but release_year=1997 (correct)
         if release_year and self.is_year_change_dramatic(release_year, proposed_year):

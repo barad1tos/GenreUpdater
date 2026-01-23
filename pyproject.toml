@@ -344,8 +344,9 @@ python_version = "3.13"
 # Bandit configuration - Security linting
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.bandit]
-skips = ["B101", "B311", "B404", "B603"]
+skips = ["B101", "B105", "B311", "B404", "B603"]
 # B101: Allow assert for type narrowing
+# B105: "password_configured" is a status flag, not a password
 # B311: random.uniform used for jitter, not security
 # B404: subprocess module is required for AppleScript
 # B603: shell=False is safe (we control the command)
