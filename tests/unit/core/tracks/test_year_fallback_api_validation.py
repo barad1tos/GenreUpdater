@@ -453,3 +453,212 @@ class TestEscalationLogic:
         assert call_kwargs["metadata"]["proposed_year"] == "2020"
         assert call_kwargs["metadata"]["confidence_score"] == low_confidence
         assert call_kwargs["metadata"]["threshold"] == DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR
+
+
+class TestFreshAlbumDetection:
+    """Tests for Rule 0.1: Fresh album detection with stale API data.
+
+    When release_year equals the current year but API returns an older year,
+    we trust Apple Music's release_year (read-only, more authoritative).
+    """
+
+    @pytest.mark.asyncio
+    async def test_fresh_album_rejects_stale_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """API returns 2025 but release_year = 2026 (current year) → trust release_year.
+
+        Case: Poppy "Empty Hands" - API hasn't updated yet for newly released album.
+        """
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        stale_year = str(current_year - 1)  # API returns last year
+
+        result = await fallback_handler._handle_dramatic_year_change(
+            proposed_year=stale_year,
+            existing_year=stale_year,
+            confidence_score=50,
+            artist="Poppy",
+            album="Empty Hands",
+            year_scores={stale_year: 85},
+            release_year=str(current_year),  # Apple Music says current year
+        )
+
+        # Should return True (skip API year, trust release_year)
+        assert result is True
+
+        # Should mark for verification with reason "stale_api_data_for_fresh_album"
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert call_kwargs["reason"] == "stale_api_data_for_fresh_album"
+        assert call_kwargs["metadata"]["release_year"] == str(current_year)
+        assert call_kwargs["metadata"]["proposed_year"] == stale_year
+
+    @pytest.mark.asyncio
+    async def test_fresh_album_no_rejection_when_years_match(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """When release_year and API year both equal current year → proceed normally."""
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        year_str = str(current_year)
+
+        result = await fallback_handler._handle_dramatic_year_change(
+            proposed_year=year_str,
+            existing_year=year_str,
+            confidence_score=50,
+            artist="Test",
+            album="Album",
+            year_scores={year_str: 85},
+            release_year=year_str,  # Both match
+        )
+
+        # Should return False (years match, no dramatic change)
+        assert result is False
+
+        # Should NOT mark for verification (no issue detected)
+        pending_verification.mark_for_verification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_fresh_album_uses_normal_logic(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """When release_year != current year → use normal dramatic change logic."""
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        # Both release_year and proposed_year are old (not fresh)
+        old_release = str(current_year - 5)
+        old_proposed = str(current_year - 6)
+
+        result = await fallback_handler._handle_dramatic_year_change(
+            proposed_year=old_proposed,
+            existing_year=old_release,
+            confidence_score=50,
+            artist="Test",
+            album="Album",
+            year_scores={old_proposed: 85},
+            release_year=old_release,  # Not current year
+        )
+
+        # Should return False (not a fresh album, no special handling)
+        # The 1-year difference is not dramatic (< 5 year threshold)
+        assert result is False
+
+        # Should NOT mark for verification (no dramatic change)
+        pending_verification.mark_for_verification.assert_not_called()
+
+
+class TestReRecordingDetection:
+    """Tests for Rule 4 Enhancement: Re-recording year detection.
+
+    When album is explicitly marked as "re-recorded" and API returns a year
+    10+ years old, we reject the API year (it's likely the original album's year).
+    """
+
+    @pytest.mark.asyncio
+    async def test_rerecording_rejects_old_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """Re-recording album, API returns 2010 (original) instead of 2026 → skip."""
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        original_year = str(current_year - 14)  # 14 years old (>= 10 threshold)
+
+        result = await fallback_handler._handle_special_album_type(
+            proposed_year=original_year,
+            existing_year="",
+            artist="Rotting Christ",
+            album="Aealo (Re-Recorded)",
+        )
+
+        # Should return "" (signal to propagate existing, skip API year)
+        assert result == ""
+
+        # Should mark for verification (special album type always marks)
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert call_kwargs["artist"] == "Rotting Christ"
+        assert call_kwargs["album"] == "Aealo (Re-Recorded)"
+        assert "reissue" in call_kwargs["reason"]
+        assert call_kwargs["metadata"]["detected_pattern"] == "re-recorded"
+
+    @pytest.mark.asyncio
+    async def test_rerecording_accepts_recent_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """Re-recording album, API returns recent year (< 10 years) → accept."""
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        recent_year = str(current_year - 5)  # Only 5 years old (< 10 threshold)
+
+        result = await fallback_handler._handle_special_album_type(
+            proposed_year=recent_year,
+            existing_year="",
+            artist="Test Artist",
+            album="Album (Re-Recorded)",
+        )
+
+        # Should return the proposed year (recent enough to trust)
+        assert result == recent_year
+
+        # Should still mark for verification (special album type always marks)
+        pending_verification.mark_for_verification.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_regular_remaster_uses_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """Regular remaster (not re-recording) → apply API year normally."""
+        result = await fallback_handler._handle_special_album_type(
+            proposed_year="2020",
+            existing_year="2015",
+            artist="Test Artist",
+            album="Album (Remastered 2020)",
+        )
+
+        # Should return "2020" (normal remaster behavior)
+        assert result == "2020"
+
+        # Should mark for verification (all special album types get marked)
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert call_kwargs["metadata"]["detected_pattern"] == "remastered"
+
+    @pytest.mark.asyncio
+    async def test_anniversary_edition_uses_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+        pending_verification: Any,
+    ) -> None:
+        """Anniversary edition (not re-recording) → apply API year normally."""
+        result = await fallback_handler._handle_special_album_type(
+            proposed_year="2010",
+            existing_year="2000",
+            artist="Test Artist",
+            album="Album (10th Anniversary Edition)",
+        )
+
+        # Should return "2010" (anniversary edition uses API year)
+        assert result == "2010"
+
+        # Should mark for verification (all special album types get marked)
+        pending_verification.mark_for_verification.assert_called_once()
+        call_kwargs = pending_verification.mark_for_verification.call_args[1]
+        assert "anniversary" in call_kwargs["metadata"]["detected_pattern"]

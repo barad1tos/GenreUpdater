@@ -81,3 +81,7 @@ csv/
 # Documentation
 !docs/              # Force-include docs/ (overrides global gitignore)
 site/               # MkDocs generated HTML (don't track)
+
+.claude_settings.json
+.security-key
+logs/security/

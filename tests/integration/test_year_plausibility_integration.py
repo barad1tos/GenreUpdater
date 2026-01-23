@@ -70,8 +70,20 @@ def create_test_tracks(
     album: str,
     year: str,
     count: int = 3,
+    release_year: str | None = None,
 ) -> list[TrackDict]:
-    """Create test tracks for an album."""
+    """Create test tracks for an album.
+
+    Args:
+        artist: Artist name
+        album: Album name
+        year: Year value for the tracks (editable field)
+        count: Number of tracks to create
+        release_year: Apple Music release_year field (read-only, more authoritative)
+
+    Returns:
+        List of TrackDict instances
+    """
     return [
         TrackDict(
             id=f"{artist}_{album}_{i}",
@@ -81,6 +93,7 @@ def create_test_tracks(
             genre="Rock",
             year=year,
             date_added="2024-01-01",
+            release_year=release_year,
         )
         for i in range(count)
     ]
@@ -385,3 +398,268 @@ class TestRealWorldScenariosIntegration:
         )
 
         assert result == "1997", f"Children of Bodom case failed: got '{result}' instead of '1997'. High confidence API year should be applied."
+
+
+@pytest.mark.integration
+class TestFreshAlbumEdgeCasesIntegration:
+    """Integration tests for fresh album detection (Rule 0.1).
+
+    These tests verify that albums released in the current year
+    correctly reject stale API data that returns an older year.
+    """
+
+    @pytest.fixture
+    def mock_api_service(self) -> MockExternalApiService:
+        """Create mock external API service."""
+        return MockExternalApiService()
+
+    @pytest.fixture
+    def mock_pending_service(self) -> MockPendingVerificationService:
+        """Create mock pending verification service."""
+        return MockPendingVerificationService()
+
+    @pytest.fixture
+    def fallback_handler(
+        self,
+        mock_pending_service: MockPendingVerificationService,
+        mock_api_service: MockExternalApiService,
+    ) -> YearFallbackHandler:
+        """Create fallback handler for testing."""
+        return YearFallbackHandler(
+            console_logger=logging.getLogger("test"),
+            pending_verification=mock_pending_service,
+            fallback_enabled=True,
+            absurd_year_threshold=1900,
+            year_difference_threshold=5,
+            trust_api_score_threshold=70,
+            api_orchestrator=mock_api_service,
+        )
+
+    @pytest.mark.asyncio
+    async def test_poppy_empty_hands_case(
+        self,
+        fallback_handler: YearFallbackHandler,
+        mock_pending_service: MockPendingVerificationService,
+    ) -> None:
+        """Integration test for Poppy "Empty Hands" case.
+
+        Real scenario:
+        - Artist: Poppy
+        - Album: Empty Hands (released 2026)
+        - release_year: 2026 (current year from Apple Music)
+        - API year: 2025 (stale data, not yet updated)
+
+        Expected: System detects fresh album and trusts release_year over stale API.
+        """
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        stale_api_year = str(int(current_year) - 1)
+
+        # Create tracks with release_year = current year
+        tracks = create_test_tracks(
+            artist="Poppy",
+            album="Empty Hands",
+            year="",  # No existing editable year
+            release_year=current_year,  # Apple Music says current year
+        )
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year=stale_api_year,  # API returns previous year
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="Poppy",
+            album="Empty Hands",
+            release_year=current_year,
+        )
+
+        # Should NOT apply stale API year when release_year is current year
+        # Returns existing_year (None/"") to preserve, not stale_api_year
+        assert result != stale_api_year, (
+            f"Fresh album case failed: got '{result}' (stale API year). "
+            f"For fresh album with release_year={current_year}, should not apply older year {stale_api_year}."
+        )
+
+        # Should be marked for verification
+        assert len(mock_pending_service.marked_albums) >= 1
+        reasons = [m[2] for m in mock_pending_service.marked_albums]
+        assert "stale_api_data_for_fresh_album" in reasons, f"Expected 'stale_api_data_for_fresh_album' reason, got: {reasons}"
+
+    @pytest.mark.asyncio
+    async def test_fresh_album_with_matching_api_year_applies(
+        self,
+        fallback_handler: YearFallbackHandler,
+        mock_pending_service: MockPendingVerificationService,
+    ) -> None:
+        """Test that fresh album with matching API year is applied normally.
+
+        When release_year equals API year, no conflict exists.
+        """
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+
+        tracks = create_test_tracks(
+            artist="Test Artist",
+            album="New Release",
+            year="",
+            release_year=current_year,
+        )
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year=current_year,  # API also says current year
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="Test Artist",
+            album="New Release",
+            release_year=current_year,
+        )
+
+        # When API and release_year match, apply normally
+        assert result == current_year, f"Expected '{current_year}' when API and release_year match, got '{result}'"
+
+        # Should NOT be marked for stale_api_data
+        stale_reasons = [m[2] for m in mock_pending_service.marked_albums if "stale_api_data" in m[2]]
+        assert not stale_reasons, f"Should not mark as stale when years match: {stale_reasons}"
+
+
+@pytest.mark.integration
+class TestReRecordingEdgeCasesIntegration:
+    """Integration tests for re-recording detection (Rule 4 enhancement).
+
+    These tests verify that re-recorded albums correctly reject
+    old API years that reference the original album.
+    """
+
+    @pytest.fixture
+    def mock_api_service(self) -> MockExternalApiService:
+        """Create mock external API service."""
+        return MockExternalApiService()
+
+    @pytest.fixture
+    def mock_pending_service(self) -> MockPendingVerificationService:
+        """Create mock pending verification service."""
+        return MockPendingVerificationService()
+
+    @pytest.fixture
+    def fallback_handler(
+        self,
+        mock_pending_service: MockPendingVerificationService,
+        mock_api_service: MockExternalApiService,
+    ) -> YearFallbackHandler:
+        """Create fallback handler for testing."""
+        return YearFallbackHandler(
+            console_logger=logging.getLogger("test"),
+            pending_verification=mock_pending_service,
+            fallback_enabled=True,
+            absurd_year_threshold=1900,
+            year_difference_threshold=5,
+            trust_api_score_threshold=70,
+            api_orchestrator=mock_api_service,
+        )
+
+    @pytest.mark.asyncio
+    async def test_rotting_christ_aealo_rerecorded_case(
+        self,
+        fallback_handler: YearFallbackHandler,
+    ) -> None:
+        """Integration test for Rotting Christ "Aealo (Re-Recorded)" case.
+
+        Real scenario:
+        - Artist: Rotting Christ
+        - Album: Aealo (Re-Recorded) (newly recorded version, 2026)
+        - API year: 2010 (original "Aealo" album year)
+
+        Expected: System detects re-recording pattern and rejects 10+ year old API year.
+        """
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+
+        # Create tracks with existing year (or no year)
+        tracks = create_test_tracks(
+            artist="Rotting Christ",
+            album="Aealo (Re-Recorded)",  # Has re-recording pattern
+            year="2026",  # May have been set manually
+        )
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2010",  # API returns original album's year
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=50,
+            artist="Rotting Christ",
+            album="Aealo (Re-Recorded)",
+        )
+
+        # Should NOT apply 2010 for a re-recording when it's 10+ years old
+        # API year 2010 is 16+ years before current year
+        if current_year >= 2020:
+            assert result != "2010", (
+                f"Re-recording case failed: got '{result}'. "
+                f"For re-recording album, should not apply original album's year (2010) "
+                f"that is {current_year - 2010} years old."
+            )
+
+    @pytest.mark.asyncio
+    async def test_recent_remaster_uses_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+    ) -> None:
+        """Test that recent remaster correctly uses API year.
+
+        When a remaster's API year is recent (within 10 years),
+        it should be applied normally.
+        """
+        from datetime import UTC, datetime
+
+        current_year = datetime.now(UTC).year
+        recent_year = str(current_year - 3)  # 3 years ago - within threshold
+
+        tracks = create_test_tracks(
+            artist="Metallica",
+            album="Master of Puppets (Remastered)",
+            year="2000",  # Some old year in library
+        )
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year=recent_year,
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=60,
+            artist="Metallica",
+            album="Master of Puppets (Remastered)",
+        )
+
+        # Recent remaster year should be applied (not 10+ years old)
+        assert result == recent_year, f"Expected recent remaster year '{recent_year}', got '{result}'"
+
+    @pytest.mark.asyncio
+    async def test_anniversary_edition_uses_api_year(
+        self,
+        fallback_handler: YearFallbackHandler,
+    ) -> None:
+        """Test that anniversary editions correctly use API year.
+
+        Anniversary editions (e.g., "25th Anniversary") should apply
+        the API year if it's reasonable.
+        """
+        tracks = create_test_tracks(
+            artist="Iron Maiden",
+            album="The Number of the Beast (25th Anniversary Edition)",
+            year="1982",  # Original year
+        )
+
+        result = await fallback_handler.apply_year_fallback(
+            proposed_year="2007",  # Anniversary edition year
+            album_tracks=tracks,
+            is_definitive=False,
+            confidence_score=70,
+            artist="Iron Maiden",
+            album="The Number of the Beast (25th Anniversary Edition)",
+        )
+
+        # Anniversary edition with high confidence should apply
+        assert result == "2007", f"Expected anniversary edition year '2007', got '{result}'"

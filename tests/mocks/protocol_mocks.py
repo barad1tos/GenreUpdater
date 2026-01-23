@@ -638,6 +638,17 @@ class MockPendingVerificationService:
         """
         # No-op for mock - just needs to exist for protocol compliance
 
+    @staticmethod
+    async def should_auto_verify() -> bool:
+        """Check if automatic pending verification should run.
+
+        For testing, always returns False (no auto-verification needed).
+
+        Returns:
+            False - tests control verification timing explicitly.
+        """
+        return False
+
 
 if TYPE_CHECKING:
     # Type checking to ensure mock implementations conform to protocols

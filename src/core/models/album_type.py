@@ -149,6 +149,8 @@ _DEFAULT_REISSUE_PATTERNS: Final[frozenset[str]] = frozenset(
         "reissue",
         "rerelease",
         "remanufacture",
+        "re-record",
+        "re-recorded",
     }
 )
 
