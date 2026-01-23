@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -222,10 +222,11 @@ class TestApiOrchestratorProviderCoordination:
         mock_cache_orchestrator.get_year_from_all_caches = AsyncMock(return_value=("2019", 90))
 
         # The orchestrator should use the cached result
-        cached_year, cached_score = await mock_cache_orchestrator.get_year_from_all_caches(
+        result = await mock_cache_orchestrator.get_year_from_all_caches(
             artist="Test Artist",
             album="Test Album",
         )
+        cached_year, cached_score = cast(tuple[str, int], result)
 
         assert cached_year == "2019"
         assert cached_score == 90
@@ -330,10 +331,11 @@ class TestApiOrchestratorErrorHandling:
     ) -> None:
         """Test that None is returned when all providers fail."""
         # Cache returns nothing
-        mock_cache_orchestrator.get_year_from_all_caches = AsyncMock(return_value=None)
+        async_mock = AsyncMock(return_value=None)
+        mock_cache_orchestrator.get_year_from_all_caches = async_mock
 
         # No cached result means we need to try APIs
-        result = await mock_cache_orchestrator.get_year_from_all_caches(
+        result: tuple[str, int] | None = await async_mock(
             artist="Unknown Artist",
             album="Unknown Album",
         )
@@ -372,7 +374,7 @@ class TestApiOrchestratorConcurrency:
 
         # Execute concurrent lookups
         tasks = [mock_cache_orchestrator.get_year_from_all_caches(artist=a, album=b) for a, b in albums]
-        results = await asyncio.gather(*tasks)
+        results: list[tuple[str, int] | None] = await asyncio.gather(*tasks)
 
         # Verify all requests completed
         assert len(results) == 5
@@ -458,10 +460,11 @@ class TestApiOrchestratorArtistActivityPeriod:
     ) -> None:
         """Test that activity period is cached and reused across requests."""
         # First request caches the activity period
-        mock_cache_orchestrator.get_artist_activity_period = AsyncMock(return_value=(1980, 1995))
+        async_mock = AsyncMock(return_value=(1980, 1995))
+        mock_cache_orchestrator.get_artist_activity_period = async_mock
 
-        period1 = await mock_cache_orchestrator.get_artist_activity_period("Test Artist")
-        period2 = await mock_cache_orchestrator.get_artist_activity_period("Test Artist")
+        period1: tuple[int, int] = await async_mock("Test Artist")
+        period2: tuple[int, int] = await async_mock("Test Artist")
 
         assert period1 == (1980, 1995)
         assert period2 == (1980, 1995)
