@@ -17,11 +17,11 @@ from pathlib import Path
 # Add src directory to Python path BEFORE imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from app.cli import CLI
 from app.app_config import Config
+from app.cli import CLI
 from app.orchestrator import Orchestrator
-from services.dependency_container import DependencyContainer
 from core.logger import SafeQueueListener, get_loggers
+from services.dependency_container import DependencyContainer
 
 # Suppress Pydantic migration warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._migration")

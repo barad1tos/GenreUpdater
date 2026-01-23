@@ -6,7 +6,9 @@ year values based on confidence levels and existing data.
 
 from __future__ import annotations
 
+import contextlib
 from collections import Counter
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from core.models.album_type import (
@@ -132,25 +134,9 @@ class YearFallbackHandler:
         existing_year = self.get_existing_year_from_tracks(album_tracks)
 
         # Early exit: No change needed if existing year equals proposed year
-        # BUT: still check plausibility - both could be wrong (e.g., year before artist started)
+        # Delegate to helper to keep main function return count under limit
         if existing_year and existing_year == proposed_year:
-            # Check if this matching year is plausible for the artist
-            is_implausible = await self._check_matching_year_plausibility(
-                year=existing_year,
-                artist=artist,
-                album=album,
-            )
-            if is_implausible:
-                # Both existing and proposed years are implausible - mark for verification, skip update
-                return None
-
-            self.console_logger.debug(
-                "[FALLBACK] No change needed for %s - %s (existing year %s matches proposed)",
-                artist,
-                album,
-                existing_year,
-            )
-            return proposed_year
+            return await self._handle_matching_year(existing_year, proposed_year, artist, album)
 
         # Rule 2: Absurd year detection (when no existing year to compare)
         if await self._handle_absurd_year(proposed_year, existing_year, artist, album):
@@ -160,6 +146,17 @@ class YearFallbackHandler:
         # Delegate to helper to keep main function return count under limit
         if not existing_year and confidence_score < self.min_confidence_for_new_year:
             return await self._handle_low_confidence_no_existing_year(proposed_year, confidence_score, artist, album)
+
+        # Rule 2.6: Fresh album detection (applies BEFORE Rule 3 - even when no existing year)
+        # If release_year == current year and API returns older year, reject API year as stale
+        fresh_album_result = await self._check_fresh_album_stale_api(
+            proposed_year=proposed_year,
+            release_year=release_year,
+            artist=artist,
+            album=album,
+        )
+        if fresh_album_result is not None:
+            return fresh_album_result
 
         # Rule 3: No existing year - nothing to preserve (year passed absurd check and confidence check)
         if not existing_year:
@@ -256,6 +253,45 @@ class YearFallbackHandler:
             return True
         return False
 
+    async def _handle_matching_year(
+        self,
+        existing_year: str,
+        proposed_year: str,
+        artist: str,
+        album: str,
+    ) -> str | None:
+        """Handle case when existing year matches proposed year.
+
+        Checks plausibility - both could be wrong (e.g., year before artist started).
+
+        Args:
+            existing_year: Existing year from tracks
+            proposed_year: Year from API
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            proposed_year: If year is plausible
+            None: If year is implausible (skip update)
+
+        """
+        is_implausible = await self._check_matching_year_plausibility(
+            year=existing_year,
+            artist=artist,
+            album=album,
+        )
+        if is_implausible:
+            # Both existing and proposed years are implausible - mark for verification, skip update
+            return None
+
+        self.console_logger.debug(
+            "[FALLBACK] No change needed for %s - %s (existing year %s matches proposed)",
+            artist,
+            album,
+            existing_year,
+        )
+        return proposed_year
+
     async def _handle_low_confidence_no_existing_year(
         self,
         proposed_year: str,
@@ -310,6 +346,68 @@ class YearFallbackHandler:
         )
         return None
 
+    async def _check_fresh_album_stale_api(
+        self,
+        proposed_year: str,
+        release_year: str | None,
+        artist: str,
+        album: str,
+    ) -> str | None:
+        """Check if this is a fresh album with stale API data.
+
+        This detects the case where:
+        - release_year (from Apple Music) equals the current year
+        - API returns an older year (stale data, not yet updated)
+
+        In this case, we trust Apple Music's release_year over the stale API data.
+
+        Args:
+            proposed_year: Year from API
+            release_year: Original release year from Apple Music (read-only, more authoritative)
+            artist: Artist name
+            album: Album name
+
+        Returns:
+            None: Continue to next rule (not a fresh album or no conflict)
+            release_year: Return release_year when fresh album detected with stale API
+            Empty string: Signal to skip update entirely
+
+        """
+        if not release_year:
+            return None  # No release_year to compare
+
+        current_year = datetime.now(UTC).year
+
+        try:
+            release_year_int = int(release_year)
+            proposed_year_int = int(proposed_year)
+        except (ValueError, TypeError):
+            return None  # Invalid years, continue to next rule
+
+        # For albums released THIS YEAR, ANY earlier API year is likely stale data
+        if release_year_int == current_year and proposed_year_int < release_year_int:
+            self.console_logger.warning(
+                "[FALLBACK] Fresh album detected: release_year=%s (current year) but API proposed %s - trusting release_year for %s - %s",
+                release_year,
+                proposed_year,
+                artist,
+                album,
+            )
+            await self.pending_verification.mark_for_verification(
+                artist=artist,
+                album=album,
+                reason="stale_api_data_for_fresh_album",
+                metadata={
+                    "release_year": release_year,
+                    "proposed_year": proposed_year,
+                    "current_year": current_year,
+                },
+            )
+            # Return release_year so it gets applied to all tracks
+            return release_year
+
+        return None  # No fresh album conflict detected
+
     async def _handle_special_album_type(
         self,
         proposed_year: str,
@@ -348,7 +446,23 @@ class YearFallbackHandler:
             )
             return ""  # Signal to propagate existing_year (handled by caller)
 
-        # MARK_AND_UPDATE: continue with proposed year
+        # MARK_AND_UPDATE for reissues - but special handling for re-recordings
+        # Re-recordings are NEW albums (newly recorded), not just remasters
+        # The API likely returned the ORIGINAL album's year, not the re-recording's year
+        if album_info.detected_pattern in ("re-record", "re-recorded"):
+            current_year = datetime.now(UTC).year
+            with contextlib.suppress(ValueError, TypeError):
+                proposed_int = int(proposed_year)
+                # If API year is 10+ years old, it's probably the original album's year
+                if current_year - proposed_int >= 10:
+                    self.console_logger.warning(
+                        "[FALLBACK] Re-recording detected but API year %s is 10+ years old - skipping update for %s - %s (pattern: %s)",
+                        proposed_year,
+                        artist,
+                        album,
+                        album_info.detected_pattern,
+                    )
+                    return ""  # Signal to propagate existing_year (skip API year)
         self.console_logger.info(
             "[FALLBACK] Updating year for %s - %s (reissue detected: %s)",
             artist,
@@ -549,7 +663,6 @@ class YearFallbackHandler:
         )
         return False  # NOT found → trust API year
 
-    # noinspection PySimplifyBooleanCheck
     async def _handle_dramatic_year_change(
         self,
         proposed_year: str,
@@ -588,6 +701,33 @@ class YearFallbackHandler:
             5. Low confidence + dramatic + plausible → preserve existing, mark for verification
 
         """
+        # Rule 0.1: Fresh album detection - if release_year == current year and API returns older year
+        # This catches cases like Poppy "Empty Hands" where release_year=2026 but API hasn't updated yet
+        current_year = datetime.now(UTC).year
+        if release_year:
+            with contextlib.suppress(ValueError, TypeError):
+                release_year_int = int(release_year)
+                proposed_year_int = int(proposed_year)
+                # For albums released THIS YEAR, ANY earlier API year is likely stale data
+                if release_year_int == current_year and proposed_year_int < release_year_int:
+                    self.console_logger.warning(
+                        "[FALLBACK] Fresh album detected: release_year=%s (current year) but API proposed %s - trusting release_year for %s - %s",
+                        release_year,
+                        proposed_year,
+                        artist,
+                        album,
+                    )
+                    await self.pending_verification.mark_for_verification(
+                        artist=artist,
+                        album=album,
+                        reason="stale_api_data_for_fresh_album",
+                        metadata={
+                            "release_year": release_year,
+                            "proposed_year": proposed_year,
+                            "current_year": current_year,
+                        },
+                    )
+                    return True  # Skip API year, preserve/use release_year
         # Rule 0: Check release_year from Apple Music (more authoritative than editable year field)
         # This catches cases like Crematory where year=2025 (wrong) but release_year=1997 (correct)
         if release_year and self.is_year_change_dramatic(release_year, proposed_year):
@@ -648,7 +788,7 @@ class YearFallbackHandler:
             proposed_year=proposed_year,
             artist=artist,
         )
-        if plausibility_result is True:
+        if plausibility_result:
             # Proposed year is implausible (before artist started) → propagate existing
             await self.pending_verification.mark_for_verification(
                 artist=artist,

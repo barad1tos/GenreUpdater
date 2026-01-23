@@ -38,15 +38,15 @@ dev = [
     # Documentation
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
-    "mkdocstrings[python]>=0.27",
+    "mkdocstrings[python]==1.0.1",
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-literate-nav>=0.6.2",
     # Linting & formatting
-    "ruff==0.14.13",
-    "ty==0.0.12",
+    "ruff==0.14.14",
+    "ty==0.0.13",
     "basedpyright==1.37.1", # IDE support - ty is used for pre-commit
-    "sourcery==1.41.1; sys_platform == 'darwin'", # macOS only
-    "bandit==1.9.2",
+    "sourcery==1.43.0; sys_platform == 'darwin'", # macOS only
+    "bandit==1.9.3",
     "pip-audit==2.10.0",
     # Testing
     "pytest==9.0.2",
@@ -54,7 +54,7 @@ dev = [
     "pytest-xdist==3.8.0",
     "pytest-cov==7.0.0",
     "coverage==7.13.1",
-    "pytest-html==4.1.1",
+    "pytest-html==4.2.0",
     "pytest-sugar==1.1.1",
     # Type stubs & tools
     "types-pyyaml==6.0.12.20250915",
