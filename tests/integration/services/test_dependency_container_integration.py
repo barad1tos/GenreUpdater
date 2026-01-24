@@ -24,7 +24,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 
-
 # Get project root for temp config files (config validation requires project dir)
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
