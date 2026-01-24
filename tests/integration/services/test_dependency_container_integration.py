@@ -15,7 +15,10 @@ import logging
 import uuid
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from services.dependency_container import InitializableService
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1105,22 +1108,26 @@ class TestDependencyContainerInitializeService:
         # Track if force was passed
         force_received: list[bool] = []
 
-        async def async_init(force: bool = False) -> None:
-            """Track whether force parameter was received."""
-            force_received.append(force)
-
-        # Create service class with proper initialize method signature
+        # Create service class that implements InitializableService protocol
         class MockServiceWithForce:
             """Mock service with force parameter in initialize signature."""
 
-            @staticmethod
-            async def initialize(force: bool = False) -> None:
+            def __init__(self) -> None:
+                """Initialize the mock service."""
+                self._initialized = False
+
+            async def initialize(self, force: bool = False) -> None:
                 """Initialize with optional force flag."""
-                await async_init(force=force)
+                self._initialized = True
+                force_received.append(force)
 
         mock_service = MockServiceWithForce()
 
-        await container._initialize_service(mock_service, "Test Service", force=True)
+        await container._initialize_service(
+            cast("InitializableService", mock_service),
+            "Test Service",
+            force=True,
+        )
 
         # Verify force was passed via our tracking list
         assert force_received == [True]
