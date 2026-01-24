@@ -210,14 +210,18 @@ class TestValidateTrackIds:
     def test_validates_track_ids(self, year_retriever: YearRetriever) -> None:
         """Test validates track IDs."""
         track_ids = ["123", "456"]
-        result = year_retriever._batch_processor._validate_track_ids(track_ids)
+        result = year_retriever._batch_processor._validate_track_ids(track_ids, artist="Test Artist", album="Test Album")
         assert result == ["123", "456"]
 
     def test_logs_warning_for_missing_ids(self, year_retriever: YearRetriever) -> None:
         """Test logs warning for tracks without IDs."""
         # Intentionally pass invalid data to test validation
         track_ids = ["", "123", None]  # type: ignore[list-item]
-        result = year_retriever._batch_processor._validate_track_ids(track_ids)  # type: ignore[arg-type]
+        result = year_retriever._batch_processor._validate_track_ids(
+            track_ids,
+            artist="Test Artist",
+            album="Test Album",  # type: ignore[arg-type]
+        )
         assert result == ["123"]
 
 

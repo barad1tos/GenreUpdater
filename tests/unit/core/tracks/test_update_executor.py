@@ -432,14 +432,20 @@ class TestTryBatchUpdate:
 
     @pytest.mark.asyncio
     async def test_builds_correct_command(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
-        """Test builds correct batch command string."""
+        """Test builds correct batch command string with ASCII separators."""
         mock_ap_client.run_script.return_value = "Success"
         updates = [("genre", "Rock"), ("year", "2020")]
         await executor._try_batch_update("123", updates)
         call_args = mock_ap_client.run_script.call_args
         command = call_args[0][1][0]
-        assert "123:genre:Rock" in command
-        assert "123:year:2020" in command
+        # ASCII 30 (Record Separator) between fields, ASCII 29 (Group Separator) between commands
+        field_sep = chr(30)
+        cmd_sep = chr(29)
+        expected_genre = f"123{field_sep}genre{field_sep}Rock"
+        expected_year = f"123{field_sep}year{field_sep}2020"
+        assert expected_genre in command
+        assert expected_year in command
+        assert cmd_sep in command  # Commands should be separated
 
     @pytest.mark.asyncio
     async def test_invalid_timeout_raises(self, executor: TrackUpdateExecutor) -> None:
@@ -472,6 +478,25 @@ class TestTryBatchUpdate:
         # Verify the timeout was used (120.0)
         call_kwargs = mock_ap_client.run_script.call_args[1]
         assert call_kwargs["timeout"] == 120.0
+
+    @pytest.mark.asyncio
+    async def test_handles_special_characters_in_values(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
+        """Test ASCII separators handle special characters that would break old format.
+
+        Old format used ':' and ';' as delimiters which could conflict with
+        genre values like "Rock: Classic; Alternative". ASCII 30/29 separators
+        don't appear in metadata, making them safe for any content.
+        """
+        mock_ap_client.run_script.return_value = "Success"
+        # Genre with colons and semicolons - would break old format
+        updates = [("genre", "Rock: Classic; Alternative")]
+        await executor._try_batch_update("123", updates)
+        call_args = mock_ap_client.run_script.call_args
+        command = call_args[0][1][0]
+        # The value should be preserved intact
+        assert "Rock: Classic; Alternative" in command
+        # ASCII separators should be present
+        assert chr(30) in command  # Field separator
 
 
 class TestApplyTrackUpdates:
