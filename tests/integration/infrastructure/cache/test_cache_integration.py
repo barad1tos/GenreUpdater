@@ -524,12 +524,25 @@ class TestFingerprintGeneratorIntegration:
 class TestUnifiedHashServiceIntegration:
     """Integration tests for unified hash service."""
 
+    @staticmethod
+    def _assert_hash_consistency(hash_func: Any, *args: Any) -> str:
+        """Assert that hash function produces consistent results for same input.
+
+        Args:
+            hash_func: The hash function to test.
+            *args: Arguments to pass to the hash function.
+
+        Returns:
+            The computed hash value for further assertions.
+        """
+        key1 = hash_func(*args)
+        key2 = hash_func(*args)
+        assert key1 == key2, "Hash should be consistent for same input"
+        return key1
+
     def test_hash_album_key_consistency(self) -> None:
         """Test hash consistency for album keys."""
-        key1 = UnifiedHashService.hash_album_key("artist", "album")
-        key2 = UnifiedHashService.hash_album_key("artist", "album")
-
-        assert key1 == key2
+        self._assert_hash_consistency(UnifiedHashService.hash_album_key, "artist", "album")
 
     def test_hash_album_key_uniqueness(self) -> None:
         """Test hash uniqueness for different inputs."""
@@ -553,18 +566,11 @@ class TestUnifiedHashServiceIntegration:
     def test_hash_generic_key_handles_dict(self) -> None:
         """Test generic hash handles dictionary input."""
         data = {"type": "test", "id": 123, "nested": {"key": "value"}}
-
-        key1 = UnifiedHashService.hash_generic_key(data)
-        key2 = UnifiedHashService.hash_generic_key(data)
-
-        assert key1 == key2
+        self._assert_hash_consistency(UnifiedHashService.hash_generic_key, data)
 
     def test_hash_generic_key_handles_string(self) -> None:
         """Test generic hash handles string input."""
-        key1 = UnifiedHashService.hash_generic_key("simple_string")
-        key2 = UnifiedHashService.hash_generic_key("simple_string")
-
-        assert key1 == key2
+        self._assert_hash_consistency(UnifiedHashService.hash_generic_key, "simple_string")
 
     def test_hash_handles_unicode(self) -> None:
         """Test hash service handles unicode characters."""
@@ -588,12 +594,12 @@ class TestUnifiedHashServiceIntegration:
 
     def test_hash_pending_key(self) -> None:
         """Test pending verification key generation."""
-        key1 = UnifiedHashService.hash_pending_key("track_123")
-        key2 = UnifiedHashService.hash_pending_key("track_123")
+        # Consistency: same input = same hash
+        key1 = self._assert_hash_consistency(UnifiedHashService.hash_pending_key, "track_123")
         key3 = UnifiedHashService.hash_pending_key("track_456")
 
-        assert key1 == key2  # Same track = same key
-        assert key1 != key3  # Different track = different key
+        # Uniqueness: different input = different hash
+        assert key1 != key3
 
 
 class TestCacheIntegrationScenarios:
