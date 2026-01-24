@@ -332,8 +332,10 @@ class AlbumCacheService:
                     missing_fields.append("album")
                 if not year:
                     missing_fields.append("year")
+                elif not str(year).isdigit():
+                    missing_fields.append("year (non-numeric)")
                 self.logger.warning(
-                    "Skipping invalid CSV row (empty: %s): %s",
+                    "Skipping invalid CSV row (empty or invalid: %s): %s",
                     ", ".join(missing_fields),
                     row,
                 )

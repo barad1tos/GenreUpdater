@@ -64,7 +64,7 @@ class GenreUpdateService:
         Returns:
             List of tracks or None if not found.
         """
-        fetched_tracks: list[TrackDict]
+        fetched_tracks: list[TrackDict] | None
         if artist is None:
             fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
         else:
