@@ -483,8 +483,9 @@ class TrackUpdateExecutor:
         # Build batch command using ASCII control character separators.
         # Each command has 3 fields (trackID, property, value) separated by ASCII 30.
         # ASCII 29 separates multiple commands.
+        # The !s conversion flag ensures safe AppleScript input for any value type.
         commands = []
-        commands.extend(f"{track_id}{FIELD_SEP}{property_name}{FIELD_SEP}{property_value}" for property_name, property_value in updates)
+        commands.extend(f"{track_id}{FIELD_SEP}{property_name}{FIELD_SEP}{property_value!s}" for property_name, property_value in updates)
         batch_command = CMD_SEP.join(commands)
 
         # Determine timeout from configuration with sensible fallbacks

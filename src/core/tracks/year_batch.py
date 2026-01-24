@@ -378,7 +378,17 @@ class YearBatchProcessor:
 
         # Read prerelease handling mode from config
         # Options: process_editable (default), skip_all, mark_only
+        valid_prerelease_modes = {"process_editable", "skip_all", "mark_only"}
         prerelease_handling = self.config.get("year_retrieval", {}).get("processing", {}).get("prerelease_handling", "process_editable")
+        if prerelease_handling not in valid_prerelease_modes:
+            self.console_logger.warning(
+                "Unknown prerelease_handling mode '%s' for %s - %s, defaulting to 'process_editable'. Valid options: %s",
+                prerelease_handling,
+                artist,
+                album,
+                ", ".join(sorted(valid_prerelease_modes)),
+            )
+            prerelease_handling = "process_editable"
 
         # Filter to only editable tracks (excludes read-only prerelease tracks)
         editable_tracks = [track for track in album_tracks if can_edit_metadata(track.track_status)]
