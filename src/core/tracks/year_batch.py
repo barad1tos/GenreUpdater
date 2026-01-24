@@ -853,7 +853,7 @@ class YearBatchProcessor:
                     failed += 1
                     track_id_in_batch = batch[idx] if idx < len(batch) else "unknown"
                     self.error_logger.error(
-                        "Failed to update track %s (artist=%s, album=%s, year=%d): %s",
+                        "Failed to update track %s (artist=%s, album=%s, year=%s): %s",
                         track_id_in_batch,
                         artist,
                         album,
