@@ -151,6 +151,11 @@ year_retrieval:
     skip_prerelease: true
     future_year_threshold: 1
     prerelease_recheck_days: 30
+    # Behavior for albums with prerelease tracks:
+    #   - process_editable: Update editable tracks, mark album for verification (default)
+    #   - skip_all: Skip entire album if any track is prerelease
+    #   - mark_only: Don't process, just mark for future verification
+    prerelease_handling: process_editable
 
   logic:
     min_valid_year: 1900

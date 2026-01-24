@@ -1,7 +1,17 @@
 -- batch_update_tracks.applescript
--- Accepts a single string with multiple commands separated by semicolons.
--- Each command is in the format "trackID:propertyName:value".
--- Example: "123:genre:Rock;456:year:2022"
+-- Accepts a single string with multiple commands separated by ASCII control characters.
+-- Uses the same separator pattern as fetch_tracks.applescript for consistency:
+--   ASCII 30 (Record Separator) - separates fields within a command (trackID, propertyName, value)
+--   ASCII 29 (Group Separator) - separates individual commands
+--
+-- Example input: "123<RS>genre<RS>Rock: Classic<GS>456<RS>year<RS>2022"
+-- where <RS> = ASCII 30, <GS> = ASCII 29
+--
+-- Benefits over URL-encoding:
+--   1. No external dependencies (no python3 shell call)
+--   2. Faster parsing (simple string split vs shell script per value)
+--   3. No size increase (URL-encoding can 3x string length)
+--   4. Proven pattern (fetch_tracks handles 37k+ tracks this way)
 
 on run argv
     if (count of argv) is 0 then
@@ -9,8 +19,10 @@ on run argv
     end if
 
     set updateString to item 1 of argv
-    set command_separator to ";"
-    set part_separator to ":"
+
+    -- Use same separators as fetch_tracks.applescript
+    set fieldSeparator to ASCII character 30    -- Record Separator (between fields)
+    set commandSeparator to ASCII character 29  -- Group Separator (between commands)
 
     -- Get current year BEFORE tell block to avoid Music.app scope conflict
     set currentYear to year of (current date)
@@ -21,7 +33,7 @@ on run argv
 
     try
         -- Split the entire string into individual commands
-        set AppleScript's text item delimiters to command_separator
+        set AppleScript's text item delimiters to commandSeparator
         set commandList to text items of updateString
 
         tell application "Music"
@@ -29,11 +41,12 @@ on run argv
             repeat with aCommand in commandList
                 if aCommand is not "" then
                     -- Split the command into parts: ID, property, value
-                    set AppleScript's text item delimiters to part_separator
+                    set AppleScript's text item delimiters to fieldSeparator
                     set commandParts to text items of aCommand
 
                     set trackID to item 1 of commandParts
                     set propName to item 2 of commandParts
+                    -- No decoding needed - ASCII separators don't appear in metadata
                     set propValue to item 3 of commandParts
 
                     try
@@ -55,6 +68,10 @@ on run argv
                             set name of the_track to propValue
                         else if propName is "album" then
                             set album of the_track to propValue
+                        else if propName is "artist" then
+                            set artist of the_track to propValue
+                        else if propName is "album_artist" then
+                            set album artist of the_track to propValue
                         end if
 
                     on error errMsg number errNum

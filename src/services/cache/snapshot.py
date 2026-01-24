@@ -18,10 +18,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol
 
-from services.cache.json_utils import dumps_json, loads_json
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
 from core.logger import ensure_directory, spinner
 from core.models.track_models import TrackDict
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
+from services.cache.json_utils import dumps_json, loads_json
 
 SNAPSHOT_VERSION = "1.0"
 DEFAULT_MAX_AGE_HOURS = 24
@@ -295,7 +295,11 @@ class LibrarySnapshotService:
         await asyncio.to_thread(self._write_bytes_atomic, self._delta_path, data)
 
     async def get_library_mtime(self) -> datetime:
-        """Return modification time of the music library file."""
+        """Return modification time of the music library file.
+
+        Returns a naive UTC datetime for consistency with snapshot comparisons.
+        Uses UTC to prevent false positives on non-UTC local timezones.
+        """
         if not self._music_library_path:
             msg = "music_library_path not configured"
             raise FileNotFoundError(msg)
@@ -305,7 +309,10 @@ class LibrarySnapshotService:
         except OSError as stat_error:
             raise FileNotFoundError(str(stat_error)) from stat_error
 
-        return datetime.fromtimestamp(stat_result.st_mtime)
+        # BUG FIX: Convert to UTC, then strip timezone to match naive datetime format
+        # Without tz=UTC, fromtimestamp returns local time (e.g., EET +2), causing
+        # false "library changed" detections when compared to UTC-saved snapshots
+        return datetime.fromtimestamp(stat_result.st_mtime, tz=UTC).replace(tzinfo=None)
 
     @staticmethod
     def _parse_raw_track(raw_track: dict[str, Any]) -> TrackDict:
@@ -388,7 +395,7 @@ class LibrarySnapshotService:
         - Force mode: Full metadata comparison for manual change detection (~30-60s)
 
         Force mode triggers when:
-        - force=True (CLI --force)
+        - Force=True (CLI --force)
         - Last force scan was 7+ days ago (weekly auto-force)
 
         Fast mode (skips full scan) when:
@@ -568,7 +575,7 @@ class LibrarySnapshotService:
         """Determine if full metadata scan is needed.
 
         Force scan triggers when:
-        - force_flag is True (CLI --force)
+        - Force_flag is True (CLI --force)
         - Last force scan was 7+ days ago (weekly auto-force)
 
         Fast mode (no full scan) when:

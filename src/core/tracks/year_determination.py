@@ -247,7 +247,7 @@ class YearDeterminator:
     ) -> tuple[bool, str]:
         """Check pre-conditions BEFORE any API call.
 
-        Guard clauses prevent wasted API calls by checking cheap conditions first.
+        Guard clauses prevent wasted API calls by checking inexpensive conditions first.
         Trusts cache (API data) over Music.app data.
 
         Args:
@@ -298,19 +298,30 @@ class YearDeterminator:
         Returns:
             Tuple (True, "already_processed") if should skip, None otherwise.
 
+        Note: Checks ALL tracks in album, not just the first one. This prevents
+        skipping albums where only some tracks have been processed (e.g., after
+        a partial update or library sync issue).
         """
-        sample_track = album_tracks[0] if album_tracks else None
-        if not sample_track or not sample_track.year_set_by_mgu:
+        if not album_tracks:
             return None
 
-        current_year = str(sample_track.year or "")
-        applied_year = str(sample_track.year_set_by_mgu or "")
-        if applied_year and applied_year == current_year:
+        # Get the year_set_by_mgu from first track as reference
+        first_mgu = album_tracks[0].year_set_by_mgu
+        if not first_mgu:
+            return None
+
+        # BUG FIX: Check ALL tracks have consistent year_set_by_mgu,
+        # not just the first track. This prevents skipping albums with
+        # inconsistent track states (e.g., partial updates, library syncs).
+        all_match = all(t.year_set_by_mgu == first_mgu and str(t.year) == first_mgu for t in album_tracks)
+
+        if all_match:
             self.console_logger.debug(
-                "[PRE-CHECK] Skip %s - %s: already processed (year_set_by_mgu=%s)",
+                "[PRE-CHECK] Skip %s - %s: already processed (year_set_by_mgu=%s, all %d tracks match)",
                 artist,
                 album,
-                applied_year,
+                first_mgu,
+                len(album_tracks),
             )
             return True, "already_processed"
         return None
@@ -435,14 +446,14 @@ class YearDeterminator:
         return False, ""
 
     async def _check_recent_rejection(self, artist: str, album: str) -> str | None:
-        """Check if album was recently rejected by FALLBACK.
+        """Verify if FALLBACK has recently declined the album.
 
         Args:
-            artist: Artist name
-            album: Album name
+            artist: The name of the artist.
+            album: The name of the album.
 
         Returns:
-            Rejection reason if recently rejected, None otherwise.
+            The reason for rejection if the album was recently rejected, otherwise returns None.
 
         """
         # Rejection reasons that indicate FALLBACK rejected the year update

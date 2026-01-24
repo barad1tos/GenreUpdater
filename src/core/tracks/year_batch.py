@@ -26,6 +26,7 @@ from core.models.track_models import ChangeLogEntry
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
+    is_prerelease_status,
 )
 from core.models.validators import is_empty_year
 
@@ -337,10 +338,14 @@ class YearBatchProcessor:
                     if isinstance(result, BaseException):
                         album_key, _ = album_entry
                         artist_name, album_name = album_key
+                        album_key, album_tracks = album_entry
                         self.error_logger.warning(
-                            "Failed to process album %s/%s: %s",
+                            "Failed to process album %s/%s (%d tracks, force=%s): %s: %s",
                             artist_name,
                             album_name,
+                            len(album_tracks),
+                            force,
+                            type(result).__name__,
                             result,
                         )
 
@@ -364,16 +369,117 @@ class YearBatchProcessor:
             force: If True, bypass skip checks and re-query API
 
         """
+        # Check for prerelease tracks BEFORE filtering.
+        # Previously, prerelease status was checked AFTER filtering, so mixed albums
+        # (some prerelease + some purchased) were never marked for verification.
+        original_track_count = len(album_tracks)
+        prerelease_tracks = [track for track in album_tracks if is_prerelease_status(track.track_status)]
+        has_prerelease = len(prerelease_tracks) > 0
+
+        # Read prerelease handling mode from config
+        # Options: process_editable (default), skip_all, mark_only
+        valid_prerelease_modes = {"process_editable", "skip_all", "mark_only"}
+        prerelease_handling = self.config.get("year_retrieval", {}).get("processing", {}).get("prerelease_handling", "process_editable")
+        if prerelease_handling not in valid_prerelease_modes:
+            self.console_logger.warning(
+                "Unknown prerelease_handling mode '%s' for %s - %s, defaulting to 'process_editable'. Valid options: %s",
+                prerelease_handling,
+                artist,
+                album,
+                ", ".join(sorted(valid_prerelease_modes)),
+            )
+            prerelease_handling = "process_editable"
+
         # Filter to only editable tracks (excludes read-only prerelease tracks)
         editable_tracks = [track for track in album_tracks if can_edit_metadata(track.track_status)]
 
+        # Handle prerelease tracks based on configured mode
+        if has_prerelease:
+            if prerelease_handling == "skip_all":
+                # skip_all: Skip entire album if ANY track is prerelease
+                self.console_logger.info(
+                    "[SKIP] %s - %s: contains prerelease tracks (%d/%d) - skip_all mode",
+                    artist,
+                    album,
+                    len(prerelease_tracks),
+                    original_track_count,
+                )
+                return
+
+            if prerelease_handling == "mark_only":
+                # mark_only: Don't process, just mark for future verification
+                self.console_logger.info(
+                    "[MARK] %s - %s: %d prerelease + %d editable - mark_only mode",
+                    artist,
+                    album,
+                    len(prerelease_tracks),
+                    len(editable_tracks),
+                )
+                await self.year_determinator.pending_verification.mark_for_verification(
+                    artist,
+                    album,
+                    reason="prerelease",
+                    metadata={
+                        "track_count": str(original_track_count),
+                        "prerelease_count": str(len(prerelease_tracks)),
+                        "editable_count": str(len(editable_tracks)),
+                        "mode": "mark_only",
+                    },
+                    recheck_days=self.year_determinator.prerelease_recheck_days,
+                )
+                return
+
+            # process_editable mode continues below
+
         if not editable_tracks:
+            # ALL tracks are read-only (all prerelease)
             self.console_logger.debug(
-                "Skipping album '%s - %s': no editable tracks (all tracks are read-only)",
+                "Skipping album '%s - %s': no editable tracks (%d/%d tracks are prerelease)",
                 artist,
                 album,
+                len(prerelease_tracks),
+                original_track_count,
             )
+            # Mark for verification so we return when prerelease tracks become available
+            if has_prerelease:
+                await self.year_determinator.pending_verification.mark_for_verification(
+                    artist,
+                    album,
+                    reason="prerelease",
+                    metadata={
+                        "track_count": str(original_track_count),
+                        "prerelease_count": str(len(prerelease_tracks)),
+                        "all_prerelease": "true",
+                    },
+                    recheck_days=self.year_determinator.prerelease_recheck_days,
+                )
             return
+
+        # process_editable mode: If mixed album (some prerelease, some editable),
+        # mark for verification but CONTINUE processing the editable tracks.
+        # This ensures:
+        # 1. We update what we can now (purchased tracks)
+        # 2. We come back later to update the rest when prerelease tracks become available
+        if has_prerelease:
+            self.console_logger.info(
+                "[MIXED] %s - %s: %d prerelease + %d editable - marking for verification, processing editable",
+                artist,
+                album,
+                len(prerelease_tracks),
+                len(editable_tracks),
+            )
+            await self.year_determinator.pending_verification.mark_for_verification(
+                artist,
+                album,
+                reason="prerelease",
+                metadata={
+                    "track_count": str(original_track_count),
+                    "prerelease_count": str(len(prerelease_tracks)),
+                    "editable_count": str(len(editable_tracks)),
+                    "mixed_album": "true",
+                },
+                recheck_days=self.year_determinator.prerelease_recheck_days,
+            )
 
         album_tracks = editable_tracks
 
@@ -383,9 +489,10 @@ class YearBatchProcessor:
         if await self.year_determinator.check_suspicious_album(artist, album, album_tracks):
             return
 
-        if await self.year_determinator.check_prerelease_status(artist, album, album_tracks):
-            self.console_logger.debug("DEBUG: Skipping '%s - %s' - all tracks prerelease", artist, album)
-            return
+        # NOTE: check_prerelease_status is no longer called here because:
+        # 1. We already checked prerelease status above on ORIGINAL tracks
+        # 2. album_tracks now contains only editable tracks (no prerelease)
+        # The old call would always return False, wasting cycles
 
         # Check for future years
         future_years = YearDeterminator.extract_future_years(album_tracks)
@@ -397,7 +504,7 @@ class YearBatchProcessor:
         self._detect_user_year_changes(artist, album, album_tracks)
 
         # Check if we should skip this album (force=True bypasses this)
-        # Pre-checks prevent wasted API calls by checking cheap conditions first
+        # Pre-checks prevent wasted API calls by checking inexpensive conditions first
         should_skip, skip_reason = await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force)
         if should_skip:
             self.console_logger.info("[SKIP] %s - %s: %s", artist, album, skip_reason)
@@ -444,7 +551,7 @@ class YearBatchProcessor:
 
         # Deduplicate by track ID
         if tracks_needing_update := list({track.get("id"): track for track in tracks_needing_update}.values()):
-            empty_count = len([t for t in tracks_needing_update if is_empty_year(t.get("year"))])
+            empty_count = len([track for track in tracks_needing_update if is_empty_year(track.get("year"))])
             inconsistent_count = len(tracks_needing_update) - empty_count
 
             self.console_logger.info(
@@ -660,10 +767,12 @@ class YearBatchProcessor:
         """
         if available_tracks := filter_available_tracks(album_tracks):
             self.console_logger.warning(
-                "Album '%s - %s' has %d available tracks but no year could be determined. Tracks remain unchanged.",
+                "Album '%s - %s' has %d available tracks (of %d total) but no year could be determined. "
+                "Check API responses or provide year manually.",
                 artist,
                 album,
                 len(available_tracks),
+                len(album_tracks),
             )
         else:
             self.console_logger.debug(
@@ -790,8 +899,11 @@ class YearBatchProcessor:
         except (OSError, ValueError, RuntimeError):
             # All retries exhausted
             self.error_logger.exception(
-                "Failed to update year for track %s after all retry attempts",
+                "Failed to update year for track %s (artist=%s, album=%s, year=%s) after all retry attempts",
                 track_id,
+                original_artist or "unknown",
+                original_album or "unknown",
+                new_year,
             )
             return False
 
@@ -815,14 +927,19 @@ class YearBatchProcessor:
 
         """
         # Extract and validate track IDs
-        track_ids = [str(t.get("id", "")) for t in tracks if t.get("id")]
-        valid_track_ids = self._validate_track_ids(track_ids)
+        track_ids = [str(track.get("id", "")) for track in tracks if track.get("id")]
+        valid_track_ids = self._validate_track_ids(track_ids, artist=artist, album=album)
         if not valid_track_ids:
-            self.console_logger.warning("No valid track IDs to update (input: %d tracks)", len(tracks))
+            self.console_logger.warning(
+                "No valid track IDs to update for %s - %s (input: %d tracks, all IDs empty or invalid)",
+                artist,
+                album,
+                len(tracks),
+            )
             return 0, len(tracks)
 
         # Build mapping from track_id to track name for logging
-        track_names: dict[str, str] = {str(t.get("id", "")): str(t.get("name", "")) for t in tracks if t.get("id")}
+        track_names: dict[str, str] = {str(track.get("id", "")): str(track.get("name", "")) for track in tracks if track.get("id")}
 
         # Process in batches
         batch_size = self.config.get("apple_script_concurrency", 2)
@@ -848,10 +965,10 @@ class YearBatchProcessor:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Count results
-            for idx, result in enumerate(results):
+            for index, result in enumerate(results):
                 if isinstance(result, Exception):
                     failed += 1
-                    track_id_in_batch = batch[idx] if idx < len(batch) else "unknown"
+                    track_id_in_batch = batch[index] if index < len(batch) else "unknown"
                     self.error_logger.error(
                         "Failed to update track %s (artist=%s, album=%s, year=%s): %s",
                         track_id_in_batch,
@@ -874,11 +991,19 @@ class YearBatchProcessor:
 
         return successful, failed
 
-    def _validate_track_ids(self, track_ids: list[str]) -> list[str]:
+    def _validate_track_ids(
+        self,
+        track_ids: list[str],
+        *,
+        artist: str,
+        album: str,
+    ) -> list[str]:
         """Validate track IDs before bulk update.
 
         Args:
             track_ids: List of track IDs to validate
+            artist: Artist name for contextual logging
+            album: Album name for contextual logging
 
         Returns:
             List of valid track IDs
@@ -887,12 +1012,14 @@ class YearBatchProcessor:
         if not track_ids:
             return []
 
-        valid_ids = [tid for tid in track_ids if tid and str(tid).strip()]
+        valid_ids = [track_id for track_id in track_ids if track_id and str(track_id).strip()]
 
         if len(valid_ids) < len(track_ids):
             self.console_logger.warning(
-                "Filtered out %d invalid track IDs (empty or whitespace)",
+                "Filtered out %d invalid track IDs for %s - %s (empty or whitespace)",
                 len(track_ids) - len(valid_ids),
+                artist,
+                album,
             )
 
         return valid_ids

@@ -261,19 +261,22 @@ class TestShouldSkipAlbumMultipleTracks:
     """Tests for should_skip_album with multiple tracks."""
 
     @pytest.mark.asyncio
-    async def test_uses_first_track_for_year_set_by_mgu_check(self) -> None:
-        """Should use first track's year_set_by_mgu for skip check."""
+    async def test_requires_all_tracks_match_for_skip(self) -> None:
+        """Should NOT skip if any track has inconsistent year_set_by_mgu.
+
+        BUG FIX: The code now checks ALL tracks, not just the first one.
+        This prevents skipping albums with partial updates or library sync issues.
+        """
         determinator = _create_year_determinator()
         tracks = [
             _create_track(year="2020", year_set_by_mgu="2020"),
-            _create_track("2", year="2018", year_set_by_mgu="2019"),  # Different values
+            _create_track("2", year="2018", year_set_by_mgu="2019"),  # Inconsistent values
         ]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        should_skip, _reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
-        # Should skip based on first track's year_set_by_mgu matching
-        assert should_skip is True
-        assert reason == "already_processed"
+        # Should NOT skip because second track has inconsistent year_set_by_mgu
+        assert should_skip is False
 
     @pytest.mark.asyncio
     async def test_first_track_determines_skip_decision(self) -> None:
@@ -486,13 +489,17 @@ class TestPreCheckPriority:
 
     @pytest.mark.asyncio
     async def test_already_processed_takes_priority_over_consistent_year(self) -> None:
-        """Pre-check 1 (already_processed) should run before pre-check 3 (year_consistent)."""
+        """Pre-check 1 (already_processed) should run before pre-check 3 (year_consistent).
+
+        BUG FIX: The code now checks ALL tracks have consistent year_set_by_mgu,
+        not just the first track. So all tracks must have matching values.
+        """
         determinator = _create_year_determinator()
-        # All tracks have same year AND year_set_by_mgu matches current
+        # All tracks have same year AND all have matching year_set_by_mgu
         tracks = [
             _create_track(year="2020", year_set_by_mgu="2020"),
-            _create_track("2", year="2020"),
-            _create_track("3", year="2020"),
+            _create_track("2", year="2020", year_set_by_mgu="2020"),
+            _create_track("3", year="2020", year_set_by_mgu="2020"),
         ]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")

@@ -22,6 +22,14 @@ if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
 
 
+# ASCII separator constants for batch commands (same as fetch_tracks.applescript)
+# These non-printable control characters don't appear in metadata strings,
+# so they're safe delimiters without any encoding/escaping.
+# See: https://en.wikipedia.org/wiki/C0_and_C1_control_codes
+FIELD_SEP = chr(30)  # ASCII Record Separator - separates fields within a command
+CMD_SEP = chr(29)  # ASCII Group Separator - separates individual commands
+
+
 class TrackUpdateExecutor:
     """Executes track metadata updates via AppleScript.
 
@@ -449,6 +457,16 @@ class TrackUpdateExecutor:
         This is experimental and may fail. Caller should handle exceptions
         and fall back to individual updates.
 
+        Uses ASCII control characters as delimiters (same pattern as fetch_tracks):
+        - ASCII 30 (Record Separator) between fields within a command
+        - ASCII 29 (Group Separator) between commands
+
+        This approach is superior to URL-encoding because:
+        1. No external dependencies (no python3 shell call in AppleScript)
+        2. Faster (simple string split vs shell script invocation per value)
+        3. No size increase (URL-encoding can 3x the string length)
+        4. Proven pattern (fetch_tracks handles 37,000+ tracks this way)
+
         Args:
             track_id: Sanitized track ID
             updates: List of (property_name, value) tuples
@@ -462,13 +480,13 @@ class TrackUpdateExecutor:
         Raises:
             Exception: If batch update fails for any reason
         """
-        # Build batch command string: "trackID:property:value;trackID:property:value"
+        # Build batch command using ASCII control character separators.
+        # Each command has 3 fields (trackID, property, value) separated by ASCII 30.
+        # ASCII 29 separates multiple commands.
+        # The !s conversion flag ensures safe AppleScript input for any value type.
         commands = []
-        for property_name, property_value in updates:
-            value_str = str(property_value)
-            commands.append(f"{track_id}:{property_name}:{value_str}")
-
-        batch_command = ";".join(commands)
+        commands.extend(f"{track_id}{FIELD_SEP}{property_name}{FIELD_SEP}{property_value!s}" for property_name, property_value in updates)
+        batch_command = CMD_SEP.join(commands)
 
         # Determine timeout from configuration with sensible fallbacks
         timeouts_config = self.config.get("applescript_timeouts", {}) if isinstance(self.config, dict) else {}
