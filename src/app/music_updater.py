@@ -589,10 +589,10 @@ class MusicUpdater:
                 # Emit cache invalidation for identity changes (artist/album renamed)
                 if result:
                     self._emit_identity_change_events(delta.updated_ids, snapshot_map, result, api_cache)
-        except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        except (OSError, RuntimeError, ValueError, KeyError) as smart_delta_error:
             # Broad catch intentional: Smart Delta is an optimization, not critical path.
             # Any failure should gracefully fall back to full batch scan.
-            self.console_logger.exception("Smart Delta failed: %s", exc)
+            self.console_logger.exception("Smart Delta failed: %s", smart_delta_error)
             self.error_logger.exception("Smart Delta error")
             result = None
 
@@ -691,9 +691,9 @@ class MusicUpdater:
         unique_tracks: dict[str, TrackDict] = {}
         for artist in self.dry_run_test_artists:
             artist_tracks = await self.track_processor.fetch_tracks_async(artist=artist)
-            for track in artist_tracks:
-                if track_id := track.get("id"):
-                    unique_tracks[str(track_id)] = track
+            for current_track in artist_tracks:
+                if track_id := current_track.get("id"):
+                    unique_tracks[str(track_id)] = current_track
         collected_tracks = list(unique_tracks.values())
         self.snapshot_manager.set_snapshot(collected_tracks, library_mtime=pre_fetch_library_mtime)
         return collected_tracks

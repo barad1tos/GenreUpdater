@@ -1318,7 +1318,7 @@ class ExternalApiOrchestrator:
 
         """
         # Delegate to MusicBrainz client
-        str_result = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
+        activity_period = await self.musicbrainz_client.get_artist_activity_period(artist_norm)
 
         # Convert string years to integers to match protocol
         def safe_int(val: str | None) -> int | None:
@@ -1330,7 +1330,7 @@ class ExternalApiOrchestrator:
             except ValueError:
                 return None
 
-        return safe_int(str_result[0]), safe_int(str_result[1])
+        return safe_int(activity_period[0]), safe_int(activity_period[1])
 
     async def get_artist_start_year(self, artist_norm: str) -> int | None:
         """Get artist's career start year with caching and fallback.

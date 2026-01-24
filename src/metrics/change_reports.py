@@ -645,10 +645,10 @@ def save_changes_report(
         error_logger = logging.getLogger("error_logger")
 
     # Convert ChangeLogEntry objects to dictionaries
-    dict_changes = [_convert_changelog_to_dict(item) for item in changes]
+    converted_changes = [_convert_changelog_to_dict(item) for item in changes]
 
     # Process each change for type determination and field normalization
-    for change in dict_changes:
+    for change in converted_changes:
         if "change_type" not in change:
             change["change_type"] = _determine_change_type(change)
         _normalize_field_mappings(change)
@@ -657,7 +657,7 @@ def save_changes_report(
     final_path = _add_timestamp_to_filename(file_path) if add_timestamp and file_path else file_path
 
     save_unified_changes_report(
-        dict_changes,
+        converted_changes,
         final_path,
         console_logger,
         error_logger,
