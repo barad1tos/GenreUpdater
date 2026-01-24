@@ -1124,7 +1124,7 @@ class TestDependencyContainerInitializeService:
         mock_service = MockServiceWithForce()
 
         await container._initialize_service(
-            cast("InitializableService", mock_service),
+            cast("InitializableService", cast(object, mock_service)),
             "Test Service",
             force=True,
         )
