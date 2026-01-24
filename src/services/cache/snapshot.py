@@ -162,14 +162,14 @@ class LibrarySnapshotService:
             if self.compress:
                 raw_bytes = await asyncio.to_thread(gzip.decompress, raw_bytes)
             payload = loads_json(raw_bytes)
-        except (OSError, ValueError) as exc:
-            self.logger.exception("Failed to load library snapshot: %s", exc)
+        except (OSError, ValueError) as snapshot_error:
+            self.logger.exception("Failed to load library snapshot: %s", snapshot_error)
             return None
 
         try:
             return self._deserialize_tracks(payload)
-        except ValueError as exc:
-            self.logger.exception("Snapshot payload validation failed: %s", exc)
+        except ValueError as validation_error:
+            self.logger.exception("Snapshot payload validation failed: %s", validation_error)
             return None
 
     async def save_snapshot(self, tracks: Sequence[TrackDict]) -> str:
@@ -198,7 +198,10 @@ class LibrarySnapshotService:
         # Check metadata existence and version
         metadata = await self.get_snapshot_metadata()
         if not metadata:
-            self.logger.warning("Snapshot metadata not found; treating snapshot as invalid")
+            self.logger.warning(
+                "Snapshot metadata not found at %s; treating snapshot as invalid",
+                self._metadata_path,
+            )
             return False
 
         if metadata.version != SNAPSHOT_VERSION:
@@ -250,8 +253,8 @@ class LibrarySnapshotService:
             raw_bytes = await asyncio.to_thread(self._metadata_path.read_bytes)
             data = loads_json(raw_bytes)
             return LibraryCacheMetadata.from_dict(data)
-        except (OSError, KeyError, ValueError) as exc:
-            self.logger.warning("Failed to parse snapshot metadata: %s", exc)
+        except (OSError, KeyError, ValueError) as metadata_error:
+            self.logger.warning("Failed to parse snapshot metadata: %s", metadata_error)
             return None
 
     async def update_snapshot_metadata(self, metadata: LibraryCacheMetadata) -> None:
@@ -268,8 +271,8 @@ class LibrarySnapshotService:
             raw_bytes = await asyncio.to_thread(self._delta_path.read_bytes)
             data = loads_json(raw_bytes)
             delta = LibraryDeltaCache.from_dict(data)
-        except (OSError, KeyError, ValueError) as exc:
-            self.logger.warning("Failed to load delta cache: %s", exc)
+        except (OSError, KeyError, ValueError) as delta_error:
+            self.logger.warning("Failed to load delta cache: %s", delta_error)
             return None
 
         if delta.should_reset():
@@ -299,8 +302,8 @@ class LibrarySnapshotService:
 
         try:
             stat_result = await asyncio.to_thread(self._music_library_path.stat)
-        except OSError as exc:
-            raise FileNotFoundError(str(exc)) from exc
+        except OSError as stat_error:
+            raise FileNotFoundError(str(stat_error)) from stat_error
 
         return datetime.fromtimestamp(stat_result.st_mtime)
 
@@ -492,9 +495,9 @@ class LibrarySnapshotService:
         )
 
         async with spinner(f"Force mode: fetching {len(common_ids)} tracks for update detection..."):
-            for i in range(0, len(common_ids), batch_size):
-                batch = common_ids[i : i + batch_size]
-                batch_num = i // batch_size + 1
+            for batch_index in range(0, len(common_ids), batch_size):
+                batch = common_ids[batch_index : batch_index + batch_size]
+                batch_num = batch_index // batch_size + 1
                 ids_param = ",".join(batch)
 
                 result = await applescript_client.run_script(
@@ -516,8 +519,8 @@ class LibrarySnapshotService:
                     try:
                         track_dict = self._parse_raw_track(raw_track)
                         current_map[str(track_dict.id)] = track_dict
-                    except (KeyError, ValueError) as exc:
-                        self.logger.warning("Failed to parse track: %s", exc)
+                    except (KeyError, ValueError) as parse_error:
+                        self.logger.warning("Failed to parse track: %s", parse_error)
 
         if not current_map:
             self.logger.warning("Force scan: no tracks fetched successfully")
@@ -648,9 +651,9 @@ class LibrarySnapshotService:
         temp_path: Path | None = None
         success = False
         try:
-            with tempfile.NamedTemporaryFile("wb", delete=False, dir=target_path.parent) as temp:
-                temp.write(data)
-                temp_path = Path(temp.name)
+            with tempfile.NamedTemporaryFile("wb", delete=False, dir=target_path.parent) as temp_file:
+                temp_file.write(data)
+                temp_path = Path(temp_file.name)
             temp_path.replace(target_path)
             success = True
         finally:
@@ -665,13 +668,13 @@ class LibrarySnapshotService:
             if plain.exists():
                 try:
                     plain.unlink()
-                except OSError as exc:
-                    self.logger.warning("Failed to remove plain snapshot file %s: %s", plain, exc)
+                except OSError as removal_error:
+                    self.logger.warning("Failed to remove plain snapshot file %s: %s", plain, removal_error)
         elif compressed.exists():
             try:
                 compressed.unlink()
-            except OSError as exc:
-                self.logger.warning("Failed to remove compressed snapshot file %s: %s", compressed, exc)
+            except OSError as removal_error:
+                self.logger.warning("Failed to remove compressed snapshot file %s: %s", compressed, removal_error)
 
     @property
     def _snapshot_path(self) -> Path:

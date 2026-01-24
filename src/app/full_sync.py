@@ -66,7 +66,7 @@ async def run_full_resync(
     try:
         # Check if Music.app is running
         if not is_music_app_running(error_logger):
-            error_logger.error("Music.app is not running! Please start Music.app before running this script.")
+            error_logger.error("Music.app is not running - cannot perform full_sync operation. Please start Music.app before running this script.")
             return
 
         console_logger.info("Music.app is running")
@@ -76,7 +76,7 @@ async def run_full_resync(
         all_tracks = await track_processor.fetch_tracks_async()
 
         if not all_tracks:
-            console_logger.warning("No tracks found in Music.app")
+            console_logger.warning("No tracks found in Music.app (full library fetch)")
             return
 
         console_logger.info("Found %d tracks in Music.app", len(all_tracks))

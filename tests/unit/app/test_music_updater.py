@@ -191,7 +191,7 @@ class TestMusicUpdaterAllure:
             await updater.run_clean_artist("Test Artist")
         error_logs = deps.error_logger.error_messages
         assert len(error_logs) > 0
-        assert "Music app is not running" in error_logs[0]
+        assert "Music.app is not running" in error_logs[0]
 
     @pytest.mark.asyncio
     async def test_run_update_years(self) -> None:

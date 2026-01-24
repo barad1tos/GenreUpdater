@@ -64,7 +64,7 @@ class GenreUpdateService:
         Returns:
             List of tracks or None if not found.
         """
-        fetched_tracks: list[TrackDict]
+        fetched_tracks: list[TrackDict] | None
         if artist is None:
             fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
         else:
@@ -80,7 +80,11 @@ class GenreUpdateService:
             )
 
         if not fetched_tracks:
-            self._console_logger.warning("No tracks found")
+            self._console_logger.warning(
+                "No tracks found for genre update (artist=%s, test_mode=%s)",
+                artist or "all",
+                bool(self._test_artists),
+            )
             return None
         return fetched_tracks
 

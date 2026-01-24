@@ -83,7 +83,7 @@ class YearUpdateService:
         """
         # For full library (no artist filter), use batch fetcher to avoid AppleScript timeout
         # For specific artist, use direct fetch which is more efficient
-        fetched_tracks: list[TrackDict]
+        fetched_tracks: list[TrackDict] | None
         if artist is None:
             fetched_tracks = await self._track_processor.fetch_tracks_in_batches()
         else:
@@ -99,7 +99,11 @@ class YearUpdateService:
             )
 
         if not fetched_tracks:
-            self._console_logger.warning("No tracks found")
+            self._console_logger.warning(
+                "No tracks found for year update (artist=%s, test_mode=%s)",
+                artist or "all",
+                bool(self._test_artists),
+            )
             return None
         return fetched_tracks
 
@@ -136,7 +140,13 @@ class YearUpdateService:
         if success:
             self._console_logger.info("Year update operation completed successfully")
         else:
-            self._error_logger.error("Year update operation failed")
+            self._error_logger.error(
+                "Year update operation failed (artist=%s, force=%s, fresh=%s, tracks_count=%d)",
+                artist or "all",
+                force,
+                fresh,
+                len(tracks) if tracks else 0,
+            )
 
     async def run_revert_years(self, artist: str, album: str | None, backup_csv: str | None = None) -> None:
         """Revert year updates for an artist (optionally per album).
@@ -434,7 +444,10 @@ class YearUpdateService:
             changes_log = year_changes
             self._console_logger.info("=== AFTER Step 4 completed successfully with %d changes ===", len(changes_log))
         except Exception as e:
-            self._error_logger.exception("=== ERROR in Step 4 ===")
+            self._error_logger.exception(
+                "=== ERROR in Step 4 (year retrieval): %s ===",
+                type(e).__name__,
+            )
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
             changes_log.append(

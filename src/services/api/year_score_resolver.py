@@ -97,14 +97,23 @@ class YearScoreResolver:
             Tuple of (best_year, is_definitive, confidence_score)
         """
         if not year_scores:
-            self.console_logger.warning("No year scores to evaluate")
+            self.console_logger.warning(
+                "No year scores to evaluate (releases_count=%d, existing_year=%s)",
+                len(all_releases) if all_releases else 0,
+                existing_year or "none",
+            )
             return "", False, 0
 
         final_year_scores = self._compute_final_year_scores(year_scores)
         sorted_years = self._sort_years_by_score(final_year_scores)
 
         if not sorted_years:
-            self.console_logger.warning("No valid years after score computation")
+            self.console_logger.warning(
+                "No valid years after score computation (year_candidates=%d, min_valid=%d, max_valid=%d)",
+                len(year_scores),
+                self.min_valid_year,
+                self.current_year,
+            )
             return "", False, 0
 
         self._log_ranked_years(sorted_years)

@@ -163,7 +163,7 @@ class TrackProcessor:
         try:
             await self.artist_renamer.rename_tracks(tracks)
         except (OSError, ValueError, RuntimeError):
-            self.error_logger.exception("Artist renamer failed")
+            self.error_logger.exception("Artist renamer failed (processing %d tracks)", len(tracks))
 
     async def _get_cached_tracks(self, cache_key: str) -> Sequence[TrackDict] | None:
         """Retrieve tracks from the cache with type validation.

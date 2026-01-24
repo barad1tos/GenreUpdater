@@ -52,7 +52,7 @@ def validate_csv_header(
 ) -> list[str]:
     """Validate CSV header and return fields to read."""
     if reader.fieldnames is None:
-        logger.warning("CSV file %s is empty or has no header.", csv_path)
+        logger.warning("CSV file %s is empty or has no header (cannot read fieldnames)", csv_path)
         return []
 
     fieldnames: Sequence[str] = reader.fieldnames or []
@@ -137,7 +137,7 @@ def load_track_list(csv_path: str) -> dict[str, TrackDict]:
 
         logger.info("Loaded %d tracks from track_list.csv.", len(track_map))
     except (OSError, UnicodeError, csv.Error):
-        logger.exception("Could not read track_list.csv")
+        logger.exception("Could not read CSV file: %s", csv_path)
     return track_map
 
 

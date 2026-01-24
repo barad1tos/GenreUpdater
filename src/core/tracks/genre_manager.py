@@ -115,13 +115,13 @@ class GenreManager(BaseProcessor):
         # Use itertools.chain to avoid memory overhead of list concatenation
         seen: set[str] = set()
         combined: list[TrackDict] = []
-        for t in itertools.chain(new_tracks, missing_genre_tracks):
-            tid = str(t.id or "")
+        for track in itertools.chain(new_tracks, missing_genre_tracks):
+            track_id = str(track.id or "")
             # Check for missing or empty ID (but allow '0' which is falsy but valid)
-            if not tid or tid in seen:
+            if not track_id or track_id in seen:
                 continue
-            seen.add(tid)
-            combined.append(t)
+            seen.add(track_id)
+            combined.append(track)
 
         self.console_logger.info(
             "Found %d new tracks since %s; including %d with missing/unknown genre (combined %d)",
@@ -145,7 +145,11 @@ class GenreManager(BaseProcessor):
         track_status = track.track_status
 
         if not track_id:
-            self.error_logger.error("Track missing 'id' field")
+            self.error_logger.error(
+                "Track missing 'id' field: artist=%s, name=%s",
+                track.artist or "unknown",
+                track.name or "unknown",
+            )
             return False, ""
 
         # Skip prerelease tracks (read-only)
@@ -266,7 +270,7 @@ class GenreManager(BaseProcessor):
 
             return updated_track, change_log
 
-        self.error_logger.error("Failed to update genre for track %s", track_id)
+        self.error_logger.error("Failed to update genre for track %s to '%s'", track_id, new_genre)
         return None, None
 
     async def _gather_with_error_handling(
@@ -541,19 +545,19 @@ class GenreManager(BaseProcessor):
             List of tracks that should be updated
         """
         candidates: list[TrackDict] = []
-        for t in artist_tracks:
-            if force_flag or self.is_missing_or_unknown_genre(t):
-                candidates.append(t)
+        for track in artist_tracks:
+            if force_flag or self.is_missing_or_unknown_genre(track):
+                candidates.append(track)
                 continue
 
-            added_dt = self.parse_date_added(t)
+            added_dt = self.parse_date_added(track)
             if last_run is not None and added_dt and added_dt > last_run:
-                candidates.append(t)
+                candidates.append(track)
                 continue
 
-            genre_val = t.genre or ""
+            genre_val = track.genre or ""
             if isinstance(genre_val, str) and genre_val.strip() and dominant_genre and (genre_val != dominant_genre):
-                candidates.append(t)
+                candidates.append(track)
 
         return candidates
 
@@ -569,12 +573,12 @@ class GenreManager(BaseProcessor):
         """
         seen_ids: set[str] = set()
         unique: list[TrackDict] = []
-        for t in tracks:
-            tid = t.id or ""
-            if not tid or tid in seen_ids:
+        for track in tracks:
+            track_id = track.id or ""
+            if not track_id or track_id in seen_ids:
                 continue
-            seen_ids.add(tid)
-            unique.append(t)
+            seen_ids.add(track_id)
+            unique.append(track)
         return unique
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
