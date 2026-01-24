@@ -321,3 +321,55 @@ class TestAllPrereleaseAlbum:
         year_determinator.pending_verification.mark_for_verification.assert_called_once()
         call_kwargs = year_determinator.pending_verification.mark_for_verification.call_args[1]
         assert call_kwargs["metadata"]["all_prerelease"] == "true"
+
+
+class TestInvalidPrereleaseHandlingConfig:
+    """Tests for invalid prerelease_handling configuration values."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_mode_defaults_to_process_editable(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that invalid prerelease_handling mode logs warning and defaults to process_editable."""
+        year_determinator = _create_mock_year_determinator()
+        processor = _create_year_batch_processor(
+            year_determinator=year_determinator,
+            config={"year_retrieval": {"processing": {"prerelease_handling": "invalid_mode"}}},
+        )
+
+        # Mixed album: 1 prerelease + 1 purchased (editable)
+        tracks = [
+            _create_track("1", track_status="Prerelease"),
+            _create_track("2", track_status="Purchased"),
+        ]
+
+        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+            with caplog.at_level(logging.WARNING):
+                await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+
+            # Should have logged warning about invalid mode
+            assert any("Unknown prerelease_handling mode" in record.message for record in caplog.records)
+            assert any("invalid_mode" in record.message for record in caplog.records)
+
+            # Should still process (defaulted to process_editable behavior)
+            mock_update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_invalid_mode_warning_contains_valid_options(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that warning message includes valid options for user guidance."""
+        year_determinator = _create_mock_year_determinator()
+        processor = _create_year_batch_processor(
+            year_determinator=year_determinator,
+            config={"year_retrieval": {"processing": {"prerelease_handling": "wrong_value"}}},
+        )
+
+        tracks = [
+            _create_track("1", track_status="Prerelease"),
+            _create_track("2", track_status="Purchased"),
+        ]
+
+        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
+            with caplog.at_level(logging.WARNING):
+                await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+
+            # Warning should contain valid options
+            warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+            assert any("mark_only" in msg and "process_editable" in msg and "skip_all" in msg for msg in warning_messages)
