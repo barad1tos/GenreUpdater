@@ -145,7 +145,11 @@ class GenreManager(BaseProcessor):
         track_status = track.track_status
 
         if not track_id:
-            self.error_logger.error("Track missing 'id' field")
+            self.error_logger.error(
+                "Track missing 'id' field: artist=%s, name=%s",
+                track.artist or "unknown",
+                track.name or "unknown",
+            )
             return False, ""
 
         # Skip prerelease tracks (read-only)
@@ -266,7 +270,7 @@ class GenreManager(BaseProcessor):
 
             return updated_track, change_log
 
-        self.error_logger.error("Failed to update genre for track %s", track_id)
+        self.error_logger.error("Failed to update genre for track %s to '%s'", track_id, new_genre)
         return None, None
 
     async def _gather_with_error_handling(

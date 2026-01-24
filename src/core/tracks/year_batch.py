@@ -818,7 +818,7 @@ class YearBatchProcessor:
         track_ids = [str(t.get("id", "")) for t in tracks if t.get("id")]
         valid_track_ids = self._validate_track_ids(track_ids)
         if not valid_track_ids:
-            self.console_logger.warning("No valid track IDs to update")
+            self.console_logger.warning("No valid track IDs to update (input: %d tracks)", len(tracks))
             return 0, len(tracks)
 
         # Build mapping from track_id to track name for logging
@@ -848,10 +848,18 @@ class YearBatchProcessor:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Count results
-            for result in results:
+            for idx, result in enumerate(results):
                 if isinstance(result, Exception):
                     failed += 1
-                    self.error_logger.error("Failed to update track: %s", result)
+                    track_id_in_batch = batch[idx] if idx < len(batch) else "unknown"
+                    self.error_logger.error(
+                        "Failed to update track %s (artist=%s, album=%s, year=%d): %s",
+                        track_id_in_batch,
+                        artist,
+                        album,
+                        year,
+                        result,
+                    )
                 elif result:
                     successful += 1
                 else:

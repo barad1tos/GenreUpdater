@@ -80,7 +80,11 @@ class GenreUpdateService:
             )
 
         if not fetched_tracks:
-            self._console_logger.warning("No tracks found")
+            self._console_logger.warning(
+                "No tracks found for genre update (artist=%s, test_mode=%s)",
+                artist or "all",
+                bool(self._test_artists),
+            )
             return None
         return fetched_tracks
 

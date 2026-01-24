@@ -101,7 +101,10 @@ class TestOrchestratorAllure:
         with patch("app.orchestrator.is_music_app_running", return_value=False):
             await orchestrator.run_command(args)
         console_error_mock = cast(Mock, orchestrator.console_logger.error)
-        console_error_mock.assert_called_once_with("Music app is not running! Please start Music.app before running this script.")
+        console_error_mock.assert_called_once_with(
+            "Music.app is not running - cannot execute '%s' command. Please start Music.app before running this script.",
+            "clean_artist",
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

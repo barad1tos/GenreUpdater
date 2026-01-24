@@ -208,7 +208,10 @@ class MusicUpdater:
 
         # Check if Music app is running
         if not is_music_app_running(self.error_logger):
-            self.error_logger.error("Music app is not running! Please start Music.app before running this script.")
+            self.error_logger.error(
+                "Music.app is not running - cannot perform clean_artist for '%s'. Please start Music.app before running this script.",
+                artist,
+            )
             return
 
         # Fetch tracks for artist
@@ -456,7 +459,7 @@ class MusicUpdater:
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
         if not tracks:
-            self.console_logger.warning("No tracks found in Music.app")
+            self.console_logger.warning("No tracks found in Music.app (force=%s)", force)
             return
 
         self.console_logger.info("Found %d tracks in Music.app", len(tracks))
@@ -592,8 +595,8 @@ class MusicUpdater:
         except (OSError, RuntimeError, ValueError, KeyError) as smart_delta_error:
             # Broad catch intentional: Smart Delta is an optimization, not critical path.
             # Any failure should gracefully fall back to full batch scan.
-            self.console_logger.exception("Smart Delta failed: %s", smart_delta_error)
-            self.error_logger.exception("Smart Delta error")
+            self.console_logger.exception("Smart Delta failed during library sync: %s", smart_delta_error)
+            self.error_logger.exception("Smart Delta error during library sync: %s", smart_delta_error)
             result = None
 
         return result

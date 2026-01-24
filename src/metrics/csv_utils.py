@@ -80,7 +80,7 @@ def save_csv(
             len(data),
         )
     except (OSError, UnicodeError):
-        error_logger.exception("Failed to save %s", data_type)
+        error_logger.exception("Failed to save %s to %s (%d entries)", data_type, file_path, len(data))
         # Clean up temporary file in case of error
         if Path(temp_file_path).exists():
             try:

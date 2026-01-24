@@ -325,7 +325,18 @@ class AlbumCacheService:
                     confidence=confidence,
                 )
             else:
-                self.logger.warning("Skipping invalid CSV row: %s", row)
+                missing_fields = []
+                if not artist:
+                    missing_fields.append("artist")
+                if not album:
+                    missing_fields.append("album")
+                if not year:
+                    missing_fields.append("year")
+                self.logger.warning(
+                    "Skipping invalid CSV row (empty: %s): %s",
+                    ", ".join(missing_fields),
+                    row,
+                )
 
         except KeyError as e:
             self.logger.warning("Missing required field in CSV row: %s", e)

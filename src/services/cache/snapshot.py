@@ -198,7 +198,10 @@ class LibrarySnapshotService:
         # Check metadata existence and version
         metadata = await self.get_snapshot_metadata()
         if not metadata:
-            self.logger.warning("Snapshot metadata not found; treating snapshot as invalid")
+            self.logger.warning(
+                "Snapshot metadata not found at %s; treating snapshot as invalid",
+                self._metadata_path,
+            )
             return False
 
         if metadata.version != SNAPSHOT_VERSION:

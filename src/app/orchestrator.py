@@ -59,7 +59,10 @@ class Orchestrator:
 
         # Check if Music app is running for commands that depend on it
         if self._requires_music_app(command) and not is_music_app_running(self.error_logger):
-            self.console_logger.error("Music app is not running! Please start Music.app before running this script.")
+            self.console_logger.error(
+                "Music.app is not running - cannot execute '%s' command. Please start Music.app before running this script.",
+                command or "default",
+            )
             return
 
         # Set dry-run context if needed

@@ -153,8 +153,13 @@ class YearDeterminator:
             )
         except (OSError, ValueError, RuntimeError) as e:
             if debug.year:
-                self.console_logger.exception("Exception in get_album_year: %s", e)
-                self.error_logger.exception("Full exception details:")
+                self.console_logger.exception(
+                    "Exception in get_album_year for artist=%s, album=%s: %s",
+                    artist,
+                    album,
+                    e,
+                )
+                self.error_logger.exception("Full exception details for artist=%s, album=%s:", artist, album)
             return None
 
         if not year_result:
