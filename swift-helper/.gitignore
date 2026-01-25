@@ -1,0 +1,15 @@
+# Swift Package Manager
+.build/
+Package.resolved
+*.xcodeproj
+*.xcworkspace
+
+# macOS
+.DS_Store
+*.swp
+
+# Build output (keep committed binary for now)
+# build/
+
+# Claude Code memory files
+CLAUDE.md
