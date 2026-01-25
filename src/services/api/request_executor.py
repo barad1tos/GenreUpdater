@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
+from services.cache.hash_service import UnifiedHashService
+
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
     from services.api.api_base import EnhancedRateLimiter
@@ -182,14 +184,20 @@ class ApiRequestExecutor:
         url: str,
         params: dict[str, str] | None,
     ) -> str:
-        """Build a cache key for the API request."""
-        cache_key_tuple = (
-            "api_request",
-            api_name,
-            url,
-            tuple(sorted((params or {}).items())),
-        )
-        return f"{cache_key_tuple[0]}_{cache_key_tuple[1]}_{hash(cache_key_tuple)}"
+        """Build a deterministic cache key for the API request.
+
+        Uses SHA-256 via UnifiedHashService instead of Python's built-in hash()
+        to ensure cache keys remain stable across interpreter restarts.
+        Python's hash() is randomized per-process (PYTHONHASHSEED) which would
+        cause cache misses after every restart.
+        """
+        cache_key_data = {
+            "type": "api_request",
+            "api": api_name,
+            "url": url,
+            "params": sorted((params or {}).items()),
+        }
+        return f"api_request_{api_name}_{UnifiedHashService.hash_generic_key(cache_key_data)}"
 
     async def _check_cache(
         self,
