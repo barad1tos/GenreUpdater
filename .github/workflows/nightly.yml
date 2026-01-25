@@ -36,6 +36,8 @@ jobs:
       - name: Run integration tests
         env:
           PYTHONUNBUFFERED: "1"
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
         run: |
           uv run pytest tests/integration/ -v --tb=short -m 'not slow' --no-cov-on-fail --cov-fail-under=0
 
@@ -65,5 +67,7 @@ jobs:
       - name: Run e2e tests
         env:
           PYTHONUNBUFFERED: "1"
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
         run: |
           uv run pytest tests/e2e/ -v --tb=short -m 'not slow' --no-cov-on-fail --cov-fail-under=0
