@@ -26,7 +26,6 @@ from metrics.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
 from .apple import AppleScriptClient
-from .apple.swift_bridge import SwiftBridge
 from .cache.orchestrator import CacheOrchestrator
 from .cache.snapshot import LibrarySnapshotService
 from .pending_verification import PendingVerificationService
@@ -258,26 +257,15 @@ class DependencyContainer:
             raise
 
     def _initialize_apple_script_client(self, dry_run: bool) -> None:
-        """Initialize the appropriate Music.app client based on configuration.
-
-        Selection priority:
-        1. If dry_run=True → DryRunAppleScriptClient (always, for safety)
-        2. If swift_helper.enabled=True → SwiftBridge (~60x faster)
-        3. Otherwise → AppleScriptClient (traditional, stable)
-        """
+        """Initialize the appropriate AppleScript client based on the dry-run flag."""
         if self._analytics is None:
             msg = "Analytics must be initialized before AppleScript client"
             raise RuntimeError(msg)
 
         # Type assertion after None check to help type checker
         analytics = self._analytics
-
-        # Check Swift helper configuration
-        swift_config = self._config.get("swift_helper", {})
-        swift_enabled = swift_config.get("enabled", False)
-
         if dry_run:
-            # Dry-run always uses AppleScript client for safety
+            # Create the real client first
             real_client = AppleScriptClient(
                 self._config,
                 analytics,
@@ -285,30 +273,15 @@ class DependencyContainer:
                 self._error_logger,
                 retry_handler=self._retry_handler,
             )
+            # Then wrap it with DryRunAppleScriptClient
             self._ap_client = DryRunAppleScriptClient(
                 real_client,
                 self._config,
                 self._console_logger,
                 self._error_logger,
             )
-            self._console_logger.info(
-                "Dry run enabled - using %s",
-                LogFormat.entity("DryRunAppleScriptClient"),
-            )
-        elif swift_enabled:
-            # Use SwiftBridge for ~60x performance improvement
-            self._ap_client = SwiftBridge(
-                self._config,
-                analytics,
-                self._console_logger,
-                self._error_logger,
-            )
-            self._console_logger.info(
-                "Swift helper enabled - using %s (~60x faster)",
-                LogFormat.entity("SwiftBridge"),
-            )
+            self._console_logger.info("Dry run enabled - using %s", LogFormat.entity("DryRunAppleScriptClient"))
         else:
-            # Traditional AppleScript client
             self._ap_client = AppleScriptClient(
                 self._config,
                 analytics,
@@ -449,17 +422,6 @@ class DependencyContainer:
                     await self._cache_service.shutdown()
                 except Exception as e:
                     self._console_logger.warning("Failed to shutdown cache services: %s", e)
-
-        # 3. FINALLY: Shutdown SwiftBridge daemon if active
-        if self._ap_client is not None and isinstance(self._ap_client, SwiftBridge):
-            try:
-                await self._ap_client.shutdown()
-                self._console_logger.debug(
-                    "%s daemon terminated",
-                    LogFormat.entity("SwiftBridge"),
-                )
-            except Exception as e:
-                self._console_logger.warning("Failed to shutdown SwiftBridge: %s", e)
 
         self._console_logger.debug("%s closed.", LogFormat.entity("DependencyContainer"))
 

@@ -31,13 +31,6 @@ applescript_timeouts:
   single_artist_fetch: 600
   batch_update: 1800
 
-# Swift Helper Daemon (~60x faster than AppleScript for large libraries)
-# When enabled, uses native Swift/ScriptingBridge instead of osascript
-swift_helper:
-  enabled: false          # Set to true to use Swift daemon
-  binary_path: null       # Auto-detect from swift-helper/build/
-  socket_timeout_seconds: 300
-
 max_retries: 3
 retry_delay_seconds: 1
 cache_ttl_seconds: 1800
