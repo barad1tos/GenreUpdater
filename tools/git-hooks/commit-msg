@@ -43,12 +43,16 @@ if ! echo "$COMMIT_MSG" | head -1 | grep -qE "$PATTERN"; then
     exit 1
 fi
 
-# Check subject line length (soft limit: 72 chars)
+# Check subject line length (hard limit: 55 chars per skill)
 SUBJECT_LENGTH=$(head -1 "$COMMIT_MSG_FILE" | wc -c)
-if [ "$SUBJECT_LENGTH" -gt 72 ]; then
+# Note: wc -c includes trailing newline, so actual limit is 56
+if [ "$SUBJECT_LENGTH" -gt 56 ]; then
     echo ""
-    echo "⚠️  WARNING: Subject line exceeds 72 characters ($SUBJECT_LENGTH chars)"
-    echo "   Consider shortening for better readability in git log."
+    echo "❌ COMMIT REJECTED: Subject exceeds 55 characters ($((SUBJECT_LENGTH - 1)) chars)"
     echo ""
-    # Don't fail, just warn
+    echo "   Your subject: $(head -1 "$COMMIT_MSG_FILE")"
+    echo ""
+    echo "   Tip: Move details to commit body, keep subject concise"
+    echo ""
+    exit 1
 fi
