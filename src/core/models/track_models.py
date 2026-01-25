@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, TypedDict, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Type checking improvements for better IDE support and type safety
 T = TypeVar("T")
@@ -107,6 +107,19 @@ class DevelopmentConfig(BaseModel):
 
     test_artists: list[str]
     debug_mode: bool = False
+
+    @field_validator("test_artists", mode="before")
+    @classmethod
+    def parse_test_artists(cls, v: str | list[str]) -> list[str]:
+        """Convert comma-separated string to list.
+
+        Supports both formats:
+        - YAML list: [ Amon Amarth, Children of Bodom ]
+        - Comma string: "Amon Amarth, Children of Bodom"
+        """
+        if isinstance(v, str):
+            return [a.strip() for a in v.split(",") if a.strip()]
+        return v
 
 
 class LogLevelsConfig(BaseModel):
