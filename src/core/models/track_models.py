@@ -110,16 +110,32 @@ class DevelopmentConfig(BaseModel):
 
     @field_validator("test_artists", mode="before")
     @classmethod
-    def parse_test_artists(cls, v: str | list[str]) -> list[str]:
-        """Convert comma-separated string to list.
+    def parse_test_artists(cls, v: str | list[str] | tuple[str, ...]) -> list[str]:
+        """Convert comma-separated string, list, or tuple to list of strings.
 
-        Supports both formats:
+        Supports formats:
         - YAML list: [ Amon Amarth, Children of Bodom ]
         - Comma string: "Amon Amarth, Children of Bodom"
+        - Tuple: ("Amon Amarth", "Children of Bodom")
+
+        Raises:
+            ValueError: If input is not a string, list, or tuple.
+            TypeError: If list/tuple contains non-string elements.
         """
         if isinstance(v, str):
             return [a.strip() for a in v.split(",") if a.strip()]
-        return v
+        if isinstance(v, (list, tuple)):
+            result = []
+            for i, item in enumerate(v):
+                if not isinstance(item, str):
+                    msg = f"test_artists[{i}] must be str, got {type(item).__name__}"
+                    raise TypeError(msg)
+                stripped = item.strip()
+                if stripped:
+                    result.append(stripped)
+            return result
+        msg = f"test_artists must be a string, list, or tuple, got {type(v).__name__}"
+        raise ValueError(msg)
 
 
 class LogLevelsConfig(BaseModel):

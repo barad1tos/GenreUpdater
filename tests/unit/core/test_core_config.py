@@ -23,6 +23,7 @@ from core.core_config import (
     validate_api_auth,
     validate_required_env_vars,
 )
+from core.models.track_models import DevelopmentConfig
 
 if TYPE_CHECKING:
     import pathlib
@@ -289,3 +290,52 @@ class TestValidateApiAuth:
 
         # Should not raise
         validate_api_auth(api_auth)
+
+
+class TestDevelopmentConfigTestArtists:
+    """Tests for DevelopmentConfig.parse_test_artists validator."""
+
+    def test_parses_comma_separated_string(self) -> None:
+        """Should parse comma-separated string to list."""
+        config = DevelopmentConfig(test_artists="Amon Amarth, Children of Bodom")
+        assert config.test_artists == ["Amon Amarth", "Children of Bodom"]
+
+    def test_parses_string_with_extra_whitespace(self) -> None:
+        """Should strip whitespace from items."""
+        config = DevelopmentConfig(test_artists="  Artist1  ,  Artist2  ")
+        assert config.test_artists == ["Artist1", "Artist2"]
+
+    def test_filters_empty_strings(self) -> None:
+        """Should filter out empty strings from comma-separated input."""
+        config = DevelopmentConfig(test_artists="Artist1,,Artist2,")
+        assert config.test_artists == ["Artist1", "Artist2"]
+
+    def test_accepts_list_input(self) -> None:
+        """Should accept list input unchanged (but stripped)."""
+        config = DevelopmentConfig(test_artists=["Artist1", " Artist2 "])
+        assert config.test_artists == ["Artist1", "Artist2"]
+
+    def test_accepts_tuple_input(self) -> None:
+        """Should accept tuple and convert to list."""
+        config = DevelopmentConfig(test_artists=("Artist1", "Artist2"))
+        assert config.test_artists == ["Artist1", "Artist2"]
+
+    def test_raises_for_dict_input(self) -> None:
+        """Should raise ValueError for dict input."""
+        with pytest.raises(ValidationError, match="test_artists must be a string, list, or tuple"):
+            DevelopmentConfig(test_artists={"artist": "value"})  # type: ignore[arg-type]
+
+    def test_raises_for_int_input(self) -> None:
+        """Should raise ValueError for int input."""
+        with pytest.raises(ValidationError, match="test_artists must be a string, list, or tuple"):
+            DevelopmentConfig(test_artists=42)  # type: ignore[arg-type]
+
+    def test_raises_for_non_string_list_element(self) -> None:
+        """Should raise TypeError when list contains non-string."""
+        with pytest.raises(TypeError, match=r"test_artists\[1\] must be str"):
+            DevelopmentConfig(test_artists=["Artist1", 123])  # type: ignore[list-item]
+
+    def test_raises_for_non_string_tuple_element(self) -> None:
+        """Should raise TypeError when tuple contains non-string."""
+        with pytest.raises(TypeError, match=r"test_artists\[0\] must be str"):
+            DevelopmentConfig(test_artists=(None, "Artist"))  # type: ignore[arg-type]
