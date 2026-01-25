@@ -386,7 +386,12 @@ class GenreManager(BaseProcessor):
             return [], []
 
         # Use provided global semaphore or create local one (for backward compatibility)
+        # WARNING: Local semaphore means AppleScript concurrency is NOT globally limited
         if applescript_semaphore is None:
+            self.console_logger.warning(
+                "No global AppleScript semaphore provided for artist '%s' - creating local semaphore (concurrency not globally enforced)",
+                artist_name,
+            )
             concurrency_limit = self.config.get("apple_script_concurrency", 2)
             applescript_semaphore = asyncio.Semaphore(concurrency_limit)
 
