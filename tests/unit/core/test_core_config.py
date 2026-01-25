@@ -332,10 +332,10 @@ class TestDevelopmentConfigTestArtists:
 
     def test_raises_for_non_string_list_element(self) -> None:
         """Should raise TypeError when list contains non-string."""
-        with pytest.raises(ValidationError, match=r"test_artists\[1\] must be str"):
+        with pytest.raises(TypeError, match=r"test_artists\[1\] must be str"):
             DevelopmentConfig(test_artists=["Artist1", 123])  # type: ignore[list-item]
 
     def test_raises_for_non_string_tuple_element(self) -> None:
         """Should raise TypeError when tuple contains non-string."""
-        with pytest.raises(ValidationError, match=r"test_artists\[0\] must be str"):
+        with pytest.raises(TypeError, match=r"test_artists\[0\] must be str"):
             DevelopmentConfig(test_artists=(None, "Artist"))  # type: ignore[arg-type]
