@@ -809,7 +809,7 @@ class PendingVerificationService:
             Path(report_path).parent.mkdir(parents=True, exist_ok=True)
 
             # Use run_in_executor for async file operation
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _write_report() -> None:
                 with Path(report_path).open("w", newline="", encoding="utf-8") as f:

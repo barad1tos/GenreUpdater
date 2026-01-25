@@ -143,7 +143,7 @@ class DatabaseVerifier:
             return True
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _read_last_verify() -> str:
                 with last_verify_path.open(encoding="utf-8") as f:
@@ -209,7 +209,7 @@ class DatabaseVerifier:
 
         try:
             # Read last run time using async file operation
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _read_file() -> str:
                 with last_run_path.open(encoding="utf-8") as f:
@@ -353,7 +353,7 @@ class DatabaseVerifier:
 
         try:
             # Read last verification time using async file operation
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _read_last_verify() -> str:
                 with last_verify_path.open(encoding="utf-8") as f:
@@ -456,7 +456,7 @@ class DatabaseVerifier:
 
         try:
             # Write last verification time using async file operation
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _write_last_verify() -> None:
                 with last_verify_path.open("w", encoding="utf-8") as f:
