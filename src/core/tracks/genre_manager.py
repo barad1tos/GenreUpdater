@@ -346,8 +346,8 @@ class GenreManager(BaseProcessor):
         artist_name: str,
         all_artist_tracks: list[TrackDict],
         force_update: bool,
+        applescript_semaphore: asyncio.Semaphore,
         tracks_to_update: list[TrackDict] | None = None,
-        applescript_semaphore: asyncio.Semaphore | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Process all tracks for a single artist with proper concurrency control.
 
@@ -359,9 +359,9 @@ class GenreManager(BaseProcessor):
             artist_name: Name of the artist
             all_artist_tracks: All tracks by this artist (for dominant genre calculation)
             force_update: Whether to force update all tracks
+            applescript_semaphore: Global semaphore for AppleScript concurrency control
+                (shared across all artists to respect Music.app limits)
             tracks_to_update: Specific tracks to update (if None, uses all_artist_tracks)
-            applescript_semaphore: Global semaphore for AppleScript concurrency control.
-                If None, creates a local one (for backward compatibility with tests).
 
         Returns:
             Tuple of (updated_tracks, change_logs)
@@ -384,16 +384,6 @@ class GenreManager(BaseProcessor):
         target_tracks = tracks_to_update if tracks_to_update is not None else all_artist_tracks
         if not target_tracks:
             return [], []
-
-        # Use provided global semaphore or create local one (for backward compatibility)
-        # WARNING: Local semaphore means AppleScript concurrency is NOT globally limited
-        if applescript_semaphore is None:
-            self.console_logger.warning(
-                "No global AppleScript semaphore provided for artist '%s' - creating local semaphore (concurrency not globally enforced)",
-                artist_name,
-            )
-            concurrency_limit = self.config.get("apple_script_concurrency", 2)
-            applescript_semaphore = asyncio.Semaphore(concurrency_limit)
 
         async def update_with_semaphore(
             track: TrackDict,
@@ -537,7 +527,7 @@ class GenreManager(BaseProcessor):
         if not to_update:
             return [], []
         async with artist_semaphore:
-            return await self._process_artist_genres(artist_name, artist_tracks, force, to_update, applescript_semaphore)
+            return await self._process_artist_genres(artist_name, artist_tracks, force, applescript_semaphore, to_update)
 
     def _select_tracks_to_update_for_artist(
         self,
@@ -672,8 +662,8 @@ class GenreManager(BaseProcessor):
         artist_name: str,
         all_artist_tracks: list[TrackDict],
         force_update: bool,
+        applescript_semaphore: asyncio.Semaphore,
         tracks_to_update: list[TrackDict] | None = None,
-        applescript_semaphore: asyncio.Semaphore | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Test-only access to _process_artist_genres method.
 
@@ -681,13 +671,13 @@ class GenreManager(BaseProcessor):
             artist_name: Name of the artist.
             all_artist_tracks: All tracks by this artist.
             force_update: Whether to force update all tracks.
+            applescript_semaphore: Semaphore for AppleScript concurrency control.
             tracks_to_update: Specific tracks to update.
-            applescript_semaphore: Optional semaphore for AppleScript concurrency.
 
         Returns:
             Tuple of (updated_tracks, change_logs).
         """
-        return await self._process_artist_genres(artist_name, all_artist_tracks, force_update, tracks_to_update, applescript_semaphore)
+        return await self._process_artist_genres(artist_name, all_artist_tracks, force_update, applescript_semaphore, tracks_to_update)
 
     async def test_process_single_artist_wrapper(
         self,
