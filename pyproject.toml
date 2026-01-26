@@ -28,7 +28,7 @@ dependencies = [
     "certifi==2026.1.4",
     "cryptography==46.0.3",
     "orjson==3.11.5",
-    "rich==14.3.1",
+    "rich==14.2.0",
     "psutil==7.2.1",
     "pygithub==2.8.1",
 ]
@@ -38,22 +38,22 @@ dev = [
     # Documentation
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
-    "mkdocstrings[python]==1.0.2",
+    "mkdocstrings[python]==1.0.1",
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-literate-nav>=0.6.2",
     # Linting & formatting
     "ruff==0.14.14",
     "ty==0.0.13",
-    "basedpyright==1.37.2", # IDE support - ty is used for pre-commit
+    "basedpyright==1.37.1", # IDE support - ty is used for pre-commit
     "sourcery==1.43.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.3",
     "pip-audit==2.10.0",
     # Testing
-    "pytest>=9.0.2",
+    "pytest==9.0.2",
     "pytest-asyncio==1.3.0",
     "pytest-xdist==3.8.0",
     "pytest-cov==7.0.0",
-    "coverage==7.13.2",
+    "coverage==7.13.1",
     "pytest-html==4.2.0",
     "pytest-sugar==1.1.1",
     # Type stubs & tools
