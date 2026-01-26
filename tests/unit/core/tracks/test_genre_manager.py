@@ -567,3 +567,61 @@ class TestGenreManager:
 
             assert len(updated_tracks) == 0
             assert len(change_logs) == 0
+
+    @pytest.mark.asyncio
+    async def test_process_artist_genres_empty_target_tracks(self) -> None:
+        """Test early return when tracks_to_update is an empty list.
+
+        This covers lines 385-386: `if not target_tracks: return [], []`
+        """
+        manager = TestGenreManager.create_manager()
+        all_tracks = [DummyTrackData.create(track_id="1", genre="Rock")]
+
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+            # Return a valid dominant genre so we don't exit at line 377
+            mock_determine.return_value = "Rock"
+
+            # Pass explicit empty list for tracks_to_update (not None!)
+            # This triggers early return at line 385-386
+            updated_tracks, change_logs = await manager.test_process_artist_genres(
+                "Test Artist",
+                all_tracks,
+                force_update=False,
+                tracks_to_update=[],  # Empty list triggers early return
+            )
+
+            assert updated_tracks == []
+            assert change_logs == []
+
+    @pytest.mark.asyncio
+    async def test_process_artist_genres_creates_local_semaphore_with_warning(self) -> None:
+        """Test that None applescript_semaphore creates local semaphore with warning.
+
+        This covers lines 390-396: warning log + local semaphore creation.
+        """
+        mock_processor = MagicMock()
+        mock_processor.update_track_async = AsyncMock(return_value=True)
+        manager = TestGenreManager.create_manager(mock_track_processor=mock_processor)
+
+        # Track with different genre from dominant to trigger actual update
+        track = DummyTrackData.create(track_id="1", genre="Unknown")
+
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+            mock_determine.return_value = "Rock"
+
+            # No semaphore passed - should create local one and log warning
+            updated_tracks, change_logs = await manager.test_process_artist_genres(
+                "Test Artist",
+                [track],
+                force_update=True,
+                tracks_to_update=None,  # Will use all_artist_tracks
+                applescript_semaphore=None,  # Triggers lines 390-396
+            )
+
+            # Should have processed the track
+            assert len(updated_tracks) == 1
+            assert len(change_logs) == 1
+
+            # Verify warning was logged (MockLogger stores in warning_messages list)
+            mock_logger = cast(MockLogger, manager.console_logger)
+            assert any("No global AppleScript semaphore provided" in msg for msg in mock_logger.warning_messages)
