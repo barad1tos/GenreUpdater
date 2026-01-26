@@ -469,7 +469,7 @@ class TestGenreManager:
         with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = None
 
-            updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False)
+            updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False, asyncio.Semaphore())
 
             assert len(updated_tracks) == 0
             assert len(change_logs) == 0
@@ -486,7 +486,7 @@ class TestGenreManager:
         with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = "New Genre"
 
-            updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False)
+            updated_tracks, change_logs = await manager.test_process_artist_genres("Test Artist", tracks, False, asyncio.Semaphore())
 
             assert len(updated_tracks) == 1
             assert len(change_logs) == 1
@@ -567,3 +567,29 @@ class TestGenreManager:
 
             assert len(updated_tracks) == 0
             assert len(change_logs) == 0
+
+    @pytest.mark.asyncio
+    async def test_process_artist_genres_empty_target_tracks(self) -> None:
+        """Test early return when tracks_to_update is an empty list.
+
+        This covers lines 385-386: `if not target_tracks: return [], []`
+        """
+        manager = TestGenreManager.create_manager()
+        all_tracks = [DummyTrackData.create(track_id="1", genre="Rock")]
+
+        with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
+            # Return a valid dominant genre so we don't exit at line 377
+            mock_determine.return_value = "Rock"
+
+            # Pass explicit empty list for tracks_to_update (not None!)
+            # This triggers early return at line 385-386
+            updated_tracks, change_logs = await manager.test_process_artist_genres(
+                "Test Artist",
+                all_tracks,
+                False,
+                asyncio.Semaphore(),
+                tracks_to_update=[],  # Empty list triggers early return
+            )
+
+            assert updated_tracks == []
+            assert change_logs == []
