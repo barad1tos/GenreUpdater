@@ -10,6 +10,11 @@ from services.api.musicbrainz import MusicBrainzClient
 from tests.mocks.csv_mock import MockLogger
 
 
+def _mock_analytics() -> MagicMock:
+    """Create a mock Analytics instance for testing."""
+    return MagicMock()
+
+
 class TestMusicBrainzClientAllure:
     """Enhanced tests for MusicBrainzClient with Allure reporting."""
 
@@ -30,6 +35,7 @@ class TestMusicBrainzClientAllure:
             error_logger=MockLogger(),  # type: ignore[arg-type]
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
+            analytics=_mock_analytics(),
         )
 
     @staticmethod
@@ -200,6 +206,7 @@ class TestMusicBrainzArtistMatching:
             error_logger=MockLogger(),  # type: ignore[arg-type]
             make_api_request_func=AsyncMock(return_value={}),
             score_release_func=MagicMock(return_value=0.85),
+            analytics=_mock_analytics(),
         )
 
     def test_artist_matches_any_credit_direct_match(self) -> None:

@@ -184,6 +184,7 @@ class MusicBrainzClient(BaseApiClient):
         error_logger: logging.Logger,
         make_api_request_func: Callable[..., Awaitable[dict[str, Any] | None]],
         score_release_func: Callable[..., float],
+        analytics: Analytics,
     ) -> None:
         """Initialize MusicBrainz client.
 
@@ -192,11 +193,13 @@ class MusicBrainzClient(BaseApiClient):
             error_logger: Logger for error messages
             make_api_request_func: Function to make API requests with rate limiting
             score_release_func: Function to score releases for originality
+            analytics: Analytics instance for performance tracking
 
         """
         super().__init__(console_logger, error_logger)
         self._make_api_request = make_api_request_func
         self._score_original_release = score_release_func
+        self.analytics = analytics
 
     @staticmethod
     def _escape_lucene(term: str) -> str:

@@ -71,12 +71,13 @@ def executor(
 ) -> TrackUpdateExecutor:
     """Create a TrackUpdateExecutor instance."""
     return TrackUpdateExecutor(
-        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
+        ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
         security_validator=mock_security_validator,
         config=config,
         console_logger=logger,
         error_logger=error_logger,
+        analytics=MagicMock(),
     )
 
 
@@ -91,12 +92,13 @@ def dry_run_executor(
 ) -> TrackUpdateExecutor:
     """Create a TrackUpdateExecutor instance in dry-run mode."""
     return TrackUpdateExecutor(
-        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
+        ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
         security_validator=mock_security_validator,
         config=config,
         console_logger=logger,
         error_logger=error_logger,
+        analytics=MagicMock(),
         dry_run=True,
     )
 

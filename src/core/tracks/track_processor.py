@@ -88,6 +88,7 @@ class TrackProcessor:
             config=config,
             console_logger=console_logger,
             error_logger=error_logger,
+            analytics=analytics,
             dry_run=dry_run,
         )
 
