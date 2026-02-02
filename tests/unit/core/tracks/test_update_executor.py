@@ -22,12 +22,6 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create a test error logger."""
-    return logging.getLogger("test.update_executor.error")
-
-
-@pytest.fixture
 def mock_ap_client() -> AsyncMock:
     """Create a mock AppleScript client."""
     client = AsyncMock()

@@ -54,12 +54,6 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create a test error logger."""
-    return logging.getLogger("test.track_processor.error")
-
-
-@pytest.fixture
 def config() -> dict[str, Any]:
     """Create a test config."""
     return {

@@ -10,18 +10,6 @@ from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create a test console logger."""
-    return logging.getLogger("test.applemusic.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create a test error logger."""
-    return logging.getLogger("test.applemusic.error")
-
-
-@pytest.fixture
 def mock_api_request_func() -> AsyncMock:
     """Create mock API request function."""
     return AsyncMock(return_value=None)

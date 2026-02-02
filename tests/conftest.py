@@ -29,3 +29,17 @@ def mock_console_logger() -> MagicMock:
 def mock_error_logger() -> MagicMock:
     """Mock error logger for testing."""
     return MagicMock(spec=logging.Logger)
+
+
+@pytest.fixture
+def console_logger(request: pytest.FixtureRequest) -> logging.Logger:
+    """Auto-named console logger from test module."""
+    module_name = request.module.__name__.split(".")[-1]
+    return logging.getLogger(f"test.{module_name}.console")
+
+
+@pytest.fixture
+def error_logger(request: pytest.FixtureRequest) -> logging.Logger:
+    """Auto-named error logger from test module."""
+    module_name = request.module.__name__.split(".")[-1]
+    return logging.getLogger(f"test.{module_name}.error")

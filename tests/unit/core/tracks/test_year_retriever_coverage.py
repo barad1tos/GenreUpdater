@@ -68,12 +68,6 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create test error logger."""
-    return logging.getLogger("test.year_retriever.error")
-
-
-@pytest.fixture
 def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
     """Create test retry handler."""
     policy = RetryPolicy(

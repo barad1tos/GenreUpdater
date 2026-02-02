@@ -5,6 +5,12 @@ All notable changes to Music Genre Updater.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Test fixture deduplication: shared logger fixtures in root conftest
+- Unified track factory and mock fixtures in tracks conftest
+
 ## [3.0.0] - 2026-01-12
 
 ### Added

@@ -11,18 +11,6 @@ from services.api.year_search_coordinator import YearSearchCoordinator
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create a test console logger."""
-    return logging.getLogger("test.year_search.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create a test error logger."""
-    return logging.getLogger("test.year_search.error")
-
-
-@pytest.fixture
 def mock_musicbrainz_client() -> AsyncMock:
     """Create mock MusicBrainz client."""
     client = AsyncMock()

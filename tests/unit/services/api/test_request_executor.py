@@ -25,18 +25,6 @@ TEST_API_TOKEN = "test_token"  # noqa: S105
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create a test console logger."""
-    return logging.getLogger("test.api.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create a test error logger."""
-    return logging.getLogger("test.api.error")
-
-
-@pytest.fixture
 def mock_cache_service() -> AsyncMock:
     """Create a mock cache service."""
     service = AsyncMock()
