@@ -115,9 +115,9 @@ jobs:
 
       - name: Run tests
         env:
-          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN || 'ci_dummy_token' }}
-          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL || 'ci@example.com' }}
-          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY || 'ci_dummy_key' }}
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: |
           uv run pytest tests/ -v \
             --cov=src \

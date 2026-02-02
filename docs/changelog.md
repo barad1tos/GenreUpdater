@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pinned hypothesis==6.151.4 for reproducible test runs
 - Applied ruff format to all new test files
 
+### Fixed
+- Dependabot PRs failing CI due to missing env vars in `load_config()` validation
+
 ## [3.0.0] - 2026-01-12
 
 ### Added
