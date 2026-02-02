@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Batch error handling tests: sequential processing, CancelledError, config validation
+- Track ID validation and bulk update mixed-results tests
+- Retry exhaustion behavior tests
+
 ### Changed
 - Test fixture deduplication: shared logger fixtures in root conftest
 - Unified track factory and mock fixtures in tracks conftest
