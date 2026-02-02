@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API client boundary security tests (MusicBrainz, Discogs, iTunes)
 - Hash service adversarial input and collision resistance tests
 - CLI argument security boundary tests
+- Property-based tests for validators (Hypothesis): year validation, string sanitization
+- Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
 
 ### Changed
 - Test fixture deduplication: shared logger fixtures in root conftest
