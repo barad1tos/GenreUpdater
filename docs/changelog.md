@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch error handling tests: sequential processing, CancelledError, config validation
 - Track ID validation and bulk update mixed-results tests
 - Retry exhaustion behavior tests
+- API client boundary security tests (MusicBrainz, Discogs, iTunes)
+- Hash service adversarial input and collision resistance tests
+- CLI argument security boundary tests
 
 ### Changed
 - Test fixture deduplication: shared logger fixtures in root conftest
