@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed TC001 lint: moved type-only imports to TYPE_CHECKING blocks
 - Consolidated year_determinator mock into shared `create_year_determinator_mock()` helper
 - Pinned hypothesis==6.151.4 for reproducible test runs
+- Applied ruff format to all new test files
 
 ## [3.0.0] - 2026-01-12
 

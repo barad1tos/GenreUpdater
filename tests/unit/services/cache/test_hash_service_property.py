@@ -131,9 +131,7 @@ class TestHashApiKeyProperties:
         source=st.text(min_size=1, max_size=50),
     )
     @settings(max_examples=100)
-    def test_source_normalization_idempotent(
-        self, artist: str, album: str, source: str
-    ) -> None:
+    def test_source_normalization_idempotent(self, artist: str, album: str, source: str) -> None:
         """Applying normalization twice produces same hash as once."""
         normalized_source = source.strip().lower()
         h1 = UnifiedHashService.hash_api_key(artist, album, normalized_source)

@@ -37,11 +37,13 @@ class TestIsValidYearProperties:
         """Leading/trailing whitespace doesn't change validity."""
         assert is_valid_year(f"  {year}  ", current_year=2026) == is_valid_year(str(year), current_year=2026)
 
-    @given(year=st.one_of(
-        st.none(),
-        st.text(min_size=0, max_size=20).filter(lambda s: not s.strip().lstrip("-").isdigit()),
-        st.floats(allow_nan=True, allow_infinity=True),
-    ))
+    @given(
+        year=st.one_of(
+            st.none(),
+            st.text(min_size=0, max_size=20).filter(lambda s: not s.strip().lstrip("-").isdigit()),
+            st.floats(allow_nan=True, allow_infinity=True),
+        )
+    )
     @settings(max_examples=100)
     def test_never_raises_for_any_input(self, year: str | float | None) -> None:
         """is_valid_year never raises — always returns bool."""

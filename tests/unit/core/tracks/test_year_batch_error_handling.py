@@ -524,7 +524,10 @@ class TestBulkUpdateMixedResults:
         ]
 
         successful, failed = await processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="B",
+            tracks=tracks,
+            year="2020",
+            artist="A",
+            album="B",
         )
 
         assert successful == 2
@@ -544,7 +547,10 @@ class TestBulkUpdateMixedResults:
 
         with caplog.at_level(logging.ERROR):
             successful, failed = await processor.update_album_tracks_bulk_async(
-                tracks=tracks, year="2020", artist="A", album="B",
+                tracks=tracks,
+                year="2020",
+                artist="A",
+                album="B",
             )
 
         assert successful == 0
@@ -561,7 +567,10 @@ class TestBulkUpdateMixedResults:
         ]
 
         successful, failed = await processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="B",
+            tracks=tracks,
+            year="2020",
+            artist="A",
+            album="B",
         )
 
         assert successful == 2
@@ -574,7 +583,10 @@ class TestBulkUpdateMixedResults:
         tracks = [create_test_track("", name="NoID")]
 
         successful, failed = await processor.update_album_tracks_bulk_async(
-            tracks=tracks, year="2020", artist="A", album="B",
+            tracks=tracks,
+            year="2020",
+            artist="A",
+            album="B",
         )
 
         assert successful == 0

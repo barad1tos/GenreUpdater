@@ -21,9 +21,7 @@ class TestPrereleaseHandlingProcessEditable:
     """Tests for prerelease_handling='process_editable' mode (default)."""
 
     @pytest.mark.asyncio
-    async def test_processes_editable_tracks_in_mixed_album(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_processes_editable_tracks_in_mixed_album(self, mock_year_determinator: MagicMock) -> None:
         """Test that editable tracks are processed in mixed prerelease/purchased album."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -51,9 +49,7 @@ class TestPrereleaseHandlingProcessEditable:
             assert len(album_tracks_passed) == 2
 
     @pytest.mark.asyncio
-    async def test_marks_mixed_album_for_verification(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_marks_mixed_album_for_verification(self, mock_year_determinator: MagicMock) -> None:
         """Test that mixed album is marked for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -73,9 +69,7 @@ class TestPrereleaseHandlingProcessEditable:
         assert call_kwargs["metadata"]["mixed_album"] == "true"
 
     @pytest.mark.asyncio
-    async def test_default_mode_is_process_editable(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_default_mode_is_process_editable(self, mock_year_determinator: MagicMock) -> None:
         """Test that default behavior (no config) is process_editable."""
         # No prerelease_handling in config
         processor = create_year_batch_processor(
@@ -99,9 +93,7 @@ class TestPrereleaseHandlingSkipAll:
     """Tests for prerelease_handling='skip_all' mode."""
 
     @pytest.mark.asyncio
-    async def test_skips_album_with_any_prerelease(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_skips_album_with_any_prerelease(self, mock_year_determinator: MagicMock) -> None:
         """Test that album is skipped entirely when ANY track is prerelease."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -122,9 +114,7 @@ class TestPrereleaseHandlingSkipAll:
             mock_update.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_does_not_mark_for_verification(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_does_not_mark_for_verification(self, mock_year_determinator: MagicMock) -> None:
         """Test that skip_all does not mark album for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -143,9 +133,7 @@ class TestPrereleaseHandlingSkipAll:
         mock_year_determinator.pending_verification.mark_for_verification.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_processes_album_without_prerelease(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_processes_album_without_prerelease(self, mock_year_determinator: MagicMock) -> None:
         """Test that album without prerelease is processed normally."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -169,9 +157,7 @@ class TestPrereleaseHandlingMarkOnly:
     """Tests for prerelease_handling='mark_only' mode."""
 
     @pytest.mark.asyncio
-    async def test_marks_but_does_not_process(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_marks_but_does_not_process(self, mock_year_determinator: MagicMock) -> None:
         """Test that album is marked for verification but not processed."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -195,9 +181,7 @@ class TestPrereleaseHandlingMarkOnly:
         assert call_kwargs["metadata"]["mode"] == "mark_only"
 
     @pytest.mark.asyncio
-    async def test_processes_album_without_prerelease(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_processes_album_without_prerelease(self, mock_year_determinator: MagicMock) -> None:
         """Test that album without prerelease is processed normally."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -221,9 +205,7 @@ class TestAllPrereleaseAlbum:
     """Tests for albums where ALL tracks are prerelease (no editable tracks)."""
 
     @pytest.mark.asyncio
-    async def test_all_prerelease_skips_regardless_of_mode(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_all_prerelease_skips_regardless_of_mode(self, mock_year_determinator: MagicMock) -> None:
         """Test that album with ALL prerelease tracks is skipped in all modes."""
         for mode in ["process_editable", "skip_all", "mark_only"]:
             mock_year_determinator.reset_mock()
@@ -245,9 +227,7 @@ class TestAllPrereleaseAlbum:
                 mock_update.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_all_prerelease_marks_for_verification(
-        self, mock_year_determinator: MagicMock
-    ) -> None:
+    async def test_all_prerelease_marks_for_verification(self, mock_year_determinator: MagicMock) -> None:
         """Test that all-prerelease album is marked for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -270,9 +250,7 @@ class TestInvalidPrereleaseHandlingConfig:
     """Tests for invalid prerelease_handling configuration values."""
 
     @pytest.mark.asyncio
-    async def test_invalid_mode_defaults_to_process_editable(
-        self, mock_year_determinator: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_invalid_mode_defaults_to_process_editable(self, mock_year_determinator: MagicMock, caplog: pytest.LogCaptureFixture) -> None:
         """Test that invalid prerelease_handling mode logs warning and defaults to process_editable."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
@@ -297,9 +275,7 @@ class TestInvalidPrereleaseHandlingConfig:
             mock_update.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_invalid_mode_warning_contains_valid_options(
-        self, mock_year_determinator: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_invalid_mode_warning_contains_valid_options(self, mock_year_determinator: MagicMock, caplog: pytest.LogCaptureFixture) -> None:
         """Test that warning message includes valid options for user guidance."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
