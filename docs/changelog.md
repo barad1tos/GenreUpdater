@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Test fixture deduplication: shared logger fixtures in root conftest
 - Unified track factory and mock fixtures in tracks conftest
+- Migrated year_batch test files to shared fixtures (-409/+208 lines)
 
 ## [3.0.0] - 2026-01-12
 
