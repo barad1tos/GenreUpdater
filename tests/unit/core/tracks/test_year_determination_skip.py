@@ -12,7 +12,7 @@ Also tests the pre-check pipeline added in Issue #75:
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,11 +24,13 @@ from core.models.protocols import (
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
-from core.models.types import TrackDict
 from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import YearDeterminator
 from core.tracks.year_fallback import YearFallbackHandler
 from services.pending_verification import PendingAlbumEntry, VerificationReason
+
+if TYPE_CHECKING:
+    from core.models.types import TrackDict
 
 
 def _create_mock_cache_service() -> MagicMock:

@@ -179,8 +179,9 @@ class TestDiscogsInputBoundary:
         cache_service.get_async = AsyncMock(return_value=None)
         cache_service.set_async = AsyncMock()
 
+        discogs_auth = "fake_value_for_testing"
         return DiscogsClient(
-            token="fake_token",
+            token=discogs_auth,
             console_logger=console_logger,
             error_logger=error_logger,
             analytics=analytics,

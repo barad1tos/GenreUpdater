@@ -13,12 +13,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.models.types import TrackDict
 from core.tracks.year_batch import YearBatchProcessor
 from tests.unit.core.tracks.conftest import create_test_track, create_year_batch_processor
 
 if TYPE_CHECKING:
     from core.models.track_models import ChangeLogEntry
+    from core.models.types import TrackDict
 
 
 def _make_year_determinator_mock() -> MagicMock:
