@@ -71,9 +71,13 @@ def mock_track_processor() -> MagicMock:
     return processor
 
 
-@pytest.fixture
-def mock_year_determinator() -> MagicMock:
-    """Create a mock year determinator for YearBatchProcessor."""
+def create_year_determinator_mock(*, with_pending_verification: bool = False) -> MagicMock:
+    """Build a MagicMock year-determinator with all async stubs.
+
+    Args:
+        with_pending_verification: If True, add pending_verification
+            and prerelease_recheck_days attrs (needed for prerelease tests).
+    """
     determinator = MagicMock()
     determinator.should_skip_album = AsyncMock(return_value=(False, None))
     determinator.determine_album_year = AsyncMock(return_value="2020")
@@ -81,10 +85,17 @@ def mock_year_determinator() -> MagicMock:
     determinator.check_suspicious_album = AsyncMock(return_value=False)
     determinator.handle_future_years = AsyncMock(return_value=False)
     determinator.extract_future_years = MagicMock(return_value=[])
-    determinator.pending_verification = MagicMock()
-    determinator.pending_verification.mark_for_verification = AsyncMock()
-    determinator.prerelease_recheck_days = 30
+    if with_pending_verification:
+        determinator.pending_verification = MagicMock()
+        determinator.pending_verification.mark_for_verification = AsyncMock()
+        determinator.prerelease_recheck_days = 30
     return determinator
+
+
+@pytest.fixture
+def mock_year_determinator() -> MagicMock:
+    """Create a mock year determinator for YearBatchProcessor (with pending_verification)."""
+    return create_year_determinator_mock(with_pending_verification=True)
 
 
 @pytest.fixture

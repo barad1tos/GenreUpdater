@@ -14,27 +14,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.tracks.year_batch import YearBatchProcessor
-from tests.unit.core.tracks.conftest import create_test_track, create_year_batch_processor
+from tests.unit.core.tracks.conftest import create_test_track, create_year_batch_processor, create_year_determinator_mock
 
 if TYPE_CHECKING:
     from core.models.track_models import ChangeLogEntry
     from core.models.types import TrackDict
-
-
-def _make_year_determinator_mock() -> MagicMock:
-    """Build a MagicMock year-determinator with all async stubs.
-
-    Identical to the default created inside ``create_year_batch_processor``,
-    but returned so tests can override individual methods before injection.
-    """
-    yd = MagicMock()
-    yd.should_skip_album = AsyncMock(return_value=(False, None))
-    yd.determine_album_year = AsyncMock(return_value="2020")
-    yd.check_prerelease_status = AsyncMock(return_value=False)
-    yd.check_suspicious_album = AsyncMock(return_value=False)
-    yd.handle_future_years = AsyncMock(return_value=False)
-    yd.extract_future_years = MagicMock(return_value=[])
-    return yd
 
 
 @pytest.mark.unit
@@ -53,7 +37,7 @@ class TestBatchProcessingErrorResilience:
         - Album 2 should fail but be logged
         - Album 3 should still succeed
         """
-        year_determinator = _make_year_determinator_mock()
+        year_determinator = create_year_determinator_mock()
 
         # Make the second album's determine_album_year call raise an exception
         call_count = 0
@@ -109,7 +93,7 @@ class TestBatchProcessingErrorResilience:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Multiple album failures should not prevent successful albums from processing."""
-        year_determinator = _make_year_determinator_mock()
+        year_determinator = create_year_determinator_mock()
 
         successful_albums: list[str] = []
 
@@ -164,7 +148,7 @@ class TestBatchProcessingErrorResilience:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Exception details should be logged for debugging."""
-        year_determinator = _make_year_determinator_mock()
+        year_determinator = create_year_determinator_mock()
         year_determinator.determine_album_year = AsyncMock(side_effect=ValueError("Specific error message for testing"))
 
         processor = create_year_batch_processor(year_determinator=year_determinator)

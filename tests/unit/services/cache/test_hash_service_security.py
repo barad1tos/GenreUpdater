@@ -83,16 +83,15 @@ class TestHashServiceCollisionResistance:
         h2 = UnifiedHashService.hash_api_key("A", "B", "src")
         assert h1 != h2
 
-    def test_delimiter_in_artist_does_not_cause_collision(self) -> None:
-        """Artist containing pipe '|' delimiter doesn't collide with different album."""
-        # "foo|bar" + "baz" should differ from "foo" + "bar|baz"
+    def test_delimiter_in_artist_causes_known_collision(self) -> None:
+        """Known limitation: pipe '|' in artist causes collision with different artist/album split.
+
+        hash("foo|bar", "baz") normalizes to sha256("foo|bar|baz")
+        hash("foo", "bar|baz") normalizes to sha256("foo|bar|baz")
+        Both produce identical hashes — this is a documented limitation.
+        """
         h1 = UnifiedHashService.hash_album_key("foo|bar", "baz")
         h2 = UnifiedHashService.hash_album_key("foo", "bar|baz")
-        # NOTE: This MAY collide if normalization creates same string
-        # After normalize: "foo|bar|baz" vs "foo|bar|baz"
-        # This IS a known limitation — document it
-        # Actually: h1 = sha256("foo|bar|baz"), h2 = sha256("foo|bar|baz") → SAME!
-        # This is expected behavior — test documents the limitation
         assert h1 == h2  # Known collision due to delimiter in input
 
     def test_colon_in_source_does_not_cause_api_key_collision(self) -> None:
