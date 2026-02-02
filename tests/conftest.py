@@ -12,6 +12,21 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from hypothesis import HealthCheck, settings
+
+# ---------------------------------------------------------------------------
+# Hypothesis profiles
+# ---------------------------------------------------------------------------
+
+settings.register_profile(
+    "ci",
+    max_examples=200,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+settings.register_profile(
+    "dev",
+    max_examples=50,
+)
 
 # Ensure project root is on sys.path for `import *`
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,3 +44,17 @@ def mock_console_logger() -> MagicMock:
 def mock_error_logger() -> MagicMock:
     """Mock error logger for testing."""
     return MagicMock(spec=logging.Logger)
+
+
+@pytest.fixture
+def console_logger(request: pytest.FixtureRequest) -> logging.Logger:
+    """Auto-named console logger from test module."""
+    module_name = request.module.__name__.split(".")[-1]
+    return logging.getLogger(f"test.{module_name}.console")
+
+
+@pytest.fixture
+def error_logger(request: pytest.FixtureRequest) -> logging.Logger:
+    """Auto-named error logger from test module."""
+    module_name = request.module.__name__.split(".")[-1]
+    return logging.getLogger(f"test.{module_name}.error")

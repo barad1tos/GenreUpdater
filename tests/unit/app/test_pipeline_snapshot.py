@@ -23,12 +23,6 @@ def mock_track_processor() -> MagicMock:
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create console logger."""
-    return logging.getLogger("test.console")
-
-
-@pytest.fixture
 def manager(mock_track_processor: MagicMock, console_logger: logging.Logger) -> PipelineSnapshotManager:
     """Create PipelineSnapshotManager instance."""
     return PipelineSnapshotManager(

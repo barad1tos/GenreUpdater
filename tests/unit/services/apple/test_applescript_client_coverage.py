@@ -13,18 +13,6 @@ from services.apple.applescript_client import AppleScriptClient
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create test console logger."""
-    return logging.getLogger("test.applescript.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create test error logger."""
-    return logging.getLogger("test.applescript.error")
-
-
-@pytest.fixture
 def base_config(tmp_path: Path) -> dict[str, Any]:
     """Create base config with scripts directory."""
     scripts_dir = tmp_path / "applescripts"

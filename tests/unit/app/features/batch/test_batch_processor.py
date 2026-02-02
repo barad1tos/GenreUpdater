@@ -16,18 +16,6 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create test console logger."""
-    return logging.getLogger("test.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create test error logger."""
-    return logging.getLogger("test.error")
-
-
-@pytest.fixture
 def mock_music_updater() -> MagicMock:
     """Create mock music updater."""
     updater = MagicMock()

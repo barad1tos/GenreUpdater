@@ -37,18 +37,6 @@ def mock_config() -> dict[str, Any]:
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create console logger."""
-    return logging.getLogger("test.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create error logger."""
-    return logging.getLogger("test.error")
-
-
-@pytest.fixture
 def service(
     mock_track_processor: MagicMock,
     mock_year_retriever: MagicMock,

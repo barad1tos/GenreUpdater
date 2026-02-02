@@ -19,12 +19,6 @@ from tests.mocks.protocol_mocks import (  # sourcery skip: dont-import-test-modu
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create a test console logger."""
-    return logging.getLogger("test.plausibility.console")
-
-
-@pytest.fixture
 def mock_pending_verification() -> MockPendingVerificationService:
     """Create mock pending verification service."""
     return MockPendingVerificationService()

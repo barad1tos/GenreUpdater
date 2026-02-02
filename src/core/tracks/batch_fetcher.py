@@ -266,6 +266,13 @@ class BatchTrackFetcher:
 
         # Check for AppleScript status codes
         if raw_output.startswith("ERROR:"):
+            if "OFFSET_OUT_OF_BOUNDS" in raw_output:
+                self.console_logger.debug(
+                    "Batch %d: offset exceeds library size, all tracks fetched (%s)",
+                    batch_number,
+                    raw_output,
+                )
+                return None
             self.error_logger.error("Batch %d AppleScript error: %s", batch_number, raw_output)
             return None
         if raw_output == NO_TRACKS_FOUND:

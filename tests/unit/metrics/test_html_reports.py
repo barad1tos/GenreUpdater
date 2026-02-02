@@ -32,18 +32,6 @@ def _create_simple_event(
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create console logger."""
-    return logging.getLogger("test.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create error logger."""
-    return logging.getLogger("test.error")
-
-
-@pytest.fixture
 def sample_events() -> list[dict[str, Any]]:
     """Create sample analytics events."""
     return [

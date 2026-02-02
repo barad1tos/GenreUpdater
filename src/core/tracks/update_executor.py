@@ -48,6 +48,7 @@ class TrackUpdateExecutor:
         config: dict[str, Any],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
+        analytics: Analytics,
         *,
         dry_run: bool = False,
     ) -> None:
@@ -60,6 +61,7 @@ class TrackUpdateExecutor:
             config: Configuration dictionary
             console_logger: Logger for info/debug messages
             error_logger: Logger for error messages
+            analytics: Analytics instance for performance tracking
             dry_run: If True, record actions without executing
         """
         self.ap_client = ap_client
@@ -68,6 +70,7 @@ class TrackUpdateExecutor:
         self.config = config
         self.console_logger = console_logger
         self.error_logger = error_logger
+        self.analytics = analytics
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
 

@@ -67,18 +67,6 @@ def _create_test_track(
 
 
 @pytest.fixture
-def console_logger() -> logging.Logger:
-    """Create console logger."""
-    return logging.getLogger("test.console")
-
-
-@pytest.fixture
-def error_logger() -> logging.Logger:
-    """Create error logger."""
-    return logging.getLogger("test.error")
-
-
-@pytest.fixture
 def mock_cache_service() -> CacheServiceProtocol:
     """Create mock cache service."""
     service = MagicMock()

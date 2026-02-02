@@ -5,6 +5,27 @@ All notable changes to Music Genre Updater.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Batch error handling tests: sequential processing, CancelledError, config validation
+- Track ID validation and bulk update mixed-results tests
+- Retry exhaustion behavior tests
+- API client boundary security tests (MusicBrainz, Discogs, iTunes)
+- Hash service adversarial input and collision resistance tests
+- CLI argument security boundary tests
+- Property-based tests for validators (Hypothesis): year validation, string sanitization
+- Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
+
+### Changed
+- Test fixture deduplication: shared logger fixtures in root conftest
+- Unified track factory and mock fixtures in tracks conftest
+- Migrated year_batch test files to shared fixtures (-409/+208 lines)
+- Fixed TC001 lint: moved type-only imports to TYPE_CHECKING blocks
+- Consolidated year_determinator mock into shared `create_year_determinator_mock()` helper
+- Pinned hypothesis==6.151.4 for reproducible test runs
+- Applied ruff format to all new test files
+
 ## [3.0.0] - 2026-01-12
 
 ### Added
