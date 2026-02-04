@@ -70,8 +70,9 @@ The installer automatically:
 
 1. Clones the repo to `~/Library/Application Support/GenreUpdater/app/`
 2. Copies scripts to `bin/`
-3. Deploys the LaunchAgent plist
-4. Loads the service
+3. Creates config symlinks (see [Config Symlinks](#config-symlinks))
+4. Deploys the LaunchAgent plist
+5. Loads the service
 
 ### Verify Installation
 
@@ -94,11 +95,11 @@ Edit `launchctl/com.music.genreautoupdater.plist` in the repo:
 <key>ThrottleInterval</key>
 <integer>300</integer>  <!-- 5 minutes -->
 
-<!-- Change CPU priority (0=normal, 10=low) -->
+        <!-- Change CPU priority (0=normal, 10=low) -->
 <key>Nice</key>
 <integer>10</integer>
 
-<!-- Change timeout -->
+        <!-- Change timeout -->
 <key>ExitTimeOut</key>
 <integer>14400</integer>  <!-- 4 hours -->
 ```
@@ -128,21 +129,40 @@ Then redeploy:
 Edit the plist template, find WatchPaths:
 
 ```xml
+
 <key>WatchPaths</key>
 <array>
 <string>$HOME/Music/Music/Music Library.musiclibrary</string>
 </array>
 ```
 
+## Environment Variables
+
+Sync scripts support environment variable overrides for non-standard setups:
+
+| Variable       | Default                                                          | Used By            |
+|----------------|------------------------------------------------------------------|--------------------|
+| `MGU_LOGS_DIR` | `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs` | `sync-fixtures.sh` |
+| `MGU_REPO_DIR` | `~/Library/Application Support/GenreUpdater/app`                 | `sync-fixtures.sh` |
+
+These variables allow sync scripts to locate the library snapshot cache and the daemon's git clone
+without hardcoding paths. In most setups the defaults are correct and no override is needed.
+
+Example override:
+
+```bash
+MGU_LOGS_DIR="/custom/logs/path" MGU_REPO_DIR="/custom/repo" ./sync-fixtures.sh
+```
+
 ## Commands
 
-| Script             | Description                             |
-|--------------------|-----------------------------------------|
-| `install.sh`       | Deploy scripts + plist, load service    |
-| `run-daemon.sh`    | Main wrapper (called by launchctl)      |
-| `update.sh`        | Manually pull latest changes from main  |
-| `notify.sh`        | macOS notification helper               |
-| `sync-fixtures.sh` | Sync library snapshot to repo for tests |
+| Script             | Description                                           |
+|--------------------|-------------------------------------------------------|
+| `install.sh`       | Deploy scripts + plist, create symlinks, load service |
+| `run-daemon.sh`    | Main wrapper (called by launchctl)                    |
+| `update.sh`        | Manually pull latest changes from main                |
+| `notify.sh`        | macOS notification helper                             |
+| `sync-fixtures.sh` | Sync library snapshot to repo via daemon's clone      |
 
 ### Manual Operations
 
@@ -193,6 +213,12 @@ Any change to this file triggers the daemon.
 │           │ No                             │
 │           ▼                                │
 │  ┌────────────────────┐                    │
+│  │  Symlink config    │                    │
+│  │  + .env            │                    │
+│  └────────┬───────────┘                    │
+│           │                                │
+│           ▼                                │
+│  ┌────────────────────┐                    │
 │  │  git pull          │                    │
 │  │  uv sync           │                    │
 │  │  run Python        │                    │
@@ -203,15 +229,66 @@ Any change to this file triggers the daemon.
 │  (uses snapshot cache for speed)           │
 │           │                                │
 │           ▼                                │
-│  Send notification                         │
+│  ┌────────────────────────────┐            │
+│  │  On success:               │            │
+│  │  1. Notify (Glass sound)   │            │
+│  │  2. sync-fixtures.sh       │            │
+│  │     (push snapshot to git) │            │
+│  └────────────────────────────┘            │
+│           │                                │
+│  ┌────────────────────────────┐            │
+│  │  On failure:               │            │
+│  │  1. Notify (Basso sound)   │            │
+│  │  2. Log error details      │            │
+│  └────────────────────────────┘            │
 └────────────────────────────────────────────┘
 ```
 
 **Timings:**
 
 - LaunchAgent ThrottleInterval: 5 minutes (minimum between triggers)
-- Python startup + quick exit if nothing to do: ~3-4 seconds
+- Python startup and quick exit if nothing to do: ~3–4 seconds
 - Max runtime: 4 hours (timeout)
+
+## Config Symlinks
+
+`run-daemon.sh` creates symlinks from the DEV REPO (iCloud) into the daemon's clone so that
+the daemon uses the same user config and secrets as the development environment.
+
+| Symlink Target (daemon's clone) | Source (DEV REPO in iCloud) |
+|---------------------------------|-----------------------------|
+| `app/my-config.yaml`            | `v2.0/my-config.yaml`       |
+| `app/.env`                      | `v2.0/.env`                 |
+
+The symlinks are created **before** any Python execution and only if they don't already exist.
+Both `install.sh` and `run-daemon.sh` handle symlink creation, so they are restored automatically
+even if someone deletes the daemon's clone and re-runs the installer.
+
+**Why symlinks?**
+
+- `my-config.yaml` contains user-specific paths and API key references
+- `.env` contains encrypted API keys
+- Both are gitignored, so the daemon's `git reset --hard` would delete real copies
+- Symlinks survive `git reset --hard` because git doesn't track them
+
+## Sync Scripts
+
+### sync-fixtures.sh
+
+Copies the library snapshot from the logs/cache directory into `tests/fixtures/` and pushes the
+commit through the **daemon's git clone** (not the DEV REPO in iCloud).
+
+**Flow:**
+
+1. Finds snapshot at `$MGU_LOGS_DIR/cache/library_snapshot.json`
+2. Compares with existing `tests/fixtures/library_snapshot.json`
+3. If changed: copies, commits with `[skip ci]` tag, pushes to current branch
+4. Safety: only pushes from `main` or `dev` branch
+
+**Called by:** `run-daemon.sh` (after successful pipeline run, non-fatal on failure)
+
+**Important:** The script pushes via the daemon's clone (`~/Library/Application Support/GenreUpdater/app/`),
+not the DEV REPO in iCloud. This prevents git conflicts with the developer's working directory.
 
 ## Development Workflow
 
@@ -245,7 +322,7 @@ Each machine has:
 
 - Shared dev code via iCloud (v2.0/)
 - Independent daemon clone (app/) - NOT synced
-- Local state (lock, logs) - NOT synced
+- Local state (lock, logs) – NOT synced
 
 This means:
 
@@ -315,7 +392,35 @@ ls -la ~/Library/Application\ Support/GenreUpdater/app/.env
 # (it creates symlinks automatically now)
 ```
 
+### Sync Scripts Failing
+
+```bash
+# Check if snapshot exists
+ls -la ~/Library/Mobile\ Documents/com~apple~CloudDocs/4.\ Dev/MGU\ logs/cache/library_snapshot.json
+
+# Check daemon's git status (sync pushes from here, not DEV REPO)
+cd ~/Library/Application\ Support/GenreUpdater/app
+git status
+git log -3 --oneline
+
+# Manual sync (from daemon's clone)
+~/Library/Application\ Support/GenreUpdater/bin/sync-fixtures.sh
+```
+
+## Changelog
+
+### 2026-02-05
+
+- **fix(sync):** Redirected sync-fixtures.sh to push from daemon's clone, not the DEV REPO in iCloud
+- **cleanup:** Removed legacy `v2.0-daemon` worktree (replaced by `app/` in Application Support)
+- **cleanup:** Pruned stale git worktree references
+- **docs:** Added Config Symlinks, Sync Scripts, Environment Variables sections
+
+### 2025-12-26
+
+- Initial SERVICE_README.md
+
 ---
 
 **Status:** Production-ready
-**Last update:** 2025-12-26
+**Last update:** 2026-02-05
