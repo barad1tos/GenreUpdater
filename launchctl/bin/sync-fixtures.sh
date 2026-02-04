@@ -8,7 +8,7 @@ set -euo pipefail
 
 # === Configuration (template with iCloud defaults) ===
 LOGS_DIR="${MGU_LOGS_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs}"
-REPO_DIR="${MGU_REPO_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0}"
+REPO_DIR="${MGU_REPO_DIR:-$HOME/Library/Application Support/GenreUpdater/app}"
 FIXTURE_PATH="tests/fixtures/library_snapshot.json"
 
 log() {
