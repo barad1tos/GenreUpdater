@@ -129,7 +129,6 @@ Then redeploy:
 Edit the plist template, find WatchPaths:
 
 ```xml
-
 <key>WatchPaths</key>
 <array>
 <string>$HOME/Music/Music/Music Library.musiclibrary</string>
@@ -140,10 +139,10 @@ Edit the plist template, find WatchPaths:
 
 Sync scripts support environment variable overrides for non-standard setups:
 
-| Variable       | Default                                                          | Used By            |
-|----------------|------------------------------------------------------------------|--------------------|
-| `MGU_LOGS_DIR` | `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs` | `sync-fixtures.sh` |
-| `MGU_REPO_DIR` | `~/Library/Application Support/GenreUpdater/app`                 | `sync-fixtures.sh` |
+| Variable       | Default                                                          | Used By                                    |
+|----------------|------------------------------------------------------------------|--------------------------------------------|
+| `MGU_LOGS_DIR` | `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs` | `sync-fixtures.sh`, `sync-diagnostics.sh`  |
+| `MGU_REPO_DIR` | `~/Library/Application Support/GenreUpdater/app`                 | `sync-fixtures.sh`, `sync-diagnostics.sh`  |
 
 These variables allow sync scripts to locate the library snapshot cache and the daemon's git clone
 without hardcoding paths. In most setups the defaults are correct and no override is needed.

@@ -40,7 +40,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -52,12 +52,8 @@ from services.cache.hash_service import UnifiedHashService
 PENDING_LAST_VERIFY_SUFFIX = "_last_verify.txt"
 
 
-class VerificationReason(str, Enum):
-    """Reasons why an album is pending verification.
-
-    Inherits from str to maintain backward compatibility with existing CSV files
-    and string-based comparisons.
-    """
+class VerificationReason(StrEnum):
+    """Reasons why an album is pending verification."""
 
     # Original reasons
     NO_YEAR_FOUND = "no_year_found"

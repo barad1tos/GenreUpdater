@@ -688,7 +688,7 @@ class ReleaseScorer:
         Note: Score component logging is handled by caller based on source.
         """
         with contextlib.suppress(IndexError, ValueError, TypeError):
-            rg_year_str = rg_first_date_str.split("-")[0]
+            rg_year_str = rg_first_date_str.split("-", maxsplit=1)[0]
             if len(rg_year_str) == self.YEAR_LENGTH and rg_year_str.isdigit():
                 return int(rg_year_str)
         return None

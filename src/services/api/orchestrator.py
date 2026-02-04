@@ -86,7 +86,7 @@ def normalize_name(name: str) -> str:
     # "Robot Hive / Exodus" → "Robot Hive"
     # "House By the Cemetery / Mortal Massacre" → "House By the Cemetery"
     if " / " in result:
-        result = result.split(" / ")[0].strip()
+        result = result.split(" / ", maxsplit=1)[0].strip()
 
     # Normalize whitespace (multiple spaces to single)
     return re.sub(r"\s+", " ", result).strip()

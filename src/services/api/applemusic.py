@@ -283,7 +283,7 @@ class AppleMusicClient:
             if release_date:
                 try:
                     # iTunes returns dates in ISO format: "2024-03-15T12:00:00Z"
-                    release_year = release_date.split("-")[0]
+                    release_year = release_date.split("-", maxsplit=1)[0]
                     if not release_year.isdigit() or len(release_year) != VALID_YEAR_LENGTH:
                         release_year = None
                 except (IndexError, ValueError):
@@ -607,7 +607,7 @@ class AppleMusicClient:
             return None
 
         with contextlib.suppress(IndexError, ValueError):
-            year_str = release_date.split("-")[0]
+            year_str = release_date.split("-", maxsplit=1)[0]
             if year_str.isdigit() and len(year_str) == VALID_YEAR_LENGTH:
                 return int(year_str)
         return None
