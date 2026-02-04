@@ -207,6 +207,9 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "RUF059", # Tests can have unused unpacked variables
     "E501", # Tests can have longer lines for readability
 ]
+"src/core/models/metadata_utils.py" = [
+    "PLW0108", # Lambda intentional: key=len makes ty infer Sized instead of str
+]
 "src/services/api/orchestrator.py" = [
     "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
 ]
