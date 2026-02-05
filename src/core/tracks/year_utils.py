@@ -121,6 +121,6 @@ def normalize_collaboration_artist(artist: str) -> str:
     ]
 
     return next(
-        (artist.split(separator)[0].strip() for separator in separators if separator in artist),
+        (artist.split(separator, maxsplit=1)[0].strip() for separator in separators if separator in artist),
         artist,
     )

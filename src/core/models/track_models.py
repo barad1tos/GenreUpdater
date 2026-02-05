@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal, TypedDict, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,7 +34,7 @@ class MBArtistCredit(TypedDict, total=False):
     joinphrase: str | None
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     """Log level enumeration."""
 
     DEBUG = "DEBUG"
@@ -45,7 +45,7 @@ class LogLevel(str, Enum):
     NOTSET = "NOTSET"
 
 
-class PreferredApi(str, Enum):
+class PreferredApi(StrEnum):
     """Preferred API enumeration."""
 
     MUSICBRAINZ = "musicbrainz"
@@ -53,7 +53,7 @@ class PreferredApi(str, Enum):
     ITUNES = "itunes"
 
 
-class ScriptType(str, Enum):
+class ScriptType(StrEnum):
     """Script type enumeration for API prioritization."""
 
     CYRILLIC = "cyrillic"
@@ -62,7 +62,7 @@ class ScriptType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class ChangeDisplayMode(str, Enum):
+class ChangeDisplayMode(StrEnum):
     """Change display mode enumeration."""
 
     COMPACT = "compact"

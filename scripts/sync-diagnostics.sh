@@ -16,8 +16,8 @@ set -euo pipefail
 # Source: where daemon writes logs
 LOGS_DIR="${MGU_LOGS_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs}"
 
-# Target: main repo (not daemon copy)
-REPO_DIR="${MGU_REPO_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0}"
+# Target: daemon's app clone (pushes to main)
+REPO_DIR="${MGU_REPO_DIR:-$HOME/Library/Application Support/GenreUpdater/app}"
 
 # File to sync
 SOURCE_FILE="$LOGS_DIR/csv/pending_year_verification.csv"

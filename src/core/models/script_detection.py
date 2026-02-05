@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 # Constants for script detection thresholds
 MINIMUM_SCRIPT_RATIO = 0.25  # Minimum ratio for script to be considered significant
 MINIMUM_SCRIPT_COUNT = 2  # Minimum number of scripts for mixed case detection
 
 
-class ScriptType(str, Enum):
+class ScriptType(StrEnum):
     """Script type enumeration for text analysis."""
 
     ARABIC = "arabic"
@@ -379,7 +379,7 @@ def _count_script_characters(text: str) -> tuple[dict[ScriptType, int], int]:
 
 
 def _handle_latin_mixed_case(script_counts: dict[ScriptType, int], total_chars: int) -> ScriptType | None:
-    """Handle Latin + one other script case based on proportions.
+    """Handle Latin and one other script case based on proportions.
 
     Args:
         script_counts: Character counts by script type

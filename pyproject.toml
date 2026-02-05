@@ -42,9 +42,9 @@ dev = [
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-literate-nav>=0.6.2",
     # Linting & formatting
-    "ruff==0.14.14",
-    "ty==0.0.13",
-    "basedpyright==1.37.3", # IDE support - ty is used for pre-commit
+    "ruff==0.15.0",
+    "ty==0.0.14",
+    "basedpyright==1.37.4", # IDE support - ty is used for pre-commit
     "sourcery==1.43.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.3",
     "pip-audit==2.10.0",
@@ -53,10 +53,10 @@ dev = [
     "pytest-asyncio==1.3.0",
     "pytest-xdist==3.8.0",
     "pytest-cov==7.0.0",
-    "coverage==7.13.2",
+    "coverage==7.13.3",
     "pytest-html==4.2.0",
     "pytest-sugar==1.1.1",
-    "hypothesis==6.151.4",
+    "hypothesis==6.151.5",
     # Type stubs & tools
     "types-pyyaml==6.0.12.20250915",
     "cst-lsp==0.1.3",
@@ -206,6 +206,9 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "ANN202", # Tests can skip return annotations for private funcs
     "RUF059", # Tests can have unused unpacked variables
     "E501", # Tests can have longer lines for readability
+]
+"src/core/models/metadata_utils.py" = [
+    "PLW0108", # Lambda intentional: key=len makes ty infer Sized instead of str
 ]
 "src/services/api/orchestrator.py" = [
     "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
