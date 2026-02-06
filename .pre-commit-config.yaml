@@ -22,7 +22,7 @@ repos:
       - id: zizmor
         args: ['--min-severity', 'medium']  # Ignore informational findings
 
-  # Use local ruff from pyproject.toml (single source of truth)
+  # Use local tools from pyproject.toml (single source of truth)
   - repo: local
     hooks:
       - id: ruff-format
@@ -46,3 +46,10 @@ repos:
         types: [python]
         files: ^src/
         pass_filenames: false  # ty checks whole project, not individual files
+
+      - id: pydoclint
+        name: pydoclint
+        entry: uv run pydoclint
+        language: system
+        types: [python]
+        files: ^src/
