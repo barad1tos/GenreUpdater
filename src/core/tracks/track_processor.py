@@ -444,10 +444,10 @@ class TrackProcessor:
             ids_param = ",".join(batch)
 
             raw_output = await self.ap_client.run_script(
-                "fetch_tracks_by_ids.scpt",
+                "fetch_tracks_by_ids.applescript",
                 [ids_param],
                 timeout=timeout,
-                label=f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]",
+                label=f"fetch_tracks_by_ids.applescript [{batch_num}/{total_batches}]",
             )
 
             if not raw_output:

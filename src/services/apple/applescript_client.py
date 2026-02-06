@@ -313,7 +313,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         batch_size: int = 1000,
         timeout: float | None = None,
     ) -> list[dict[str, str]]:
-        """Fetch tracks by their IDs using fetch_tracks_by_ids.scpt.
+        """Fetch tracks by their IDs using fetch_tracks_by_ids.applescript.
 
         Args:
             track_ids: List of track IDs to fetch
@@ -348,10 +348,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
                 status.update(f"[cyan]Fetching tracks by ID... ({batch_num}/{total_batches})[/cyan]")
 
-                batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
+                batch_label = f"fetch_tracks_by_ids.applescript [{batch_num}/{total_batches}]"
 
                 raw_output = await self.run_script(
-                    "fetch_tracks_by_ids.scpt",
+                    "fetch_tracks_by_ids.applescript",
                     [ids_csv],
                     timeout=timeout_float,
                     label=batch_label,
@@ -360,7 +360,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 if not raw_output or raw_output == NO_TRACKS_FOUND:
                     continue
 
-                # Parse output using same format as fetch_tracks.scpt
+                # Parse output using same format as fetch_tracks.applescript
                 batch_tracks = self._parse_track_output(raw_output)
                 all_tracks.extend(batch_tracks)
 

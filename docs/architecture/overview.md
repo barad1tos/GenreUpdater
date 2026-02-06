@@ -394,8 +394,8 @@ Scripts in `applescripts/` directory:
 
 | Script | Purpose | Output Format |
 |--------|---------|---------------|
-| `fetch_tracks.scpt` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
-| `fetch_tracks_by_ids.scpt` | Get specific tracks by ID list | Same format |
+| `fetch_tracks.applescript` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
+| `fetch_tracks_by_ids.applescript` | Get specific tracks by ID list | Same format |
 | `update_property.applescript` | Set single track property | "Success: ..." or "No Change: ..." |
 | `batch_update_tracks.applescript` | Batch updates (experimental) | JSON status array |
 

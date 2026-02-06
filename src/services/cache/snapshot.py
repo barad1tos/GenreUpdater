@@ -489,7 +489,7 @@ class LibrarySnapshotService:
             await self._update_force_scan_time()
             return []
 
-        # Fetch common tracks in batches using fetch_tracks_by_ids.scpt
+        # Fetch common tracks in batches using fetch_tracks_by_ids.applescript
         batch_size = 200
         timeout_per_batch = 120  # 2 minutes per 200 IDs is generous
         current_map: dict[str, TrackDict] = {}
@@ -508,7 +508,7 @@ class LibrarySnapshotService:
                 ids_param = ",".join(batch)
 
                 result = await applescript_client.run_script(
-                    "fetch_tracks_by_ids.scpt",
+                    "fetch_tracks_by_ids.applescript",
                     arguments=[ids_param],
                     timeout=timeout_per_batch,
                 )

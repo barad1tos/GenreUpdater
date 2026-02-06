@@ -419,7 +419,7 @@ class AppleScriptClientProtocol(Protocol):
         batch_size: int = 1000,
         timeout: float | None = None,
     ) -> list[dict[str, str]]:
-        """Fetch tracks by their IDs using fetch_tracks_by_ids.scpt.
+        """Fetch tracks by their IDs using fetch_tracks_by_ids.applescript.
 
         Args:
             track_ids: List of track IDs to fetch
