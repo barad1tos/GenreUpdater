@@ -390,7 +390,7 @@ async def process_tracks(self, tracks: list[Track]) -> None:
 
 ## AppleScript Integration
 
-Scripts in `applescripts/` directory (canonical names defined in `services/apple/scripts.py`):
+Scripts in `applescripts/` directory (canonical names defined in `core/apple_script_names.py`):
 
 | Script | Purpose | Output Format |
 |--------|---------|---------------|

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from core.logger import ensure_directory, spinner
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
-from services.apple.scripts import FETCH_TRACKS_BY_IDS
+from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from services.cache.json_utils import dumps_json, loads_json
 
 SNAPSHOT_VERSION = "1.0"

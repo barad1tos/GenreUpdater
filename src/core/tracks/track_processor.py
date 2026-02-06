@@ -17,7 +17,7 @@ from core.models.metadata_utils import parse_tracks
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
-from services.apple.scripts import FETCH_TRACKS, FETCH_TRACKS_BY_IDS
+from core.apple_script_names import FETCH_TRACKS, FETCH_TRACKS_BY_IDS
 from core.models.validators import SecurityValidationError, SecurityValidator
 from metrics import Analytics
 

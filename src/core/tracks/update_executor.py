@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from core.models.track_status import can_edit_metadata
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
-from services.apple.scripts import BATCH_UPDATE_TRACKS, UPDATE_PROPERTY
+from core.apple_script_names import BATCH_UPDATE_TRACKS, UPDATE_PROPERTY
 from metrics import Analytics
 
 if TYPE_CHECKING:

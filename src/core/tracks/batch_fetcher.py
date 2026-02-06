@@ -12,7 +12,7 @@ from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
 from core.tracks.track_delta import LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
-from services.apple.scripts import FETCH_TRACKS
+from core.apple_script_names import FETCH_TRACKS
 
 if TYPE_CHECKING:
     import logging

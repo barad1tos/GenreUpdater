@@ -13,7 +13,7 @@ import asyncio.subprocess
 from typing import TYPE_CHECKING
 
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
-from services.apple.scripts import FETCH_TRACK_IDS, TRACK_DATA_SCRIPTS, UPDATE_PROPERTY
+from core.apple_script_names import FETCH_TRACK_IDS, TRACK_DATA_SCRIPTS, UPDATE_PROPERTY
 
 if TYPE_CHECKING:
     import logging

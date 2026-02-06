@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from core.apple_script_names import FETCH_TRACKS
 from core.models.types import TrackDict
 from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
@@ -512,9 +513,6 @@ async def fetch_missing_track_fields_for_sync(
     if has_missing_fields and applescript_client is not None:
         try:
             console_logger.info("Fetching track fields via direct osascript...")
-
-            # Lazy import to avoid circular dependency (metrics ↔ services.apple)
-            from services.apple.scripts import FETCH_TRACKS
 
             # Use applescript_client's configured directory instead of hardcoded path
             if applescript_client.apple_scripts_dir:

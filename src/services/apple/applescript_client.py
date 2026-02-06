@@ -21,7 +21,7 @@ from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
 from services.apple.rate_limiter import EnhancedRateLimiter
 from services.apple.sanitizer import AppleScriptSanitizer
-from services.apple.scripts import (
+from core.apple_script_names import (
     FETCH_TRACK_IDS,
     FETCH_TRACKS,
     FETCH_TRACKS_BY_IDS,
