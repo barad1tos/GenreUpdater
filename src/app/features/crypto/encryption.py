@@ -1,13 +1,14 @@
 """Fernet-based encryption implementation for secure token handling."""
 
+from __future__ import annotations
+
 import base64
 import binascii
 import contextlib
 import hashlib
-import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
@@ -20,6 +21,9 @@ from .exceptions import (
     InvalidTokenError,
     KeyGenerationError,
 )
+
+if TYPE_CHECKING:
+    import logging
 
 # Constants for Fernet token validation
 FERNET_KEY_LENGTH = 44  # Standard Fernet key length in base64 encoding

@@ -1,22 +1,18 @@
 """AppleScript subprocess execution module.
 
 This module handles the low-level subprocess execution for AppleScript
-commands, including timeout handling, process cleanup, and temp file management.
+commands, including timeout handling and process cleanup.
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
 import subprocess
 import time
-import uuid
-from pathlib import Path
 import asyncio.subprocess
 from typing import TYPE_CHECKING
 
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
-from services.apple.file_validator import AppleScriptFileValidator
 
 if TYPE_CHECKING:
     import logging
@@ -28,9 +24,6 @@ if TYPE_CHECKING:
 # Constants for script execution
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
-COMPLEX_SCRIPT_THRESHOLD = 1024  # bytes
-COMPLEX_PATTERN_COUNT = 2  # number of complex patterns before using temp file
-MAX_TELL_BLOCKS = 3  # maximum nested tell blocks before using temp file
 
 
 class AppleScriptExecutionError(OSError):
@@ -341,117 +334,3 @@ class AppleScriptExecutor:
 
         async with self.semaphore:
             return await self.handle_subprocess_execution(cmd, label, timeout_seconds)
-
-    def should_use_temp_file(self, script_code: str) -> bool:
-        """Determine if a script should be executed via a temporary file.
-
-        Large or complex scripts benefit from temporary file execution to avoid
-        shell escaping issues and command-line length limitations.
-
-        Args:
-            script_code: The AppleScript code to evaluate
-
-        Returns:
-            True if the script should use temporary file execution
-        """
-        # Check script size
-        script_size = len(script_code.encode())
-        if script_size > COMPLEX_SCRIPT_THRESHOLD:
-            self.console_logger.debug(
-                "Script size %d exceeds threshold %d, using temp file",
-                script_size,
-                COMPLEX_SCRIPT_THRESHOLD,
-            )
-            return True
-
-        # Check for complex patterns that might cause escaping issues
-        complex_patterns = [
-            r'\\"',  # Escaped quotes (literal \")
-            r"\\\\",  # Escaped backslashes (literal \\)
-            r"\n",  # Newlines in strings
-            r"\t",  # Tabs
-            r"[^\x20-\x7E]",  # Non-ASCII characters
-            r"(?s).{100,}",  # Very long single lines
-        ]
-
-        pattern_count = 0
-        for pattern in complex_patterns:
-            if re.search(pattern, script_code):
-                pattern_count += 1
-                if pattern_count > COMPLEX_PATTERN_COUNT:
-                    self.console_logger.debug("Script has %d complex patterns, using temp file", pattern_count)
-                    return True
-
-        # Check for multiple nested tell blocks (complex structure)
-        tell_count = len(re.findall(r"tell\s+application", script_code, re.IGNORECASE))
-        if tell_count > MAX_TELL_BLOCKS:
-            self.console_logger.debug("Script has %d tell blocks, using temp file", tell_count)
-            return True
-
-        return False
-
-    async def run_via_temp_file(
-        self,
-        script_code: str,
-        arguments: list[str] | None,
-        timeout_seconds: float,
-    ) -> str | None:
-        """Execute AppleScript via a temporary file.
-
-        This method writes the script to a temporary file and executes it,
-        which is more reliable for complex scripts than using the -e flag.
-
-        Args:
-            script_code: The AppleScript code to execute
-            arguments: Optional arguments to pass to the script
-            timeout_seconds: Timeout in seconds for script execution
-
-        Returns:
-            The output of the script, or None if an error occurred
-        """
-        temp_file_path: str | None = None
-        try:
-            # Check if apple_scripts_dir is set
-            if self.apple_scripts_directory is None:
-                self.error_logger.error("❌ AppleScript directory is not set. Cannot create temporary file.")
-                return None
-
-            # Create a temporary file with .applescript extension using an async-friendly approach
-            temp_filename = f"temp_script_{uuid.uuid4().hex}.applescript"
-            temp_file_path = str(Path(self.apple_scripts_directory) / temp_filename)
-            # Write the script content asynchronously using an executor
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                AppleScriptFileValidator.write_temp_file_sync,
-                temp_file_path,
-                script_code,
-            )
-
-            self.console_logger.debug("Created temporary script file: %s", Path(temp_file_path).name)
-
-            # Build command with the temp file
-            cmd = ["osascript", temp_file_path]
-            if arguments:
-                # Shell metacharacters are safe - we use create_subprocess_exec (no shell)
-                cmd.extend(arguments)
-
-            return await self.run_osascript(
-                cmd,
-                f"tempfile-script ({Path(temp_file_path).name})",
-                timeout_seconds,
-            )
-        except OSError as e:
-            self.error_logger.exception("Error creating temporary file: %s", e)
-            return None
-        except (ValueError, TypeError, subprocess.SubprocessError) as e:
-            self.error_logger.exception("Error in temp file execution: %s", e)
-            return None
-        finally:
-            # Clean up temporary file
-            if temp_file_path:
-                try:
-                    Path(temp_file_path).unlink()
-                    self.console_logger.debug("Cleaned up temporary file: %s", Path(temp_file_path).name)
-                except OSError as e:
-                    self.console_logger.warning("Could not delete temporary file %s: %s", temp_file_path, e)

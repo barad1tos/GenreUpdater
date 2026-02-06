@@ -31,10 +31,11 @@ Usage:
 
 """
 
+from __future__ import annotations
+
 import asyncio
 import csv
 import json
-import logging
 import os
 import sys
 from collections.abc import Callable
@@ -42,11 +43,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING
 
 from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import clean_names
 from services.cache.hash_service import UnifiedHashService
+
+if TYPE_CHECKING:
+    import logging
 
 # Suffix for the file that tracks the last auto-verification timestamp
 PENDING_LAST_VERIFY_SUFFIX = "_last_verify.txt"
@@ -74,7 +78,7 @@ class VerificationReason(StrEnum):
     IMPLAUSIBLE_PROPOSED_YEAR = "implausible_proposed_year"
 
     @classmethod
-    def from_string(cls, value: str) -> "VerificationReason":
+    def from_string(cls, value: str) -> VerificationReason:
         """Convert string to VerificationReason, defaulting to NO_YEAR_FOUND."""
         try:
             return cls(value.strip().lower())

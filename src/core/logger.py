@@ -15,6 +15,8 @@ Provides a comprehensive logging system with detailed tracking and visual format
 10. **Configuration Driven:** Relies on a configuration dictionary for paths, log levels, and other settings.
 """
 
+from __future__ import annotations
+
 import contextlib
 
 # ---------------------------------------------------------------------------
@@ -33,16 +35,18 @@ import sys
 import syslog
 import time
 import traceback
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, TYPE_CHECKING
 
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.status import Status
+
+if TYPE_CHECKING:
+    from rich.status import Status
+    from collections.abc import AsyncGenerator
 
 # Explicit exports
 __all__ = [

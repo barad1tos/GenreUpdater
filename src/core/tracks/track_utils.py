@@ -4,9 +4,14 @@ This module provides common utilities for track operations that are used
 across multiple modules to avoid code duplication.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
-from core.models.track_models import TrackDict
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.models.track_models import TrackDict
 
 
 def is_missing_or_unknown_genre(track: TrackDict) -> bool:

@@ -13,20 +13,24 @@ Functions:
     - is_music_app_running: Checks if Music.app is currently running.
 """
 
-import logging
+from __future__ import annotations
+
 import re
 import subprocess  # trunk-ignore(bandit/B404)
 from collections import defaultdict
-from collections.abc import Sequence
 from datetime import datetime
 from enum import IntEnum, auto
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from core.tracks.year_utils import normalize_collaboration_artist
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    import logging
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
 _logged_cleaning_exceptions: set[tuple[str, str]] = set()

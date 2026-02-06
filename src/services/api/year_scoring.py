@@ -9,6 +9,8 @@ Extracted from the legacy external API service to enable modular usage
 across different API providers while preserving the sophisticated scoring logic.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import re

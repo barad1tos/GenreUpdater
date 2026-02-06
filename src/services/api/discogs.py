@@ -4,16 +4,20 @@ This module provides the Discogs-specific implementation for fetching
 and scoring music releases from the Discogs database.
 """
 
-import logging
+from __future__ import annotations
+
 import re
 import urllib.parse
-from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict
+from typing import Any, TypedDict, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
 from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    import logging
 
 
 # Discogs Type Definitions

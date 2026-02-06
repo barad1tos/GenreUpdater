@@ -139,15 +139,3 @@ class AppleScriptFileValidator:
             return False
 
         return True
-
-    @staticmethod
-    def write_temp_file_sync(file_path: str, content: str) -> None:
-        """Write content to a temporary file synchronously.
-
-        Args:
-            file_path: Path where to write the file
-            content: Content to write
-        """
-        with Path(file_path).open("w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()

@@ -4,6 +4,8 @@ This module provides type imports that utils modules can use without
 depending on the services layer, maintaining clean architecture boundaries.
 """
 
+from __future__ import annotations
+
 # Re-export protocol types for use in utils layer
 # Re-export model types
 from core.models.track_models import CachedApiResult, TrackDict

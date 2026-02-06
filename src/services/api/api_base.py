@@ -7,13 +7,17 @@ This module provides common functionality for all API providers including:
 - Shared utilities for API interactions
 """
 
+from __future__ import annotations
+
 import asyncio
-import logging
 import re
 import time
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import logging
 
 
 class ScoredRelease(TypedDict):

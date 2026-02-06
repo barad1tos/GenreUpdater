@@ -14,15 +14,19 @@ The iTunes Search API is particularly valuable for:
 API Reference: https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/
 """
 
+from __future__ import annotations
+
 import contextlib
-import logging
 import traceback
-from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
-from services.api.api_base import ScoredRelease
+
+if TYPE_CHECKING:
+    from services.api.api_base import ScoredRelease
+    from collections.abc import Callable, Coroutine
+    import logging
 
 # Constants for data validation
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")

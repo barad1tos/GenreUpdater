@@ -3,9 +3,10 @@
 This is a streamlined version that uses the new modular components.
 """
 
+from __future__ import annotations
+
 import contextlib
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,6 @@ from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
 from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import is_music_app_running
-from core.models.track_models import ChangeLogEntry, TrackDict
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
@@ -30,6 +30,8 @@ from metrics.change_reports import (
 )
 
 if TYPE_CHECKING:
+    from core.models.track_models import ChangeLogEntry, TrackDict
+    from datetime import datetime
     from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
     from services.pending_verification import PendingAlbumEntry
@@ -39,7 +41,7 @@ if TYPE_CHECKING:
 class MusicUpdater:
     """Orchestrates music library updates using modular components."""
 
-    def __init__(self, deps: "DependencyContainer") -> None:
+    def __init__(self, deps: DependencyContainer) -> None:
         """Initialize MusicUpdater with dependency injection.
 
         Args:
@@ -171,7 +173,7 @@ class MusicUpdater:
         # Propagate test artists to genre_service for filtering
         self.genre_service.set_test_artists(test_artists)
 
-    def _resolve_artist_rename_config_path(self, deps: "DependencyContainer") -> Path:
+    def _resolve_artist_rename_config_path(self, deps: DependencyContainer) -> Path:
         """Resolve absolute path to artist rename configuration file.
 
         Handles both absolute and relative paths from config. For relative paths,
@@ -516,7 +518,7 @@ class MusicUpdater:
         self.console_logger.info("Main update pipeline completed successfully")
 
     @staticmethod
-    def _should_update_run_timestamp(force: bool, incremental_tracks: list["TrackDict"]) -> bool:
+    def _should_update_run_timestamp(force: bool, incremental_tracks: list[TrackDict]) -> bool:
         """Determine whether to update the last run timestamp.
 
         Args:
@@ -538,7 +540,7 @@ class MusicUpdater:
         return bool(self.dry_run_test_artists) and self.deps.dry_run
 
     # noinspection PyUnusedLocal
-    async def _try_smart_delta_fetch(self, force: bool = False) -> list["TrackDict"] | None:
+    async def _try_smart_delta_fetch(self, force: bool = False) -> list[TrackDict] | None:
         """Attempt to use Smart Delta to fetch only changed tracks."""
         snapshot_service = self.deps.library_snapshot_service
         ap_client = self.deps.ap_client
@@ -604,8 +606,8 @@ class MusicUpdater:
     def _emit_removed_track_events(
         self,
         removed_ids: list[str],
-        snapshot_map: dict[str, "TrackDict"],
-        api_cache: "ApiCacheService",
+        snapshot_map: dict[str, TrackDict],
+        api_cache: ApiCacheService,
     ) -> None:
         """Emit cache invalidation events for removed tracks."""
         if not removed_ids:
@@ -620,9 +622,9 @@ class MusicUpdater:
     def _emit_identity_change_events(
         self,
         updated_ids: list[str],
-        snapshot_map: dict[str, "TrackDict"],
-        current_tracks: list["TrackDict"],
-        api_cache: "ApiCacheService",
+        snapshot_map: dict[str, TrackDict],
+        current_tracks: list[TrackDict],
+        api_cache: ApiCacheService,
     ) -> None:
         """Emit cache invalidation for tracks with identity changes (artist/album renamed)."""
         if not updated_ids:
@@ -644,7 +646,7 @@ class MusicUpdater:
                 identity_changed_count,
             )
 
-    async def _fetch_tracks_for_pipeline_mode(self, force: bool = False) -> list["TrackDict"]:
+    async def _fetch_tracks_for_pipeline_mode(self, force: bool = False) -> list[TrackDict]:
         """Fetch tracks based on the current mode (test or normal).
 
         Args:
@@ -718,7 +720,7 @@ class MusicUpdater:
         return await tracker.get_last_run_timestamp()
 
     async def _update_all_genres(
-        self, tracks: list["TrackDict"], last_run_time: datetime | None, force: bool, fresh: bool = False
+        self, tracks: list[TrackDict], last_run_time: datetime | None, force: bool, fresh: bool = False
     ) -> list[ChangeLogEntry]:
         """Update genres for all tracks (Step 2 of pipeline).
 
@@ -745,7 +747,7 @@ class MusicUpdater:
         self.console_logger.info("Updated genres for %d tracks (%d changes)", len(updated_genre_tracks), len(genre_changes))
         return genre_changes
 
-    async def _update_all_years_with_logs(self, tracks: list["TrackDict"], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
+    async def _update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
@@ -810,7 +812,7 @@ class MusicUpdater:
                     partial_sync=True,  # Incremental sync - only process new/changed tracks
                 )
 
-    async def _compute_incremental_scope(self, tracks: list["TrackDict"], force: bool) -> tuple[list["TrackDict"], bool]:
+    async def _compute_incremental_scope(self, tracks: list[TrackDict], force: bool) -> tuple[list[TrackDict], bool]:
         """Compute which tracks need processing in incremental mode.
 
         Args:

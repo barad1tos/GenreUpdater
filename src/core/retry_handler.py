@@ -4,13 +4,17 @@ This module provides sophisticated retry mechanisms for database operations
 with intelligent error classification and adaptive delay strategies.
 """
 
+from __future__ import annotations
+
 import asyncio
-import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TypedDict, TypeVar, cast
+from typing import TypedDict, TypeVar, cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+    import logging
 
 
 # Type variable for retry operation return types

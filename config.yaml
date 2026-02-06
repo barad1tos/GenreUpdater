@@ -279,7 +279,17 @@ genre_update:
   concurrent_limit: 5
 
 # -----------------------------------------------------------------------
-# 8. TEST MODE
+# 8. EXPERIMENTAL FEATURES (Use with caution)
+# -----------------------------------------------------------------------
+experimental:
+  # Batch Updates - RISKY OPTIMIZATION
+  # WARNING: May cause Music.app stability issues or data corruption
+  # Only enable after thorough testing with small batch sizes
+  batch_updates_enabled: false  # Default: disabled for safety
+  max_batch_size: 5  # Start small (5-10 tracks), increase gradually if stable
+
+# -----------------------------------------------------------------------
+# 9. TEST MODE
 # -----------------------------------------------------------------------
 test_artists:
   - Amon Amarth

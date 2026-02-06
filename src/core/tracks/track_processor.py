@@ -4,17 +4,15 @@ This module handles fetching tracks from Music.app, caching,
 and updating track properties.
 """
 
-import logging
-from collections.abc import Sequence
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from core.tracks.cache_manager import TrackCacheManager
 from core.tracks.update_executor import TrackUpdateExecutor
 from core.utils.datetime_utils import datetime_to_applescript_timestamp
-from services.cache.snapshot import LibrarySnapshotService
 from core.models.metadata_utils import parse_tracks
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
@@ -23,6 +21,10 @@ from core.models.validators import SecurityValidationError, SecurityValidator
 from metrics import Analytics
 
 if TYPE_CHECKING:
+    from core.tracks.artist_renamer import ArtistRenamer
+    from services.cache.snapshot import LibrarySnapshotService
+    from collections.abc import Sequence
+    import logging
     from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
 
 
@@ -31,8 +33,8 @@ class TrackProcessor:
 
     def __init__(
         self,
-        ap_client: "AppleScriptClientProtocol",
-        cache_service: "CacheServiceProtocol",
+        ap_client: AppleScriptClientProtocol,
+        cache_service: CacheServiceProtocol,
         *,
         library_snapshot_service: LibrarySnapshotService | None = None,
         console_logger: logging.Logger,

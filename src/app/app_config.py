@@ -1,5 +1,7 @@
 """Configuration management for Music Genre Updater."""
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Any, TypeVar, overload

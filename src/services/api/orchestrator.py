@@ -14,16 +14,16 @@ The orchestrator handles:
 - Release year determination using the sophisticated scoring algorithm
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
-import logging
 import os
 import re
 import ssl
-from collections.abc import Coroutine
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, NoReturn, TypedDict
+from typing import Any, NoReturn, TypedDict, TYPE_CHECKING
 
 import aiohttp
 import certifi
@@ -33,7 +33,6 @@ from core.logger import LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
-from metrics import Analytics
 from services.api.api_base import EnhancedRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
@@ -42,9 +41,14 @@ from services.api.request_executor import ApiRequestExecutor
 from services.api.year_score_resolver import YearScoreResolver
 from services.api.year_scoring import ArtistPeriodContext, create_release_scorer
 from services.api.year_search_coordinator import YearSearchCoordinator
-from services.cache.orchestrator import CacheOrchestrator
-from services.pending_verification import PendingVerificationService
 from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
+
+if TYPE_CHECKING:
+    from services.cache.orchestrator import CacheOrchestrator
+    from services.pending_verification import PendingVerificationService
+    from metrics import Analytics
+    from collections.abc import Coroutine
+    import logging
 
 
 def normalize_name(name: str) -> str:

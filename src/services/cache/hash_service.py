@@ -9,6 +9,8 @@ Replaces:
 - OptimizedHashGenerator.generate_key() (SHA256) → hash_api_key() (SHA256)
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 from typing import Any

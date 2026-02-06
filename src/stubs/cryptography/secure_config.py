@@ -8,8 +8,9 @@ Centralized in src/typings/cryptography/ for better organization alongside
 other cryptography-related type definitions and implementations.
 """
 
-import logging
-from typing import Any, NoReturn
+from __future__ import annotations
+
+from typing import Any, NoReturn, TYPE_CHECKING
 
 # Import cryptography manager
 from app.features.crypto import (
@@ -19,6 +20,9 @@ from app.features.crypto import (
     EncryptionError,
     InvalidTokenError,
 )
+
+if TYPE_CHECKING:
+    import logging
 
 
 class SecurityConfigError(Exception):
