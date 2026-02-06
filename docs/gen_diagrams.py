@@ -57,7 +57,6 @@ def _run_pyreverse(executable: str, output_dir: str, project_name: str, source_p
             project_name,
             "-d",
             output_dir,
-            "--colorized",
             source_path,
         ],
         capture_output=True,
