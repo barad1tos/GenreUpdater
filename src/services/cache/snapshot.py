@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from core.logger import ensure_directory, spinner
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
+from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from services.cache.json_utils import dumps_json, loads_json
 
 SNAPSHOT_VERSION = "1.0"
@@ -489,7 +490,7 @@ class LibrarySnapshotService:
             await self._update_force_scan_time()
             return []
 
-        # Fetch common tracks in batches using fetch_tracks_by_ids.scpt
+        # Fetch common tracks in batches using fetch_tracks_by_ids.applescript
         batch_size = 200
         timeout_per_batch = 120  # 2 minutes per 200 IDs is generous
         current_map: dict[str, TrackDict] = {}
@@ -508,7 +509,7 @@ class LibrarySnapshotService:
                 ids_param = ",".join(batch)
 
                 result = await applescript_client.run_script(
-                    "fetch_tracks_by_ids.scpt",
+                    FETCH_TRACKS_BY_IDS,
                     arguments=[ids_param],
                     timeout=timeout_per_batch,
                 )

@@ -21,6 +21,12 @@ from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
 from services.apple.rate_limiter import EnhancedRateLimiter
 from services.apple.sanitizer import AppleScriptSanitizer
+from core.apple_script_names import (
+    FETCH_TRACK_IDS,
+    FETCH_TRACKS,
+    FETCH_TRACKS_BY_IDS,
+    UPDATE_PROPERTY,
+)
 
 if TYPE_CHECKING:
     from core.retry_handler import DatabaseRetryHandler
@@ -115,8 +121,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
             # Check for required scripts
             required_scripts: list[str] = [
-                "update_property.applescript",
-                "fetch_tracks.applescript",
+                UPDATE_PROPERTY,
+                FETCH_TRACKS,
             ]
             if missing_scripts := [script for script in required_scripts if not (Path(self.apple_scripts_dir) / script).exists()]:
                 self.error_logger.warning("Missing required AppleScripts: %s", "', '".join(missing_scripts))
@@ -313,7 +319,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         batch_size: int = 1000,
         timeout: float | None = None,
     ) -> list[dict[str, str]]:
-        """Fetch tracks by their IDs using fetch_tracks_by_ids.scpt.
+        """Fetch tracks by their IDs using fetch_tracks_by_ids.applescript.
 
         Args:
             track_ids: List of track IDs to fetch
@@ -348,10 +354,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
                 status.update(f"[cyan]Fetching tracks by ID... ({batch_num}/{total_batches})[/cyan]")
 
-                batch_label = f"fetch_tracks_by_ids.scpt [{batch_num}/{total_batches}]"
+                batch_label = f"{FETCH_TRACKS_BY_IDS} [{batch_num}/{total_batches}]"
 
                 raw_output = await self.run_script(
-                    "fetch_tracks_by_ids.scpt",
+                    FETCH_TRACKS_BY_IDS,
                     [ids_csv],
                     timeout=timeout_float,
                     label=batch_label,
@@ -360,7 +366,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 if not raw_output or raw_output == NO_TRACKS_FOUND:
                     continue
 
-                # Parse output using same format as fetch_tracks.scpt
+                # Parse output using same format as fetch_tracks.applescript
                 batch_tracks = self._parse_track_output(raw_output)
                 all_tracks.extend(batch_tracks)
 
@@ -388,7 +394,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         async with spinner("Fetching all track IDs from Music.app..."):
             raw_output = await self.run_script(
-                "fetch_track_ids.applescript",
+                FETCH_TRACK_IDS,
                 timeout=timeout_float,
             )
 

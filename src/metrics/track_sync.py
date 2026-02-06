@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from core.apple_script_names import FETCH_TRACKS
 from core.models.types import TrackDict
 from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
@@ -515,10 +516,10 @@ async def fetch_missing_track_fields_for_sync(
 
             # Use applescript_client's configured directory instead of hardcoded path
             if applescript_client.apple_scripts_dir:
-                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.applescript")
+                script_path = str(Path(applescript_client.apple_scripts_dir) / FETCH_TRACKS)
             else:
                 # Fallback to relative path if apple_scripts_dir is not available
-                script_path = str(Path("applescripts") / "fetch_tracks.applescript")
+                script_path = str(Path("applescripts") / FETCH_TRACKS)
 
             artist_filter = None  # None means fetch ALL tracks
             console_logger.info(

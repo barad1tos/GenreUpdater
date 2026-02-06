@@ -390,12 +390,13 @@ async def process_tracks(self, tracks: list[Track]) -> None:
 
 ## AppleScript Integration
 
-Scripts in `applescripts/` directory:
+Scripts in `applescripts/` directory (canonical names defined in `core/apple_script_names.py`):
 
 | Script | Purpose | Output Format |
 |--------|---------|---------------|
-| `fetch_tracks.scpt` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
-| `fetch_tracks_by_ids.scpt` | Get specific tracks by ID list | Same format |
+| `fetch_tracks.applescript` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
+| `fetch_track_ids.applescript` | Get all track IDs | Comma-separated IDs |
+| `fetch_tracks_by_ids.applescript` | Get specific tracks by ID list | Same as `fetch_tracks` |
 | `update_property.applescript` | Set single track property | "Success: ..." or "No Change: ..." |
 | `batch_update_tracks.applescript` | Batch updates (experimental) | JSON status array |
 

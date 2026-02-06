@@ -20,7 +20,7 @@ Solutions for common issues when running Music Genre Updater.
 python3 --version
 
 # Test AppleScript connection
-osascript applescripts/fetch_tracks.scpt "" 0 10  # Fetch first 10 tracks
+osascript applescripts/fetch_tracks.applescript "" 0 10  # Fetch first 10 tracks
 
 # Check launch agent status
 launchctl list | grep genreautoupdater
