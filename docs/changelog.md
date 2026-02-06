@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
 
 ### Changed
+- Removed dead temp-file execution infrastructure from AppleScript executor (superseded by bulk verification)
 - Test fixture deduplication: shared logger fixtures in root conftest
 - Unified track factory and mock fixtures in tracks conftest
 - Migrated year_batch test files to shared fixtures (-409/+208 lines)

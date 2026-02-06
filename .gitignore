@@ -76,7 +76,6 @@ csv/
 /temp
 .worktrees/
 /applescripts/*.scpt
-/applescripts/temp_script_*.applescript
 
 # Documentation
 !docs/              # Force-include docs/ (overrides global gitignore)
