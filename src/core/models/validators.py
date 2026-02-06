@@ -1,12 +1,16 @@
 """Validation utilities for Music Genre Updater."""
 
+from __future__ import annotations
+
 import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, TypeGuard
+from typing import Any, Protocol, TypeGuard, TYPE_CHECKING
 
-from core.models.track_models import TrackDict
+
+if TYPE_CHECKING:
+    from core.models.track_models import TrackDict
 
 
 class SupportsDictConversion(Protocol):

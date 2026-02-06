@@ -22,6 +22,8 @@ Design Philosophy (Linus Torvalds approved):
 - Reliable: Detects all meaningful changes, ignores cosmetic ones
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging

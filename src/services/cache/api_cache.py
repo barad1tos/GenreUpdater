@@ -10,6 +10,8 @@ Key Features:
 - Automatic cache invalidation when tracks are removed from library
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging

@@ -21,19 +21,19 @@ Key functions:
 Note: Uses CacheServiceProtocol for album year caching.
 """
 
+from __future__ import annotations
+
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from rich.console import Console
 from rich.table import Table
 
 from core.logger import ensure_directory
 from core.models.track_models import ChangeLogEntry
-from core.models.types import TrackDict
 from metrics.csv_utils import TRACK_FIELDNAMES
 from metrics.csv_utils import save_csv as _save_csv
 
@@ -46,6 +46,10 @@ from metrics.track_sync import (
     save_track_map_to_csv,
     sync_track_list_with_current,
 )
+
+if TYPE_CHECKING:
+    from core.models.types import TrackDict
+    from collections.abc import Callable, Sequence
 
 __all__ = [
     # Public constants

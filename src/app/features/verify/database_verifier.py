@@ -4,8 +4,9 @@ This module handles verifying the track database against Music.app
 and managing incremental run timestamps.
 """
 
+from __future__ import annotations
+
 import asyncio
-import logging
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,13 +15,14 @@ from typing import TYPE_CHECKING, Any
 from core.logger import LogFormat, get_full_log_path
 
 from core.run_tracking import IncrementalRunTracker
-from core.models.types import TrackDict
 from metrics.change_reports import load_track_list, save_to_csv
 
 # Constants
 LAST_VERIFY_SUFFIX = "_last_verify.txt"
 
 if TYPE_CHECKING:
+    from core.models.types import TrackDict
+    import logging
     from core.models.protocols import AppleScriptClientProtocol
     from metrics import Analytics
 
@@ -31,12 +33,12 @@ class DatabaseVerifier:
 
     def __init__(
         self,
-        ap_client: "AppleScriptClientProtocol",
+        ap_client: AppleScriptClientProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         *,
-        analytics: "Analytics",
+        analytics: Analytics,
         config: dict[str, Any],
         dry_run: bool = False,
     ) -> None:

@@ -11,8 +11,9 @@ Or from project root:
     python -c "import asyncio; from app.full_sync import main; asyncio.run(main())"
 """
 
+from __future__ import annotations
+
 import asyncio
-import logging
 import sys
 import traceback
 from pathlib import Path
@@ -35,6 +36,7 @@ from core.models.metadata_utils import is_music_app_running  # noqa: E402
 from metrics.change_reports import sync_track_list_with_current  # noqa: E402
 
 if TYPE_CHECKING:
+    import logging
     from core.tracks.track_processor import TrackProcessor
     from services.cache.orchestrator import CacheOrchestrator
 
@@ -44,8 +46,8 @@ async def run_full_resync(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     config: dict[str, Any],
-    cache_service: "CacheOrchestrator",
-    track_processor: "TrackProcessor",
+    cache_service: CacheOrchestrator,
+    track_processor: TrackProcessor,
 ) -> None:
     """Run complete media library resynchronization.
 

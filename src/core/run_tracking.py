@@ -4,6 +4,8 @@ Provides shared functionality for tracking last run timestamps
 and determining if incremental processing should occur.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import UTC, datetime

@@ -4,9 +4,10 @@ This module handles determining dominant genres for artists and
 updating track genres accordingly.
 """
 
+from __future__ import annotations
+
 import asyncio
 import itertools
-import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,7 @@ from .track_utils import is_missing_or_unknown_genre as _is_missing_or_unknown_g
 from .track_utils import parse_track_date_added as _parse_track_date_added
 
 if TYPE_CHECKING:
+    import logging
     from metrics import Analytics
 
     from .track_processor import TrackProcessor
@@ -32,10 +34,10 @@ class GenreManager(BaseProcessor):
 
     def __init__(
         self,
-        track_processor: "TrackProcessor",
+        track_processor: TrackProcessor,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: "Analytics",
+        analytics: Analytics,
         config: dict[str, Any],
         dry_run: bool = False,
     ) -> None:

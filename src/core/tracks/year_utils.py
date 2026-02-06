@@ -4,6 +4,8 @@ Pure functions without side effects for year processing.
 These utilities are used across the year retrieval subsystem.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 

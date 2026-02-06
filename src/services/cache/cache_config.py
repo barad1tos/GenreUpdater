@@ -10,11 +10,15 @@ Key Features:
 - Lifecycle management for persistent vs temporary cache entries
 """
 
+from __future__ import annotations
+
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class CacheContentType(Enum):

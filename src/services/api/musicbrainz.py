@@ -4,17 +4,21 @@ This module provides the MusicBrainz-specific implementation for fetching
 and scoring music releases from the MusicBrainz database.
 """
 
+from __future__ import annotations
+
 import asyncio
-import logging
 import urllib.parse
-from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict, cast, TYPE_CHECKING
 
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
 from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    import logging
 
 # Type alias for MusicBrainz API response data
 MBApiData = dict[str, Any]

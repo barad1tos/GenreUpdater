@@ -1,5 +1,7 @@
 """Command-line interface for Music Genre Updater."""
 
+from __future__ import annotations
+
 import argparse
 from typing import Any
 

@@ -3,7 +3,8 @@
 This module handles the high-level coordination of all operations.
 """
 
-import argparse
+from __future__ import annotations
+
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from core.models.metadata_utils import is_music_app_running, reset_cleaning_exce
 from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 if TYPE_CHECKING:
+    import argparse
     from services.dependency_container import DependencyContainer
 
 
@@ -25,7 +27,7 @@ class Orchestrator:
 
     COMMANDS_BYPASSING_MUSIC_CHECK: ClassVar[set[str]] = {"rotate_keys", "rotate-keys"}
 
-    def __init__(self, deps: "DependencyContainer") -> None:
+    def __init__(self, deps: DependencyContainer) -> None:
         """Initialize the orchestrator with dependencies.
 
         Args:
@@ -286,7 +288,7 @@ class Orchestrator:
             self.console_logger.exception("Failed to backup %s to %s: %s", source_path, backup_path, exc)
             raise
 
-    def _re_encrypt_tokens(self, secure_config: "SecureConfig", current_tokens: dict[str, str]) -> dict[str, str]:
+    def _re_encrypt_tokens(self, secure_config: SecureConfig, current_tokens: dict[str, str]) -> dict[str, str]:
         """Re-encrypt tokens with a new encryption key.
 
         Args:
@@ -313,7 +315,7 @@ class Orchestrator:
 
         return re_encrypted_tokens
 
-    def _display_rotation_status(self, secure_config: "SecureConfig", new_password: str | None) -> None:
+    def _display_rotation_status(self, secure_config: SecureConfig, new_password: str | None) -> None:
         """Display the status after key rotation completion.
 
         Args:

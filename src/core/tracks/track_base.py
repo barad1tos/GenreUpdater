@@ -4,10 +4,12 @@ Provides common functionality and structure for all music processing modules
 including genre management, year retrieval, and track processing.
 """
 
-import logging
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import logging
     from metrics import Analytics
 
 
@@ -22,7 +24,7 @@ class BaseProcessor:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: "Analytics",
+        analytics: Analytics,
         config: dict[str, Any],
         dry_run: bool,
     ) -> None:

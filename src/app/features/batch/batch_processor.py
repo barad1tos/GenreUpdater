@@ -1,11 +1,13 @@
 """Batch processing functionality for Music Genre Updater."""
 
+from __future__ import annotations
+
 import asyncio
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import logging
     from app.music_updater import MusicUpdater
 
 
@@ -14,7 +16,7 @@ class BatchProcessor:
 
     def __init__(
         self,
-        music_updater: "MusicUpdater",
+        music_updater: MusicUpdater,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
