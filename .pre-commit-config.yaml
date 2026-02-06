@@ -22,6 +22,11 @@ repos:
       - id: zizmor
         args: ['--min-severity', 'medium']  # Ignore informational findings
 
+  - repo: https://github.com/jsh9/pydoclint
+    rev: 0.8.3
+    hooks:
+      - id: pydoclint
+
   # Use local ruff from pyproject.toml (single source of truth)
   - repo: local
     hooks:

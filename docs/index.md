@@ -111,7 +111,7 @@ Year lookup queries three sources and uses scoring to pick the most accurate:
 
     Auto-generated documentation from source code
 
-    [:octicons-arrow-right-24: API Docs](api/index.md)
+    [:octicons-arrow-right-24: API Docs](reference/app/index.md)
 
 - :material-help-circle:{ .lg .middle } **Troubleshooting**
 

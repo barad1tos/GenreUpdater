@@ -40,7 +40,8 @@ dev = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]==1.0.2",
     "mkdocs-gen-files>=0.6.0",
-    "mkdocs-literate-nav>=0.6.2",
+    "mkdocs-api-autonav>=0.4.0",
+    "pydoclint>=0.8.3",
     # Linting & formatting
     "ruff==0.15.0",
     "ty==0.0.14",
@@ -223,9 +224,13 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "INP001", # docs/ is a namespace package for mkdocs gen-files plugin
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+check-return-types = false
+require-return-section-when-returning-nothing = false
+
 # ty configuration - Fast type checker from Astral (Ruff/uv team)
-# ─────────────────────────────────────────────────────────────────────────────
 [tool.ty.environment]
 python-version = "3.13"
 python = ".venv"
