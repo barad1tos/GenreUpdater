@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from core.models.track_status import can_edit_metadata
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
+from services.apple.scripts import BATCH_UPDATE_TRACKS, UPDATE_PROPERTY
 from metrics import Analytics
 
 if TYPE_CHECKING:
@@ -135,7 +136,7 @@ class TrackUpdateExecutor:
 
             # Execute update with contextual information
             result = await self.ap_client.run_script(
-                "update_property.applescript",
+                UPDATE_PROPERTY,
                 [track_id, property_name, value_str],
                 timeout=30,
                 context_artist=artist,
@@ -514,7 +515,7 @@ class TrackUpdateExecutor:
 
         # Execute batch update with configured timeout (defaults to 60s)
         result = await self.ap_client.run_script(
-            "batch_update_tracks.applescript",
+            BATCH_UPDATE_TRACKS,
             [batch_command],
             timeout=batch_timeout,
             context_artist=artist,

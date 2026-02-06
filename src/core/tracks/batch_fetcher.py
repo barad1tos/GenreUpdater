@@ -12,6 +12,7 @@ from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
 from core.tracks.track_delta import LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
+from services.apple.scripts import FETCH_TRACKS
 
 if TYPE_CHECKING:
     import logging
@@ -255,7 +256,7 @@ class BatchTrackFetcher:
         args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
 
         raw_output = await self.ap_client.run_script(
-            "fetch_tracks.applescript",
+            FETCH_TRACKS,
             args,
             timeout=300,  # 5 minutes per batch
         )

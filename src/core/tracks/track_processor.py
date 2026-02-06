@@ -17,6 +17,7 @@ from core.models.metadata_utils import parse_tracks
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from services.apple.applescript_client import NO_TRACKS_FOUND
+from services.apple.scripts import FETCH_TRACKS, FETCH_TRACKS_BY_IDS
 from core.models.validators import SecurityValidationError, SecurityValidator
 from metrics import Analytics
 
@@ -369,14 +370,15 @@ class TrackProcessor:
                 args.append(str(timestamp))
 
             self.console_logger.info(
-                "Running AppleScript: fetch_tracks.applescript with args: %s",
+                "Running AppleScript: %s with args: %s",
+                FETCH_TRACKS,
                 ", ".join(arg for arg in args if arg),
             )
 
             # Execute AppleScript with appropriate timeout based on operation type
             timeout = self._get_applescript_timeout(original_artist_provided)
 
-            raw_output = await self.ap_client.run_script("fetch_tracks.applescript", args, timeout=timeout)
+            raw_output = await self.ap_client.run_script(FETCH_TRACKS, args, timeout=timeout)
 
             # DEBUG: Log raw output details
             self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
@@ -444,10 +446,10 @@ class TrackProcessor:
             ids_param = ",".join(batch)
 
             raw_output = await self.ap_client.run_script(
-                "fetch_tracks_by_ids.applescript",
+                FETCH_TRACKS_BY_IDS,
                 [ids_param],
                 timeout=timeout,
-                label=f"fetch_tracks_by_ids.applescript [{batch_num}/{total_batches}]",
+                label=f"{FETCH_TRACKS_BY_IDS} [{batch_num}/{total_batches}]",
             )
 
             if not raw_output:

@@ -13,6 +13,7 @@ import asyncio.subprocess
 from typing import TYPE_CHECKING
 
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
+from services.apple.scripts import FETCH_TRACK_IDS, TRACK_DATA_SCRIPTS, UPDATE_PROPERTY
 
 if TYPE_CHECKING:
     import logging
@@ -110,11 +111,11 @@ class AppleScriptExecutor:
             elapsed: Execution time in seconds
         """
         # Skip verbose logging for update_property - higher-level logs are more informative
-        if label.startswith("update_property"):
+        if label.startswith(UPDATE_PROPERTY):
             self.console_logger.debug("◁ %s completed in %.1fs", label, elapsed)
             return
 
-        if label.startswith(("fetch_tracks.applescript", "fetch_tracks_by_ids.applescript")):
+        if label.startswith(TRACK_DATA_SCRIPTS):
             # Count tracks by counting line separators (ASCII 29)
             track_count = script_result.count(LINE_SEPARATOR)
             size_kb = len(script_result.encode()) / 1024
@@ -126,7 +127,7 @@ class AppleScriptExecutor:
                 size_kb,
                 elapsed,
             )
-        elif label.startswith("fetch_track_ids.applescript"):
+        elif label.startswith(FETCH_TRACK_IDS):
             # Just show count of IDs fetched - no preview needed
             id_count = script_result.count(",") + 1 if script_result.strip() else 0
             size_kb = len(script_result.encode()) / 1024

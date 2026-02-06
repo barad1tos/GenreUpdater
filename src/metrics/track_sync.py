@@ -513,12 +513,15 @@ async def fetch_missing_track_fields_for_sync(
         try:
             console_logger.info("Fetching track fields via direct osascript...")
 
+            # Lazy import to avoid circular dependency (metrics ↔ services.apple)
+            from services.apple.scripts import FETCH_TRACKS
+
             # Use applescript_client's configured directory instead of hardcoded path
             if applescript_client.apple_scripts_dir:
-                script_path = str(Path(applescript_client.apple_scripts_dir) / "fetch_tracks.applescript")
+                script_path = str(Path(applescript_client.apple_scripts_dir) / FETCH_TRACKS)
             else:
                 # Fallback to relative path if apple_scripts_dir is not available
-                script_path = str(Path("applescripts") / "fetch_tracks.applescript")
+                script_path = str(Path("applescripts") / FETCH_TRACKS)
 
             artist_filter = None  # None means fetch ALL tracks
             console_logger.info(

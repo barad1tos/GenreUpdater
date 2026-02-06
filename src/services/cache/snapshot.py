@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from core.logger import ensure_directory, spinner
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
+from services.apple.scripts import FETCH_TRACKS_BY_IDS
 from services.cache.json_utils import dumps_json, loads_json
 
 SNAPSHOT_VERSION = "1.0"
@@ -508,7 +509,7 @@ class LibrarySnapshotService:
                 ids_param = ",".join(batch)
 
                 result = await applescript_client.run_script(
-                    "fetch_tracks_by_ids.applescript",
+                    FETCH_TRACKS_BY_IDS,
                     arguments=[ids_param],
                     timeout=timeout_per_batch,
                 )
