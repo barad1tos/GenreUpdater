@@ -263,3 +263,4 @@ uv run ruff check src/ tests/
 ---
 
 > **Warning:** Changes sync to iCloud immediately and cannot be easily reverted. Always use `--dry-run` first!
+

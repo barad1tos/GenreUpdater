@@ -209,6 +209,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "ANN202", # Tests can skip return annotations for private funcs
     "RUF059", # Tests can have unused unpacked variables
     "E501", # Tests can have longer lines for readability
+    "S603", # Tests can run subprocess with resolved tool paths (shutil.which)
 ]
 "src/core/models/metadata_utils.py" = [
     "PLW0108", # Lambda intentional: key=len makes ty infer Sized instead of str

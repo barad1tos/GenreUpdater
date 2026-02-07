@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,8 @@ from pytest_examples import CodeExample, EvalExample, find_examples
 DOCS_DIR = Path(__file__).parent.parent / "docs"
 
 _EXCLUDED_DIRS = {"plans"}
+
+_SHELLCHECK_PATH = shutil.which("shellcheck")
 
 
 def _is_excluded(example: CodeExample) -> bool:
@@ -92,8 +95,10 @@ def test_docs_bash_examples(block: BashBlock) -> None:
         pytest.skip("Marked as illustrative")
     if not block.source.strip():
         pytest.skip("Empty block")
+    if not _SHELLCHECK_PATH:
+        pytest.skip("shellcheck not installed")
     result = subprocess.run(
-        ["shellcheck", "--shell=bash", "-"],
+        [_SHELLCHECK_PATH, "--shell=bash", "-"],
         input=block.source,
         capture_output=True,
         text=True,
