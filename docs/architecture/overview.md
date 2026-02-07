@@ -317,7 +317,7 @@ src/
 
 All services are wired via `DependencyContainer`:
 
-```python
+```python test="skip"
 container = DependencyContainer(config, logger)
 await container.initialize()
 
@@ -330,7 +330,7 @@ year_retriever = container.year_retriever
 
 Interfaces defined with `typing.Protocol`:
 
-```python
+```python test="skip"
 class ExternalApiServiceProtocol(Protocol):
     async def fetch_year(
         self, artist: str, album: str
@@ -341,7 +341,7 @@ class ExternalApiServiceProtocol(Protocol):
 
 All I/O operations use `async/await`:
 
-```python
+```python test="skip"
 async def process_tracks(self, tracks: list[Track]) -> None:
     async with aiohttp.ClientSession() as session:
         results = await asyncio.gather(*[

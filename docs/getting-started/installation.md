@@ -10,7 +10,7 @@
 
 [uv](https://github.com/astral-sh/uv) is a fast Python package manager from Astral (the Ruff team).
 
-```bash
+```bash test="skip"
 # Install uv if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -26,7 +26,7 @@ uv sync
 
 If you prefer traditional pip/venv:
 
-```bash
+```bash test="skip"
 # Clone the repository
 git clone https://github.com/barad1tos/GenreUpdater.git
 cd GenreUpdater

@@ -41,6 +41,8 @@ dev = [
     "mkdocstrings[python]==1.0.2",
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-api-autonav>=0.4.0",
+    "mkdocs-git-revision-date-localized-plugin>=1.5",
+    "pytest-examples>=0.0.14",
     "pydoclint>=0.8.3",
     # Linting & formatting
     "ruff==0.15.0",
@@ -207,6 +209,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "ANN202", # Tests can skip return annotations for private funcs
     "RUF059", # Tests can have unused unpacked variables
     "E501", # Tests can have longer lines for readability
+    "S603", # Tests can run subprocess with resolved tool paths (shutil.which)
 ]
 "src/core/models/metadata_utils.py" = [
     "PLW0108", # Lambda intentional: key=len makes ty infer Sized instead of str

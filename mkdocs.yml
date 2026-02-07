@@ -52,6 +52,11 @@ plugins:
         - src/core
         - src/metrics
         - src/services
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      enable_git_follow: false
+      strict: false
   - mkdocstrings:
       default_handler: python
       handlers:

@@ -111,7 +111,7 @@ Requirements:
 
 ## How do I update the app?
 
-```bash
+```bash test="skip"
 cd /path/to/GenreUpdater
 git pull
 uv sync  # or pip install -e .

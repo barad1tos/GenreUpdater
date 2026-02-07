@@ -12,7 +12,7 @@ Guidelines for contributing to Music Genre Updater.
 
 ### Installation
 
-```bash
+```bash test="skip"
 # Clone the repository
 git clone https://github.com/barad1tos/GenreUpdater.git
 cd GenreUpdater
@@ -28,7 +28,7 @@ prek install
 
 Create a `.env` file:
 
-```bash
+```bash test="skip"
 DISCOGS_TOKEN=your_discogs_token
 CONTACT_EMAIL=your@email.com
 ```
@@ -127,7 +127,7 @@ docs: update architecture documentation
 
 Use Google style:
 
-```python
+```python test="skip"
 def fetch_year(self, artist: str, album: str) -> tuple[int | None, int]:
     """Fetch album release year from external API.
 
@@ -147,7 +147,7 @@ def fetch_year(self, artist: str, album: str) -> tuple[int | None, int]:
 
 All functions must have type hints:
 
-```python
+```python test="skip"
 async def process_tracks(
     self,
     tracks: list[Track],
@@ -161,7 +161,7 @@ async def process_tracks(
 
 Follow the project's error design principles:
 
-```python
+```python test="skip"
 # ✅ Good - includes context
 except OSError as e:
     logger.warning(
