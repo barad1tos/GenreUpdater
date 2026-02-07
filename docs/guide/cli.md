@@ -22,7 +22,7 @@ These options work with any command:
 
 Run the full library update process:
 
-```bash
+```bash test="skip"
 uv run python main.py [options]
 ```
 
@@ -42,7 +42,7 @@ uv run python main.py --force --fresh
 
 Update album release years from external APIs (MusicBrainz, Discogs, iTunes).
 
-```bash
+```bash test="skip"
 uv run python main.py update_years [--artist NAME] [--force]
 ```
 
@@ -57,7 +57,7 @@ Aliases: `years`
 
 Update track genres from the dominant genre database.
 
-```bash
+```bash test="skip"
 uv run python main.py update_genres [--artist NAME]
 ```
 
@@ -85,7 +85,7 @@ Aliases: `clean`
 
 Revert previously applied year changes.
 
-```bash
+```bash test="skip"
 uv run python main.py revert_years --artist "Artist Name" [--album "Album"] [--backup-csv PATH]
 ```
 
@@ -101,7 +101,7 @@ Aliases: `revert`
 
 Restore years from Apple Music's read-only `release_year` field.
 
-```bash
+```bash test="skip"
 uv run python main.py restore_release_years [--artist NAME] [--album NAME] [--threshold N]
 ```
 
@@ -179,7 +179,7 @@ The application uses these environment variables:
 
 Set them in a `.env` file or export directly:
 
-```bash
+```bash test="skip"
 export DISCOGS_TOKEN="your_token_here"
 export CONTACT_EMAIL="your@email.com"
 ```

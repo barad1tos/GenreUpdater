@@ -12,7 +12,7 @@ The recommended approach is a **daemon** that monitors your Music library and ap
 
 Copy the project to a stable location:
 
-```bash
+```bash test="skip"
 cp -r /path/to/project ~/Library/Application\ Support/GenreUpdater/app
 ```
 
@@ -188,7 +188,7 @@ The daemon requires Music.app to be running. Add a check script:
 ```bash
 #!/bin/bash
 if pgrep -x "Music" > /dev/null; then
-    cd ~/Library/Application\ Support/GenreUpdater/app
+    cd ~/Library/Application\ Support/GenreUpdater/app || exit 1
     uv run python main.py
 fi
 ```
@@ -206,7 +206,7 @@ caching:
 
 For simpler scheduling, use cron instead:
 
-```bash
+```bash test="skip"
 crontab -e
 ```
 

@@ -61,7 +61,7 @@ Artist2\x1DAlbum2\x1D...
 
 ### Parsing Pipeline
 
-```python
+```python test="skip"
 raw_output: str
     → split by '\x1E'
     → for each record: split by '\x1D'
@@ -105,7 +105,7 @@ flowchart LR
 
 ### Modification Detection
 
-```python
+```python test="skip"
 last_run = load_last_run_timestamp()
 for track in tracks:
     if track.date_modified > last_run:

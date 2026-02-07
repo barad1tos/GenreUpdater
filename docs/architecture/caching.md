@@ -103,7 +103,7 @@ cache_ttl_seconds: 1800  # Override default 5 min to 30 min for long sessions
 
 All caches use consistent key generation:
 
-```python
+```python test="skip"
 from services.cache.hash_service import UnifiedHashService
 
 key = UnifiedHashService.generate_key(
@@ -233,7 +233,7 @@ cache_ttl_seconds: 300  # 5 minutes
 
 Library snapshots use gzip compression:
 
-```python
+```python test="skip"
 import gzip
 import json
 
@@ -252,7 +252,7 @@ with gzip.open(path, 'rt') as f:
 
 Disk caches use file locking:
 
-```python
+```python test="skip"
 import fcntl
 
 with open(cache_file, 'r+') as f:

@@ -53,3 +53,10 @@ repos:
         language: system
         types: [python]
         files: ^src/
+
+      - id: mkdocs-build
+        name: mkdocs build
+        entry: uv run mkdocs build --quiet
+        language: system
+        pass_filenames: false
+        files: ^(docs/|src/|mkdocs\.yml)
