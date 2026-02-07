@@ -23,7 +23,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install doc-sync
-        run: pip install git+https://github.com/barad1tos/script-macos-dotfiles.git#subdirectory=doc-sync
+        run: pip install git+https://github.com/barad1tos/script-macos-dotfiles.git@5d5654f1d3b185e4ca91d541537137823d48c591#subdirectory=doc-sync
 
       - name: Run audit
         run: doc-sync audit --docs-dir docs/ --src-dir src/ --format json > audit.json
