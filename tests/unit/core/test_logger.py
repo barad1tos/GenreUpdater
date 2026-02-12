@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path as PathLib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,9 +35,15 @@ from core.logger import (
     try_config_alias_replacement,
     try_home_directory_replacement,
 )
+from tests.factories import (  # sourcery skip: dont-import-test-modules
+    MINIMAL_CONFIG_DATA,
+    create_test_app_config,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from core.models.track_models import AppConfig
 
 
 class TestEnsureDirectory:
@@ -101,28 +107,16 @@ class TestConvertPathValueToString:
 class TestGetPathFromConfig:
     """Tests for get_path_from_config function."""
 
-    def test_returns_default_when_no_logging_section(self) -> None:
-        """Should return default when logging section is missing."""
-        config: dict[str, Any] = {}
-        result = get_path_from_config(config, "log_file", "default.log", None)
-        assert result == "default.log"
-
-    def test_returns_default_when_logging_not_dict(self) -> None:
-        """Should return default when logging is not a dict."""
-        config: dict[str, Any] = {"logging": "invalid"}
-        result = get_path_from_config(config, "log_file", "default.log", None)
-        assert result == "default.log"
-
     def test_returns_value_from_config(self) -> None:
-        """Should return value from logging config."""
-        config: dict[str, Any] = {"logging": {"log_file": "custom.log"}}
-        result = get_path_from_config(config, "log_file", "default.log", None)
-        assert result == "custom.log"
+        """Should return value from logging config via attribute access."""
+        config: AppConfig = create_test_app_config()
+        result = get_path_from_config(config, "main_log_file", "default.log", None)
+        assert result == MINIMAL_CONFIG_DATA["logging"]["main_log_file"]
 
     def test_returns_default_when_key_not_in_logging(self) -> None:
-        """Should return default when key is not in logging section."""
-        config: dict[str, Any] = {"logging": {"other_key": "value"}}
-        result = get_path_from_config(config, "missing_key", "default.log", None)
+        """Should return default when attribute is not in LoggingConfig."""
+        config: AppConfig = create_test_app_config()
+        result = get_path_from_config(config, "nonexistent_key", "default.log", None)
         assert result == "default.log"
 
 
@@ -131,14 +125,12 @@ class TestGetFullLogPath:
 
     def test_builds_full_path(self, tmp_path: Path) -> None:
         """Should build full path from base dir and relative path."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {"main_log": "logs/main.log"},
-        }
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
-        result = get_full_log_path(config, "main_log", "default.log")
+        result = get_full_log_path(config, "main_log_file", "default.log")
 
-        assert result == str(tmp_path / "logs" / "main.log")
+        expected = str(tmp_path / MINIMAL_CONFIG_DATA["logging"]["main_log_file"])
+        assert result == expected
 
     def test_uses_default_when_config_is_none(self) -> None:
         """Should use default path when config is None."""
@@ -147,12 +139,13 @@ class TestGetFullLogPath:
 
     def test_creates_necessary_directories(self, tmp_path: Path) -> None:
         """Should create parent directories."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {"main_log": "deep/nested/main.log"},
-        }
+        logging_overrides = {**MINIMAL_CONFIG_DATA["logging"], "main_log_file": "deep/nested/main.log"}
+        config: AppConfig = create_test_app_config(
+            logs_base_dir=str(tmp_path),
+            logging=logging_overrides,
+        )
 
-        result = get_full_log_path(config, "main_log", "default.log")
+        result = get_full_log_path(config, "main_log_file", "default.log")
 
         assert (tmp_path / "deep" / "nested").exists()
         assert result == str(tmp_path / "deep" / "nested" / "main.log")
@@ -168,11 +161,11 @@ class TestBuildConfigAliasMap:
 
     def test_builds_alias_map_from_config(self, tmp_path: Path) -> None:
         """Should build alias map from config directories."""
-        config: dict[str, Any] = {
-            "apple_scripts_dir": str(tmp_path / "scripts"),
-            "logs_base_dir": str(tmp_path / "logs"),
-            "music_library_path": str(tmp_path / "music"),
-        }
+        config: AppConfig = create_test_app_config(
+            apple_scripts_dir=str(tmp_path / "scripts"),
+            logs_base_dir=str(tmp_path / "logs"),
+            music_library_path=str(tmp_path / "music"),
+        )
 
         result = build_config_alias_map(config)
 
@@ -187,7 +180,7 @@ class TestTryConfigAliasReplacement:
         """Should replace matching path with alias."""
         scripts_dir = tmp_path / "scripts"
         scripts_dir.mkdir()
-        config: dict[str, Any] = {"apple_scripts_dir": str(scripts_dir)}
+        config: AppConfig = create_test_app_config(apple_scripts_dir=str(scripts_dir))
 
         result = try_config_alias_replacement(str(scripts_dir / "test.scpt"), config)
 
@@ -196,7 +189,7 @@ class TestTryConfigAliasReplacement:
 
     def test_returns_none_for_non_matching_path(self) -> None:
         """Should return None when path doesn't match any alias."""
-        config: dict[str, Any] = {"apple_scripts_dir": "/some/path"}
+        config: AppConfig = create_test_app_config(apple_scripts_dir="/some/path")
         result = try_config_alias_replacement("/other/path/file.txt", config)
         assert result is None
 
@@ -243,7 +236,7 @@ class TestShortenPath:
         """Should shorten paths matching config directories."""
         scripts_dir = tmp_path / "scripts"
         scripts_dir.mkdir()
-        config: dict[str, Any] = {"apple_scripts_dir": str(scripts_dir)}
+        config: AppConfig = create_test_app_config(apple_scripts_dir=str(scripts_dir))
 
         result = shorten_path(str(scripts_dir / "test.scpt"), config)
 
@@ -407,9 +400,9 @@ class TestLoggable:
 class TestGetLogLevelsFromConfig:
     """Tests for get_log_levels_from_config function."""
 
-    def test_returns_default_levels_for_empty_config(self) -> None:
-        """Should return default levels for empty config."""
-        config: dict[str, Any] = {}
+    def test_returns_levels_from_default_config(self) -> None:
+        """Should return levels from factory defaults."""
+        config: AppConfig = create_test_app_config()
         levels = get_log_levels_from_config(config)
 
         assert levels["console"] == logging.INFO
@@ -417,14 +410,11 @@ class TestGetLogLevelsFromConfig:
 
     def test_parses_string_levels(self) -> None:
         """Should parse string level names."""
-        config: dict[str, Any] = {
-            "logging": {
-                "levels": {
-                    "console": "DEBUG",
-                    "main_file": "WARNING",
-                }
-            }
+        logging_overrides = {
+            **MINIMAL_CONFIG_DATA["logging"],
+            "levels": {"console": "DEBUG", "main_file": "WARNING", "analytics_file": "INFO"},
         }
+        config: AppConfig = create_test_app_config(logging=logging_overrides)
 
         levels = get_log_levels_from_config(config)
 
@@ -433,14 +423,11 @@ class TestGetLogLevelsFromConfig:
 
     def test_handles_case_insensitive_levels(self) -> None:
         """Should handle level names case-insensitively."""
-        config: dict[str, Any] = {
-            "logging": {
-                "levels": {
-                    "console": "debug",
-                    "main_file": "ERROR",
-                }
-            }
+        logging_overrides = {
+            **MINIMAL_CONFIG_DATA["logging"],
+            "levels": {"console": "debug", "main_file": "ERROR", "analytics_file": "INFO"},
         }
+        config: AppConfig = create_test_app_config(logging=logging_overrides)
 
         levels = get_log_levels_from_config(config)
 
@@ -453,10 +440,7 @@ class TestGetLogFilePaths:
 
     def test_returns_all_file_paths(self, tmp_path: Path) -> None:
         """Should return all log file paths."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {},
-        }
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
         paths = get_log_file_paths(config)
 
@@ -470,7 +454,7 @@ class TestGetHtmlReportPath:
 
     def test_returns_incremental_path_by_default(self, tmp_path: Path) -> None:
         """Should return incremental report path by default."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
         result = get_html_report_path(config)
 
@@ -478,7 +462,7 @@ class TestGetHtmlReportPath:
 
     def test_returns_full_path_in_force_mode(self, tmp_path: Path) -> None:
         """Should return full report path in force mode."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
         result = get_html_report_path(config, force_mode=True)
 
@@ -491,7 +475,7 @@ class TestGetHtmlReportPath:
 
     def test_creates_analytics_directory(self, tmp_path: Path) -> None:
         """Should create analytics directory."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
         get_html_report_path(config)
 
@@ -956,10 +940,11 @@ class TestSetupQueueLogging:
 
     def test_returns_all_loggers(self, tmp_path: Path) -> None:
         """Should return all loggers and listener."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {"max_runs": 2},
-        }
+        logging_overrides = {**MINIMAL_CONFIG_DATA["logging"], "max_runs": 2}
+        config: AppConfig = create_test_app_config(
+            logs_base_dir=str(tmp_path),
+            logging=logging_overrides,
+        )
         levels = {
             "console": logging.INFO,
             "main_file": logging.DEBUG,
@@ -984,10 +969,7 @@ class TestSetupQueueLogging:
 
     def test_creates_log_files(self, tmp_path: Path) -> None:
         """Should create log file directories."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {},
-        }
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
         levels = {
             "console": logging.INFO,
             "main_file": logging.DEBUG,
@@ -1010,14 +992,7 @@ class TestGetLoggers:
 
     def test_returns_tuple_of_loggers(self, tmp_path: Path) -> None:
         """Should return tuple of loggers."""
-        config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path),
-            "logging": {
-                "main_log": "main.log",
-                "analytics_log": "analytics.log",
-                "db_verify_log": "db_verify.log",
-            },
-        }
+        config: AppConfig = create_test_app_config(logs_base_dir=str(tmp_path))
 
         result = get_loggers(config)
         console, error, analytics, db_verify, listener = result
@@ -1032,11 +1007,12 @@ class TestGetLoggers:
 
     def test_returns_fallback_on_error(self) -> None:
         """Should return fallback loggers on error."""
+        config: AppConfig = create_test_app_config()
         with patch(
             "core.logger.get_log_levels_from_config",
             side_effect=ValueError("Config error"),
         ):
-            result = get_loggers({})
+            result = get_loggers(config)
 
         console, _error, _analytics, _db_verify, listener = result
         assert listener is None
@@ -1073,57 +1049,3 @@ class TestCreateFallbackLoggers:
         captured = capsys.readouterr()
         assert "FATAL ERROR" in captured.err
         assert "Type mismatch" in captured.err
-
-
-class TestAppConfigPath:
-    """Tests that logger functions accept AppConfig alongside dict."""
-
-    @staticmethod
-    def _make_app_config(tmp_path: PathLib) -> Any:
-        """Create an AppConfig with tmp_path as logs_base_dir."""
-        from tests.factories import create_test_app_config
-
-        return create_test_app_config(
-            music_library_path=str(tmp_path / "library"),
-            apple_scripts_dir=str(tmp_path / "scripts"),
-            logs_base_dir=str(tmp_path / "logs"),
-            logging={
-                "max_runs": 3,
-                "main_log_file": "main.log",
-                "analytics_log_file": "analytics.log",
-                "csv_output_file": "output.csv",
-                "changes_report_file": "changes.json",
-                "dry_run_report_file": "dryrun.json",
-                "last_incremental_run_file": "lastrun.json",
-                "pending_verification_file": "pending.json",
-                "last_db_verify_log": "dbverify.log",
-                "levels": {"console": "DEBUG", "main_file": "DEBUG", "analytics_file": "INFO"},
-            },
-        )
-
-    def test_get_full_log_path_with_app_config(self, tmp_path: PathLib) -> None:
-        """get_full_log_path should resolve paths from AppConfig."""
-        app_config = self._make_app_config(tmp_path)
-        result = get_full_log_path(app_config, "main_log_file", "default.log")
-
-        expected_base = str(tmp_path / "logs")
-        assert result.startswith(expected_base)
-        assert "main.log" in result
-
-    def test_get_html_report_path_with_app_config(self, tmp_path: PathLib) -> None:
-        """get_html_report_path should resolve path from AppConfig."""
-        app_config = self._make_app_config(tmp_path)
-        result = get_html_report_path(app_config)
-
-        assert "analytics_incremental.html" in result
-        expected_analytics_dir = tmp_path / "logs" / "analytics"
-        assert expected_analytics_dir.exists()
-
-    def test_get_log_levels_from_config_with_app_config(self, tmp_path: PathLib) -> None:
-        """get_log_levels_from_config should parse levels from AppConfig."""
-        app_config = self._make_app_config(tmp_path)
-        levels = get_log_levels_from_config(app_config)
-
-        assert levels["console"] == logging.DEBUG
-        assert levels["main_file"] == logging.DEBUG
-        assert levels["analytics_file"] == logging.INFO

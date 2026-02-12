@@ -39,16 +39,17 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
-from typing import Any, Literal, cast, TYPE_CHECKING
-
-from core.models.track_models import AppConfig
+from typing import TYPE_CHECKING, Literal
 
 from rich.console import Console
 from rich.logging import RichHandler
 
 if TYPE_CHECKING:
-    from rich.status import Status
     from collections.abc import AsyncGenerator
+
+    from rich.status import Status
+
+    from core.models.track_models import AppConfig
 
 # Explicit exports
 __all__ = [
@@ -440,71 +441,45 @@ def convert_path_value_to_string(path_value: str | int | None, default: str, err
         return default
 
 
-def _resolve_config_dict(config: AppConfig | dict[str, Any] | None) -> dict[str, Any] | None:
-    """Convert config to dict for internal use.
-
-    Supports both typed AppConfig and legacy dict[str, Any] callers.
-    This bridge will be removed once all callers migrate to AppConfig.
-    """
-    if config is None:
-        return None
-    if isinstance(config, AppConfig):
-        return config.model_dump()
-    return config
-
-
-def get_path_from_config(config: AppConfig | dict[str, Any], key: str, default: str, error_logger: logging.Logger | None) -> str:
+def get_path_from_config(config: AppConfig, key: str, default: str, error_logger: logging.Logger | None) -> str:
     """Extract relative path from the logging config section.
 
-    Safely retrieves a path value from the nested logging configuration,
-    with validation and error handling.
+    Safely retrieves a path value from the typed logging configuration
+    using attribute access.
 
     Args:
-        config: Application configuration (AppConfig or dict).
-        key: Key to look up in the logging section.
-        default: Default path if key is missing or invalid.
+        config: Typed application configuration.
+        key: Attribute name in ``LoggingConfig`` (e.g. ``"main_log_file"``).
+        default: Default path if attribute is missing or invalid.
         error_logger: Optional logger for error reporting.
 
     Returns:
         Path string from config, or default if not found/invalid.
 
     """
-    config = _resolve_config_dict(config) or {}
-    if "logging" not in config:
-        if error_logger is not None:
-            error_logger.error("Invalid or missing 'logging' section in config.")
+    value = getattr(config.logging, key, None)
+    if value is None:
         return default
 
-    if not isinstance(config["logging"], dict):
-        if error_logger is not None:
-            error_logger.error("Invalid or missing 'logging' section in config.")
-        return default
-
-    logging_config = cast("dict[str, Any]", config["logging"])
-    if key not in logging_config:
-        return default
-
-    return convert_path_value_to_string(logging_config[key], default, error_logger)
+    return convert_path_value_to_string(value, default, error_logger)
 
 
-# Added optional loggers arguments for logging within the utility
 def get_full_log_path(
-    config: AppConfig | dict[str, Any] | None,
+    config: AppConfig | None,
     key: str,
     default: str,
     error_logger: logging.Logger | None = None,
 ) -> str:
     """Return the full log path by joining the base logs directory with the relative path.
 
-    Ensures the base directory and the log file's directory exist. Logs errors using the provided logger.
+    Ensures the base directory and the log file's directory exist.
     """
-    config_dict = _resolve_config_dict(config)
     logs_base_dir = ""
     relative_path = default
 
-    if config_dict is not None:
-        logs_base_dir = str(config_dict.get("logs_base_dir", ""))
-        relative_path = get_path_from_config(config_dict, key, default, error_logger)
+    if config is not None:
+        logs_base_dir = config.logs_base_dir
+        relative_path = get_path_from_config(config, key, default, error_logger)
     elif error_logger is not None:
         error_logger.error("Invalid config passed to get_full_log_path.")
 
@@ -520,27 +495,26 @@ def get_full_log_path(
     return full_path
 
 
-def build_config_alias_map(config: AppConfig | dict[str, Any] | None) -> list[tuple[str, str]]:
+def build_config_alias_map(config: AppConfig | None) -> list[tuple[str, str]]:
     """Build alias mapping from config directories for path shortening.
 
     Creates ordered list of (directory, alias) tuples used by shorten_path()
     to replace long paths with readable aliases like $SCRIPTS, $LOGS.
 
     Args:
-        config: Application configuration (AppConfig or dict).
+        config: Typed application configuration.
 
     Returns:
         List of (resolved_path, alias) tuples ordered by replacement priority.
-        Returns empty list if config is None or invalid.
+        Returns empty list if config is None.
 
     """
-    config_dict = _resolve_config_dict(config)
-    if not isinstance(config_dict, dict):
+    if config is None:
         return []
 
-    scripts_dir = str(Path(config_dict.get("apple_scripts_dir", "")).resolve())
-    logs_dir = str(Path(config_dict.get("logs_base_dir", "")).resolve())
-    music_lib = str(Path(config_dict.get("music_library_path", "")).resolve())
+    scripts_dir = str(Path(config.apple_scripts_dir).resolve())
+    logs_dir = str(Path(config.logs_base_dir).resolve())
+    music_lib = str(Path(config.music_library_path).resolve())
 
     # Order matters — first matched prefix wins
     return [
@@ -550,7 +524,7 @@ def build_config_alias_map(config: AppConfig | dict[str, Any] | None) -> list[tu
     ]
 
 
-def try_config_alias_replacement(norm_path: str, config: AppConfig | dict[str, Any] | None) -> str | None:
+def try_config_alias_replacement(norm_path: str, config: AppConfig | None) -> str | None:
     """Attempt to replace path with config-based aliases.
 
     Checks if the normalized path starts with any configured directory
@@ -558,7 +532,7 @@ def try_config_alias_replacement(norm_path: str, config: AppConfig | dict[str, A
 
     Args:
         norm_path: Normalized (os.path.normpath) absolute path.
-        config: Application configuration (AppConfig or dict).
+        config: Typed application configuration.
 
     Returns:
         Aliased path string (e.g., "$SCRIPTS/fetch.scpt") if match found,
@@ -603,10 +577,9 @@ def try_home_directory_replacement(norm_path: str, error_logger: logging.Logger 
     return None
 
 
-# Added optional loggers arguments for logging within the utility
 def shorten_path(
     path: str,
-    config: AppConfig | dict[str, Any] | None = None,
+    config: AppConfig | None = None,
     error_logger: logging.Logger | None = None,
 ) -> str:
     """Return a shortened, human-friendly representation of *path*.
@@ -656,7 +629,7 @@ class CompactFormatter(logging.Formatter):
         style: Literal["%", "{", "$"] = "%",
         *,
         include_separator: bool = False,
-        config: AppConfig | dict[str, Any] | None = None,
+        config: AppConfig | None = None,
     ) -> None:
         """Initialize the CompactFormatter."""
         # Define a default format string that includes placeholders for shortened paths
@@ -672,7 +645,7 @@ class CompactFormatter(logging.Formatter):
         self.include_separator = include_separator
         # Separator line uses ANSI colors for file logs
         self.separator_line = f"\n{BLUE}{'-' * 60}{RESET}"
-        self.config = config or {}  # Ensure config is at least an empty dict
+        self.config = config
 
     def format(self, record: logging.LogRecord) -> str:
         """Format the LogRecord into a compact string, applying path shortening to specific attributes before standard formatting."""
@@ -885,25 +858,21 @@ class Loggable:
         self.error_logger = error_logger
 
 
-def get_log_levels_from_config(config: AppConfig | dict[str, Any]) -> dict[str, int]:
+def get_log_levels_from_config(config: AppConfig) -> dict[str, int]:
     """Extract log levels from config for different logger targets.
 
-    Parses the logging.levels section of config and converts string level
-    names to logging module constants.
+    Reads the ``logging.levels`` section and converts string level
+    names to ``logging`` module constants.
 
     Args:
-        config: Application configuration (AppConfig or dict).
+        config: Typed application configuration.
 
     Returns:
         Dictionary mapping target names to logging level constants:
-        - "console": Level for RichHandler console output
-        - "main_file": Level for main application log file
-        - "analytics_file": Level for analytics log file
+        ``"console"``, ``"main_file"``, ``"analytics_file"``.
 
     """
-    config_dict = _resolve_config_dict(config) or {}
-    logging_config = config_dict.get("logging", {})
-    levels_config = logging_config.get("levels", {})
+    levels_config = config.logging.levels
 
     log_levels: dict[str, int] = {
         "CRITICAL": logging.CRITICAL,
@@ -926,26 +895,24 @@ def get_log_levels_from_config(config: AppConfig | dict[str, Any]) -> dict[str, 
         return log_levels.get(level_upper, default_level)
 
     return {
-        "console": get_level_from_config(levels_config.get("console", "INFO")),
-        "main_file": get_level_from_config(levels_config.get("main_file", "INFO")),
-        "analytics_file": get_level_from_config(levels_config.get("analytics_file", "INFO")),
+        "console": get_level_from_config(levels_config.console),
+        "main_file": get_level_from_config(levels_config.main_file),
+        "analytics_file": get_level_from_config(levels_config.analytics_file),
     }
 
 
-def get_log_file_paths(config: AppConfig | dict[str, Any]) -> dict[str, str]:
+def get_log_file_paths(config: AppConfig) -> dict[str, str]:
     """Get all log file paths from config with defaults.
 
-    Resolves full paths for each log file by combining logs_base_dir
-    with relative paths from logging config section.
+    Resolves full paths for each log file by combining ``logs_base_dir``
+    with relative paths from the logging config section.
 
     Args:
-        config: Application configuration (AppConfig or dict).
+        config: Typed application configuration.
 
     Returns:
         Dictionary mapping log type to absolute file path:
-        - "main": Main application log
-        - "analytics": Analytics/metrics log
-        - "db_verify": Database verification log
+        ``"main"``, ``"analytics"``, ``"db_verify"``.
 
     """
     return {
@@ -986,12 +953,10 @@ def create_console_logger(levels: dict[str, int]) -> logging.Logger:
 
 
 def setup_queue_logging(
-    config: AppConfig | dict[str, Any], levels: dict[str, int], log_files: dict[str, str]
+    config: AppConfig, levels: dict[str, int], log_files: dict[str, str]
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener]:
     """Set up queue-based file logging with all handlers."""
-    config_dict = _resolve_config_dict(config) or {}
-    logging_config = config_dict.get("logging", {})
-    max_runs = logging_config.get("max_runs", 3)
+    max_runs = config.logging.max_runs
     run_handler = RunHandler(max_runs)
 
     file_formatter = CompactFormatter(
@@ -1044,9 +1009,8 @@ def setup_queue_logging(
     return main_logger, error_logger, analytics_logger, db_verify_logger, listener
 
 
-# Added loggers as return values and ensure_directory calls
 def get_loggers(
-    config: AppConfig | dict[str, Any],
+    config: AppConfig,
 ) -> tuple[logging.Logger, logging.Logger, logging.Logger, logging.Logger, SafeQueueListener | None]:
     """Create and return loggers with QueueHandler for non-blocking file logging.
 
@@ -1058,15 +1022,11 @@ def get_loggers(
         fallback loggers with basic StreamHandler configuration.
 
     Args:
-        config: Application configuration (AppConfig or legacy dict).
+        config: Typed application configuration.
 
     Returns:
-        Tuple containing:
-        - console_logger: Logger for user-facing console output (RichHandler)
-        - error_logger: Logger for error messages (file output via queue)
-        - analytics_logger: Logger for analytics/metrics (separate file)
-        - db_verify_logger: Logger for database verification (separate file)
-        - listener: SafeQueueListener managing file handlers (None on failure)
+        Tuple of (console_logger, error_logger, analytics_logger,
+        db_verify_logger, listener). Listener is ``None`` on failure.
 
     """
     try:
@@ -1131,21 +1091,16 @@ def create_fallback_loggers(
     return console_fallback, error_fallback, analytics_fallback, db_verify_fallback, None
 
 
-def get_html_report_path(config: AppConfig | dict[str, Any] | None, force_mode: bool = False) -> str:
+def get_html_report_path(config: AppConfig | None, force_mode: bool = False) -> str:
     """Get the path for HTML analytics report based on run mode."""
-    config_dict = _resolve_config_dict(config)
-    if config_dict is None:
-        # Use print for error if config is invalid, as logger might not be available
+    if config is None:
         print("ERROR: Invalid config passed to get_html_report_path.", file=sys.stderr)
-        # Fallback to current directory
         logs_base_dir = ""
     else:
-        logs_base_dir = config_dict.get("logs_base_dir", "")
+        logs_base_dir = config.logs_base_dir
 
     analytics_dir = str(Path(logs_base_dir) / "analytics")
-    # Ensure directory exists
     ensure_directory(analytics_dir)
 
-    # Choose file based on mode
     report_filename = "analytics_full.html" if force_mode else "analytics_incremental.html"
     return str(Path(analytics_dir) / report_filename)

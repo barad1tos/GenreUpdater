@@ -226,6 +226,12 @@ class LogLevelsConfig(BaseModel):
     main_file: LogLevel
     analytics_file: LogLevel
 
+    @field_validator("console", "main_file", "analytics_file", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        """Accept case-insensitive log level names (e.g. 'debug' -> 'DEBUG')."""
+        return value.upper() if isinstance(value, str) else value
+
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
