@@ -21,15 +21,17 @@ from services.cache.hash_service import UnifiedHashService
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from core.models.track_models import AppConfig
+
 
 class AlbumCacheService:
     """Specialized cache service for album release years with CSV persistence."""
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         """Initialize album cache service.
 
         Args:
-            config: Cache configuration dictionary
+            config: Typed application configuration
             logger: Optional logger instance
         """
         self.config = config

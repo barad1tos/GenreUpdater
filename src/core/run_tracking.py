@@ -10,20 +10,23 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from core.logger import get_full_log_path
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 # noinspection PyTypeChecker
 class IncrementalRunTracker:
     """Utility class for tracking incremental run timestamps."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: AppConfig) -> None:
         """Initialize the run tracker.
 
         Args:
-            config: Application configuration
+            config: Typed application configuration
 
         """
         self.config = config

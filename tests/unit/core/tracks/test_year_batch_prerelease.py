@@ -9,12 +9,26 @@ Tests the three prerelease_handling modes:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.unit.core.tracks.conftest import create_test_track, create_year_batch_processor
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.unit.core.tracks.conftest import (  # sourcery skip: dont-import-test-modules
+    create_test_track,
+    create_year_batch_processor,
+)
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
+
+
+def _config_with_prerelease_handling(mode: str) -> AppConfig:
+    """Create an AppConfig with a specific prerelease_handling mode."""
+    config = create_test_app_config()
+    config.year_retrieval.processing.prerelease_handling = mode
+    return config
 
 
 class TestPrereleaseHandlingProcessEditable:
@@ -25,14 +39,14 @@ class TestPrereleaseHandlingProcessEditable:
         """Test that editable tracks are processed in mixed prerelease/purchased album."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "process_editable"}}},
+            config=_config_with_prerelease_handling("process_editable"),
         )
 
         # Mixed album: 1 prerelease + 2 purchased
         tracks = [
-            create_test_track("1", track_status="Prerelease"),  # prerelease
-            create_test_track("2", track_status="Purchased"),  # editable
-            create_test_track("3", track_status="Purchased"),  # editable
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
+            create_test_track(track_id="track-c", track_status="Purchased"),
         ]
 
         updated_tracks: list[Any] = []
@@ -53,12 +67,12 @@ class TestPrereleaseHandlingProcessEditable:
         """Test that mixed album is marked for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "process_editable"}}},
+            config=_config_with_prerelease_handling("process_editable"),
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
@@ -70,16 +84,15 @@ class TestPrereleaseHandlingProcessEditable:
 
     @pytest.mark.asyncio
     async def test_default_mode_is_process_editable(self, mock_year_determinator: MagicMock) -> None:
-        """Test that default behavior (no config) is process_editable."""
-        # No prerelease_handling in config
+        """Test that default behavior (no config override) is process_editable."""
+        # Default config — prerelease_handling defaults to "process_editable"
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={},
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -97,14 +110,14 @@ class TestPrereleaseHandlingSkipAll:
         """Test that album is skipped entirely when ANY track is prerelease."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "skip_all"}}},
+            config=_config_with_prerelease_handling("skip_all"),
         )
 
         # Mixed album - but in skip_all mode, entire album should be skipped
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
-            create_test_track("3", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
+            create_test_track(track_id="track-c", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -118,12 +131,12 @@ class TestPrereleaseHandlingSkipAll:
         """Test that skip_all does not mark album for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "skip_all"}}},
+            config=_config_with_prerelease_handling("skip_all"),
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
@@ -137,13 +150,13 @@ class TestPrereleaseHandlingSkipAll:
         """Test that album without prerelease is processed normally."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "skip_all"}}},
+            config=_config_with_prerelease_handling("skip_all"),
         )
 
         # All purchased - no prerelease
         tracks = [
-            create_test_track("1", track_status="Purchased"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Purchased"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -161,12 +174,12 @@ class TestPrereleaseHandlingMarkOnly:
         """Test that album is marked for verification but not processed."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "mark_only"}}},
+            config=_config_with_prerelease_handling("mark_only"),
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -185,13 +198,13 @@ class TestPrereleaseHandlingMarkOnly:
         """Test that album without prerelease is processed normally."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "mark_only"}}},
+            config=_config_with_prerelease_handling("mark_only"),
         )
 
         # All purchased - no prerelease
         tracks = [
-            create_test_track("1", track_status="Purchased"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Purchased"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -211,13 +224,13 @@ class TestAllPrereleaseAlbum:
             mock_year_determinator.reset_mock()
             processor = create_year_batch_processor(
                 year_determinator=mock_year_determinator,
-                config={"year_retrieval": {"processing": {"prerelease_handling": mode}}},
+                config=_config_with_prerelease_handling(mode),
             )
 
             # All prerelease - no editable tracks
             tracks = [
-                create_test_track("1", track_status="Prerelease"),
-                create_test_track("2", track_status="Prerelease"),
+                create_test_track(track_id="track-a", track_status="Prerelease"),
+                create_test_track(track_id="track-b", track_status="Prerelease"),
             ]
 
             with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -231,12 +244,12 @@ class TestAllPrereleaseAlbum:
         """Test that all-prerelease album is marked for verification."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "process_editable"}}},
+            config=_config_with_prerelease_handling("process_editable"),
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Prerelease"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Prerelease"),
         ]
 
         await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
@@ -254,13 +267,13 @@ class TestInvalidPrereleaseHandlingConfig:
         """Test that invalid prerelease_handling mode logs warning and defaults to process_editable."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "invalid_mode"}}},
+            config=_config_with_prerelease_handling("invalid_mode"),
         )
 
         # Mixed album: 1 prerelease + 1 purchased (editable)
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
@@ -279,12 +292,12 @@ class TestInvalidPrereleaseHandlingConfig:
         """Test that warning message includes valid options for user guidance."""
         processor = create_year_batch_processor(
             year_determinator=mock_year_determinator,
-            config={"year_retrieval": {"processing": {"prerelease_handling": "wrong_value"}}},
+            config=_config_with_prerelease_handling("wrong_value"),
         )
 
         tracks = [
-            create_test_track("1", track_status="Prerelease"),
-            create_test_track("2", track_status="Purchased"),
+            create_test_track(track_id="track-a", track_status="Prerelease"),
+            create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
         with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):

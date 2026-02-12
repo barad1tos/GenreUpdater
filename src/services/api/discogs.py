@@ -16,9 +16,10 @@ from core.models.normalization import normalize_for_matching
 from .api_base import BaseApiClient, ScoredRelease
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
     import logging
+    from collections.abc import Awaitable, Callable
 
+    from core.models.track_models import AppConfig, YearRetrievalConfig
     from metrics import Analytics
 
 
@@ -115,8 +116,8 @@ class DiscogsClient(BaseApiClient):
         *,
         score_release_func: Callable[..., float],
         cache_service: Any,  # Type as Any for now since CacheServiceProtocol is in utils
-        scoring_config: dict[str, Any],
-        config: dict[str, Any],
+        scoring_config: YearRetrievalConfig,
+        config: AppConfig,
         cache_ttl_days: int = 30,
     ) -> None:
         """Initialize Discogs client.
@@ -129,8 +130,8 @@ class DiscogsClient(BaseApiClient):
             make_api_request_func: Function to make API requests with rate-limiting
             score_release_func: Function to score releases for originality
             cache_service: Cache service for storing results
-            scoring_config: Scoring configuration
-            config: General configuration
+            scoring_config: Year retrieval configuration with scoring rules
+            config: Typed application configuration
             cache_ttl_days: Cache TTL in days
 
         """
@@ -370,9 +371,8 @@ class DiscogsClient(BaseApiClient):
             List of keywords used to detect reissues
 
         """
-        scoring_cfg = self.scoring_config
-        reissue_keywords: list[str] = scoring_cfg.get("reissue_detection", {}).get("reissue_keywords", [])
-        remaster_keywords: list[str] = self.config.get("cleaning", {}).get("remaster_keywords", [])
+        reissue_keywords = list(self.scoring_config.reissue_detection.reissue_keywords)
+        remaster_keywords = list(self.config.cleaning.remaster_keywords)
         # Use concatenation to avoid mutating the original config lists
         return reissue_keywords + remaster_keywords
 

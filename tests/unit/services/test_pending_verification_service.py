@@ -6,7 +6,7 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,26 +16,86 @@ from services.pending_verification import (
     PendingVerificationService,
     VerificationReason,
 )
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict[str, Any]:
+def config(tmp_path: Path) -> AppConfig:
     """Provide minimal configuration required by the service."""
-    return {
-        "logs_base_dir": str(tmp_path),
-        "logging": {
+    return create_test_app_config(
+        logs_base_dir=str(tmp_path),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
+            "csv_output_file": "output.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "lastrun.json",
             "pending_verification_file": "csv/pending_verification.csv",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {"console": "INFO", "main_file": "INFO", "analytics_file": "INFO"},
         },
-        "year_retrieval": {
+        year_retrieval={
+            "enabled": False,
+            "preferred_api": "musicbrainz",
+            "api_auth": {
+                "discogs_token": "test-token",
+                "musicbrainz_app_name": "TestApp/1.0",
+                "contact_email": "test@example.com",
+            },
+            "rate_limits": {
+                "discogs_requests_per_minute": 25,
+                "musicbrainz_requests_per_second": 1,
+                "concurrent_api_calls": 3,
+            },
             "processing": {
+                "batch_size": 10,
+                "delay_between_batches": 60,
+                "adaptive_delay": False,
+                "cache_ttl_days": 30,
                 "pending_verification_interval_days": 1,
                 "prerelease_recheck_days": 7,
             },
+            "logic": {
+                "min_valid_year": 1900,
+                "definitive_score_threshold": 85,
+                "definitive_score_diff": 15,
+                "preferred_countries": [],
+                "major_market_codes": [],
+            },
+            "reissue_detection": {"reissue_keywords": []},
+            "scoring": {
+                "base_score": 0,
+                "artist_exact_match_bonus": 0,
+                "album_exact_match_bonus": 0,
+                "perfect_match_bonus": 0,
+                "album_variation_bonus": 0,
+                "album_substring_penalty": 0,
+                "album_unrelated_penalty": 0,
+                "mb_release_group_match_bonus": 0,
+                "type_album_bonus": 0,
+                "type_ep_single_penalty": 0,
+                "type_compilation_live_penalty": 0,
+                "status_official_bonus": 0,
+                "status_bootleg_penalty": 0,
+                "status_promo_penalty": 0,
+                "reissue_penalty": 0,
+                "year_diff_penalty_scale": 0,
+                "year_diff_max_penalty": 0,
+                "year_before_start_penalty": 0,
+                "year_after_end_penalty": 0,
+                "year_near_start_bonus": 0,
+                "country_artist_match_bonus": 0,
+                "country_major_market_bonus": 0,
+                "source_mb_bonus": 0,
+                "source_discogs_bonus": 0,
+            },
         },
-        "reporting": {
-            "problematic_albums_path": "reports/problematic_albums.csv",
-        },
-    }
+    )
 
 
 @pytest.fixture
@@ -52,7 +112,7 @@ def error_logger() -> MagicMock:
 
 @pytest.fixture
 def service(
-    config: dict[str, Any],
+    config: AppConfig,
     console_logger: MagicMock,
     error_logger: MagicMock,
 ) -> PendingVerificationService:
@@ -327,14 +387,27 @@ async def test_remove_from_pending_resets_attempt_count(
 
 @pytest.mark.asyncio
 async def test_malformed_attempt_count_defaults_to_zero(
-    config: dict[str, Any],
     console_logger: MagicMock,
     error_logger: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Invalid attempt_count in CSV should default to 0."""
-    # Update config to use tmp_path for logs
-    config["logs_base_dir"] = str(tmp_path)
+    # Create config with tmp_path for logs
+    tmp_config = create_test_app_config(
+        logs_base_dir=str(tmp_path),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
+            "csv_output_file": "output.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "lastrun.json",
+            "pending_verification_file": "csv/pending_verification.csv",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {"console": "INFO", "main_file": "INFO", "analytics_file": "INFO"},
+        },
+    )
 
     # Create CSV with malformed attempt_count (non-integer value)
     csv_dir = tmp_path / "csv"
@@ -346,7 +419,7 @@ async def test_malformed_attempt_count_defaults_to_zero(
     )
 
     # Create new service and initialize
-    service = PendingVerificationService(config, console_logger, error_logger)
+    service = PendingVerificationService(tmp_config, console_logger, error_logger)
     await service.initialize()
 
     # Should default to 0, not crash
@@ -401,11 +474,21 @@ class TestShouldAutoVerify:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_disabled(self, service: PendingVerificationService) -> None:
+    async def test_returns_false_when_disabled(
+        self,
+        config: AppConfig,
+        console_logger: MagicMock,
+        error_logger: MagicMock,
+    ) -> None:
         """Should return False when auto_verify_days is 0."""
-        service.config["pending_verification"] = {"auto_verify_days": 0}
-        await service.initialize()
-        result = await service.should_auto_verify()
+        from core.models.track_models import PendingVerificationConfig
+
+        disabled_config = config.model_copy(
+            update={"pending_verification": PendingVerificationConfig(auto_verify_days=0)},
+        )
+        disabled_service = PendingVerificationService(disabled_config, console_logger, error_logger)
+        await disabled_service.initialize()
+        result = await disabled_service.should_auto_verify()
         assert result is False
 
     @pytest.mark.asyncio

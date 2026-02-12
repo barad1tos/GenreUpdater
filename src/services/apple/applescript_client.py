@@ -11,7 +11,7 @@ import asyncio
 import logging
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.analytics_decorator import track_instance_method
 from core.logger import LogFormat, spinner
@@ -30,6 +30,7 @@ from core.apple_script_names import (
 )
 
 if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
     from core.retry_handler import DatabaseRetryHandler
     from metrics import Analytics
 
@@ -45,7 +46,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
     Semaphore initialization is done in the async initialize method.
 
     Attributes:
-        config (dict): Configuration dictionary loaded from config.yaml or my-config.yaml.
+        config (AppConfig): Typed application configuration.
         apple_scripts_dir (str): Directory containing AppleScript files.
         console_logger (logging.Logger): Logger for console output.
         error_logger (logging.Logger): Logger for error output.
@@ -55,7 +56,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: Analytics,
         console_logger: logging.Logger | None = None,
         error_logger: logging.Logger | None = None,
@@ -67,10 +68,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self.console_logger = console_logger if console_logger is not None else logging.getLogger(__name__)
         self.error_logger = error_logger if error_logger is not None else self.console_logger
 
-        self.apple_scripts_dir = config.get("apple_scripts_dir")
+        self.apple_scripts_dir = config.apple_scripts_dir
         if not self.apple_scripts_dir:
-            # Log critical error but don't raise here in __init__, let the initialize method handle it
-            self.error_logger.critical("Configuration error: 'apple_scripts_dir' key is missing.")
+            self.error_logger.critical("Configuration error: 'apple_scripts_dir' is empty or not set.")
 
         # Semaphore and rate limiter are initialized in the async initialize method
         self.semaphore: asyncio.Semaphore | None = None
@@ -132,18 +132,18 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         if self.semaphore is None:
             try:
-                concurrent_limit = self.config.get("apple_script_concurrency", 5)
+                concurrent_limit = self.config.apple_script_concurrency
                 if concurrent_limit <= 0:
                     error_msg = f"Invalid concurrency limit: {concurrent_limit}. Must be positive."
                     self.error_logger.critical(error_msg)
                     raise ValueError(error_msg)
 
                 # Check if rate limiting is enabled (provides better throughput stability)
-                rate_limit_config = self.config.get("apple_script_rate_limit", {})
-                if rate_limit_config.get("enabled", False):
+                rate_limit_cfg = self.config.apple_script_rate_limit
+                if rate_limit_cfg.enabled:
                     # Use enhanced rate limiter (rate limiting + concurrency control)
-                    requests_per_window = rate_limit_config.get("requests_per_window", 10)
-                    window_size = rate_limit_config.get("window_size_seconds", 1.0)
+                    requests_per_window = rate_limit_cfg.requests_per_window
+                    window_size = rate_limit_cfg.window_size_seconds
 
                     self.rate_limiter = EnhancedRateLimiter(
                         requests_per_window=requests_per_window,
@@ -271,7 +271,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         # Convert timeout to float, using configured default if not specified
         if timeout is None:
-            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
+            timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
         timeout_float = float(timeout) if timeout is not None else 3600.0
 
         # Build contextual information
@@ -337,7 +337,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             raise ValueError(msg)
 
         if timeout is None:
-            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 3600)
+            timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
 
         timeout_float = float(timeout) if timeout is not None else 3600.0
 
@@ -387,7 +387,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         """
         if timeout is None:
-            timeout = self.config.get("applescript_timeouts", {}).get("default") or self.config.get("applescript_timeout_seconds", 600)
+            timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
 
         timeout_float = float(timeout) if timeout is not None else 600.0
 

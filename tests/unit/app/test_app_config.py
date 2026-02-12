@@ -104,6 +104,42 @@ class TestConfigLoad:
         assert data1 is data2
         mock_load.assert_called_once()
 
+    def test_load_stores_app_config_and_dict(self) -> None:
+        """load() should store both _app_config and _config dict."""
+        from core.models.track_models import AppConfig
+
+        mock_app_config = _make_test_app_config()
+
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
+            config = Config("/fake/config.yaml")
+            result = config.load()
+
+        # _app_config holds the Pydantic model
+        assert config._app_config is result
+        assert isinstance(config._app_config, AppConfig)
+        # _config holds the dict view from model_dump()
+        assert config._config == result.model_dump()
+        assert config._config["apple_script_concurrency"] == 2
+
+    def test_load_guard_clause_unreachable(self) -> None:
+        """Defensive guard after load should raise if _app_config is somehow None.
+
+        This tests the branch at lines 95-97 which is a defensive check
+        that should never be reached in normal operation.
+        """
+        mock_app_config = _make_test_app_config()
+
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
+            config = Config("/fake/config.yaml")
+            config.load()
+
+        # Force _app_config to None to simulate corrupted state
+        config._app_config = None
+        config._loaded = True
+
+        with pytest.raises(RuntimeError, match="Configuration not loaded"):
+            config.load()
+
     def test_load_raises_on_invalid_path(self) -> None:
         """Config should raise RuntimeError for load failures."""
         with patch("app.app_config.load_yaml_config", side_effect=FileNotFoundError("not found")):
@@ -287,3 +323,40 @@ class TestConfigResolvedPath:
         # _resolve_config_path handles OSError gracefully
         result = config._resolve_config_path()
         assert "config.yaml" in result
+
+
+class TestLegacyTestArtistsMigration:
+    """Tests for AppConfig.migrate_legacy_test_artists validator."""
+
+    def test_migrates_top_level_to_development(self) -> None:
+        """Top-level test_artists should migrate and emit deprecation warning."""
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            app_config = _make_test_app_config(
+                test_artists=["Metallica", "Slayer"],
+                development={"test_artists": []},
+            )
+        assert app_config.development.test_artists == ["Metallica", "Slayer"]
+
+    def test_no_migration_when_development_has_values(self) -> None:
+        """When both are set, top-level is ignored with a warning."""
+        with pytest.warns(DeprecationWarning, match="ignored"):
+            app_config = _make_test_app_config(
+                test_artists=["Metallica"],
+                development={"test_artists": ["Iron Maiden"]},
+            )
+        assert app_config.development.test_artists == ["Iron Maiden"]
+
+    def test_no_migration_when_top_level_is_empty(self) -> None:
+        """When top-level test_artists is empty, nothing changes."""
+        app_config = _make_test_app_config(
+            test_artists=[],
+            development={"test_artists": []},
+        )
+        assert app_config.development.test_artists == []
+
+    def test_default_no_top_level_key(self) -> None:
+        """When top-level test_artists is not provided, development keeps its value."""
+        app_config = _make_test_app_config(
+            development={"test_artists": ["Opeth"]},
+        )
+        assert app_config.development.test_artists == ["Opeth"]

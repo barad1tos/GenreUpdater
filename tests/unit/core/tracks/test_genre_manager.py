@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.models.protocols import AnalyticsProtocol
 from core.tracks.genre_manager import GenreManager
-from core.models.track_models import ChangeLogEntry, TrackDict
+from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
 
-from tests.mocks.csv_mock import MockLogger
-from tests.mocks.track_data import DummyTrackData
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.track_data import DummyTrackData  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.tracks.track_processor import TrackProcessor
@@ -25,7 +26,7 @@ class TestGenreManager:
     @staticmethod
     def create_manager(
         mock_track_processor: TrackProcessor | None = None,
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
         if mock_track_processor is None:
@@ -35,12 +36,9 @@ class TestGenreManager:
         console_logger = MockLogger()
         error_logger = MockLogger()
         analytics = cast(AnalyticsProtocol, cast(object, MagicMock(spec=AnalyticsProtocol)))
-        test_config = config or {
-            "genre_update": {
-                "batch_size": 10,
-                "concurrent_limit": 2,
-            }
-        }
+        test_config = config or create_test_app_config(
+            genre_update={"batch_size": 10, "concurrent_limit": 2},
+        )
 
         return GenreManager(
             track_processor=mock_track_processor,

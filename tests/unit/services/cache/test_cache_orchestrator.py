@@ -4,45 +4,33 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import tempfile
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.models.track_models import TrackDict
 from services.cache.orchestrator import CacheOrchestrator
 
+from tests.factories import create_test_app_config
+
 if TYPE_CHECKING:
     from core.models.protocols import CacheableValue
+    from core.models.track_models import AppConfig
 
 
 class TestCacheOrchestrator:
     """Comprehensive tests for CacheOrchestrator."""
 
     @staticmethod
-    def create_orchestrator(config: dict[str, Any] | None = None) -> CacheOrchestrator:
+    def create_orchestrator(config: AppConfig | None = None) -> CacheOrchestrator:
         """Create a CacheOrchestrator instance for testing."""
-        temp_dir = tempfile.mkdtemp()
-        default_config = {
-            "caching": {
-                "default_ttl_seconds": 5,
-                "cleanup_interval_seconds": 1,
-                "api_result_cache_path": str(Path(temp_dir) / "api_results.json"),
-                "album_cache_sync_interval": 1,
-            },
-            "api_cache_file": str(Path(temp_dir) / "cache.json"),
-            "album_years_cache_file": str(Path(temp_dir) / "album_years.csv"),
-            "generic_cache_file": str(Path(temp_dir) / "generic_cache.json"),
-            "logging": {"base_dir": temp_dir},
-            "log_directory": temp_dir,
-        }
-        test_config = {**default_config, **(config or {})}
+        if config is None:
+            config = create_test_app_config()
         mock_logger = MagicMock(spec=logging.Logger)
-        return CacheOrchestrator(test_config, mock_logger)
+        return CacheOrchestrator(config, mock_logger)
 
-    # =========================== INITIALIZATION TESTS ===========================
+    # Initialization tests
 
     @pytest.mark.asyncio
     async def test_initialization_creates_services(self) -> None:
@@ -83,7 +71,7 @@ class TestCacheOrchestrator:
         ):
             await orchestrator.initialize()
 
-    # =========================== ALBUM CACHE TESTS ===========================
+    # Album cache tests
 
     @pytest.mark.asyncio
     async def test_get_album_year_delegates(self) -> None:
@@ -106,7 +94,7 @@ class TestCacheOrchestrator:
 
             mock_store.assert_called_once_with("Artist", "Album", "1999", 85)
 
-    # =========================== GENERIC CACHE TESTS ===========================
+    # Generic cache tests
 
     @pytest.mark.asyncio
     async def test_get_returns_cached_value(self) -> None:
@@ -183,7 +171,7 @@ class TestCacheOrchestrator:
 
             mock_set.assert_called_once_with("key", "value", 30)
 
-    # =========================== INVALIDATION TESTS ===========================
+    # Invalidation tests
 
     @pytest.mark.asyncio
     async def test_invalidate_for_track(self) -> None:
@@ -254,7 +242,7 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
-    # =========================== BACKWARD COMPATIBILITY TESTS ===========================
+    # Backward compatibility tests
 
     @pytest.mark.asyncio
     async def test_cache_property(self) -> None:
@@ -282,7 +270,7 @@ class TestCacheOrchestrator:
         assert "key" in result
         assert result["key"] == ("Artist", "Album", "1999")
 
-    # =========================== PROTOCOL METHODS TESTS ===========================
+    # Protocol methods tests
 
     @pytest.mark.asyncio
     async def test_load_cache_noop(self) -> None:

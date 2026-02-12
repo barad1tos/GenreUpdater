@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.track_models import TrackDict
@@ -208,7 +209,7 @@ class MockAnalytics(Analytics):
         loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
 
         # Initialize parent class with minimal config
-        super().__init__(config={}, loggers=loggers, max_events=1000)
+        super().__init__(config=create_test_app_config(), loggers=loggers, max_events=1000)
 
         # Override events list for testing
         self.events: list[dict[str, Any]] = []

@@ -13,8 +13,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.tracks.year_batch import YearBatchProcessor
-from tests.unit.core.tracks.conftest import create_test_track, create_year_batch_processor, create_year_determinator_mock
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.unit.core.tracks.conftest import (
+    create_test_track,
+    create_year_batch_processor,
+    create_year_determinator_mock,
+)  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.track_models import ChangeLogEntry
@@ -62,7 +66,7 @@ class TestBatchProcessingErrorResilience:
 
         # Create 3 albums: first and third will succeed, second will fail
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("Artist1", "Album 1"), [create_test_track("1", artist="Artist1", album="Album 1")]),
+            (("Artist1", "Album 1"), [create_test_track(artist="Artist1", album="Album 1")]),
             (("Artist2", "Failing Album"), [create_test_track("2", artist="Artist2", album="Failing Album")]),
             (("Artist3", "Album 3"), [create_test_track("3", artist="Artist3", album="Album 3")]),
         ]
@@ -79,7 +83,6 @@ class TestBatchProcessingErrorResilience:
                 concurrency_limit=2,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
-                force=False,
             )
 
         # Verify the failure was logged
@@ -116,7 +119,7 @@ class TestBatchProcessingErrorResilience:
 
         # 5 albums: 2 will fail, 3 will succeed
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("A1", "Success 1"), [create_test_track("1", artist="A1", album="Success 1")]),
+            (("A1", "Success 1"), [create_test_track(artist="A1", album="Success 1")]),
             (("A2", "Fail 1"), [create_test_track("2", artist="A2", album="Fail 1")]),
             (("A3", "Success 2"), [create_test_track("3", artist="A3", album="Success 2")]),
             (("A4", "Fail 2"), [create_test_track("4", artist="A4", album="Fail 2")]),
@@ -134,7 +137,6 @@ class TestBatchProcessingErrorResilience:
                 concurrency_limit=3,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
-                force=False,
             )
 
         # All 3 successful albums should have been processed
@@ -154,7 +156,7 @@ class TestBatchProcessingErrorResilience:
         processor = create_year_batch_processor(year_determinator=year_determinator)
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("Artist", "Album"), [create_test_track("1")]),
+            (("Artist", "Album"), [create_test_track()]),
         ]
 
         updated_tracks: list[TrackDict] = []
@@ -168,7 +170,6 @@ class TestBatchProcessingErrorResilience:
                 concurrency_limit=1,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
-                force=False,
             )
 
         # The error message should be in the logs
@@ -198,7 +199,7 @@ class TestSequentialProcessingErrors:
         )
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("Artist", "Album"), [create_test_track("1")]),
+            (("Artist", "Album"), [create_test_track()]),
         ]
 
         with pytest.raises(RuntimeError, match="Simulated sequential failure"):
@@ -223,6 +224,8 @@ class TestSequentialProcessingErrors:
             changes_log: list[ChangeLogEntry],
             force: bool = False,
         ) -> None:
+            """Simulate album processing that fails for 'Failing' album."""
+            _ = artist, album_tracks, updated_tracks, changes_log, force
             if album == "Failing":
                 raise RuntimeError("boom")
             processed_albums.append(album)
@@ -231,7 +234,7 @@ class TestSequentialProcessingErrors:
         processor._process_single_album = AsyncMock(side_effect=mock_process)
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("A1", "First"), [create_test_track("1")]),
+            (("A1", "First"), [create_test_track()]),
             (("A2", "Failing"), [create_test_track("2")]),
             (("A3", "Third"), [create_test_track("3")]),
         ]
@@ -260,6 +263,8 @@ class TestSequentialProcessingErrors:
             changes_log: list[ChangeLogEntry],
             force: bool = False,
         ) -> None:
+            """Count calls and raise for 'Failing' album."""
+            _ = artist, album_tracks, updated_tracks, changes_log, force
             nonlocal call_count
             call_count += 1
             if album == "Failing":
@@ -269,7 +274,7 @@ class TestSequentialProcessingErrors:
         processor._process_single_album = AsyncMock(side_effect=mock_process)
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("A1", "First"), [create_test_track("1")]),
+            (("A1", "First"), [create_test_track()]),
             (("A2", "Failing"), [create_test_track("2")]),
             (("A3", "Third"), [create_test_track("3")]),
         ]
@@ -309,7 +314,7 @@ class TestCancelledErrorHandling:
         )
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("Artist", "Album"), [create_test_track("1")]),
+            (("Artist", "Album"), [create_test_track()]),
         ]
 
         with caplog.at_level(logging.WARNING):
@@ -335,7 +340,7 @@ class TestCancelledErrorHandling:
         )
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
-            (("Artist", "Album"), [create_test_track("1")]),
+            (("Artist", "Album"), [create_test_track()]),
         ]
 
         with caplog.at_level(logging.WARNING):
@@ -353,90 +358,47 @@ class TestCancelledErrorHandling:
 
 
 # ---------------------------------------------------------------------------
-# Task 6: Config Validation Fallback Tests
+# Task 6: Config Validation via Pydantic Tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestConfigValidationFallbacks:
-    """Config extraction with invalid/edge-case values falls back to defaults."""
+class TestConfigValidationViaPydantic:
+    """Pydantic validates processing settings at construction time."""
 
-    def test_invalid_batch_size_falls_back_to_default(self) -> None:
-        """Non-numeric batch_size falls back to 10."""
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"batch_size": "not_a_number"}},
-        )
-        assert batch_size == 10
+    def test_pydantic_rejects_negative_batch_size(self) -> None:
+        """Negative batch_size is rejected by Pydantic validation."""
+        from pydantic import ValidationError
 
-    def test_negative_batch_size_clamps_to_one(self) -> None:
-        """Negative batch_size is clamped to 1 via max(1, ...)."""
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"batch_size": -5}},
-        )
-        assert batch_size == 1
+        from core.models.track_models import ProcessingConfig
 
-    def test_zero_batch_size_clamps_to_one(self) -> None:
-        """Zero batch_size is clamped to 1."""
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"batch_size": 0}},
-        )
-        assert batch_size == 1
+        with pytest.raises(ValidationError, match="batch_size"):
+            ProcessingConfig(batch_size=-5, delay_between_batches=60, adaptive_delay=False, cache_ttl_days=30, pending_verification_interval_days=30)
 
-    def test_invalid_delay_falls_back_to_default(self) -> None:
-        """Non-numeric delay falls back to 60."""
-        _, delay, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"delay_between_batches": "invalid"}},
-        )
-        assert delay == 60
+    def test_pydantic_rejects_zero_batch_size(self) -> None:
+        """Zero batch_size is rejected by Pydantic validation."""
+        from pydantic import ValidationError
 
-    def test_negative_delay_clamps_to_zero(self) -> None:
-        """Negative delay is clamped to 0 via max(0, ...)."""
-        _, delay, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"delay_between_batches": -10}},
-        )
-        assert delay == 0
+        from core.models.track_models import ProcessingConfig
 
-    def test_none_batch_size_falls_back_to_default(self) -> None:
-        """None batch_size triggers TypeError → falls back to 10."""
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(
-            {"processing": {"batch_size": None}},
-        )
-        assert batch_size == 10
+        with pytest.raises(ValidationError, match="batch_size"):
+            ProcessingConfig(batch_size=0, delay_between_batches=60, adaptive_delay=False, cache_ttl_days=30, pending_verification_interval_days=30)
 
-    def test_none_concurrency_uses_applescript_fallback(self) -> None:
-        """When api_concurrency is None, apple_script_concurrency is used."""
-        processor = create_year_batch_processor(
-            config={"apple_script_concurrency": 3},
-        )
-        limit = processor._determine_concurrency_limit({"rate_limits": {}})
+    def test_concurrency_limit_uses_config_values(self) -> None:
+        """Concurrency limit is derived from typed config fields."""
+        config = create_test_app_config(apple_script_concurrency=3)
+        processor = create_year_batch_processor(config=config)
+        limit = processor._determine_concurrency_limit()
+        # min(apple_script_concurrency=3, concurrent_api_calls=3) = 3
         assert limit == 3
 
-    def test_invalid_api_concurrency_falls_back_to_applescript(self) -> None:
-        """Non-numeric api_concurrency falls back to apple_script_concurrency."""
-        processor = create_year_batch_processor(
-            config={"apple_script_concurrency": 2},
-        )
-        limit = processor._determine_concurrency_limit(
-            {"rate_limits": {"concurrent_api_calls": "not_a_number"}},
-        )
-        assert limit == 2
-
-    def test_zero_api_concurrency_uses_applescript(self) -> None:
-        """Zero api_concurrency falls back to apple_script_concurrency."""
-        processor = create_year_batch_processor(
-            config={"apple_script_concurrency": 2},
-        )
-        limit = processor._determine_concurrency_limit(
-            {"rate_limits": {"concurrent_api_calls": 0}},
-        )
-        assert limit == 2
-
-    def test_adaptive_delay_flag_parsed(self) -> None:
-        """Adaptive delay bool is correctly extracted from config."""
-        _, _, adaptive = YearBatchProcessor._get_processing_settings(
-            {"processing": {"adaptive_delay": True}},
-        )
-        assert adaptive is True
+    def test_concurrency_limit_picks_smaller_of_two(self) -> None:
+        """Concurrency limit picks the smaller of AppleScript and API limits."""
+        config = create_test_app_config(apple_script_concurrency=5)
+        processor = create_year_batch_processor(config=config)
+        # concurrent_api_calls defaults to 3 in factory
+        limit = processor._determine_concurrency_limit()
+        assert limit == 3
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +434,7 @@ class TestTrackIdValidation:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """All invalid IDs → empty list + warning logged."""
+        """All invalid IDs produce empty list and warning logged."""
         processor = create_year_batch_processor()
         with caplog.at_level(logging.WARNING):
             result = processor._validate_track_ids(
@@ -518,7 +480,7 @@ class TestBulkUpdateMixedResults:
         )
 
         tracks = [
-            create_test_track("1", name="T1"),
+            create_test_track(name="T1"),
             create_test_track("2", name="T2"),
             create_test_track("3", name="T3"),
         ]
@@ -543,7 +505,7 @@ class TestBulkUpdateMixedResults:
             side_effect=RuntimeError("unexpected error"),
         )
 
-        tracks = [create_test_track("1", name="T1")]
+        tracks = [create_test_track(name="T1")]
 
         with caplog.at_level(logging.ERROR):
             successful, failed = await processor.update_album_tracks_bulk_async(
@@ -562,7 +524,7 @@ class TestBulkUpdateMixedResults:
         processor._update_track_with_retry = AsyncMock(return_value=True)
 
         tracks = [
-            create_test_track("1", name="T1"),
+            create_test_track(name="T1"),
             create_test_track("2", name="T2"),
         ]
 

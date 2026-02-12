@@ -29,8 +29,10 @@ from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from core.tracks.year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     import logging
+    from collections.abc import Sequence
+
+    from core.models.track_models import AppConfig
 
 # Track already-logged cleaning exceptions to avoid duplicate messages
 _logged_cleaning_exceptions: set[tuple[str, str]] = set()
@@ -632,7 +634,7 @@ def clean_names(
     track_name: str,
     album_name: str,
     *,
-    config: dict[str, Any],
+    config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> tuple[str, str]:
@@ -644,8 +646,7 @@ def clean_names(
         artist: Artist name (used for exception checking).
         track_name: Raw track title to clean.
         album_name: Raw album title to clean.
-        config: Dict with exceptions.track_cleaning, cleaning.remaster_keywords,
-            and cleaning.album_suffixes_to_remove sections.
+        config: Typed application configuration.
         console_logger: Logger for debug/info output.
         error_logger: Logger for error reporting.
 
@@ -661,8 +662,8 @@ def clean_names(
             album_name,
         )
 
-    exceptions = config.get("exceptions", {}).get("track_cleaning", [])
-    if _is_cleaning_exception(artist, album_name, exceptions):
+    exceptions_list = [{"artist": exc.artist, "album": exc.album} for exc in config.exceptions.track_cleaning]
+    if _is_cleaning_exception(artist, album_name, exceptions_list):
         # Log only once per artist/album combination
         key = (artist.lower(), album_name.lower())
         if key not in _logged_cleaning_exceptions:
@@ -674,12 +675,8 @@ def clean_names(
             )
         return track_name.strip(), album_name.strip()
 
-    cleaning_config = config.get("cleaning", {})
-    remaster_keywords = cleaning_config.get(
-        "remaster_keywords",
-        ["remaster", "remastered"],
-    )
-    album_suffixes_raw: list[str] = cleaning_config.get("album_suffixes_to_remove", [])
+    remaster_keywords = list(config.cleaning.remaster_keywords)
+    album_suffixes_raw: list[str] = list(config.cleaning.album_suffixes_to_remove)
     compiled_suffixes = _compile_suffix_patterns(album_suffixes_raw)
 
     # Helper function for cleaning strings using remove_parentheses_with_keywords

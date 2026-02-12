@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
 
 ### Changed
+- **Config type safety (B4)**: migrated `Analytics`, `PendingVerificationService`, `DatabaseVerifier`, `GenreManager` from `dict[str, Any]` to typed `AppConfig`; added missing `AnalyticsConfig` fields; fixed `definitive_score_threshold/diff` model types (`float` → `int`); added `model_validator` to migrate legacy top-level `test_artists` into `development.test_artists`; fixed `max_events=0` being silently overridden (falsy `or` → `is None` check)
+- **Config type safety (B3)**: migrated core year pipeline (`ExternalApiOrchestrator`, `YearRetriever`, `YearBatchProcessor`, `TrackUpdateExecutor`, `YearDetermination`, `TrackProcessor`) from `dict[str, Any]` to typed `AppConfig`; removed dead dict-validation methods replaced by Pydantic
+- **Config type safety (B2)**: migrated `LibrarySnapshotService` and `AppleScriptClient` from `dict[str, Any]` to typed `AppConfig`; loc-based validation assertions per Sourcery
+- **Config type safety (B1)**: migrated 24 services from `dict[str, Any]` to typed `AppConfig` for config access (cache, tracks, API, orchestrator modules)
+- Removed dead coercion helpers (`_coerce_*`, `_resolve_*`) and unreachable try/except after AppConfig migration
 - Removed dead temp-file execution infrastructure from AppleScript executor (superseded by bulk verification)
 - Added `from __future__ import annotations` to 33 source files, moved type-only imports to `TYPE_CHECKING` blocks
 - Test fixture deduplication: shared logger fixtures in root conftest
@@ -29,7 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Applied ruff format to all new test files
 
 ### Fixed
+- `AlbumTypeDetectionConfig` pattern fields now use `None` vs `[]` semantics (`None` = defaults, `[]` = disabled)
 - Dependabot PRs failing CI due to missing env vars in `load_config()` validation
+- `DiscogsClient` received empty dict instead of typed `AppConfig`/`YearRetrievalConfig` — latent runtime crash on `_get_reissue_keywords()`
+- Test cast mismatch: `cast(Analytics, ...)` → `cast(AnalyticsProtocol, ...)` to match `GenreManager` signature
+- CI failures since B1: `full_sync.py` ruff format violation; `test_external_api_real.py` fixtures returning `dict` instead of `AppConfig`
+- Legacy top-level `test_artists` now emits `DeprecationWarning` when migrated or silently ignored
 
 ## [3.0.0] - 2026-01-12
 

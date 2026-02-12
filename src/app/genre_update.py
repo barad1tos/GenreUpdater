@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
 
     from app.track_cleaning import TrackCleaningService
-    from core.models.track_models import TrackDict
+    from core.models.track_models import AppConfig, TrackDict
     from core.tracks.artist_renamer import ArtistRenamer
     from core.tracks.genre_manager import GenreManager
     from core.tracks.track_processor import TrackProcessor
@@ -21,7 +21,7 @@ class GenreUpdateService:
         self,
         track_processor: TrackProcessor,
         genre_manager: GenreManager,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         cleaning_service: TrackCleaningService | None = None,
@@ -32,7 +32,7 @@ class GenreUpdateService:
         Args:
             track_processor: Processor for fetching tracks.
             genre_manager: Manager for genre updates.
-            config: Application configuration.
+            config: Typed application configuration.
             console_logger: Logger for console output.
             error_logger: Logger for error output.
             cleaning_service: Optional service for metadata cleaning.

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import warnings
 from enum import StrEnum
 from typing import Any, Literal, TypedDict, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Type checking improvements for better IDE support and type safety
 T = TypeVar("T")
@@ -130,13 +131,19 @@ class PendingVerificationConfig(BaseModel):
 
 
 class AlbumTypeDetectionConfig(BaseModel):
-    """Album type detection patterns for year fallback logic."""
+    """Album type detection patterns for year fallback logic.
 
-    special_patterns: list[str] = Field(default_factory=list)
-    compilation_patterns: list[str] = Field(default_factory=list)
-    reissue_patterns: list[str] = Field(default_factory=list)
-    soundtrack_patterns: list[str] = Field(default_factory=list)
-    various_artists_names: list[str] = Field(default_factory=list)
+    Semantics for pattern fields:
+        - ``None`` (default): use built-in defaults
+        - ``[]`` (empty list): explicitly disable the category
+        - ``["pattern", ...]``: use the provided patterns
+    """
+
+    special_patterns: list[str] | None = None
+    compilation_patterns: list[str] | None = None
+    reissue_patterns: list[str] | None = None
+    soundtrack_patterns: list[str] | None = None
+    various_artists_names: list[str] | None = None
 
 
 class LibrarySnapshotConfig(BaseModel):
@@ -251,6 +258,8 @@ class AnalyticsConfig(BaseModel):
     duration_thresholds: DurationThresholds
     max_events: int = Field(ge=0)
     compact_time: bool
+    time_format: str = "%Y-%m-%d %H:%M:%S"
+    enable_gc_collect: bool = True
 
 
 class GenreUpdateConfig(BaseModel):
@@ -296,8 +305,8 @@ class LogicConfig(BaseModel):
     min_valid_year: int = Field(ge=1000)
     absurd_year_threshold: int = Field(default=1970, ge=1000)
     suspicion_threshold_years: int = Field(default=10, ge=0)
-    definitive_score_threshold: float = Field(ge=0, le=100)
-    definitive_score_diff: float = Field(ge=0)
+    definitive_score_threshold: int = Field(ge=0, le=100)
+    definitive_score_diff: int = Field(ge=0)
     min_confidence_for_new_year: float = Field(default=30, ge=0, le=100)
     preferred_countries: list[str]
     major_market_codes: list[str]
@@ -457,6 +466,30 @@ class AppConfig(BaseModel):
 
     # Legacy / compat — top-level test_artists (prefer development.test_artists)
     test_artists: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def migrate_legacy_test_artists(self) -> AppConfig:
+        """Migrate top-level test_artists into development.test_artists.
+
+        Old configs may have a top-level ``test_artists`` key alongside an empty
+        ``development.test_artists``.  This validator copies the legacy value so
+        that consumers reading ``config.development.test_artists`` get the
+        expected list.
+        """
+        if self.test_artists and not self.development.test_artists:
+            self.development.test_artists = list(self.test_artists)
+            warnings.warn(
+                "Top-level 'test_artists' is deprecated. Move it to 'development.test_artists' in your config file.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        elif self.test_artists and self.development.test_artists:
+            warnings.warn(
+                "Both top-level 'test_artists' and 'development.test_artists' are set. Top-level value is ignored; using development section.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self
 
 
 # API Response Models

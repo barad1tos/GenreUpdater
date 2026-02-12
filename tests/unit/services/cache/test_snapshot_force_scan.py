@@ -7,26 +7,26 @@ Logic: Weekly auto-force (7+ days), no first-run force.
 - 7+ days since last force: auto-force for manual edit detection
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from core.models.cache_types import LibraryCacheMetadata
 from services.cache.snapshot import LibrarySnapshotService
+from tests.factories import create_test_app_config
 
 
 @pytest.fixture
-def snapshot_service() -> LibrarySnapshotService:
-    """Create snapshot service with mocked config."""
-    config = MagicMock()
-    config.library_snapshot = MagicMock()
-    config.library_snapshot.enabled = True
-    config.library_snapshot.delta_enabled = True
-    config.library_snapshot.compress = False
-    config.library_snapshot.max_age_hours = 24
-    config.library_snapshot.snapshot_dir = "/tmp/test_snapshots"
-    config.music_library_path = "/tmp/test_library"
+def snapshot_service(tmp_path: Path) -> LibrarySnapshotService:
+    """Create snapshot service with test config."""
+    config = create_test_app_config(
+        logs_base_dir=str(tmp_path),
+        music_library_path=str(tmp_path / "Music Library.musiclibrary"),
+    )
     logger = MagicMock()
     return LibrarySnapshotService(config, logger)
 

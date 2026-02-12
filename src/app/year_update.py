@@ -15,11 +15,10 @@ from metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
     import logging
-    from typing import Any
 
     from app.pipeline_snapshot import PipelineSnapshotManager
     from app.track_cleaning import TrackCleaningService
-    from core.models.track_models import TrackDict
+    from core.models.track_models import AppConfig, TrackDict
     from core.tracks.artist_renamer import ArtistRenamer
     from core.tracks.track_processor import TrackProcessor
     from core.tracks.year_retriever import YearRetriever
@@ -36,7 +35,7 @@ class YearUpdateService:
         track_processor: TrackProcessor,
         year_retriever: YearRetriever,
         snapshot_manager: PipelineSnapshotManager,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         cleaning_service: TrackCleaningService | None = None,
@@ -48,7 +47,7 @@ class YearUpdateService:
             track_processor: Processor for fetching and updating tracks.
             year_retriever: Retriever for year operations.
             snapshot_manager: Manager for pipeline snapshots.
-            config: Application configuration.
+            config: Typed application configuration.
             console_logger: Logger for console output.
             error_logger: Logger for error output.
             cleaning_service: Optional service for cleaning track metadata.

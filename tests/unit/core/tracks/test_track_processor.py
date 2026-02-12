@@ -13,6 +13,7 @@ from core.models.validators import SecurityValidator
 from core.tracks.track_processor import TrackProcessor
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.protocols import (
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
         CacheableValue,
         CacheServiceProtocol,
     )
+    from core.models.track_models import AppConfig
 
 
 class _MockLogger(logging.Logger):
@@ -75,7 +77,7 @@ class _MockAnalytics(Analytics):
         mock_error = _MockLogger("error")
         mock_analytics = _MockLogger("analytics")
         loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
-        super().__init__(config={}, loggers=loggers, max_events=1000)
+        super().__init__(config=create_test_app_config(), loggers=loggers, max_events=1000)
 
 
 class _MockAppleScriptClient:
@@ -298,7 +300,7 @@ class TestTrackProcessorAllure:
     def create_processor(
         ap_client: _MockAppleScriptClient | None = None,
         cache_service: _MockCacheService | None = None,
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         dry_run: bool = False,
     ) -> TrackProcessor:
         """Create a TrackProcessor instance for testing.
@@ -306,7 +308,7 @@ class TestTrackProcessorAllure:
         Args:
             ap_client: AppleScript client instance
             cache_service: Cache service instance
-            config: Configuration dictionary
+            config: Typed application configuration
             dry_run: Whether to run in dry-run mode
 
         Returns:
@@ -322,7 +324,9 @@ class TestTrackProcessorAllure:
         error_logger = _MockLogger()
         analytics = _MockAnalytics()
 
-        test_config = config or {"apple_script": {"timeout": 30}, "development": {"test_artists": ["Test Artist"]}}
+        test_config = config or create_test_app_config(
+            development={"test_artists": ["Test Artist"]},
+        )
 
         return TrackProcessor(
             ap_client=cast("AppleScriptClientProtocol", cast(object, ap_client)),
@@ -344,7 +348,7 @@ class TestTrackProcessorAllure:
             cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             console_logger=_MockLogger(),
             error_logger=_MockLogger(),
-            config={"apple_script": {"timeout": 30}},
+            config=create_test_app_config(),
             analytics=cast("AnalyticsProtocol", cast(object, _MockAnalytics())),
             dry_run=True,
             security_validator=mock_security_validator,
@@ -393,9 +397,8 @@ class TestTrackProcessorAllure:
     )
     def test_applescript_timeout_calculation(self, is_single_artist: bool, expected_timeout: int) -> None:
         """Test AppleScript timeout calculation for different scenarios."""
-        # Test with default timeouts (no applescript_timeouts config)
-        config = {"apple_script": {"timeout": 30}}
-        processor = self.create_processor(config=config)
+        # Test with default timeouts (uses AppConfig defaults)
+        processor = self.create_processor()
         timeout = processor._get_applescript_timeout(is_single_artist)
         assert timeout == expected_timeout
 

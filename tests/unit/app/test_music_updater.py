@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.music_updater import MusicUpdater
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
     MockAppleScriptClient,
@@ -42,7 +43,7 @@ class TestMusicUpdaterAllure:
         # Analytics
         deps.analytics = MockAnalytics()
 
-        # Configuration
+        # Configuration — raw dict for services still on dict (B2+ scope)
         deps.config = {
             "logs_base_dir": "/tmp/test_logs",
             "apple_script": {"timeout": 30},
@@ -74,6 +75,12 @@ class TestMusicUpdaterAllure:
                 "unwanted_phrases": ["(Remastered)", "(Deluxe Edition)"],
             },
         }
+
+        # Typed AppConfig for services migrated in B1
+        deps.app_config = create_test_app_config(
+            logs_base_dir="/tmp/test_logs",
+            development={"test_artists": ["Test Artist"]},
+        )
 
         # Flags
         deps.dry_run = False
@@ -197,19 +204,21 @@ class TestMusicUpdaterAllure:
     async def test_run_update_years(self) -> None:
         """Test year update operation."""
         deps = self.create_mock_dependencies()
+
+        # Enable year retrieval so process_album_years doesn't short-circuit
+        deps.app_config.year_retrieval.enabled = True
+
         updater = MusicUpdater(deps)
 
-        # Mock Music app running check
-        with patch("app.music_updater.is_music_app_running", return_value=True):
-            # Setup test tracks
-            track1 = DummyTrackData.create(track_id="1", album="Album 1", year="")
-            track2 = DummyTrackData.create(track_id="2", album="Album 2", year="2020")
+        # Setup test tracks
+        track1 = DummyTrackData.create(track_id="1", album="Album 1", year="")
+        track2 = DummyTrackData.create(track_id="2", album="Album 2", year="2020")
 
-            # Mock track fetching
-            await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
+        # Mock track fetching
+        await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
-            # Mock API year retrieval
-            deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
+        # Mock API year retrieval
+        deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
 
         with (
             patch(

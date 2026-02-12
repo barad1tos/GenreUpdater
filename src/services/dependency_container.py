@@ -277,7 +277,7 @@ class DependencyContainer:
         if dry_run:
             # Create the real client first
             real_client = AppleScriptClient(
-                self._config,
+                self.app_config,
                 analytics,
                 self._console_logger,
                 self._error_logger,
@@ -286,14 +286,14 @@ class DependencyContainer:
             # Then wrap it with DryRunAppleScriptClient
             self._ap_client = DryRunAppleScriptClient(
                 real_client,
-                self._config,
+                self.app_config,
                 self._console_logger,
                 self._error_logger,
             )
             self._console_logger.info("Dry run enabled - using %s", LogFormat.entity("DryRunAppleScriptClient"))
         else:
             self._ap_client = AppleScriptClient(
-                self._config,
+                self.app_config,
                 analytics,
                 self._console_logger,
                 self._error_logger,
@@ -311,7 +311,7 @@ class DependencyContainer:
             self._config = self._load_config()
 
         # Configure album type detection patterns from config
-        configure_album_patterns(self._config)
+        configure_album_patterns(self.app_config)
 
         # Construct missing service instances
         if self._analytics is None:
@@ -321,18 +321,18 @@ class DependencyContainer:
                 self._analytics_logger,
             )
             self._analytics = Analytics(
-                self._config,
+                self.app_config,
                 loggers,
             )
         if self._cache_service is None:
-            self._cache_service = CacheOrchestrator(self._config, self._console_logger)
+            self._cache_service = CacheOrchestrator(self.app_config, self._console_logger)
         if self._library_snapshot_service is None:
-            self._library_snapshot_service = LibrarySnapshotService(self._config, self._console_logger)
+            self._library_snapshot_service = LibrarySnapshotService(self.app_config, self._console_logger)
         if self._pending_verification_service is None:
-            self._pending_verification_service = PendingVerificationService(self._config, self._console_logger, self._error_logger)
+            self._pending_verification_service = PendingVerificationService(self.app_config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
-                self._config,
+                self.app_config,
                 self._console_logger,
                 self._error_logger,
                 self._analytics,
@@ -340,15 +340,15 @@ class DependencyContainer:
                 self._pending_verification_service,
             )
 
-        # Initialize retry handler from config
+        # Initialize retry handler from typed config
         if self._retry_handler is None:
-            retry_config = self._config.get("applescript_retry", {})
+            retry_cfg = self.app_config.applescript_retry
             retry_policy = RetryPolicy(
-                max_retries=retry_config.get("max_retries", 3),
-                base_delay_seconds=retry_config.get("base_delay_seconds", 1.0),
-                max_delay_seconds=retry_config.get("max_delay_seconds", 10.0),
-                jitter_range=retry_config.get("jitter_range", 0.2),
-                operation_timeout_seconds=retry_config.get("operation_timeout_seconds", 60.0),
+                max_retries=retry_cfg.max_retries,
+                base_delay_seconds=retry_cfg.base_delay_seconds,
+                max_delay_seconds=retry_cfg.max_delay_seconds,
+                jitter_range=retry_cfg.jitter_range,
+                operation_timeout_seconds=retry_cfg.operation_timeout_seconds,
             )
             self._retry_handler = DatabaseRetryHandler(
                 logger=self._console_logger,
@@ -527,20 +527,20 @@ class DependencyContainer:
         try:
             scripts_path = Path(scripts_dir_str)
             if not scripts_path.is_dir():
-                short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+                short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
                 self._console_logger.error("AppleScripts directory does not exist: %s", short_path)
                 return
         except PermissionError as exc:
-            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Permission denied for AppleScripts directory: %s. Error: %s", short_path, exc)
             return
         except Exception as exc:
-            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Error checking AppleScripts directory: %s. Error: %s", short_path, exc)
             return
 
         # Log the directory being used with shortened path
-        short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+        short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
         run_type = "DRY RUN - " if is_dry_run else ""
         self._console_logger.info("%sAppleScripts: %s", run_type, short_path)
 

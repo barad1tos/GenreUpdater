@@ -15,12 +15,15 @@ from core import debug_utils
 from core.models.track_models import ChangeLogEntry, TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
+from core.models.protocols import AnalyticsProtocol
 from core.tracks.year_consistency import (
-    _is_reasonable_year as is_reasonable_year,
+    _is_reasonable_year as is_reasonable_year,  # pyright: ignore[reportPrivateUsage]
 )
 from core.tracks.year_retriever import YearRetriever
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
     from core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
@@ -81,30 +84,9 @@ def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
 
 
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> AppConfig:
     """Create test config."""
-    return {
-        "prerelease": {
-            "skip_prerelease": True,
-            "future_year_threshold": 1,
-            "recheck_days": 7,
-        },
-        "track_update": {
-            "retry_attempts": 3,
-            "retry_delay_seconds": 1.0,
-        },
-        "year_validation": {
-            "absurd_year_threshold": 1950,
-        },
-        "year_fallback": {
-            "enabled": True,
-            "year_difference_threshold": 10,
-        },
-        "year_processing": {
-            "batch_size": 50,
-            "concurrency_limit": 5,
-        },
-    }
+    return create_test_app_config()
 
 
 @pytest.fixture
@@ -116,18 +98,18 @@ def year_retriever(
     retry_handler: DatabaseRetryHandler,
     logger: logging.Logger,
     error_logger: logging.Logger,
-    config: dict[str, Any],
+    config: AppConfig,
 ) -> YearRetriever:
     """Create YearRetriever instance."""
     return YearRetriever(
         track_processor=mock_track_processor,
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
-        external_api=cast("ExternalApiServiceProtocol", mock_external_api),
-        pending_verification=cast("PendingVerificationServiceProtocol", mock_pending_verification),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
+        external_api=cast("ExternalApiServiceProtocol", cast(object, mock_external_api)),
+        pending_verification=cast("PendingVerificationServiceProtocol", cast(object, mock_pending_verification)),
         retry_handler=retry_handler,
         console_logger=logger,
         error_logger=error_logger,
-        analytics=MagicMock(),
+        analytics=cast(AnalyticsProtocol, cast(object, MagicMock())),
         config=config,
     )
 
@@ -143,20 +125,6 @@ def sample_track() -> TrackDict:
         genre="Rock",
         year="2020",
     )
-
-
-class TestResolveNonNegativeFloat:
-    """Tests for _resolve_non_negative_float static method."""
-
-    def test_returns_valid_value(self) -> None:
-        """Test returns valid float value."""
-        result = YearRetriever._resolve_non_negative_float(1.5, 0.0)
-        assert result == 1.5
-
-    def test_returns_default_for_negative(self) -> None:
-        """Test returns default for negative value."""
-        result = YearRetriever._resolve_non_negative_float(-1.0, 5.0)
-        assert result == 5.0
 
 
 class TestHandleFutureYearsFound:
@@ -240,8 +208,7 @@ class TestUpdateTrackWithRetry:
         mock_track_processor: AsyncMock,
     ) -> None:
         """Test retries on exception (not on False return)."""
-        # Configure retries via config
-        year_retriever.config["year_retrieval"] = {"processing": {"track_retry_attempts": 2, "track_retry_delay": 0.01}}
+        # Retry behavior comes from retry_handler fixture (max_retries=2)
         # Retry only happens on OSError/ValueError/RuntimeError exceptions
         mock_track_processor.update_track_async.side_effect = [
             OSError("Network error"),
@@ -363,127 +330,33 @@ class TestUpdateAlbumTracksBulkAsync:
         assert result[1] >= 0  # At least 0 failures tracked
 
 
-class TestGetProcessingSettings:
-    """Tests for _get_processing_settings static method."""
-
-    def test_returns_defaults_for_empty_config(self) -> None:
-        """Test returns defaults for empty config."""
-        result = YearBatchProcessor._get_processing_settings({})
-        assert result == (10, 60, False)
-
-    def test_extracts_from_processing_section(self) -> None:
-        """Test extracts settings from processing section."""
-        config = {
-            "processing": {
-                "batch_size": 20,
-                "delay_between_batches": 30,
-                "adaptive_delay": True,
-            }
-        }
-        result = YearBatchProcessor._get_processing_settings(config)
-        assert result == (20, 30, True)
-
-    def test_handles_invalid_batch_size(self) -> None:
-        """Test handles invalid batch size gracefully."""
-        config = {"processing": {"batch_size": "invalid"}}
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(config)
-        assert batch_size == 10
-
-    def test_handles_invalid_delay(self) -> None:
-        """Test handles invalid delay gracefully."""
-        config = {"processing": {"delay_between_batches": "invalid"}}
-        _, delay, _ = YearBatchProcessor._get_processing_settings(config)
-        assert delay == 60
-
-    def test_enforces_minimum_batch_size(self) -> None:
-        """Test enforces minimum batch size of 1."""
-        config = {"processing": {"batch_size": -5}}
-        batch_size, _, _ = YearBatchProcessor._get_processing_settings(config)
-        assert batch_size == 1
-
-    def test_enforces_minimum_delay(self) -> None:
-        """Test enforces minimum delay of 0."""
-        config = {"processing": {"delay_between_batches": -10}}
-        _, delay, _ = YearBatchProcessor._get_processing_settings(config)
-        assert delay == 0
-
-
 class TestDetermineConcurrencyLimit:
-    """Tests for _determine_concurrency_limit method."""
+    """Tests for _determine_concurrency_limit method.
 
-    def test_uses_apple_script_concurrency_by_default(self, year_retriever: YearRetriever) -> None:
-        """Test uses apple_script_concurrency when no API concurrency set."""
-        year_retriever.config["apple_script_concurrency"] = 3
-        result = year_retriever._batch_processor._determine_concurrency_limit({})
-        assert result == 3
+    After migration to AppConfig, this method reads from self.config directly
+    (no year_config dict parameter).
+    """
 
     def test_uses_min_of_api_and_apple_script(self, year_retriever: YearRetriever) -> None:
         """Test uses minimum of API and AppleScript concurrency."""
-        year_retriever.config["apple_script_concurrency"] = 5
-        year_config = {"rate_limits": {"concurrent_api_calls": 3}}
-        result = year_retriever._batch_processor._determine_concurrency_limit(year_config)
+        year_retriever.config.apple_script_concurrency = 5
+        year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 3
+        result = year_retriever._batch_processor._determine_concurrency_limit()
         assert result == 3
 
-    def test_handles_invalid_apple_script_concurrency(self, year_retriever: YearRetriever) -> None:
-        """Test handles invalid apple_script_concurrency."""
-        year_retriever.config["apple_script_concurrency"] = "invalid"
-        result = year_retriever._batch_processor._determine_concurrency_limit({})
+    def test_uses_apple_script_when_lower(self, year_retriever: YearRetriever) -> None:
+        """Test uses apple_script_concurrency when it's the lower value."""
+        year_retriever.config.apple_script_concurrency = 2
+        year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 5
+        result = year_retriever._batch_processor._determine_concurrency_limit()
+        assert result == 2
+
+    def test_minimum_is_one(self, year_retriever: YearRetriever) -> None:
+        """Test concurrency limit is at least 1."""
+        year_retriever.config.apple_script_concurrency = 1
+        year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 1
+        result = year_retriever._batch_processor._determine_concurrency_limit()
         assert result == 1
-
-    def test_handles_invalid_api_concurrency(self, year_retriever: YearRetriever) -> None:
-        """Test handles invalid API concurrency."""
-        year_retriever.config["apple_script_concurrency"] = 3
-        year_config = {"rate_limits": {"concurrent_api_calls": "invalid"}}
-        result = year_retriever._batch_processor._determine_concurrency_limit(year_config)
-        assert result == 3
-
-    def test_handles_zero_api_concurrency(self, year_retriever: YearRetriever) -> None:
-        """Test handles zero API concurrency."""
-        year_retriever.config["apple_script_concurrency"] = 3
-        year_config = {"rate_limits": {"concurrent_api_calls": 0}}
-        result = year_retriever._batch_processor._determine_concurrency_limit(year_config)
-        assert result == 3
-
-
-class TestWarnLegacyYearConfig:
-    """Tests for _warn_legacy_year_config method."""
-
-    def test_warns_on_legacy_batch_size(self, year_retriever: YearRetriever) -> None:
-        """Test warns on legacy batch_size config."""
-        year_config = {"batch_size": 10}
-        year_retriever._batch_processor._warn_legacy_year_config(year_config)
-        # No exception = success (warning logged)
-
-    def test_warns_on_legacy_delay(self, year_retriever: YearRetriever) -> None:
-        """Test warns on legacy delay_between_batches config."""
-        year_config = {"delay_between_batches": 30}
-        year_retriever._batch_processor._warn_legacy_year_config(year_config)
-        # No exception = success (warning logged)
-
-    def test_no_warning_on_new_config(self, year_retriever: YearRetriever) -> None:
-        """Test no warning on new config format."""
-        year_config = {"processing": {"batch_size": 10}}
-        year_retriever._batch_processor._warn_legacy_year_config(year_config)
-        # No exception = success
-
-
-class TestResolvePositiveInt:
-    """Tests for _resolve_positive_int static method."""
-
-    def test_returns_valid_positive_int(self) -> None:
-        """Test returns valid positive integer."""
-        result = YearRetriever._resolve_positive_int(5, 1)
-        assert result == 5
-
-    def test_returns_default_for_zero(self) -> None:
-        """Test returns default for zero."""
-        result = YearRetriever._resolve_positive_int(0, 10)
-        assert result == 10
-
-    def test_returns_default_for_negative(self) -> None:
-        """Test returns default for negative."""
-        result = YearRetriever._resolve_positive_int(-5, 10)
-        assert result == 10
 
 
 class TestNormalizeCollaborationArtist:
@@ -1145,7 +1018,7 @@ class TestProcessAlbumYears:
         year_retriever: YearRetriever,
     ) -> None:
         """Test returns True early when year retrieval is disabled."""
-        year_retriever.config["year_retrieval"] = {"enabled": False}
+        year_retriever.config.year_retrieval.enabled = False
         result = await year_retriever.process_album_years([])
         assert result is True
 
@@ -1155,7 +1028,7 @@ class TestProcessAlbumYears:
         year_retriever: YearRetriever,
     ) -> None:
         """Test returns False when exception occurs."""
-        year_retriever.config["year_retrieval"] = {"enabled": True}
+        year_retriever.config.year_retrieval.enabled = True
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(side_effect=OSError("Test error")))
 
         result = await year_retriever.process_album_years([])
@@ -1167,7 +1040,7 @@ class TestProcessAlbumYears:
         year_retriever: YearRetriever,
     ) -> None:
         """Test processes tracks successfully."""
-        year_retriever.config["year_retrieval"] = {"enabled": True}
+        year_retriever.config.year_retrieval.enabled = True
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(return_value=([], [])))
 
         tracks = [
@@ -1186,7 +1059,7 @@ class TestProcessAlbumYears:
         mock_external_api: AsyncMock,
     ) -> None:
         """Test initializes external API when _initialized attribute missing."""
-        year_retriever.config["year_retrieval"] = {"enabled": True}
+        year_retriever.config.year_retrieval.enabled = True
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(return_value=([], [])))
         # Ensure _initialized attribute does not exist
         if hasattr(mock_external_api, "_initialized"):
@@ -1208,7 +1081,7 @@ class TestProcessAlbumYears:
         mock_external_api: AsyncMock,
     ) -> None:
         """Test logs warning when no tracks updated but some had empty years."""
-        year_retriever.config["year_retrieval"] = {"enabled": True}
+        year_retriever.config.year_retrieval.enabled = True
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(return_value=([], [])))  # No updates
         mock_external_api._initialized = True  # Skip initialization
 
@@ -1227,8 +1100,8 @@ class TestProcessAlbumYears:
         mock_external_api: AsyncMock,
     ) -> None:
         """Test logs warning when problematic albums are found."""
-        year_retriever.config["year_retrieval"] = {"enabled": True}
-        year_retriever.config["reporting"] = {"min_attempts_for_report": 3}
+        year_retriever.config.year_retrieval.enabled = True
+        year_retriever.config.reporting.min_attempts_for_report = 3
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(return_value=([], [])))
         mock_external_api._initialized = True
 
@@ -1320,11 +1193,11 @@ class TestProcessAlbumsInBatches:
         year_retriever: YearRetriever,
     ) -> None:
         """Test uses sequential processing when adaptive_delay=False and concurrency=1."""
-        year_retriever.config["year_retrieval"] = {
-            "processing": {"batch_size": 10, "delay_between_batches": 0, "adaptive_delay": False},
-            "rate_limits": {"concurrent_api_calls": 1},
-        }
-        year_retriever.config["apple_script_concurrency"] = 1
+        year_retriever.config.year_retrieval.processing.batch_size = 10
+        year_retriever.config.year_retrieval.processing.delay_between_batches = 0
+        year_retriever.config.year_retrieval.processing.adaptive_delay = False
+        year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 1
+        year_retriever.config.apple_script_concurrency = 1
         mock_sequential = AsyncMock()
         mock_concurrent = AsyncMock()
 
@@ -1346,11 +1219,11 @@ class TestProcessAlbumsInBatches:
         year_retriever: YearRetriever,
     ) -> None:
         """Test uses concurrent processing when concurrency > 1."""
-        year_retriever.config["year_retrieval"] = {
-            "processing": {"batch_size": 10, "delay_between_batches": 0, "adaptive_delay": False},
-            "rate_limits": {"concurrent_api_calls": 5},
-        }
-        year_retriever.config["apple_script_concurrency"] = 5
+        year_retriever.config.year_retrieval.processing.batch_size = 10
+        year_retriever.config.year_retrieval.processing.delay_between_batches = 0
+        year_retriever.config.year_retrieval.processing.adaptive_delay = False
+        year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 5
+        year_retriever.config.apple_script_concurrency = 5
         mock_sequential = AsyncMock()
         mock_concurrent = AsyncMock()
 

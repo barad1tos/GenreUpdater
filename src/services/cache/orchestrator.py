@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from core.models.cache_types import AlbumCacheEntry
-    from core.models.track_models import CachedApiResult, TrackDict
+    from core.models.track_models import AppConfig, CachedApiResult, TrackDict
 
 T = TypeVar("T")
 
@@ -38,11 +38,11 @@ T = TypeVar("T")
 class CacheOrchestrator(CacheServiceProtocol):
     """Orchestrates multiple specialized cache services with unified interface."""
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         """Initialize CacheOrchestrator with configuration.
 
         Args:
-            config: Cache configuration dictionary
+            config: Typed application configuration
             logger: Optional logger instance
         """
         self.config = config

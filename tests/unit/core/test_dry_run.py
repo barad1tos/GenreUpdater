@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
 from core.dry_run import DRY_RUN_SUCCESS_MESSAGE, DryRunAppleScriptClient
 from core.models.types import AppleScriptClientProtocol
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -23,12 +27,12 @@ def mock_real_client() -> Any:
 
 
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> AppConfig:
     """Create test configuration."""
-    return {
-        "apple_scripts_dir": "/path/to/scripts",
-        "development": {"test_artists": []},
-    }
+    return create_test_app_config(
+        apple_scripts_dir="/path/to/scripts",
+        development={"test_artists": []},
+    )
 
 
 @pytest.fixture
@@ -42,7 +46,7 @@ def loggers() -> tuple[logging.Logger, logging.Logger]:
 @pytest.fixture
 def dry_run_client(
     mock_real_client: Any,
-    config: dict[str, Any],
+    config: AppConfig,
     loggers: tuple[logging.Logger, logging.Logger],
 ) -> DryRunAppleScriptClient:
     """Create a DryRunAppleScriptClient instance."""
@@ -61,7 +65,7 @@ class TestDryRunClientInit:
     def test_init_stores_dependencies(
         self,
         mock_real_client: Any,
-        config: dict[str, Any],
+        config: AppConfig,
         loggers: tuple[logging.Logger, logging.Logger],
     ) -> None:
         """Should store all dependencies correctly."""
@@ -134,10 +138,10 @@ class TestDryRunClientRunScript:
     ) -> None:
         """Should log when test artists are configured."""
         console_logger, error_logger = loggers
-        config_with_artists: dict[str, Any] = {
-            "apple_scripts_dir": "/scripts",
-            "development": {"test_artists": ["Artist1", "Artist2"]},
-        }
+        config_with_artists = create_test_app_config(
+            apple_scripts_dir="/scripts",
+            development={"test_artists": ["Artist1", "Artist2"]},
+        )
         client = DryRunAppleScriptClient(
             real_client=mock_real_client,
             config=config_with_artists,

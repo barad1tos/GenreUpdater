@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from core.logger import get_full_log_path
+from core.models.track_models import AppConfig
 
 
 # Constant for duration field name (shared with analytics module)
@@ -359,7 +360,7 @@ def save_html_report(
     call_counts: dict[str, int],
     success_counts: dict[str, int],
     decorator_overhead: dict[str, float],
-    config: dict[str, Any],
+    config: AppConfig | dict[str, Any],
     console_logger: logging.Logger | None = None,
     error_logger: logging.Logger | None = None,
     group_successful_short_calls: bool = False,
@@ -378,7 +379,25 @@ def save_html_report(
         len(call_counts),
     )
     date_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    logs_base_dir = config.get("logs_base_dir", "")
+
+    if isinstance(config, AppConfig):
+        logs_base_dir = config.logs_base_dir
+        thresholds = config.analytics.duration_thresholds
+        duration_thresholds = {
+            "short_max": thresholds.short_max,
+            "medium_max": thresholds.medium_max,
+            "long_max": thresholds.long_max,
+        }
+    else:
+        logs_base_dir = config.get("logs_base_dir", ".")
+        analytics_cfg = config.get("analytics", {})
+        raw_thresholds = analytics_cfg.get("duration_thresholds", {})
+        duration_thresholds = {
+            "short_max": raw_thresholds.get("short_max", 2),
+            "medium_max": raw_thresholds.get("medium_max", 5),
+            "long_max": raw_thresholds.get("long_max", 10),
+        }
+
     reports_dir = Path(logs_base_dir) / "analytics"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -386,10 +405,6 @@ def save_html_report(
         config,
         "analytics_html_report_file",
         str(Path("analytics") / ("analytics_full.html" if force_mode else "analytics_incremental.html")),
-    )
-    duration_thresholds = config.get("analytics", {}).get(
-        "duration_thresholds",
-        {"short_max": 2, "medium_max": 5, "long_max": 10},
     )
 
     # Check for empty data
