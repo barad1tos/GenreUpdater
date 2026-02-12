@@ -4,10 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.models.track_models import ScoringConfig
 from services.api.year_scoring import (
     ArtistPeriodContext,
     ReleaseScorer,
-    ScoringConfig,
     create_release_scorer,
 )
 
@@ -50,48 +50,55 @@ class TestScoringConfig:
     def test_default_configuration(self) -> None:
         """Test default scoring configuration from ReleaseScorer."""
         scorer = ReleaseScorer()
-        config = scorer.scoring_config
+        cfg = scorer.scoring_config
 
         # Check base scoring values
-        assert config.get("base_score") == 10
-        assert config.get("artist_exact_match_bonus") == 20
-        assert config.get("album_exact_match_bonus") == 25
-        assert config.get("album_variation_bonus") == 10
+        assert cfg.base_score == 10
+        assert cfg.artist_exact_match_bonus == 20
+        assert cfg.album_exact_match_bonus == 25
+        assert cfg.album_variation_bonus == 10
 
         # Check penalties
-        assert config.get("album_substring_penalty") == -15
-        assert config.get("album_unrelated_penalty") == -40
-        assert config.get("status_bootleg_penalty") == -50
+        assert cfg.album_substring_penalty == -15
+        assert cfg.album_unrelated_penalty == -40
+        assert cfg.status_bootleg_penalty == -50
 
         # Check source bonuses
-        assert config.get("source_mb_bonus") == 5
-        assert config.get("source_discogs_bonus") == 2
-        assert config.get("source_itunes_bonus") == 4
+        assert cfg.source_mb_bonus == 5
+        assert cfg.source_discogs_bonus == 2
+        assert cfg.source_itunes_bonus == 4
 
     def test_custom_configuration(self) -> None:
         """Test custom scoring configuration."""
-        custom_config = {"base_score": 20, "artist_exact_match_bonus": 30, "album_exact_match_bonus": 35, "source_mb_bonus": 10}
+        scorer = ReleaseScorer()
+        # Override specific fields via a new ScoringConfig with custom values
+        custom = scorer.scoring_config.model_copy(
+            update={
+                "base_score": 20,
+                "artist_exact_match_bonus": 30,
+                "album_exact_match_bonus": 35,
+                "source_mb_bonus": 10,
+            },
+        )
+        scorer = ReleaseScorer(scoring_config=custom)
 
-        scorer = ReleaseScorer(scoring_config=custom_config)
-
-        assert scorer.scoring_config["base_score"] == 20
-        assert scorer.scoring_config["artist_exact_match_bonus"] == 30
-        assert scorer.scoring_config["album_exact_match_bonus"] == 35
-        assert scorer.scoring_config["source_mb_bonus"] == 10
+        assert scorer.scoring_config.base_score == 20
+        assert scorer.scoring_config.artist_exact_match_bonus == 30
+        assert scorer.scoring_config.album_exact_match_bonus == 35
+        assert scorer.scoring_config.source_mb_bonus == 10
 
     def test_scoring_config_structure(self) -> None:
-        """Test that ScoringConfig TypedDict structure is valid."""
-        config: ScoringConfig = {
-            "base_score": 10,
-            "artist_exact_match_bonus": 20,
-            "album_exact_match_bonus": 25,
-            "major_market_codes": ["us", "gb", "uk"],
-        }
+        """Test that ScoringConfig Pydantic model validates correctly."""
+        scorer = ReleaseScorer()
+        cfg = scorer.scoring_config
 
-        assert config["base_score"] == 10
-        assert config["artist_exact_match_bonus"] == 20
-        assert isinstance(config["major_market_codes"], list)
-        assert "us" in config["major_market_codes"]
+        assert isinstance(cfg, ScoringConfig)
+        assert cfg.base_score == 10
+        assert cfg.artist_exact_match_bonus == 20
+        # All penalty fields must be <= 0
+        assert cfg.album_substring_penalty <= 0
+        assert cfg.artist_mismatch_penalty <= 0
+        assert cfg.future_year_penalty <= 0
 
 
 class TestReleaseScorer:
@@ -103,9 +110,12 @@ class TestReleaseScorer:
         return MagicMock()
 
     @pytest.fixture
-    def custom_config(self) -> dict:
+    def custom_config(self) -> ScoringConfig:
         """Create custom scoring configuration."""
-        return {"base_score": 15, "artist_exact_match_bonus": 25, "album_exact_match_bonus": 30}
+        scorer = ReleaseScorer()
+        return scorer.scoring_config.model_copy(
+            update={"base_score": 15, "artist_exact_match_bonus": 25, "album_exact_match_bonus": 30},
+        )
 
     @pytest.fixture
     def scorer(self, mock_logger: MagicMock) -> ReleaseScorer:
@@ -274,12 +284,15 @@ class TestCreateFunction:
     def test_create_scorer(self) -> None:
         """Test creating a scorer instance."""
         mock_logger = MagicMock()
-        custom_config = {"base_score": 20, "artist_exact_match_bonus": 30}
+        base_scorer = ReleaseScorer()
+        custom_config = base_scorer.scoring_config.model_copy(
+            update={"base_score": 20, "artist_exact_match_bonus": 30},
+        )
 
         scorer = create_release_scorer(scoring_config=custom_config, min_valid_year=1950, definitive_score_threshold=90, console_logger=mock_logger)
 
         assert isinstance(scorer, ReleaseScorer)
-        assert scorer.scoring_config["base_score"] == 20
+        assert scorer.scoring_config.base_score == 20
         assert scorer.min_valid_year == 1950
         assert scorer.definitive_score_threshold == 90
         assert scorer.console_logger == mock_logger

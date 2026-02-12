@@ -43,40 +43,7 @@ class TestMusicUpdaterAllure:
         # Analytics
         deps.analytics = MockAnalytics()
 
-        # Configuration — raw dict for services still on dict (B2+ scope)
-        deps.config = {
-            "logs_base_dir": "/tmp/test_logs",
-            "apple_script": {"timeout": 30},
-            "development": {"test_artists": ["Test Artist"]},
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "itunes_requests_per_second": 10,
-                },
-                "processing": {"cache_ttl_days": 30},
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                },
-                "scoring": {"base_score": 50, "exact_match_bonus": 30},
-            },
-            "genre_processing": {
-                "dominant_genre_threshold": 0.5,
-                "min_tracks_for_dominant": 3,
-            },
-            "cleaning": {
-                "unwanted_phrases": ["(Remastered)", "(Deluxe Edition)"],
-            },
-        }
-
-        # Typed AppConfig for services migrated in B1
+        # Typed AppConfig
         deps.app_config = create_test_app_config(
             logs_base_dir="/tmp/test_logs",
             development={"test_artists": ["Test Artist"]},
@@ -101,7 +68,7 @@ class TestMusicUpdaterAllure:
         deps = self.create_mock_dependencies()
         updater = MusicUpdater(deps)
         assert updater.deps is deps
-        assert updater.config is deps.config
+        assert updater.app_config is deps.app_config
         assert updater.console_logger is deps.console_logger
         assert updater.error_logger is deps.error_logger
         assert updater.analytics is deps.analytics

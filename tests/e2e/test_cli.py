@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import yaml
 
@@ -50,8 +51,7 @@ class TestCLIE2E:
         """Create a mock dependency container for CLI testing."""
         mock_deps = MagicMock(spec=DependencyContainer)
 
-        # Basic services — wire app_config from the same config dict for consistency
-        mock_deps.config = config
+        # Basic services — wire app_config from the config dict for consistency
         dev_config = config.get("development", {})
         mock_deps.app_config = create_test_app_config(
             music_library_path=config.get("music_library_path", "/tmp/test.musiclibrary"),
@@ -219,7 +219,7 @@ class TestCLIE2E:
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
             # Revert command may not use AppleScript if no targets found
-            # For E2E test, successful execution without exceptions is sufficient
+            # For E2E test, successful execution without exceptions is enough
 
             # Verify targeting parameters
             assert args.artist == test_artist

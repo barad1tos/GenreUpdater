@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, overload
+from typing import TYPE_CHECKING
 
 from core.core_config import load_config as load_yaml_config
 
@@ -16,14 +16,16 @@ try:
 except ImportError:
     load_dotenv = None  # type: ignore[assignment]
 
-T = TypeVar("T")
-
 # User config takes precedence over template (my-config.yaml is gitignored)
-DEFAULT_CONFIG_FILES = ["my-config.yaml", "config.yaml"]
+DEFAULT_CONFIG_FILES: list[str] = ["my-config.yaml", "config.yaml"]
 
 
 class Config:
-    """Configuration manager for the application."""
+    """Configuration manager for the application.
+
+    Handles config file discovery (env var, defaults) and delegates
+    YAML loading + Pydantic validation to ``core.core_config.load_config``.
+    """
 
     def __init__(self, config_path: str | None = None) -> None:
         """Initialize configuration.
@@ -56,16 +58,9 @@ class Config:
         self.config_path = config_path
         self._resolved_path: str | None = None
         self._app_config: AppConfig | None = None
-        self._config: dict[str, Any] = {}
-        self._loaded = False
 
     def _resolve_config_path(self) -> str:
-        """Resolve the configuration file path to an absolute path.
-
-        Returns:
-            Absolute path to the configuration file
-
-        """
+        """Resolve the configuration file path to an absolute path."""
         load_path = Path(os.path.expandvars(self.config_path)).expanduser()
         try:
             return str(load_path.resolve())
@@ -80,7 +75,7 @@ class Config:
             Validated AppConfig Pydantic model.
 
         """
-        if not self._loaded:
+        if self._app_config is None:
             load_path = Path(os.path.expandvars(self.config_path)).expanduser()
             try:
                 app_config = load_yaml_config(str(load_path))
@@ -88,23 +83,13 @@ class Config:
                 msg = f"Failed to load configuration from '{load_path}': {e}"
                 raise RuntimeError(msg) from e
             self._app_config = app_config
-            self._config = app_config.model_dump()
             self._resolved_path = self._resolve_config_path()
-            self._loaded = True
 
-        if self._app_config is None:
-            msg = "Configuration not loaded — call load() first"
-            raise RuntimeError(msg)
         return self._app_config
 
     @property
     def resolved_path(self) -> str:
-        """Get the resolved absolute path to the configuration file.
-
-        Returns:
-            Absolute path to the configuration file
-
-        """
+        """Get the resolved absolute path to the configuration file."""
         if self._resolved_path is None:
             # Ensure config is loaded first
             self.load()
@@ -114,141 +99,3 @@ class Config:
             return self._resolve_config_path()
 
         return self._resolved_path
-
-    @overload
-    def get(self, key: str, default: None = None) -> Any:
-        """Get configuration value with None default."""
-
-    @overload
-    def get(self, key: str, default: T) -> Any | T:
-        """Get configuration value with typed default."""
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value.
-
-        Args:
-            key: Configuration key (supports dot notation)
-            default: Default value if key not found
-
-        Returns:
-            Configuration value or default
-
-        """
-        if not self._loaded:
-            self.load()
-
-        # Support dot notation
-        keys = key.split(".")
-        current: Any = self._config
-
-        for k in keys:
-            if isinstance(current, dict) and k in current:
-                current = current[k]
-            else:
-                return default
-        return current
-
-    def get_path(self, key: str, default: str = "") -> Path:
-        """Get configuration path value.
-
-        Args:
-            key: Configuration key for path
-            default: Default path if not found
-
-        Returns:
-            Path object
-
-        """
-        if path_str := self.get(key, default):
-            return Path(os.path.expandvars(path_str)).expanduser()
-        return Path(default)
-
-    def get_list(self, key: str, default: list[Any] | None = None) -> list[Any]:
-        """Get configuration list value.
-
-        Args:
-            key: Configuration key
-            default: Default list if not found
-
-        Returns:
-            List value
-
-        """
-        result: list[Any] = default if default is not None else []
-        value: Any = self.get(key, result)
-
-        return list(value) if isinstance(value, list) else result
-
-    def get_dict(self, key: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Get configuration dict value.
-
-        Args:
-            key: Configuration key
-            default: Default dict if not found
-
-        Returns:
-            Dict value
-
-        """
-        result: dict[str, Any] = default if default is not None else {}
-        value: Any = self.get(key, result)
-
-        return dict(value) if isinstance(value, dict) else result
-
-    def get_bool(self, key: str, default: bool = False) -> bool:
-        """Get configuration boolean value.
-
-        Args:
-            key: Configuration key
-            default: Default boolean if not found
-
-        Returns:
-            Boolean value
-
-        """
-        value = self.get(key, default)
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            true_values = {"true", "yes", "1", "on"}
-            false_values = {"false", "no", "0", "off"}
-            val = value.strip().lower()
-            if val in true_values:
-                return True
-            if val in false_values:
-                return False
-        return bool(value)
-
-    def get_int(self, key: str, default: int = 0) -> int:
-        """Get configuration integer value.
-
-        Args:
-            key: Configuration key
-            default: Default integer if not found
-
-        Returns:
-            Integer value
-
-        """
-        value = self.get(key, default)
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
-    def get_float(self, key: str, default: float = 0.0) -> float:
-        """Get configuration float value.
-
-        Args:
-            key: Configuration key
-            default: Default float if not found
-
-        Returns:
-            Float value
-
-        """
-        value = self.get(key, default)
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default

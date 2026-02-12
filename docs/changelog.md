@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
+- Ruff format: missing blank line in `track_models.py` after Sourcery walrus operator refactor
+
+### Changed
+- **Config type safety (C3)**: removed `_resolve_config_dict()` bridge from `logger.py`; changed all 12 logger function signatures from `AppConfig | dict[str, Any]` to `AppConfig`; replaced dict `.get()` lookups with typed `config.logging.*` attribute access; moved `AppConfig` import to `TYPE_CHECKING`; added `LogLevelsConfig.normalize_log_level` validator for case-insensitive log level names; migrated 5 test files from dict configs to `create_test_app_config()` factory; removed last `model_dump()` round-trip in `validate_api_auth` — now accepts `ApiAuthConfig` directly
+- **Config type safety (C2)**: removed `DependencyContainer.config` dict property and `Config._config` dict storage — all config access now goes through typed `AppConfig`; migrated `MusicUpdater` from `deps.config` dict to `deps.app_config`; removed dict branches from `search_strategy`, `album_type`, `html_reports`; deleted 155 lines of dead accessor methods (`.get()`, `.get_path()`, `.get_list()`, `.get_dict()`, `.get_bool()`, `.get_int()`, `.get_float()`) from `Config` class; migrated 12 test files from dict configs to `create_test_app_config()` factory
+- **Config type safety (C1)**: migrated `ReleaseScorer` from `dict[str, Any]` to typed `ScoringConfig` Pydantic model; replaced 33 `.get()` calls with typed attribute access; added 3 missing scoring fields (`artist_substring_penalty`, `artist_mismatch_penalty`, `current_year_penalty`); changed all scoring fields from `float` to `int` to match config.yaml and downstream usage; removed dead `ScoringConfig` TypedDict and `_get_default_scoring_config()`; updated orchestrator to pass `ScoringConfig` object directly instead of `model_dump()` dict
 
 ### Added
 - Batch error handling tests: sequential processing, CancelledError, config validation

@@ -7,10 +7,8 @@ This module tests the pattern-based detection of special album types
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-import pytest
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
+import pytest
 
 from core.models.album_type import (
     AlbumType,
@@ -23,6 +21,10 @@ from core.models.album_type import (
     is_special_album,
     reset_patterns,
 )
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 class TestAlbumTypeDetection:
@@ -207,13 +209,13 @@ class TestAlbumTypePatternConfiguration:
 
     def test_from_config_loads_custom_patterns(self) -> None:
         """Test that from_config() loads patterns from YAML config."""
-        config = {
-            "album_type_detection": {
+        config = create_test_app_config(
+            album_type_detection={
                 "special_patterns": ["custom-special", "my-bsides"],
                 "compilation_patterns": ["my-hits", "my-collection"],
                 "reissue_patterns": ["custom-remaster"],
             }
-        }
+        )
 
         patterns = AlbumTypePatterns.from_config(config)
 
@@ -229,19 +231,19 @@ class TestAlbumTypePatternConfiguration:
 
     def test_from_config_falls_back_to_defaults(self) -> None:
         """Test that missing config sections fall back to defaults."""
-        # Empty config - all defaults
-        patterns = AlbumTypePatterns.from_config({})
+        # Default config - all defaults (no custom album_type_detection)
+        patterns = AlbumTypePatterns.from_config(create_test_app_config())
         assert "b-sides" in patterns.special
         assert "greatest hits" in patterns.compilation
         assert "remaster" in patterns.reissue
 
-        # Partial config - missing sections use defaults
-        partial_config = {
-            "album_type_detection": {
+        # Partial config - only special_patterns overridden
+        partial_config = create_test_app_config(
+            album_type_detection={
                 "special_patterns": ["only-special"],
-                # compilation_patterns and reissue_patterns missing
+                # compilation_patterns and reissue_patterns missing -> None -> defaults
             }
-        }
+        )
         patterns = AlbumTypePatterns.from_config(partial_config)
         assert "only-special" in patterns.special
         assert "b-sides" not in patterns.special  # Overridden
@@ -250,13 +252,13 @@ class TestAlbumTypePatternConfiguration:
 
     def test_configure_patterns_sets_singleton(self) -> None:
         """Test that configure_patterns() configures the module singleton."""
-        config = {
-            "album_type_detection": {
+        config = create_test_app_config(
+            album_type_detection={
                 "special_patterns": ["configured-pattern"],
                 "compilation_patterns": ["configured-compilation"],
                 "reissue_patterns": ["configured-reissue"],
             }
-        }
+        )
 
         # Before configuration - defaults
         reset_patterns()
@@ -273,11 +275,11 @@ class TestAlbumTypePatternConfiguration:
 
     def test_reset_patterns_clears_config(self) -> None:
         """Test that reset_patterns() clears the singleton and returns to defaults."""
-        config = {
-            "album_type_detection": {
+        config = create_test_app_config(
+            album_type_detection={
                 "special_patterns": ["test-pattern"],
             }
-        }
+        )
 
         configure_patterns(config)
         assert "test-pattern" in get_patterns().special
@@ -292,13 +294,13 @@ class TestAlbumTypePatternConfiguration:
     def test_detect_uses_configured_patterns(self) -> None:
         """Test that detection uses configured patterns instead of defaults."""
         # Configure custom patterns
-        config = {
-            "album_type_detection": {
+        config = create_test_app_config(
+            album_type_detection={
                 "special_patterns": ["my-custom-special"],
                 "compilation_patterns": ["my-custom-compilation"],
                 "reissue_patterns": ["my-custom-reissue"],
             }
-        }
+        )
         configure_patterns(config)
 
         # Default pattern should NOT be detected

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.year_update import YearUpdateService
 from core.models.track_models import ChangeLogEntry, TrackDict
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -31,9 +35,9 @@ def mock_snapshot_manager() -> MagicMock:
 
 
 @pytest.fixture
-def mock_config() -> dict[str, Any]:
+def mock_config() -> AppConfig:
     """Create mock config."""
-    return {"logs_base_dir": "/tmp/logs"}
+    return create_test_app_config(logs_base_dir="/tmp/logs")
 
 
 @pytest.fixture
@@ -41,7 +45,7 @@ def service(
     mock_track_processor: MagicMock,
     mock_year_retriever: MagicMock,
     mock_snapshot_manager: MagicMock,
-    mock_config: dict[str, Any],
+    mock_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> YearUpdateService:
@@ -111,7 +115,7 @@ class TestYearUpdateServiceInit:
         mock_track_processor: MagicMock,
         mock_year_retriever: MagicMock,
         mock_snapshot_manager: MagicMock,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -133,7 +137,7 @@ class TestYearUpdateServiceInit:
         mock_track_processor: MagicMock,
         mock_year_retriever: MagicMock,
         mock_snapshot_manager: MagicMock,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:

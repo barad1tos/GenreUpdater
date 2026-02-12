@@ -50,7 +50,6 @@ class MusicUpdater:
 
         """
         self.deps = deps
-        self.config = deps.config
         self.app_config = deps.app_config
         self.console_logger = deps.console_logger
         self.error_logger = deps.error_logger
@@ -189,7 +188,7 @@ class MusicUpdater:
             Absolute Path to the artist rename YAML configuration file.
 
         """
-        config_entry = self.config.get("artist_renamer", {}).get("config_path", "artist-renames.yaml")
+        config_entry = self.app_config.artist_renamer.config_path
         candidate = Path(config_entry)
         if candidate.is_absolute():
             return candidate
@@ -274,7 +273,7 @@ class MusicUpdater:
 
         """
         # Sync with the database
-        csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
+        csv_path = get_full_log_path(self.app_config, "csv_output_file", "csv/track_list.csv")
         # Fetch ALL current tracks for complete synchronization
         all_current_tracks = await self.track_processor.fetch_tracks_async()
 
@@ -289,13 +288,13 @@ class MusicUpdater:
 
         # Save changes report
         if changes_log:
-            changes_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
+            changes_path = get_full_log_path(self.app_config, "changes_report_file", "csv/changes_report.csv")
             save_changes_report(
                 changes_log,
                 changes_path,
                 self.console_logger,
                 self.error_logger,
-                compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
+                compact_mode=self.app_config.reporting.change_display_mode == "compact",
             )
 
     async def run_update_years(self, artist: str | None, force: bool, fresh: bool = False) -> None:
@@ -682,7 +681,7 @@ class MusicUpdater:
             # Fall back to batch processing for full library
             # Skip snapshot check since Smart Delta already validated it
             self.console_logger.info("Using batch processing for full library fetch")
-            batch_size = self.config.get("batch_processing", {}).get("batch_size", 1000)
+            batch_size = self.app_config.batch_processing.batch_size
             tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Already validated in Smart Delta
@@ -770,14 +769,14 @@ class MusicUpdater:
             changes: List of all changes collected during pipeline execution
         """
         # Always display changes report (shows "No changes" message if empty)
-        changes_report_path = get_full_log_path(self.config, "changes_report_file", "csv/changes_report.csv")
+        changes_report_path = get_full_log_path(self.app_config, "changes_report_file", "csv/changes_report.csv")
 
         save_changes_report(
             changes=changes,
             file_path=changes_report_path if changes else None,  # Only save CSV if there are changes
             console_logger=self.console_logger,
             error_logger=self.error_logger,
-            compact_mode=self.config.get("reporting", {}).get("change_display_mode", "compact") == "compact",
+            compact_mode=self.app_config.reporting.change_display_mode == "compact",
         )
 
         if changes:
@@ -800,7 +799,7 @@ class MusicUpdater:
             all_current_tracks = await self.track_processor.fetch_tracks_async()
 
         if all_current_tracks:
-            csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
+            csv_path = get_full_log_path(self.app_config, "csv_output_file", "csv/track_list.csv")
             # Only sync CSV in non-dry-run mode to prevent divergence between CSV and Apple Music
             if not self.deps.dry_run:
                 # Use sync function instead of save_to_csv for bidirectional sync

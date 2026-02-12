@@ -3,24 +3,42 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.full_sync import main, run_full_resync
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from core.models.track_models import AppConfig
+
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict[str, Any]:
+def config(tmp_path: Path) -> AppConfig:
     """Create test configuration."""
-    return {
-        "logs_base_dir": str(tmp_path / "logs"),
-        "logging": {"csv_output_file": "track_list.csv"},
-    }
+    return create_test_app_config(
+        logs_base_dir=str(tmp_path / "logs"),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
+            "csv_output_file": "track_list.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "lastrun.json",
+            "pending_verification_file": "pending.json",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {
+                "console": "INFO",
+                "main_file": "INFO",
+                "analytics_file": "INFO",
+            },
+        },
+    )
 
 
 @pytest.fixture
@@ -51,7 +69,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
     ) -> None:
@@ -73,7 +91,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
@@ -103,7 +121,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -140,7 +158,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -171,7 +189,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -202,7 +220,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -233,7 +251,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -264,7 +282,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -299,7 +317,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
@@ -326,7 +344,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
@@ -351,7 +369,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -381,7 +399,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -411,7 +429,7 @@ class TestRunFullResync:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
@@ -467,7 +485,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -498,7 +516,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -638,7 +656,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -668,7 +686,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -701,7 +719,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -736,7 +754,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()
@@ -769,7 +787,7 @@ class TestMain:
         mock_deps = MagicMock()
         mock_deps.initialize = AsyncMock()
         mock_deps.close = AsyncMock()
-        mock_deps.config = {"logs_base_dir": "/tmp"}
+
         mock_deps.cache_service = MagicMock()
 
         mock_updater = MagicMock()

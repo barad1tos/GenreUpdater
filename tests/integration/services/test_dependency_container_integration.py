@@ -748,8 +748,8 @@ class TestDependencyContainerConfigLoading:
             skip_api_validation=True,
         )
 
-        # Config should be empty before initialization
-        assert container.config == {}
+        # AppConfig should not be loaded before initialization
+        assert container._app_config is None
 
         # Patch services to avoid real initialization
         with (
@@ -773,11 +773,9 @@ class TestDependencyContainerConfigLoading:
 
             await container.initialize()
 
-            # Config should now be loaded (Pydantic normalized dict)
-            assert container.config != {}
-            # Check for a key that exists after Pydantic validation
-            assert "music_library_path" in container.config
-            assert container.config["music_library_path"] == "/tmp/test_library"
+            # AppConfig should now be loaded
+            assert container._app_config is not None
+            assert container.app_config.music_library_path == "/tmp/test_library"
 
     def test_load_config_stores_app_config(
         self,
@@ -799,13 +797,11 @@ class TestDependencyContainerConfigLoading:
 
         assert container._app_config is None
 
-        result = container._load_config()
+        container._load_config()
 
         # _app_config should now be a validated AppConfig instance
         assert isinstance(container._app_config, AppConfig)
-        # Return value should be a dict from model_dump()
-        assert isinstance(result, dict)
-        assert result["music_library_path"] == "/tmp/test_library"
+        assert container.app_config.music_library_path == "/tmp/test_library"
 
     def test_load_config_validates_api_auth(
         self,
@@ -829,11 +825,11 @@ class TestDependencyContainerConfigLoading:
                 skip_api_validation=False,
             )
 
-            result = container._load_config()
+            container._load_config()
 
             # Should succeed — api_auth in fixture has valid tokens
-            assert isinstance(result, dict)
             assert container._app_config is not None
+            assert container.app_config.music_library_path is not None
         finally:
             if temp_path.exists():
                 temp_path.unlink()

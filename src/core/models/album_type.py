@@ -23,9 +23,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Final
+from typing import TYPE_CHECKING, Final
 
-from core.models.track_models import AlbumTypeDetectionConfig, AppConfig
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 __all__ = [
     "AlbumType",
@@ -184,17 +185,17 @@ class AlbumTypePatterns:
         )
 
     @classmethod
-    def from_config(cls, config: AppConfig | dict[str, Any]) -> AlbumTypePatterns:
+    def from_config(cls, config: AppConfig) -> AlbumTypePatterns:
         """Create patterns from configuration.
 
         Args:
-            config: Typed AppConfig or legacy dict
+            config: Typed application configuration
 
         Returns:
             AlbumTypePatterns loaded from config (with defaults as fallback)
 
         """
-        detection = _resolve_album_type_detection(config)
+        detection = config.album_type_detection
 
         return cls(
             special=frozenset(detection.special_patterns) if detection.special_patterns is not None else _DEFAULT_SPECIAL_PATTERNS,
@@ -203,36 +204,18 @@ class AlbumTypePatterns:
         )
 
 
-def _resolve_album_type_detection(config: AppConfig | dict[str, Any]) -> AlbumTypeDetectionConfig:
-    """Extract AlbumTypeDetectionConfig from AppConfig or legacy dict.
-
-    Args:
-        config: Typed AppConfig or legacy dict
-
-    Returns:
-        AlbumTypeDetectionConfig with detection patterns
-
-    """
-    if isinstance(config, AppConfig):
-        return config.album_type_detection
-
-    # Legacy dict path
-    raw = config.get("album_type_detection", {})
-    return AlbumTypeDetectionConfig(**raw) if raw else AlbumTypeDetectionConfig()
-
-
 # Module-level singleton for configured patterns
 _configured_patterns: AlbumTypePatterns | None = None
 
 
-def configure_patterns(config: AppConfig | dict[str, Any]) -> None:
+def configure_patterns(config: AppConfig) -> None:
     """Configure album type patterns from application config.
 
     This should be called during application initialization.
     After calling, all detection functions will use the configured patterns.
 
     Args:
-        config: Typed AppConfig or legacy dict
+        config: Typed application configuration
     """
     global _configured_patterns  # noqa: PLW0603
     _configured_patterns = AlbumTypePatterns.from_config(config)

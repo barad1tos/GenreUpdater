@@ -49,12 +49,11 @@ class TestBatchProcessingE2E:
         } | overrides
 
     @staticmethod
-    def create_mock_dependency_container(config: dict[str, Any]) -> MagicMock:
+    def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for batch testing."""
         mock_deps = MagicMock(spec=DependencyContainer)
 
         # Basic services
-        mock_deps.config = config
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
@@ -481,10 +480,9 @@ class TestBatchProcessorErrorHandling:
         } | overrides
 
     @staticmethod
-    def create_mock_dependency_container(config: dict[str, Any]) -> MagicMock:
+    def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create mock dependency container."""
         mock_deps = MagicMock(spec=DependencyContainer)
-        mock_deps.config = config
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
@@ -588,10 +586,9 @@ class TestBatchProcessingIntegrationScenarios:
         } | overrides
 
     @staticmethod
-    def create_mock_dependency_container(config: dict[str, Any]) -> MagicMock:
+    def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create mock dependency container with full services."""
         mock_deps = MagicMock(spec=DependencyContainer)
-        mock_deps.config = config
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()

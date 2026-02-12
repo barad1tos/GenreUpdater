@@ -6,25 +6,33 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 
 from core.run_tracking import IncrementalRunTracker
+from tests.factories import MINIMAL_CONFIG_DATA, create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict[str, Any]:
+def config(tmp_path: Path) -> AppConfig:
     """Create test configuration with temp directory."""
-    return {
-        "logs_base_dir": str(tmp_path / "logs"),
-        "logging": {"last_incremental_run_file": "last_run.log"},
+    logging_overrides = {
+        **MINIMAL_CONFIG_DATA["logging"],
+        "last_incremental_run_file": "last_run.log",
     }
+    return create_test_app_config(
+        logs_base_dir=str(tmp_path / "logs"),
+        logging=logging_overrides,
+    )
 
 
 @pytest.fixture
-def tracker(config: dict[str, Any]) -> IncrementalRunTracker:
+def tracker(config: AppConfig) -> IncrementalRunTracker:
     """Create an IncrementalRunTracker instance."""
     return IncrementalRunTracker(config)
 
@@ -32,7 +40,7 @@ def tracker(config: dict[str, Any]) -> IncrementalRunTracker:
 class TestIncrementalRunTrackerInit:
     """Tests for IncrementalRunTracker initialization."""
 
-    def test_init_stores_config(self, config: dict[str, Any]) -> None:
+    def test_init_stores_config(self, config: AppConfig) -> None:
         """Should store configuration."""
         tracker = IncrementalRunTracker(config)
         assert tracker.config is config
@@ -73,10 +81,14 @@ class TestUpdateLastRunTimestamp:
     @pytest.mark.asyncio
     async def test_creates_parent_directories(self, tmp_path: Path) -> None:
         """Should create parent directories if they don't exist."""
-        nested_config: dict[str, Any] = {
-            "logs_base_dir": str(tmp_path / "deep" / "nested" / "logs"),
-            "logging": {"last_incremental_run_file": "run.log"},
+        logging_overrides = {
+            **MINIMAL_CONFIG_DATA["logging"],
+            "last_incremental_run_file": "run.log",
         }
+        nested_config = create_test_app_config(
+            logs_base_dir=str(tmp_path / "deep" / "nested" / "logs"),
+            logging=logging_overrides,
+        )
         tracker = IncrementalRunTracker(nested_config)
 
         await tracker.update_last_run_timestamp()

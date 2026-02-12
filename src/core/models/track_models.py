@@ -212,8 +212,7 @@ class DevelopmentConfig(BaseModel):
                 if not isinstance(item, str):
                     msg = f"test_artists[{i}] must be str, got {type(item).__name__}"
                     raise TypeError(msg)
-                stripped = item.strip()
-                if stripped:
+                if stripped := item.strip():
                     result.append(stripped)
             return result
         msg = f"test_artists must be a string, list, or tuple, got {type(v).__name__}"
@@ -226,6 +225,12 @@ class LogLevelsConfig(BaseModel):
     console: LogLevel
     main_file: LogLevel
     analytics_file: LogLevel
+
+    @field_validator("console", "main_file", "analytics_file", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        """Accept case-insensitive log level names (e.g. 'debug' -> 'DEBUG')."""
+        return value.upper() if isinstance(value, str) else value
 
 
 class LoggingConfig(BaseModel):
@@ -319,36 +324,63 @@ class ReissueDetectionConfig(BaseModel):
 
 
 class ScoringConfig(BaseModel):
-    """Scoring configuration."""
+    """Scoring parameters for release year evaluation.
 
-    base_score: float
-    artist_exact_match_bonus: float
-    album_exact_match_bonus: float
-    perfect_match_bonus: float
-    album_variation_bonus: float
-    album_substring_penalty: float = Field(le=0)
-    album_unrelated_penalty: float = Field(le=0)
-    mb_release_group_match_bonus: float
-    type_album_bonus: float
-    type_ep_single_penalty: float = Field(le=0)
-    type_compilation_live_penalty: float = Field(le=0)
-    status_official_bonus: float
-    status_bootleg_penalty: float = Field(le=0)
-    status_promo_penalty: float = Field(le=0)
-    reissue_penalty: float = Field(le=0)
-    year_diff_penalty_scale: float = Field(le=0)
-    year_diff_max_penalty: float = Field(le=0)
-    year_before_start_penalty: float = Field(le=0)
-    year_after_end_penalty: float = Field(le=0)
-    year_near_start_bonus: float
-    country_artist_match_bonus: float
-    country_major_market_bonus: float
-    source_mb_bonus: float
-    source_discogs_bonus: float
-    source_itunes_bonus: float = 0
-    future_year_penalty: float = Field(default=0, le=0)
-    artist_cross_script_penalty: float = Field(default=0, le=0)
-    soundtrack_compensation_bonus: float = 0
+    All numeric fields use ``int`` to match config.yaml values and
+    downstream consumers (``ReleaseScorer`` uses them as-is without casts).
+    Penalties are constrained to ``le=0``; bonuses are unconstrained.
+    """
+
+    # Base scoring
+    base_score: int
+
+    # Artist matching
+    artist_exact_match_bonus: int
+    artist_substring_penalty: int = Field(default=-20, le=0)
+    artist_cross_script_penalty: int = Field(default=-10, le=0)
+    artist_mismatch_penalty: int = Field(default=-60, le=0)
+
+    # Album matching
+    album_exact_match_bonus: int
+    perfect_match_bonus: int
+    album_variation_bonus: int
+    album_substring_penalty: int = Field(le=0)
+    album_unrelated_penalty: int = Field(le=0)
+
+    # Soundtrack compensation
+    soundtrack_compensation_bonus: int = 75
+
+    # Release characteristics
+    mb_release_group_match_bonus: int
+    type_album_bonus: int
+    type_ep_single_penalty: int = Field(le=0)
+    type_compilation_live_penalty: int = Field(le=0)
+    status_official_bonus: int
+    status_bootleg_penalty: int = Field(le=0)
+    status_promo_penalty: int = Field(le=0)
+    reissue_penalty: int = Field(le=0)
+
+    # Year difference penalties
+    year_diff_penalty_scale: int = Field(le=0)
+    year_diff_max_penalty: int = Field(le=0)
+
+    # Artist activity period
+    year_before_start_penalty: int = Field(le=0)
+    year_after_end_penalty: int = Field(le=0)
+    year_near_start_bonus: int
+
+    # Country/region matching
+    country_artist_match_bonus: int
+    country_major_market_bonus: int
+
+    # Source reliability
+    source_mb_bonus: int
+    source_discogs_bonus: int
+    source_itunes_bonus: int = 0
+
+    # Year penalties
+    future_year_penalty: int = Field(default=-10, le=0)
+    current_year_penalty: int = 0
 
 
 class FallbackConfig(BaseModel):
@@ -476,19 +508,20 @@ class AppConfig(BaseModel):
         that consumers reading ``config.development.test_artists`` get the
         expected list.
         """
-        if self.test_artists and not self.development.test_artists:
-            self.development.test_artists = list(self.test_artists)
-            warnings.warn(
-                "Top-level 'test_artists' is deprecated. Move it to 'development.test_artists' in your config file.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        elif self.test_artists and self.development.test_artists:
-            warnings.warn(
-                "Both top-level 'test_artists' and 'development.test_artists' are set. Top-level value is ignored; using development section.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+        if self.test_artists:
+            if self.development.test_artists:
+                warnings.warn(
+                    "Both top-level 'test_artists' and 'development.test_artists' are set. Top-level value is ignored; using development section.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+            else:
+                self.development.test_artists = list(self.test_artists)
+                warnings.warn(
+                    "Top-level 'test_artists' is deprecated. Move it to 'development.test_artists' in your config file.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
         return self
 
 

@@ -1,13 +1,19 @@
 """Unit tests for repair utilities."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from core.models import year_repair as repair_utils
+from tests.factories import MINIMAL_CONFIG_DATA, create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
-def _make_changes_report(tmp_path: Path, rows: list[dict[str, str]]) -> dict[str, Any]:
+def _make_changes_report(tmp_path: Path, rows: list[dict[str, str]]) -> AppConfig:
     base = tmp_path / "logs"
     (base / "csv").mkdir(parents=True, exist_ok=True)
     report = base / "csv" / "changes_report.csv"
@@ -25,7 +31,11 @@ def _make_changes_report(tmp_path: Path, rows: list[dict[str, str]]) -> dict[str
         line = ",".join([r.get(h, "") for h in header])
         lines.append(line)
     report.write_text("\n".join(lines), encoding="utf-8")
-    return {"logs_base_dir": str(base)}
+    logging_overrides = {
+        **MINIMAL_CONFIG_DATA["logging"],
+        "changes_report_file": "csv/changes_report.csv",
+    }
+    return create_test_app_config(logs_base_dir=str(base), logging=logging_overrides)
 
 
 def _make_backup_csv(tmp_path: Path, rows: list[dict[str, str]]) -> str:
@@ -113,7 +123,7 @@ def test_build_targets_from_backup_csv(tmp_path: Path) -> None:
         ],
     )
 
-    targets = repair_utils.build_revert_targets(config={}, artist="Otep", album="Hydra", backup_csv_path=backup_path)
+    targets = repair_utils.build_revert_targets(config=create_test_app_config(), artist="Otep", album="Hydra", backup_csv_path=backup_path)
     # Both rows should be used since one has year, another has year_before_mgu
     assert len(targets) == 2
     years = sorted(t.year_before_mgu for t in targets)

@@ -16,11 +16,13 @@ import logging
 import re
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, TypedDict
+from typing import Any, ClassVar, TypedDict
 
 from core.models.metadata_utils import remove_parentheses_with_keywords
 from core.models.normalization import normalize_for_matching
 from core.models.script_detection import ScriptType, detect_primary_script
+
+from core.models.track_models import ScoringConfig
 
 # Module-level constant for name normalization
 _NON_ALPHANUM_PATTERN = r"[^\w\s]"
@@ -67,54 +69,6 @@ class ArtistPeriodContext(TypedDict, total=False):
     end_year: int | None
 
 
-class ScoringConfig(TypedDict, total=False):
-    """Configuration parameters for release scoring."""
-
-    # Base scoring
-    base_score: int
-
-    # Match bonuses
-    artist_exact_match_bonus: int
-    album_exact_match_bonus: int
-    album_variation_bonus: int
-    perfect_match_bonus: int
-
-    # Match penalties
-    album_substring_penalty: int
-    album_unrelated_penalty: int
-
-    # Release characteristics
-    type_album_bonus: int
-    type_ep_single_penalty: int
-    type_compilation_live_penalty: int
-    status_official_bonus: int
-    status_bootleg_penalty: int
-    status_promo_penalty: int
-    reissue_penalty: int
-
-    # MusicBrainz specific
-    mb_release_group_match_bonus: int
-
-    # Artist activity period context
-    year_before_start_penalty: int
-    year_after_end_penalty: int
-    year_near_start_bonus: int
-
-    # Year difference from the release group
-    year_diff_penalty_scale: int
-    year_diff_max_penalty: int
-
-    # Country/region matching
-    country_artist_match_bonus: int
-    country_major_market_bonus: int
-    major_market_codes: list[str]
-
-    # Source reliability
-    source_mb_bonus: int
-    source_discogs_bonus: int
-    source_itunes_bonus: int
-
-
 class ReleaseScorer:
     """Release scoring system for evaluating music metadata quality.
 
@@ -133,31 +87,63 @@ class ReleaseScorer:
 
     """
 
+    # Default major market country codes used when none provided
+    _DEFAULT_MARKET_CODES: ClassVar[list[str]] = ["us", "gb", "uk", "de", "jp", "fr"]
+
     def __init__(
         self,
-        scoring_config: dict[str, Any] | None = None,
+        scoring_config: ScoringConfig | None = None,
         min_valid_year: int = 1900,
         definitive_score_threshold: int = 85,
         console_logger: logging.Logger | None = None,
         remaster_keywords: list[str] | None = None,
+        major_market_codes: list[str] | None = None,
     ) -> None:
         """Initialize the release scorer.
 
         Args:
-            scoring_config: Configuration dictionary with scoring parameters
+            scoring_config: Typed scoring parameters (uses defaults if None)
             min_valid_year: Minimum valid year for releases
             definitive_score_threshold: Threshold for definitive scoring
             console_logger: Optional logger for debug output
-            remaster_keywords: Keywords to identify edition suffixes (e.g., "deluxe", "remaster")
+            remaster_keywords: Keywords to identify edition suffixes
+            major_market_codes: Country codes for major market bonus
 
         """
-        self.scoring_config = scoring_config or self._get_default_scoring_config()
+        self.scoring_config: ScoringConfig = scoring_config or ScoringConfig(
+            base_score=10,
+            artist_exact_match_bonus=20,
+            album_exact_match_bonus=25,
+            perfect_match_bonus=10,
+            album_variation_bonus=10,
+            album_substring_penalty=-15,
+            album_unrelated_penalty=-40,
+            mb_release_group_match_bonus=50,
+            type_album_bonus=15,
+            type_ep_single_penalty=-10,
+            type_compilation_live_penalty=-25,
+            status_official_bonus=10,
+            status_bootleg_penalty=-50,
+            status_promo_penalty=-20,
+            reissue_penalty=-30,
+            year_diff_penalty_scale=-5,
+            year_diff_max_penalty=-40,
+            year_before_start_penalty=-25,
+            year_after_end_penalty=-20,
+            year_near_start_bonus=20,
+            country_artist_match_bonus=10,
+            country_major_market_bonus=5,
+            source_mb_bonus=5,
+            source_discogs_bonus=2,
+            source_itunes_bonus=4,
+        )
         self.min_valid_year = min_valid_year
         self.current_year = dt.now(UTC).year
         self.definitive_score_threshold = definitive_score_threshold
         self.artist_period_context: ArtistPeriodContext | None = None
         self.console_logger = console_logger or logging.getLogger(__name__)
         self.remaster_keywords = remaster_keywords or []
+        self.major_market_codes = major_market_codes or self._DEFAULT_MARKET_CODES
 
         # Constants from the original implementation
         self.YEAR_LENGTH = 4
@@ -175,56 +161,8 @@ class ReleaseScorer:
         """Clear the artist activity period context."""
         self.artist_period_context = None
 
-    @staticmethod
-    def _get_default_scoring_config() -> dict[str, Any]:
-        """Get the default scoring configuration.
-
-        Returns:
-            Dictionary with default scoring parameters
-
-        """
-        return {
-            # Base scoring
-            "base_score": 10,
-            # Match bonuses
-            "artist_exact_match_bonus": 20,
-            "album_exact_match_bonus": 25,
-            "album_variation_bonus": 10,
-            "perfect_match_bonus": 10,
-            # Soundtrack compensation (when artist is "Various Artists" etc.)
-            # Needs to cover artist mismatch (-60) + album substring (-15) = 75
-            "soundtrack_compensation_bonus": 75,
-            # Match penalties
-            "album_substring_penalty": -15,
-            "album_unrelated_penalty": -40,
-            # Release characteristics
-            "type_album_bonus": 15,
-            "type_ep_single_penalty": -10,
-            "type_compilation_live_penalty": -25,
-            "status_official_bonus": 10,
-            "status_bootleg_penalty": -50,
-            "status_promo_penalty": -20,
-            "reissue_penalty": -30,
-            # MusicBrainz specific
-            "mb_release_group_match_bonus": 50,
-            # Artist activity period context
-            "year_before_start_penalty": -25,  # Variable penalty
-            "year_after_end_penalty": -20,  # Variable penalty
-            "year_near_start_bonus": 20,
-            # Year difference from the release group
-            "year_diff_penalty_scale": -5,
-            "year_diff_max_penalty": -40,
-            # Country/region matching
-            "country_artist_match_bonus": 10,
-            "country_major_market_bonus": 5,
-            "major_market_codes": ["us", "gb", "uk", "de", "jp", "fr"],
-            # Source reliability
-            "source_mb_bonus": 5,
-            "source_discogs_bonus": 2,
-            "source_itunes_bonus": 4,
-            # Future year penalty
-            "future_year_penalty": -10,
-        }
+    # _get_default_scoring_config() removed — defaults live in
+    # ScoringConfig Pydantic model (track_models.py) and constructor above
 
     @staticmethod
     def _normalize_name(name: str) -> str:
@@ -374,10 +312,10 @@ class ReleaseScorer:
             Tuple of (artist_match_bonus, score_adjustment)
 
         """
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
 
         if release_artist_norm and release_artist_norm == target_artist_norm:
-            bonus = int(scoring_cfg.get("artist_exact_match_bonus", 20))
+            bonus = cfg.artist_exact_match_bonus
             score_components.append(f"Artist Exact Match: +{bonus}")
             return bonus, bonus
 
@@ -387,7 +325,7 @@ class ReleaseScorer:
         # Artist doesn't match - apply penalties
         if target_artist_norm in release_artist_norm or release_artist_norm in target_artist_norm:
             # Partial match (substring) - moderate penalty
-            penalty = int(scoring_cfg.get("artist_substring_penalty", -20))
+            penalty = cfg.artist_substring_penalty
             score_components.append(f"Artist Substring Mismatch: {penalty}")
             return 0, penalty
 
@@ -395,13 +333,13 @@ class ReleaseScorer:
         # iTunes returns Latinized artist names for non-Latin artists, but Cyrillic album titles
         # In this case, reduce penalty to allow album matching to carry the score
         if self._is_cross_script_comparison(target_artist_norm, release_artist_norm):
-            penalty = int(scoring_cfg.get("artist_cross_script_penalty", -10))
+            penalty = cfg.artist_cross_script_penalty
             score_components.append(f"Artist Cross-Script (transliteration likely): {penalty}")
             return 0, penalty
 
         # Completely different artist - LARGE penalty
         # This prevents "Scorn - Evanescence" from matching "Evanescence - Evanescence"
-        penalty = int(scoring_cfg.get("artist_mismatch_penalty", -60))
+        penalty = cfg.artist_mismatch_penalty
         score_components.append(f"Artist Mismatch: {penalty}")
         return 0, penalty
 
@@ -529,8 +467,6 @@ class ReleaseScorer:
             Compensation bonus (positive int) if all conditions met, else 0
 
         """
-        scoring_cfg = self.scoring_config
-
         # Condition 1: Target artist must be a soundtrack pattern
         if not self._is_soundtrack_artist(target_artist_norm):
             return 0
@@ -551,7 +487,7 @@ class ReleaseScorer:
         # All conditions met - apply compensation
         # This should offset the artist mismatch penalty (~-60) to allow
         # the album match and other factors to determine the final score
-        compensation: int = int(scoring_cfg.get("soundtrack_compensation_bonus", 75))
+        compensation = self.scoring_config.soundtrack_compensation_bonus
         score_components.append(f"Soundtrack Compensation (album match + genre confirmed): +{compensation}")
         return compensation
 
@@ -597,37 +533,37 @@ class ReleaseScorer:
             Score adjustment
 
         """
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
 
         # Use shared normalization helper (edition stripping happens earlier in pipeline)
         comp_release_title = _normalize_for_comparison(release_title_norm)
         comp_album_norm = _normalize_for_comparison(target_album_norm)
 
         if comp_release_title == comp_album_norm:
-            bonus = int(scoring_cfg.get("album_exact_match_bonus", 25))
+            bonus = cfg.album_exact_match_bonus
             score_components.append(f"Album Exact Match: +{bonus}")
             if artist_match_bonus > 0:
-                perfect_bonus = int(scoring_cfg.get("perfect_match_bonus", 10))
+                perfect_bonus = cfg.perfect_match_bonus
                 score_components.append(f"Perfect Artist+Album Match: +{perfect_bonus}")
                 return bonus + perfect_bonus
             return bonus
 
         if self._is_album_variation(comp_release_title, comp_album_norm):
-            bonus = int(scoring_cfg.get("album_variation_bonus", 10))
+            bonus = cfg.album_variation_bonus
             score_components.append(f"Album Variation (Suffix): +{bonus}")
             return bonus
 
         if self._is_album_variation(comp_album_norm, comp_release_title):
-            bonus = int(scoring_cfg.get("album_variation_bonus", 10))
+            bonus = cfg.album_variation_bonus
             score_components.append(f"Album Variation (Search Suffix): +{bonus}")
             return bonus
 
         if comp_album_norm in comp_release_title or comp_release_title in comp_album_norm:
-            penalty = int(scoring_cfg.get("album_substring_penalty", -15))
+            penalty = cfg.album_substring_penalty
             score_components.append(f"Album Substring Mismatch: {penalty}")
             return penalty
 
-        penalty = int(scoring_cfg.get("album_unrelated_penalty", -40))
+        penalty = cfg.album_unrelated_penalty
         score_components.append(f"Album Unrelated: {penalty}")
         return penalty
 
@@ -655,7 +591,7 @@ class ReleaseScorer:
             Tuple of (characteristics_score, rg_first_year)
 
         """
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         char_score = 0
         rg_first_year = None
 
@@ -666,7 +602,7 @@ class ReleaseScorer:
             # Only MusicBrainz gets the release group match bonus (RG is a MB concept)
             # Year diff penalty applies to all sources with rg_first_year
             if rg_first_year is not None and source == "musicbrainz" and year_str == str(rg_first_year):
-                rg_match_bonus: int = int(scoring_cfg.get("mb_release_group_match_bonus", 50))
+                rg_match_bonus = cfg.mb_release_group_match_bonus
                 char_score += rg_match_bonus
                 score_components.append(f"MB RG First Date Match: +{rg_match_bonus}")
 
@@ -678,9 +614,9 @@ class ReleaseScorer:
 
         # Reissue penalty
         if release.get("is_reissue", False):
-            reissue_penalty: int = int(scoring_cfg.get("reissue_penalty", -30))
-            char_score += reissue_penalty
-            score_components.append(f"Reissue Indicator: {reissue_penalty}")
+            penalty = cfg.reissue_penalty
+            char_score += penalty
+            score_components.append(f"Reissue Indicator: {penalty}")
 
         return char_score, rg_first_year
 
@@ -697,40 +633,40 @@ class ReleaseScorer:
 
     def _score_release_type(self, release: dict[str, Any], score_components: list[str]) -> int:
         """Score release type (album, EP, single, etc.)."""
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         release_type = str(release.get("album_type", release.get("type", ""))).lower()
 
         if "album" in release_type:
-            type_bonus: int = int(scoring_cfg.get("type_album_bonus", 15))
-            score_components.append(f"Type Album: +{type_bonus}")
-            return type_bonus
+            bonus = cfg.type_album_bonus
+            score_components.append(f"Type Album: +{bonus}")
+            return bonus
         if any(t in release_type for t in ["ep", "single"]):
-            type_penalty: int = int(scoring_cfg.get("type_ep_single_penalty", -10))
-            score_components.append(f"Type EP/Single: {type_penalty}")
-            return type_penalty
+            penalty = cfg.type_ep_single_penalty
+            score_components.append(f"Type EP/Single: {penalty}")
+            return penalty
         if any(t in release_type for t in ["compilation", "live", "soundtrack", "remix"]):
-            type_comp_penalty = int(scoring_cfg.get("type_compilation_live_penalty", -25))
-            score_components.append(f"Type Comp/Live/Remix/Soundtrack: {type_comp_penalty}")
-            return type_comp_penalty
+            penalty = cfg.type_compilation_live_penalty
+            score_components.append(f"Type Comp/Live/Remix/Soundtrack: {penalty}")
+            return penalty
         return 0
 
     def _score_release_status(self, release: dict[str, Any], score_components: list[str]) -> int:
         """Score release status (official, bootleg, promo, etc.)."""
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         status = str(release.get("status", "")).lower()
 
         if status == "official":
-            status_bonus: int = int(scoring_cfg.get("status_official_bonus", 10))
-            score_components.append(f"Status Official: +{status_bonus}")
-            return status_bonus
+            bonus = cfg.status_official_bonus
+            score_components.append(f"Status Official: +{bonus}")
+            return bonus
         if any(s in status for s in ["bootleg", "unofficial", "pseudorelease"]):
-            status_penalty: int = int(scoring_cfg.get("status_bootleg_penalty", -50))
-            score_components.append(f"Status Bootleg/Unofficial: {status_penalty}")
-            return status_penalty
+            penalty = cfg.status_bootleg_penalty
+            score_components.append(f"Status Bootleg/Unofficial: {penalty}")
+            return penalty
         if any(s in status for s in ["promotion", "promo", "promotional"]):
-            status_promo_penalty = int(scoring_cfg.get("status_promo_penalty", -20))
-            score_components.append(f"Status Promo: {status_promo_penalty}")
-            return status_promo_penalty
+            penalty = cfg.status_promo_penalty
+            score_components.append(f"Status Promo: {penalty}")
+            return penalty
         return 0
 
     def _calculate_contextual_score(self, year: int, rg_first_year: int | None, score_components: list[str]) -> int:
@@ -761,7 +697,7 @@ class ReleaseScorer:
         """Score based on artist activity period context."""
         if self.artist_period_context is None:
             return 0
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         period_score = 0
         start_year: int | None = self.artist_period_context.get("start_year")
         end_year: int | None = self.artist_period_context.get("end_year")
@@ -770,22 +706,20 @@ class ReleaseScorer:
         # Config values are expected to be negative (per schema Field(le=0))
         if start_year and year < start_year - 1:
             years_before = start_year - year
-            penalty_val = min(50, 5 + (years_before - 1) * 5)
-            penalty: int = int(scoring_cfg.get("year_before_start_penalty", -penalty_val))
+            penalty = cfg.year_before_start_penalty
             period_score += penalty
             score_components.append(f"Year Before Start ({years_before} yrs): {penalty}")
 
         # Penalty if the year is after the artist's end (allow 3-year grace)
         if end_year and year > end_year + 3:
             years_after = year - end_year
-            penalty_val = min(40, 5 + (years_after - 3) * 3)
-            penalty_after = int(scoring_cfg.get("year_after_end_penalty", -penalty_val))
+            penalty_after = cfg.year_after_end_penalty
             period_score += penalty_after
             score_components.append(f"Year After End ({years_after} yrs): {penalty_after}")
 
         # Bonus if year is near artist start
         if start_year and 0 <= (year - start_year) <= 1:
-            near_start_bonus: int = int(scoring_cfg.get("year_near_start_bonus", 20))
+            near_start_bonus = cfg.year_near_start_bonus
             period_score += near_start_bonus
             score_components.append(f"Year Near Start: +{near_start_bonus}")
 
@@ -793,10 +727,10 @@ class ReleaseScorer:
 
     def _score_year_difference(self, year: int, rg_first_year: int, score_components: list[str]) -> int:
         """Score penalty based on the difference from the release group first year."""
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         year_diff = year - rg_first_year
-        penalty_scale: int = int(scoring_cfg.get("year_diff_penalty_scale", -5))
-        max_penalty: int = int(scoring_cfg.get("year_diff_max_penalty", -40))
+        penalty_scale = cfg.year_diff_penalty_scale
+        max_penalty = cfg.year_diff_max_penalty
         year_diff_penalty = max(max_penalty, (year_diff - 1) * penalty_scale)
         score_components.append(f"Year Diff from RG Date ({year_diff} yrs): {year_diff_penalty}")
         return year_diff_penalty
@@ -818,7 +752,7 @@ class ReleaseScorer:
             Country score adjustment
 
         """
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         release_country = (release.get("country") or "").lower()
         artist_region_normalized = (artist_region or "").lower()
 
@@ -831,11 +765,11 @@ class ReleaseScorer:
             return 0
 
         if release_country == artist_region_normalized:
-            country_bonus: int = int(scoring_cfg.get("country_artist_match_bonus", 10))
-            score_components.append(f"Country Matches Artist Region ({artist_region_normalized.upper()}): +{country_bonus}")
-            return country_bonus
-        if release_country in scoring_cfg.get("major_market_codes", ["us", "gb", "uk", "de", "jp", "fr"]):
-            market_bonus: int = int(scoring_cfg.get("country_major_market_bonus", 5))
+            bonus = cfg.country_artist_match_bonus
+            score_components.append(f"Country Matches Artist Region ({artist_region_normalized.upper()}): +{bonus}")
+            return bonus
+        if release_country in self.major_market_codes:
+            market_bonus = cfg.country_major_market_bonus
             score_components.append(f"Country Major Market ({release_country.upper()}): +{market_bonus}")
             return market_bonus
         return 0
@@ -851,15 +785,15 @@ class ReleaseScorer:
             Source reliability score adjustment
 
         """
-        scoring_cfg = self.scoring_config
+        cfg = self.scoring_config
         source_adjustment = 0
 
         if source == "musicbrainz":
-            source_adjustment = int(scoring_cfg.get("source_mb_bonus", 5))
+            source_adjustment = cfg.source_mb_bonus
         elif source == "discogs":
-            source_adjustment = int(scoring_cfg.get("source_discogs_bonus", 2))
+            source_adjustment = cfg.source_discogs_bonus
         elif source == "itunes":
-            source_adjustment = int(scoring_cfg.get("source_itunes_bonus", 4))
+            source_adjustment = cfg.source_itunes_bonus
 
         if source_adjustment != 0:
             score_components.append(f"Source {source.title()}: {source_adjustment:+}")
@@ -899,8 +833,8 @@ class ReleaseScorer:
             Integer score (0-100+) indicating release quality/originality
 
         """
-        scoring_cfg = self.scoring_config
-        score: int = int(scoring_cfg.get("base_score", 10))
+        cfg = self.scoring_config
+        score: int = cfg.base_score
         score_components: list[str] = []
 
         # Extract key fields
@@ -930,12 +864,12 @@ class ReleaseScorer:
         # Apply penalties for current and future year releases
         if year > self.current_year:
             # Future years are suspicious (likely incorrect data)
-            future_penalty: int = int(scoring_cfg.get("future_year_penalty", -10))
+            future_penalty = cfg.future_year_penalty
             score += future_penalty
             score_components.append(f"Future Year ({year}): {future_penalty}")
         elif year == self.current_year:
             # Current year: small penalty to prefer earlier releases when ambiguous
-            current_year_penalty: int = int(scoring_cfg.get("current_year_penalty", 0))
+            current_year_penalty = cfg.current_year_penalty
             score += current_year_penalty
             if current_year_penalty != 0:
                 score_components.append(f"Current Year ({year}): {current_year_penalty}")
@@ -980,20 +914,22 @@ class ReleaseScorer:
 
 # Factory function for easy usage
 def create_release_scorer(
-    scoring_config: dict[str, Any] | None = None,
+    scoring_config: ScoringConfig | None = None,
     min_valid_year: int = 1900,
     definitive_score_threshold: int = 85,
     console_logger: logging.Logger | None = None,
     remaster_keywords: list[str] | None = None,
+    major_market_codes: list[str] | None = None,
 ) -> ReleaseScorer:
     """Create a configured ReleaseScorer instance.
 
     Args:
-        scoring_config: Configuration dictionary with scoring parameters
+        scoring_config: Typed scoring parameters (uses defaults if None)
         min_valid_year: Minimum valid year for releases
         definitive_score_threshold: Threshold for definitive scoring
         console_logger: Optional logger for debug output
-        remaster_keywords: Keywords to identify edition suffixes (e.g., "deluxe", "remaster")
+        remaster_keywords: Keywords to identify edition suffixes
+        major_market_codes: Country codes for major market bonus
 
     Returns:
         Configured ReleaseScorer instance
@@ -1005,4 +941,5 @@ def create_release_scorer(
         definitive_score_threshold=definitive_score_threshold,
         console_logger=console_logger,
         remaster_keywords=remaster_keywords,
+        major_market_codes=major_market_codes,
     )

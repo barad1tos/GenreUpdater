@@ -51,12 +51,11 @@ class TestFullApplicationPipelineE2E:
         } | overrides
 
     @staticmethod
-    def create_mock_dependency_container(config: dict[str, Any]) -> MagicMock:
+    def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for testing."""
         mock_deps = MagicMock(spec=DependencyContainer)
 
         # Basic services
-        mock_deps.config = config
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
