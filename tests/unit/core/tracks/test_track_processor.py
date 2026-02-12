@@ -75,11 +75,6 @@ class _MockAnalytics(Analytics):
         mock_analytics = _MockLogger("analytics")
         loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
         super().__init__(config={}, loggers=loggers, max_events=1000)
-        self.events: list[dict[str, Any]] = []
-
-    def track_event(self, event: dict[str, Any]) -> None:
-        """Track event for testing verification."""
-        self.events.append(event)
 
 
 class _MockAppleScriptClient:

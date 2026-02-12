@@ -335,7 +335,7 @@ Interfaces defined with `typing.Protocol` in `core/models/protocols.py`:
 - `ExternalApiServiceProtocol` — external API clients
 - `AppleScriptClientProtocol` — Music.app communication
 - `PendingVerificationServiceProtocol` — verification queue
-- `AnalyticsProtocol` — performance tracking
+- `AnalyticsProtocol` — wrapped call execution and batch mode
 - `LibrarySnapshotServiceProtocol` — snapshot persistence
 
 `core/` depends only on protocols, never on concrete service classes.

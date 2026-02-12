@@ -712,68 +712,12 @@ class TrackProcessorProtocol(Protocol):
 
 @runtime_checkable
 class AnalyticsProtocol(Protocol):
-    """Protocol defining the interface for analytics services.
+    """Protocol for analytics services providing performance tracking.
 
-    This protocol defines methods for tracking application metrics,
-    performance data, and usage statistics.
+    Defines the contract for executing wrapped function calls
+    (sync and async) with analytics instrumentation, and batch mode
+    for suppressing console output during heavy processing.
     """
-
-    def track_event(
-        self,
-        event_name: str,
-        properties: dict[str, Any] | None = None,
-    ) -> None:
-        """Track an analytics event.
-
-        Args:
-            event_name: Name of the event
-            properties: Optional event properties
-
-        """
-        ...
-
-    def track_error(
-        self,
-        error: Exception,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Track an error occurrence.
-
-        Args:
-            error: Exception that occurred
-            context: Optional context information
-
-        """
-        ...
-
-    def track_performance(
-        self,
-        operation: str,
-        duration: float,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Track performance metrics.
-
-        Args:
-            operation: Name of the operation
-            duration: Duration in seconds
-            metadata: Optional additional metadata
-
-        """
-        ...
-
-    def get_statistics(self) -> dict[str, Any]:
-        """Get analytics statistics.
-
-        Returns:
-            Dictionary containing analytics data
-
-        """
-        ...
-
-    def flush(self) -> None:
-        """Flush any pending analytics data."""
-        ...
 
     async def execute_async_wrapped_call(
         self,

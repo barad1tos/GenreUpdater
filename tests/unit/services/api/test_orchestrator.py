@@ -219,25 +219,11 @@ class TestExternalApiOrchestratorAllure:
         mock_analytics = MockAnalytics()
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(analytics=mock_analytics)
         assert orchestrator.analytics is mock_analytics
-        assert hasattr(orchestrator.analytics, "track_event")
 
-        # Verify analytics can track events
-        assert hasattr(mock_analytics, "events")
-        assert isinstance(mock_analytics.events, list)
-        # Test that analytics object can receive events
-        test_event = {
-            "event_type": "api_request",
-            "provider": "musicbrainz",
-            "artist": "Test Artist",
-            "album": "Test Album",
-            "timestamp": "2024-01-01T00:00:00Z",
-        }
-
-        mock_analytics.track_event(test_event)
-
-        # Verify event was tracked
-        assert len(mock_analytics.events) == 1
-        assert mock_analytics.events[0] == test_event
+        # Verify analytics exposes the protocol methods used in production
+        assert hasattr(orchestrator.analytics, "execute_sync_wrapped_call")
+        assert hasattr(orchestrator.analytics, "execute_async_wrapped_call")
+        assert hasattr(orchestrator.analytics, "batch_mode")
 
     @pytest.mark.parametrize(
         ("config_key", "config_value"),
