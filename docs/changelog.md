@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependabot PRs failing CI due to missing env vars in `load_config()` validation
 - `DiscogsClient` received empty dict instead of typed `AppConfig`/`YearRetrievalConfig` — latent runtime crash on `_get_reissue_keywords()`
 - Test cast mismatch: `cast(Analytics, ...)` → `cast(AnalyticsProtocol, ...)` to match `GenreManager` signature
+- CI failures since B1: `full_sync.py` ruff format violation; `test_external_api_real.py` fixtures returning `dict` instead of `AppConfig`
 
 ## [3.0.0] - 2026-01-12
 

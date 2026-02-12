@@ -164,13 +164,7 @@ async def main() -> None:
 
         # Run the full resync
         print("Starting full media library resync...")
-        await run_full_resync(
-            console_logger,
-            error_logger,
-            deps.app_config,
-            deps.cache_service,
-            music_updater.track_processor
-        )
+        await run_full_resync(console_logger, error_logger, deps.app_config, deps.cache_service, music_updater.track_processor)
 
         print("✅ Full resync completed!")
         print("track_list.csv is now synchronized with Music.app")

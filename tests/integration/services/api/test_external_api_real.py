@@ -12,11 +12,11 @@ import asyncio
 import logging
 import socket
 from collections.abc import AsyncGenerator
-from typing import Any
 
 import pytest
 
 from app.app_config import Config
+from core.models.track_models import AppConfig
 from metrics.analytics import Analytics, LoggerContainer
 from services.api.orchestrator import ExternalApiOrchestrator
 from services.cache.orchestrator import CacheOrchestrator
@@ -69,7 +69,7 @@ def _check_required_secrets() -> list[str]:
 
 
 @pytest.fixture
-def app_config() -> dict[str, Any]:
+def app_config() -> AppConfig:
     """Load real application config.
 
     Skips test if required secrets are missing (e.g., Dependabot PRs).
@@ -78,13 +78,12 @@ def app_config() -> dict[str, Any]:
     if missing:
         pytest.skip(f"Missing required secrets: {', '.join(missing)}")
     config = Config()
-    app_config = config.load()
-    return app_config.model_dump()
+    return config.load()
 
 
 @pytest.fixture
 def analytics(
-    app_config: dict[str, Any],
+    app_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> Analytics:
@@ -100,7 +99,7 @@ def analytics(
 
 @pytest.fixture
 def cache_service(
-    app_config: dict[str, Any],
+    app_config: AppConfig,
     console_logger: logging.Logger,
 ) -> CacheOrchestrator:
     """Create a cache orchestrator for tests."""
@@ -109,7 +108,7 @@ def cache_service(
 
 @pytest.fixture
 def pending_verification_service(
-    app_config: dict[str, Any],
+    app_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> PendingVerificationService:
@@ -123,7 +122,7 @@ def pending_verification_service(
 
 @pytest.fixture
 async def api_orchestrator(
-    app_config: dict[str, Any],
+    app_config: AppConfig,
     analytics: Analytics,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
@@ -403,7 +402,7 @@ class TestApiCleanup:
     @pytest.mark.asyncio
     async def test_close_releases_resources(
         self,
-        app_config: dict[str, Any],
+        app_config: AppConfig,
         analytics: Analytics,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -434,7 +433,7 @@ class TestApiCleanup:
     @pytest.mark.asyncio
     async def test_double_close_safe(
         self,
-        app_config: dict[str, Any],
+        app_config: AppConfig,
         analytics: Analytics,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
