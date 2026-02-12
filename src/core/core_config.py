@@ -203,14 +203,14 @@ def _validate_config_data_type(config_data: dict[str, Any] | list[Any] | str | f
     return config_data
 
 
-def load_config(config_path: str) -> dict[str, Any]:
+def load_config(config_path: str) -> AppConfig:
     """Load the configuration from a YAML file, resolve environment variables, and validate it.
 
     Args:
         config_path: Path to the configuration YAML file.
 
     Returns:
-        dict: Dictionary containing the validated configuration with resolved env vars.
+        Validated AppConfig Pydantic model with resolved env vars.
 
     Raises:
         FileNotFoundError: If the config file does not exist.
@@ -247,21 +247,13 @@ def load_config(config_path: str) -> dict[str, Any]:
         # Validate with Pydantic
         try:
             config_model = AppConfig(**config_data)
-            # Convert Pydantic model to dict using modern v2 method
-            # Use model_dump() for Pydantic v2, with intelligent fallback
-            if hasattr(config_model, "model_dump") and callable(config_model.model_dump):
-                validated_config: dict[str, Any] = config_model.model_dump()
-            else:
-                # Fallback for edge cases - use model_fields for field extraction
-                fields = getattr(config_model, "model_fields", {})
-                validated_config = {field_name: getattr(config_model, field_name) for field_name in fields}
         except ValidationError as e:
             error_details = format_pydantic_errors(e)
             msg = f"Configuration validation failed:\n{error_details}"
             raise ValueError(msg) from e
 
         logger.info("Configuration successfully loaded and validated.")
-        return validated_config
+        return config_model
 
     except (FileNotFoundError, PermissionError, ValueError, yaml.YAMLError) as e:
         logger.critical("Configuration loading failed: %s", e)

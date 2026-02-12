@@ -100,6 +100,16 @@ class ExperimentalConfig(BaseModel):
     max_batch_size: int = Field(default=5, ge=1)
 
 
+class AppleScriptRetryConfig(BaseModel):
+    """AppleScript operation retry policy."""
+
+    max_retries: int = Field(default=3, ge=0)
+    base_delay_seconds: float = Field(default=1.0, ge=0)
+    max_delay_seconds: float = Field(default=10.0, ge=0)
+    jitter_range: float = Field(default=0.2, ge=0, le=1)
+    operation_timeout_seconds: float = Field(default=60.0, ge=0)
+
+
 class BatchProcessingConfig(BaseModel):
     """Batch processing size configuration."""
 
@@ -402,10 +412,14 @@ class AppConfig(BaseModel):
     apple_script_rate_limit: AppleScriptRateLimitConfig = Field(
         default_factory=AppleScriptRateLimitConfig,
     )
+    applescript_retry: AppleScriptRetryConfig = Field(
+        default_factory=AppleScriptRetryConfig,
+    )
     max_retries: int = Field(ge=0)
     retry_delay_seconds: float = Field(ge=0)
     incremental_interval_minutes: int = Field(ge=1)
     cache_ttl_seconds: int = Field(ge=0)
+    max_generic_entries: int = Field(default=10000, ge=1)
 
     # Feature toggles and settings
     cleaning: CleaningConfig
