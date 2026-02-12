@@ -48,10 +48,13 @@ def config(tmp_path: Path) -> dict[str, Any]:
             "csv_output_file": "track_list.csv",
         },
         "incremental_interval_minutes": 60,
-        "verify_database": {
+        "database_verification": {
             "batch_size": 10,
             "pause_seconds": 0.1,
             "auto_verify_days": 7,
+        },
+        "development": {
+            "test_artists": [],
         },
     }
 
@@ -423,7 +426,7 @@ class TestGetTracksToVerify:
         config: dict[str, Any],
     ) -> None:
         """Should filter by test_artists when in dry_run mode."""
-        config["test_artists"] = ["Artist1"]
+        config["development"]["test_artists"] = ["Artist1"]
         verifier = DatabaseVerifier(
             ap_client=mock_ap_client,
             console_logger=console_logger,
