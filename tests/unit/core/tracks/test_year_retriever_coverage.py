@@ -127,20 +127,6 @@ def sample_track() -> TrackDict:
     )
 
 
-class TestResolveNonNegativeFloat:
-    """Tests for _resolve_non_negative_float static method."""
-
-    def test_returns_valid_value(self) -> None:
-        """Test returns valid float value."""
-        result = YearRetriever._resolve_non_negative_float(1.5, 0.0)
-        assert result == 1.5
-
-    def test_returns_default_for_negative(self) -> None:
-        """Test returns default for negative value."""
-        result = YearRetriever._resolve_non_negative_float(-1.0, 5.0)
-        assert result == 5.0
-
-
 class TestHandleFutureYearsFound:
     """Tests for handle_future_years method on YearDeterminator."""
 
@@ -371,25 +357,6 @@ class TestDetermineConcurrencyLimit:
         year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 1
         result = year_retriever._batch_processor._determine_concurrency_limit()
         assert result == 1
-
-
-class TestResolvePositiveInt:
-    """Tests for _resolve_positive_int static method."""
-
-    def test_returns_valid_positive_int(self) -> None:
-        """Test returns valid positive integer."""
-        result = YearRetriever._resolve_positive_int(5, 1)
-        assert result == 5
-
-    def test_returns_default_for_zero(self) -> None:
-        """Test returns default for zero."""
-        result = YearRetriever._resolve_positive_int(0, 10)
-        assert result == 10
-
-    def test_returns_default_for_negative(self) -> None:
-        """Test returns default for negative."""
-        result = YearRetriever._resolve_positive_int(-5, 10)
-        assert result == 10
 
 
 class TestNormalizeCollaborationArtist:

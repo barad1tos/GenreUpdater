@@ -19,12 +19,7 @@ from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
 from .year_fallback import YearFallbackHandler
-from .year_utils import (
-    normalize_collaboration_artist,
-    resolve_non_negative_float,
-    resolve_non_negative_int,
-    resolve_positive_int,
-)
+from .year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
     import logging
@@ -62,10 +57,6 @@ class YearRetriever:
     DEFAULT_ABSURD_YEAR_THRESHOLD = 1970
     DEFAULT_SUSPICION_THRESHOLD_YEARS = 10
 
-    # Backward compatibility: expose utility methods as static methods
-    _resolve_non_negative_int = staticmethod(resolve_non_negative_int)
-    _resolve_positive_int = staticmethod(resolve_positive_int)
-    _resolve_non_negative_float = staticmethod(resolve_non_negative_float)
     normalize_collaboration_artist = staticmethod(normalize_collaboration_artist)
 
     def __init__(

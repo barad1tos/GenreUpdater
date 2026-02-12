@@ -168,30 +168,6 @@ class ExternalApiOrchestrator:
     _SUSPICIOUS_CURRENT_YEAR_MSG = "Rejecting suspicious current_library_year=%s (matches system year) for '%s - %s'"
 
     @staticmethod
-    def _coerce_non_negative_int(value: Any, default: int) -> int:
-        """Convert value to a non-negative integer with fallback."""
-        try:
-            candidate = int(value)
-        except (TypeError, ValueError):
-            return default
-        return candidate if candidate >= 0 else default
-
-    @staticmethod
-    def _coerce_positive_int(value: Any, default: int) -> int:
-        """Convert value to a positive integer with fallback."""
-        result = ExternalApiOrchestrator._coerce_non_negative_int(value, default)
-        return result if result > 0 else default
-
-    @staticmethod
-    def _coerce_non_negative_float(value: Any, default: float) -> float:
-        """Convert value to a non-negative float with fallback."""
-        try:
-            candidate = float(value)
-        except (TypeError, ValueError):
-            return default
-        return candidate if candidate >= 0 else default
-
-    @staticmethod
     def _normalize_api_name(api_name: Any) -> str:
         """Normalize API name aliases to orchestrator-internal identifiers."""
         name = str(api_name).strip().lower()

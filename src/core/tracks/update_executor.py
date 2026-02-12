@@ -493,25 +493,10 @@ class TrackUpdateExecutor:
         commands.extend(f"{track_id}{FIELD_SEP}{property_name}{FIELD_SEP}{property_value!s}" for property_name, property_value in updates)
         batch_command = CMD_SEP.join(commands)
 
-        # Determine timeout from typed configuration
-        timeout_value = self.config.applescript_timeouts.batch_update
-        try:
-            batch_timeout = float(timeout_value)
-        except (TypeError, ValueError):
-            self.console_logger.warning(
-                "Invalid 'applescript_timeouts.batch_update' value '%s'; falling back to 60.0 seconds",
-                timeout_value,
-            )
-            batch_timeout = 60.0
-        if batch_timeout <= 0:
-            self.console_logger.error(
-                "Non-positive 'applescript_timeouts.batch_update' value '%s'; this is a misconfiguration.",
-                timeout_value,
-            )
-            msg = f"Non-positive 'applescript_timeouts.batch_update' value '{timeout_value}'; please check your configuration."
-            raise ValueError(msg)
+        # Pydantic guarantees batch_update is int >= 1 (Field(ge=1))
+        batch_timeout = float(self.config.applescript_timeouts.batch_update)
 
-        # Execute batch update with configured timeout (defaults to 60s)
+        # Execute batch update with configured timeout (defaults to 1800s)
         result = await self.ap_client.run_script(
             BATCH_UPDATE_TRACKS,
             [batch_command],

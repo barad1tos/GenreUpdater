@@ -471,31 +471,6 @@ class TestNormalizeApiName:
         assert orchestrator._normalize_api_name("itunes") == "itunes"
 
 
-class TestCoercionMethods:
-    """Tests for value coercion helper methods."""
-
-    @pytest.mark.asyncio
-    async def test_coerce_non_negative_int(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to non-negative integer."""
-        assert orchestrator._coerce_non_negative_int(5, 0) == 5
-        assert orchestrator._coerce_non_negative_int(-5, 0) == 0
-        assert orchestrator._coerce_non_negative_int(None, 10) == 10
-
-    @pytest.mark.asyncio
-    async def test_coerce_positive_int(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to positive integer."""
-        assert orchestrator._coerce_positive_int(5, 1) == 5
-        assert orchestrator._coerce_positive_int(0, 1) == 1
-        assert orchestrator._coerce_positive_int(-5, 1) == 1
-
-    @pytest.mark.asyncio
-    async def test_coerce_non_negative_float(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to non-negative float."""
-        assert orchestrator._coerce_non_negative_float(5.5, 0.0) == 5.5
-        assert orchestrator._coerce_non_negative_float(-5.5, 0.0) == 0.0
-        assert orchestrator._coerce_non_negative_float(None, 1.5) == 1.5
-
-
 class TestCurrentYearContamination:
     """Tests for current year contamination detection logic."""
 
