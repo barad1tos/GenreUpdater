@@ -131,7 +131,7 @@ class Analytics:
         self.analytics_logger = loggers.analytics
 
         # Limits & thresholds
-        self.max_events = max_events or config.analytics.max_events
+        self.max_events = config.analytics.max_events if max_events is None else max_events
         thresholds = config.analytics.duration_thresholds
         self.short_max = thresholds.short_max
         self.medium_max = thresholds.medium_max

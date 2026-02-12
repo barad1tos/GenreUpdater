@@ -289,8 +289,9 @@ experimental:
   max_batch_size: 5  # Start small (5-10 tracks), increase gradually if stable
 
 # -----------------------------------------------------------------------
-# 9. TEST MODE
+# 9. TEST MODE (DEPRECATED — use development.test_artists instead)
 # -----------------------------------------------------------------------
+# Legacy location: auto-migrated to development.test_artists at load time
 test_artists:
   - Amon Amarth
   - Children of Bodom

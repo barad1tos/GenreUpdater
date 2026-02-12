@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Literal, TypedDict, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Type checking improvements for better IDE support and type safety
 T = TypeVar("T")
@@ -465,6 +465,19 @@ class AppConfig(BaseModel):
 
     # Legacy / compat — top-level test_artists (prefer development.test_artists)
     test_artists: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def migrate_legacy_test_artists(self) -> AppConfig:
+        """Migrate top-level test_artists into development.test_artists.
+
+        Old configs may have a top-level ``test_artists`` key alongside an empty
+        ``development.test_artists``.  This validator copies the legacy value so
+        that consumers reading ``config.development.test_artists`` get the
+        expected list.
+        """
+        if self.test_artists and not self.development.test_artists:
+            self.development.test_artists = list(self.test_artists)
+        return self
 
 
 # API Response Models

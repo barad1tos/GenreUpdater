@@ -50,9 +50,14 @@ class TestCLIE2E:
         """Create a mock dependency container for CLI testing."""
         mock_deps = MagicMock(spec=DependencyContainer)
 
-        # Basic services
+        # Basic services — wire app_config from the same config dict for consistency
         mock_deps.config = config
-        mock_deps.app_config = create_test_app_config()
+        dev_config = config.get("development", {})
+        mock_deps.app_config = create_test_app_config(
+            music_library_path=config.get("music_library_path", "/tmp/test.musiclibrary"),
+            dry_run=config.get("dry_run", True),
+            development={"test_artists": dev_config.get("test_artists", [])},
+        )
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
