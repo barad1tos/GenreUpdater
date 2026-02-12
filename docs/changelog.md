@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
+
 ### Added
 - Batch error handling tests: sequential processing, CancelledError, config validation
 - Track ID validation and bulk update mixed-results tests
