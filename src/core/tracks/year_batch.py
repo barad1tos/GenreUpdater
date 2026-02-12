@@ -37,10 +37,10 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
-    from core.models.track_models import TrackDict
+    from core.models.protocols import AnalyticsProtocol
+    from core.models.track_models import AppConfig, TrackDict
     from core.retry_handler import DatabaseRetryHandler
     from core.tracks.track_processor import TrackProcessor
-    from core.models.protocols import AnalyticsProtocol
 
 
 _PROGRESS_DESCRIPTION = "Processing albums"
@@ -77,7 +77,7 @@ class YearBatchProcessor:
         retry_handler: DatabaseRetryHandler,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: AnalyticsProtocol,
         dry_run: bool = False,
     ) -> None:
@@ -89,7 +89,7 @@ class YearBatchProcessor:
             retry_handler: Retry handler for transient error recovery
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            config: Configuration dictionary
+            config: Typed application configuration
             analytics: Service for performance tracking
             dry_run: Whether to run in dry-run mode
 
@@ -120,17 +120,18 @@ class YearBatchProcessor:
             force: If True, bypass skip checks and re-query API for all albums.
 
         """
-        year_config = self.config.get("year_retrieval", {})
-        self._warn_legacy_year_config(year_config)
+        processing = self.config.year_retrieval.processing
 
-        batch_size, delay_between_batches, adaptive_delay = self._get_processing_settings(year_config)
+        batch_size = processing.batch_size
+        delay_between_batches = int(processing.delay_between_batches)
+        adaptive_delay = processing.adaptive_delay
 
         album_items = list(grouped_albums.items())
         total_albums = len(album_items)
         if total_albums == 0:
             return
 
-        concurrency_limit = self._determine_concurrency_limit(year_config)
+        concurrency_limit = self._determine_concurrency_limit()
 
         if self._should_use_sequential_processing(adaptive_delay, concurrency_limit):
             await self._process_batches_sequentially(
@@ -154,57 +155,10 @@ class YearBatchProcessor:
             force=force,
         )
 
-    def _warn_legacy_year_config(self, year_config: dict[str, Any]) -> None:
-        """Emit warnings when user still relies on the legacy config format."""
-        if "batch_size" in year_config and "processing" not in year_config:
-            self.console_logger.warning(
-                "Legacy config detected: 'year_retrieval.batch_size' should be 'year_retrieval.processing.batch_size'. "
-                "Update your config file for optimal performance."
-            )
-        if "delay_between_batches" in year_config and "processing" not in year_config:
-            self.console_logger.warning(
-                "Legacy config detected: 'year_retrieval.delay_between_batches' should be "
-                "'year_retrieval.processing.delay_between_batches'. Update your config file for optimal performance."
-            )
-
-    @staticmethod
-    def _get_processing_settings(year_config: dict[str, Any]) -> tuple[int, int, bool]:
-        """Extract batch processing settings with correct fallbacks."""
-        processing_config = year_config.get("processing", {})
-        batch_size_raw = processing_config.get("batch_size", 10)
-        delay_raw = processing_config.get("delay_between_batches", 60)
-        adaptive_delay_raw = processing_config.get("adaptive_delay", False)
-
-        try:
-            batch_size = int(batch_size_raw)
-        except (TypeError, ValueError):
-            batch_size = 10
-
-        try:
-            delay_between_batches = int(delay_raw)
-        except (TypeError, ValueError):
-            delay_between_batches = 60
-
-        adaptive_delay = bool(adaptive_delay_raw)
-        return max(1, batch_size), max(0, delay_between_batches), adaptive_delay
-
-    def _determine_concurrency_limit(self, year_config: dict[str, Any]) -> int:
+    def _determine_concurrency_limit(self) -> int:
         """Compute concurrency limit based on AppleScript and API limits."""
-        api_concurrency_raw = year_config.get("rate_limits", {}).get("concurrent_api_calls")
-        apple_script_concurrency_raw = self.config.get("apple_script_concurrency", 1)
-
-        try:
-            apple_script_concurrency = int(apple_script_concurrency_raw)
-        except (TypeError, ValueError):
-            apple_script_concurrency = 1
-
-        try:
-            api_concurrency = int(api_concurrency_raw) if api_concurrency_raw is not None else None
-        except (TypeError, ValueError):
-            api_concurrency = None
-
-        if api_concurrency is None or api_concurrency <= 0:
-            return max(1, apple_script_concurrency)
+        api_concurrency = self.config.year_retrieval.rate_limits.concurrent_api_calls
+        apple_script_concurrency = self.config.apple_script_concurrency
         return max(1, min(apple_script_concurrency, api_concurrency))
 
     @staticmethod
@@ -549,7 +503,7 @@ class YearBatchProcessor:
 
         """
         valid_modes = {"process_editable", "skip_all", "mark_only"}
-        mode = self.config.get("year_retrieval", {}).get("processing", {}).get("prerelease_handling", "process_editable")
+        mode = self.config.year_retrieval.processing.prerelease_handling
 
         if mode not in valid_modes:
             self.console_logger.warning(
@@ -983,7 +937,7 @@ class YearBatchProcessor:
         track_names: dict[str, str] = {str(track.get("id", "")): str(track.get("name", "")) for track in tracks if track.get("id")}
 
         # Process in batches
-        batch_size = self.config.get("apple_script_concurrency", 2)
+        batch_size = self.config.apple_script_concurrency
         successful = 0
         failed = 0
 

@@ -6,22 +6,26 @@ import asyncio
 from collections.abc import AsyncGenerator
 from datetime import UTC
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from services.api.orchestrator import ExternalApiOrchestrator
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
     from services.pending_verification import PendingVerificationService
 
 
 @pytest.fixture
-def mock_config() -> dict[str, Any]:
+def mock_config() -> AppConfig:
     """Create mock configuration."""
-    return {
-        "year_retrieval": {
+    return create_test_app_config(
+        year_retrieval={
+            "enabled": False,
+            "preferred_api": "musicbrainz",
             "api_auth": {
                 "discogs_token": "test_token",
                 "musicbrainz_app_name": "TestApp/1.0",
@@ -30,27 +34,56 @@ def mock_config() -> dict[str, Any]:
             "rate_limits": {
                 "discogs_requests_per_minute": 25,
                 "musicbrainz_requests_per_second": 1,
-                "itunes_requests_per_second": 10,
+                "concurrent_api_calls": 3,
             },
             "processing": {
+                "batch_size": 10,
+                "delay_between_batches": 60,
+                "adaptive_delay": False,
                 "cache_ttl_days": 30,
                 "skip_prerelease": True,
                 "future_year_threshold": 1,
                 "prerelease_recheck_days": 30,
+                "pending_verification_interval_days": 30,
             },
             "logic": {
                 "min_valid_year": 1900,
                 "definitive_score_threshold": 85,
                 "definitive_score_diff": 15,
+                "preferred_countries": [],
+                "major_market_codes": [],
             },
+            "reissue_detection": {"reissue_keywords": []},
             "scoring": {
                 "base_score": 10,
+                "artist_exact_match_bonus": 0,
+                "album_exact_match_bonus": 0,
+                "perfect_match_bonus": 0,
+                "album_variation_bonus": 0,
+                "album_substring_penalty": 0,
+                "album_unrelated_penalty": 0,
+                "mb_release_group_match_bonus": 0,
+                "type_album_bonus": 0,
+                "type_ep_single_penalty": 0,
+                "type_compilation_live_penalty": 0,
+                "status_official_bonus": 0,
+                "status_bootleg_penalty": 0,
+                "status_promo_penalty": 0,
+                "reissue_penalty": 0,
+                "year_diff_penalty_scale": 0,
+                "year_diff_max_penalty": 0,
+                "year_before_start_penalty": 0,
+                "year_after_end_penalty": 0,
+                "year_near_start_bonus": 0,
+                "country_artist_match_bonus": 0,
+                "country_major_market_bonus": 0,
+                "source_mb_bonus": 0,
+                "source_discogs_bonus": 0,
             },
-            "preferred_api": "musicbrainz",
         },
-        "max_retries": 3,
-        "retry_delay_seconds": 1.0,
-    }
+        max_retries=3,
+        retry_delay_seconds=1.0,
+    )
 
 
 @pytest.fixture
@@ -78,7 +111,7 @@ def mock_services() -> tuple[MagicMock, MagicMock, MagicMock]:
 
 @pytest.fixture
 async def orchestrator(
-    mock_config: dict[str, Any],
+    mock_config: AppConfig,
     mock_loggers: tuple[MagicMock, MagicMock],
     mock_services: tuple[MagicMock, MagicMock, MagicMock],
 ) -> AsyncGenerator[ExternalApiOrchestrator]:
@@ -146,7 +179,7 @@ class TestSafeMarkForVerification:
 
     @pytest.mark.asyncio
     async def test_warns_when_service_not_initialized(
-        self, mock_config: dict[str, Any], mock_loggers: tuple[MagicMock, MagicMock], mock_services: tuple[MagicMock, MagicMock, MagicMock]
+        self, mock_config: AppConfig, mock_loggers: tuple[MagicMock, MagicMock], mock_services: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         """Should log warning when pending verification service is not initialized."""
         console_logger, error_logger = mock_loggers
@@ -211,7 +244,7 @@ class TestSafeRemoveFromPending:
 
     @pytest.mark.asyncio
     async def test_returns_when_service_not_initialized(
-        self, mock_config: dict[str, Any], mock_loggers: tuple[MagicMock, MagicMock], mock_services: tuple[MagicMock, MagicMock, MagicMock]
+        self, mock_config: AppConfig, mock_loggers: tuple[MagicMock, MagicMock], mock_services: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         """Should return early when pending verification service is None."""
         console_logger, error_logger = mock_loggers
@@ -333,24 +366,21 @@ class TestTokenMethods:
 
     @pytest.mark.asyncio
     async def test_get_raw_token_returns_config_value(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should return token from config."""
-        config = {"discogs_token": "test_discogs_token"}
-        result = orchestrator._get_raw_token(config, "discogs_token", "DISCOGS_TOKEN")
+        """Should return token from config value string."""
+        result = orchestrator._get_raw_token("test_discogs_token", "discogs_token", "DISCOGS_TOKEN")
         assert result == "test_discogs_token"
 
     @pytest.mark.asyncio
     async def test_get_raw_token_returns_empty_for_missing(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Should return empty string for missing token."""
-        config: dict[str, Any] = {}
-        result = orchestrator._get_raw_token(config, "nonexistent_token", "NONEXISTENT_VAR")
+        result = orchestrator._get_raw_token("", "nonexistent_token", "NONEXISTENT_VAR")
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_get_raw_token_uses_env_var_fallback(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should fall back to environment variable when config is empty."""
-        config: dict[str, Any] = {}
+        """Should fall back to environment variable when config value is empty."""
         with patch.dict("os.environ", {"TEST_TOKEN_VAR": "env_token_value"}):
-            result = orchestrator._get_raw_token(config, "test_key", "TEST_TOKEN_VAR")
+            result = orchestrator._get_raw_token("", "test_key", "TEST_TOKEN_VAR")
         assert result == "env_token_value"
 
 
@@ -441,31 +471,6 @@ class TestNormalizeApiName:
         assert orchestrator._normalize_api_name("itunes") == "itunes"
 
 
-class TestCoercionMethods:
-    """Tests for value coercion helper methods."""
-
-    @pytest.mark.asyncio
-    async def test_coerce_non_negative_int(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to non-negative integer."""
-        assert orchestrator._coerce_non_negative_int(5, 0) == 5
-        assert orchestrator._coerce_non_negative_int(-5, 0) == 0
-        assert orchestrator._coerce_non_negative_int(None, 10) == 10
-
-    @pytest.mark.asyncio
-    async def test_coerce_positive_int(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to positive integer."""
-        assert orchestrator._coerce_positive_int(5, 1) == 5
-        assert orchestrator._coerce_positive_int(0, 1) == 1
-        assert orchestrator._coerce_positive_int(-5, 1) == 1
-
-    @pytest.mark.asyncio
-    async def test_coerce_non_negative_float(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should coerce to non-negative float."""
-        assert orchestrator._coerce_non_negative_float(5.5, 0.0) == 5.5
-        assert orchestrator._coerce_non_negative_float(-5.5, 0.0) == 0.0
-        assert orchestrator._coerce_non_negative_float(None, 1.5) == 1.5
-
-
 class TestCurrentYearContamination:
     """Tests for current year contamination detection logic."""
 
@@ -473,7 +478,7 @@ class TestCurrentYearContamination:
     async def test_current_year_rejected_when_tracks_added_long_ago(self, orchestrator: ExternalApiOrchestrator) -> None:
         """Tracks added years ago with current year should be rejected as contamination."""
         current_year = orchestrator.current_year
-        # Tracks added 5 years ago, but library year is current year → contamination
+        # Tracks added 5 years ago, but library year is current year -> contamination
         result = orchestrator._get_fallback_year_when_no_api_results(
             current_library_year=str(current_year),
             log_artist="Test Artist",
@@ -522,7 +527,7 @@ class TestCurrentYearContamination:
     async def test_handle_year_search_error_respects_track_added_year(self, orchestrator: ExternalApiOrchestrator) -> None:
         """_handle_year_search_error should use earliest_track_added_year for contamination check."""
         current_year = orchestrator.current_year
-        # Tracks added this year → accept current year
+        # Tracks added this year -> accept current year
         result, is_def, conf, _scores = orchestrator._handle_year_search_error(
             log_artist="Test Artist",
             log_album="Test Album",

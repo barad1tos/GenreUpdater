@@ -332,7 +332,7 @@ class DependencyContainer:
             self._pending_verification_service = PendingVerificationService(self._config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
-                self._config,
+                self.app_config,
                 self._console_logger,
                 self._error_logger,
                 self._analytics,

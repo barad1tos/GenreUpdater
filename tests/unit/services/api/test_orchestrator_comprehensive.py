@@ -1,7 +1,9 @@
 """Comprehensive unit tests for ExternalApiOrchestrator."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +12,10 @@ from services.api.orchestrator import (
     ExternalApiOrchestrator,
     normalize_name,
 )
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestNormalizeFunction:
@@ -27,7 +33,7 @@ class TestNormalizeFunction:
         assert normalize_name("   ") == ""  # Whitespace is normalized/stripped
 
     def test_normalize_ampersand_to_and(self) -> None:
-        """Test that & is converted to 'and' for better API matching."""
+        """Test that ampersand converts to 'and' for better API matching."""
         assert normalize_name("Karma & Effect") == "Karma and Effect"
         assert normalize_name("Blessed & Cursed") == "Blessed and Cursed"
         assert normalize_name("Pt. 1 & 2") == "Pt. 1 and 2"
@@ -44,16 +50,16 @@ class TestNormalizeFunction:
         assert normalize_name("Solanaceae / King Dude") == "Solanaceae"
 
     def test_normalize_strips_plus_compilation_markers(self) -> None:
-        """Test that trailing '+ <digit>' compilation markers are stripped (conservative)."""
-        # Only strip when + is followed by digits (bonus track counts)
+        """Test stripping trailing '+ digit' compilation markers (conservative)."""
+        # Only strip when '+' precedes digits (bonus track counts)
         assert normalize_name("Not for Want of Trying + 4") == "Not for Want of Trying"
         assert normalize_name("Album + 10 Bonus Tracks") == "Album"
-        # Preserve legitimate titles where + is followed by text
+        # Preserve legitimate titles where '+' precedes text
         assert normalize_name("Nebularium + the Restless Memoirs") == "Nebularium + the Restless Memoirs"
         assert normalize_name("The Singles Plus") == "The Singles Plus"  # No ' + '
 
     def test_normalize_w_slash_to_with(self) -> None:
-        """Test that 'w/' is converted to 'with'."""
+        """Test converting 'w/' to 'with'."""
         assert normalize_name("Split w/ East Of The Wall") == "Split with East Of The Wall"
         assert normalize_name("Collab w/Artist") == "Collab with Artist"
 
@@ -81,43 +87,81 @@ class TestNormalizeFunction:
         assert normalize_name("Album: Subtitle") == "Album Subtitle"
 
 
+def _create_orchestrator_config(**overrides: object) -> AppConfig:
+    """Create an AppConfig for orchestrator tests with optional overrides."""
+    year_retrieval = {
+        "enabled": False,
+        "preferred_api": "musicbrainz",
+        "api_auth": {
+            "discogs_token": "test_token",
+            "musicbrainz_app_name": "TestApp/1.0",
+            "contact_email": "test@example.com",
+        },
+        "rate_limits": {
+            "discogs_requests_per_minute": 25,
+            "musicbrainz_requests_per_second": 1,
+            "concurrent_api_calls": 3,
+        },
+        "processing": {
+            "batch_size": 10,
+            "delay_between_batches": 60,
+            "adaptive_delay": False,
+            "cache_ttl_days": 30,
+            "skip_prerelease": True,
+            "future_year_threshold": 1,
+            "prerelease_recheck_days": 30,
+            "pending_verification_interval_days": 30,
+        },
+        "logic": {
+            "min_valid_year": 1900,
+            "definitive_score_threshold": 85,
+            "definitive_score_diff": 15,
+            "preferred_countries": [],
+            "major_market_codes": [],
+        },
+        "reissue_detection": {"reissue_keywords": []},
+        "scoring": {
+            "base_score": 10,
+            "artist_exact_match_bonus": 0,
+            "album_exact_match_bonus": 0,
+            "perfect_match_bonus": 0,
+            "album_variation_bonus": 0,
+            "album_substring_penalty": 0,
+            "album_unrelated_penalty": 0,
+            "mb_release_group_match_bonus": 0,
+            "type_album_bonus": 0,
+            "type_ep_single_penalty": 0,
+            "type_compilation_live_penalty": 0,
+            "status_official_bonus": 0,
+            "status_bootleg_penalty": 0,
+            "status_promo_penalty": 0,
+            "reissue_penalty": 0,
+            "year_diff_penalty_scale": 0,
+            "year_diff_max_penalty": 0,
+            "year_before_start_penalty": 0,
+            "year_after_end_penalty": 0,
+            "year_near_start_bonus": 0,
+            "country_artist_match_bonus": 0,
+            "country_major_market_bonus": 0,
+            "source_mb_bonus": 0,
+            "source_discogs_bonus": 0,
+        },
+    }
+    return create_test_app_config(
+        year_retrieval=year_retrieval,
+        max_retries=3,
+        retry_delay_seconds=1.0,
+        **overrides,
+    )
+
+
 class TestExternalApiOrchestrator:
     """Test the ExternalApiOrchestrator class."""
 
     @pytest.fixture
-    def mock_config(self) -> dict[str, Any]:
+    def mock_config(self) -> AppConfig:
         """Create mock configuration."""
-        return {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp/1.0",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "itunes_requests_per_second": 10,
-                },
-                "processing": {
-                    "cache_ttl_days": 30,
-                    "skip_prerelease": True,
-                    "future_year_threshold": 1,
-                    "prerelease_recheck_days": 30,
-                },
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                },
-                "scoring": {
-                    "base_score": 10,
-                },
-                "preferred_api": "musicbrainz",
-            },
-            "max_retries": 3,
-            "retry_delay_seconds": 1.0,
-        }
+        return _create_orchestrator_config()
 
     @pytest.fixture
     def mock_loggers(self) -> tuple[MagicMock, MagicMock]:
@@ -142,7 +186,7 @@ class TestExternalApiOrchestrator:
     @pytest.fixture
     async def orchestrator(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_loggers: tuple[MagicMock, MagicMock],
         mock_services: tuple[MagicMock, MagicMock, MagicMock],
     ) -> AsyncGenerator[ExternalApiOrchestrator]:
@@ -280,19 +324,16 @@ class TestExternalApiOrchestrator:
     @pytest.mark.asyncio
     async def test_config_validation_error(self) -> None:
         """Test that invalid config raises appropriate errors."""
-        invalid_config = {
-            "year_retrieval": None,  # Invalid: should be a dict
-        }
-
         console_logger = MagicMock()
         error_logger = MagicMock()
         analytics = MagicMock()
         cache_service = MagicMock()
         pending_verification = MagicMock()
 
-        with pytest.raises(TypeError):
+        # Passing None instead of AppConfig raises AttributeError on attribute access
+        with pytest.raises(AttributeError):
             ExternalApiOrchestrator(
-                config=invalid_config,
+                config=None,  # type: ignore[arg-type]
                 console_logger=console_logger,
                 error_logger=error_logger,
                 analytics=analytics,
@@ -356,34 +397,9 @@ class TestGetArtistStartYear:
     """Tests for ExternalApiOrchestrator.get_artist_start_year method."""
 
     @pytest.fixture
-    def mock_config(self) -> dict[str, Any]:
+    def mock_config(self) -> AppConfig:
         """Create mock configuration."""
-        return {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp/1.0",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "itunes_requests_per_second": 10,
-                },
-                "processing": {
-                    "cache_ttl_days": 30,
-                    "skip_prerelease": True,
-                    "future_year_threshold": 1,
-                    "prerelease_recheck_days": 30,
-                },
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                },
-                "scoring": {},
-            }
-        }
+        return _create_orchestrator_config()
 
     @pytest.fixture
     def mock_console_logger(self) -> MagicMock:
@@ -419,7 +435,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_returns_cached_value(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -446,7 +462,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_returns_none_for_cached_negative(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -472,7 +488,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_uses_musicbrainz_first(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -507,7 +523,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_falls_back_to_itunes(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -540,7 +556,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_caches_positive_result(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -573,7 +589,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_caches_negative_result(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,
@@ -609,7 +625,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_handles_invalid_cached_type(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
         mock_cache_service: MagicMock,

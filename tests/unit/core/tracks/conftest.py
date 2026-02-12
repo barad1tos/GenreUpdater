@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.types import TrackDict
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_fallback import YearFallbackHandler
-from tests.mocks.protocol_mocks import (
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.protocol_mocks import (  # sourcery skip: dont-import-test-modules
     MockExternalApiService,
     MockPendingVerificationService,
 )
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +125,7 @@ def create_year_batch_processor(
     analytics: MagicMock | None = None,
     console_logger: logging.Logger | None = None,
     error_logger: logging.Logger | None = None,
-    config: dict[str, Any] | None = None,
+    config: AppConfig | None = None,
     dry_run: bool = False,
 ) -> YearBatchProcessor:
     """Create YearBatchProcessor with mock dependencies.
@@ -132,26 +137,18 @@ def create_year_batch_processor(
         tp.update_tracks_batch_async = AsyncMock(return_value=[])
         track_processor = tp
     if year_determinator is None:
-        yd = MagicMock()
-        yd.should_skip_album = AsyncMock(return_value=(False, None))
-        yd.determine_album_year = AsyncMock(return_value="2020")
-        yd.check_prerelease_status = AsyncMock(return_value=False)
-        yd.check_suspicious_album = AsyncMock(return_value=False)
-        yd.handle_future_years = AsyncMock(return_value=False)
-        yd.extract_future_years = MagicMock(return_value=[])
-        year_determinator = yd
+        year_determinator = create_year_determinator_mock()
     if retry_handler is None:
-        rh = MagicMock()
-        rh.execute_with_retry = AsyncMock()
-        retry_handler = rh
+        retry_handler = MagicMock()
+        retry_handler.execute_with_retry = AsyncMock()
     return YearBatchProcessor(
         track_processor=track_processor,
         year_determinator=year_determinator,
         retry_handler=retry_handler,
         console_logger=console_logger or logging.getLogger("test.console"),
         error_logger=error_logger or logging.getLogger("test.error"),
-        config=config or {},
-        analytics=analytics or MagicMock(),
+        config=config or create_test_app_config(),
+        analytics=analytics or cast(AnalyticsProtocol, cast(object, MagicMock())),
         dry_run=dry_run,
     )
 

@@ -1,17 +1,22 @@
 """Tests for TrackUpdateExecutor - track metadata update operations."""
 
+from __future__ import annotations
+
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
 from core.tracks.update_executor import TrackUpdateExecutor
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
+    from core.models.track_models import AppConfig
     from core.models.types import AppleScriptClientProtocol
 
 
@@ -46,12 +51,12 @@ def mock_security_validator() -> MagicMock:
 
 
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> AppConfig:
     """Create test configuration."""
-    return {
-        "applescript_timeouts": {"batch_update": 60},
-        "experimental": {"batch_updates_enabled": False, "max_batch_size": 5},
-    }
+    return create_test_app_config(
+        applescript_timeouts={"batch_update": 60},
+        experimental={"batch_updates_enabled": False, "max_batch_size": 5},
+    )
 
 
 @pytest.fixture
@@ -59,7 +64,7 @@ def executor(
     mock_ap_client: AsyncMock,
     mock_cache_service: AsyncMock,
     mock_security_validator: MagicMock,
-    config: dict[str, Any],
+    config: AppConfig,
     logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> TrackUpdateExecutor:
@@ -71,7 +76,7 @@ def executor(
         config=config,
         console_logger=logger,
         error_logger=error_logger,
-        analytics=MagicMock(),
+        analytics=cast(AnalyticsProtocol, cast(object, MagicMock())),
     )
 
 
@@ -80,7 +85,7 @@ def dry_run_executor(
     mock_ap_client: AsyncMock,
     mock_cache_service: AsyncMock,
     mock_security_validator: MagicMock,
-    config: dict[str, Any],
+    config: AppConfig,
     logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> TrackUpdateExecutor:
@@ -92,7 +97,7 @@ def dry_run_executor(
         config=config,
         console_logger=logger,
         error_logger=error_logger,
-        analytics=MagicMock(),
+        analytics=cast(AnalyticsProtocol, cast(object, MagicMock())),
         dry_run=True,
     )
 
@@ -443,37 +448,32 @@ class TestTryBatchUpdate:
         assert expected_year in command
         assert cmd_sep in command  # Commands should be separated
 
-    @pytest.mark.asyncio
-    async def test_invalid_timeout_raises(self, executor: TrackUpdateExecutor) -> None:
-        """Test invalid timeout configuration raises ValueError."""
-        executor.config["applescript_timeouts"]["batch_update"] = -1
-        updates = [("genre", "Rock")]
-        with pytest.raises(ValueError, match="Non-positive"):
-            await executor._try_batch_update("123", updates)
+    def test_pydantic_rejects_negative_batch_update(self) -> None:
+        """Pydantic rejects negative batch_update at construction time."""
+        from pydantic import ValidationError
+
+        from core.models.track_models import AppleScriptTimeoutsConfig
+
+        with pytest.raises(ValidationError, match="batch_update"):
+            AppleScriptTimeoutsConfig(batch_update=-1)
+
+    def test_pydantic_rejects_zero_batch_update(self) -> None:
+        """Pydantic rejects zero batch_update at construction time."""
+        from pydantic import ValidationError
+
+        from core.models.track_models import AppleScriptTimeoutsConfig
+
+        with pytest.raises(ValidationError, match="batch_update"):
+            AppleScriptTimeoutsConfig(batch_update=0)
 
     @pytest.mark.asyncio
-    async def test_invalid_timeout_string_uses_default(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
-        """Test invalid timeout string falls back to default."""
-        executor.config["applescript_timeouts"]["batch_update"] = "invalid"
+    async def test_valid_timeout_used_in_batch(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
+        """Test batch update uses the configured timeout value."""
         mock_ap_client.run_script.return_value = "Success"
         updates = [("genre", "Rock")]
-        # Should not raise, uses default 60.0
-        result = await executor._try_batch_update("123", updates)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_fallback_to_applescript_timeout_seconds(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
-        """Test falls back to applescript_timeout_seconds when batch_update not set."""
-        # Remove batch_update from config to trigger fallback
-        del executor.config["applescript_timeouts"]["batch_update"]
-        executor.config["applescript_timeout_seconds"] = 120
-        mock_ap_client.run_script.return_value = "Success"
-        updates = [("genre", "Rock")]
-        result = await executor._try_batch_update("123", updates)
-        assert result is True
-        # Verify the timeout was used (120.0)
+        await executor._try_batch_update("123", updates)
         call_kwargs = mock_ap_client.run_script.call_args[1]
-        assert call_kwargs["timeout"] == 120.0
+        assert call_kwargs["timeout"] == 60.0
 
     @pytest.mark.asyncio
     async def test_handles_special_characters_in_values(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
@@ -517,7 +517,7 @@ class TestApplyTrackUpdates:
     @pytest.mark.asyncio
     async def test_batch_update_when_enabled(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test uses batch update when enabled."""
-        executor.config["experimental"]["batch_updates_enabled"] = True
+        executor.config.experimental.batch_updates_enabled = True
         mock_ap_client.run_script.return_value = "Success"
         updates = [("genre", "Rock"), ("year", "2020")]
         result = await executor._apply_track_updates("123", updates)
@@ -530,7 +530,7 @@ class TestApplyTrackUpdates:
     @pytest.mark.asyncio
     async def test_falls_back_on_batch_failure(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test falls back to individual updates on batch failure."""
-        executor.config["experimental"]["batch_updates_enabled"] = True
+        executor.config.experimental.batch_updates_enabled = True
         # First call (batch) fails, subsequent calls (individual) succeed
         mock_ap_client.run_script.side_effect = [
             "Error: batch failed",  # batch fails

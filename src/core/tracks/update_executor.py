@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.track_models import AppConfig
 
 
 # ASCII separator constants for batch commands (same as fetch_tracks.applescript)
@@ -46,7 +47,7 @@ class TrackUpdateExecutor:
         ap_client: AppleScriptClientProtocol,
         cache_service: CacheServiceProtocol,
         security_validator: SecurityValidator,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
@@ -59,7 +60,7 @@ class TrackUpdateExecutor:
             ap_client: AppleScript client for executing updates
             cache_service: Cache service for invalidation
             security_validator: Validator for sanitizing inputs
-            config: Configuration dictionary
+            config: Typed application configuration
             console_logger: Logger for info/debug messages
             error_logger: Logger for error messages
             analytics: Service for performance tracking
@@ -492,28 +493,10 @@ class TrackUpdateExecutor:
         commands.extend(f"{track_id}{FIELD_SEP}{property_name}{FIELD_SEP}{property_value!s}" for property_name, property_value in updates)
         batch_command = CMD_SEP.join(commands)
 
-        # Determine timeout from configuration with sensible fallbacks
-        timeouts_config = self.config.get("applescript_timeouts", {}) if isinstance(self.config, dict) else {}
-        timeout_value = timeouts_config.get("batch_update")
-        if timeout_value is None:
-            timeout_value = self.config.get("applescript_timeout_seconds", 3600)
-        try:
-            batch_timeout = float(timeout_value)
-        except (TypeError, ValueError):
-            self.console_logger.warning(
-                "Invalid 'applescript_timeouts.batch_update' value '%s'; falling back to 60.0 seconds",
-                timeout_value,
-            )
-            batch_timeout = 60.0
-        if batch_timeout <= 0:
-            self.console_logger.error(
-                "Non-positive 'applescript_timeouts.batch_update' value '%s'; this is a misconfiguration.",
-                timeout_value,
-            )
-            msg = f"Non-positive 'applescript_timeouts.batch_update' value '{timeout_value}'; please check your configuration."
-            raise ValueError(msg)
+        # Pydantic guarantees batch_update is int >= 1 (Field(ge=1))
+        batch_timeout = float(self.config.applescript_timeouts.batch_update)
 
-        # Execute batch update with configured timeout (defaults to 60s)
+        # Execute batch update with configured timeout (defaults to 1800s)
         result = await self.ap_client.run_script(
             BATCH_UPDATE_TRACKS,
             [batch_command],
@@ -558,8 +541,8 @@ class TrackUpdateExecutor:
             return True
 
         # Check if batch updates are enabled (default: disabled for safety)
-        batch_enabled = self.config.get("experimental", {}).get("batch_updates_enabled", False)
-        max_batch_size = self.config.get("experimental", {}).get("max_batch_size", 5)
+        batch_enabled = self.config.experimental.batch_updates_enabled
+        max_batch_size = self.config.experimental.max_batch_size
 
         # Only try batch for multiple updates and if explicitly enabled
         updates_count = len(updates)

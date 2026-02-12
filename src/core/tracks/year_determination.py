@@ -9,14 +9,13 @@ from __future__ import annotations
 import contextlib
 from collections import Counter
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.debug_utils import debug
 from core.models.track_status import is_prerelease_status
 from core.models.validators import is_empty_year, is_valid_year
 
 from .year_consistency import YearConsistencyChecker
-from .year_utils import resolve_non_negative_int, resolve_positive_int
 
 if TYPE_CHECKING:
     import logging
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    from core.models.track_models import TrackDict
+    from core.models.track_models import AppConfig, TrackDict
 
     from .year_fallback import YearFallbackHandler
 
@@ -60,7 +59,7 @@ class YearDeterminator:
         fallback_handler: YearFallbackHandler,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Initialize the YearDeterminator.
 
@@ -72,7 +71,7 @@ class YearDeterminator:
             fallback_handler: Handler for fallback logic
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            config: Configuration dictionary
+            config: Typed application configuration
 
         """
         self.cache_service = cache_service
@@ -84,13 +83,12 @@ class YearDeterminator:
         self.error_logger = error_logger
         self.config = config
 
-        # Extract configuration
-        year_config = self.config.get("year_retrieval", {}) if isinstance(self.config, dict) else {}
-        processing_config = year_config.get("processing", {}) if isinstance(year_config, dict) else {}
+        # Extract configuration from typed model
+        processing = config.year_retrieval.processing
 
-        self.skip_prerelease = bool(processing_config.get("skip_prerelease", True))
-        self.future_year_threshold = resolve_non_negative_int(processing_config.get("future_year_threshold"), default=1)
-        self.prerelease_recheck_days = resolve_positive_int(processing_config.get("prerelease_recheck_days"), default=30)
+        self.skip_prerelease = processing.skip_prerelease
+        self.future_year_threshold = processing.future_year_threshold
+        self.prerelease_recheck_days = processing.prerelease_recheck_days
 
     async def _try_local_sources(
         self,

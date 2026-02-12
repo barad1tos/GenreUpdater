@@ -9,12 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
 from core.tracks.track_processor import TrackProcessor
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
-    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol, LibrarySnapshotServiceProtocol
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -54,38 +57,30 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> AppConfig:
     """Create a test config."""
-    return {
-        "apple_script": {"timeout": 30},
-        "applescript_timeouts": {
-            "single_artist_fetch": 600,
-            "full_library_fetch": 3600,
-        },
-        "development": {"test_artists": []},
-        "experimental": {"batch_updates_enabled": False},
-        "library_snapshot": {"enabled": False},
-    }
+    return create_test_app_config(
+        development={"test_artists": []},
+    )
 
 
 @pytest.fixture
 def processor(
     mock_ap_client: AsyncMock,
     mock_cache_service: AsyncMock,
-    config: dict[str, Any],
+    config: AppConfig,
     logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> TrackProcessor:
     """Create a TrackProcessor instance for testing."""
     security_validator = SecurityValidator(logger)
-    analytics = MagicMock()
     return TrackProcessor(
-        ap_client=cast("AppleScriptClientProtocol", mock_ap_client),
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
+        ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
         console_logger=logger,
         error_logger=error_logger,
         config=config,
-        analytics=analytics,
+        analytics=cast(AnalyticsProtocol, cast(object, MagicMock())),
         security_validator=security_validator,
     )
 
@@ -139,7 +134,7 @@ class TestProcessTestArtists:
     @pytest.mark.asyncio
     async def test_uses_config_test_artists(self, processor: TrackProcessor, mock_ap_client: AsyncMock) -> None:
         """Test uses config test artists when dry run not set."""
-        processor.config["development"]["test_artists"] = ["Config Artist"]
+        processor.config.development.test_artists = ["Config Artist"]
         mock_ap_client.run_script.return_value = "456\x1eTrack\x1eConfig Artist\x1eConfig Artist\x1eAlbum\x1eRock\x1e2021-01-01\x1d"
 
         result = await processor._process_test_artists(False)
@@ -149,7 +144,7 @@ class TestProcessTestArtists:
     async def test_returns_empty_when_no_test_artists(self, processor: TrackProcessor) -> None:
         """Test returns empty list when no test artists configured."""
         processor.dry_run_test_artists = set()
-        processor.config["development"]["test_artists"] = []
+        processor.config.development.test_artists = []
 
         result = await processor._process_test_artists(False)
         assert result == []
@@ -226,14 +221,14 @@ class TestTryFetchTestTracks:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_test_artists(self, processor: TrackProcessor) -> None:
         """Test returns None when no test artists configured."""
-        processor.config["development"]["test_artists"] = []
+        processor.config.development.test_artists = []
         result = await processor._try_fetch_test_tracks(False, False, None)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_test_artists_configured_but_no_tracks(self, processor: TrackProcessor, mock_ap_client: AsyncMock) -> None:
         """Test returns empty list when test artists configured but no tracks found."""
-        processor.config["development"]["test_artists"] = ["Nonexistent Artist"]
+        processor.config.development.test_artists = ["Nonexistent Artist"]
         # AppleScript returns empty for nonexistent artist
         mock_ap_client.run_script.return_value = ""
 
@@ -365,7 +360,10 @@ class TestRefreshSnapshotFromDelta:
         mock_snapshot_service.get_snapshot_metadata.return_value = None
         mock_snapshot_service.load_delta.return_value = None
 
-        result = await processor._refresh_snapshot_from_delta([sample_track], mock_snapshot_service)
+        result = await processor._refresh_snapshot_from_delta(
+            [sample_track],
+            cast("LibrarySnapshotServiceProtocol", cast(object, mock_snapshot_service)),
+        )
         assert result is None
 
     @pytest.mark.asyncio
@@ -383,7 +381,10 @@ class TestRefreshSnapshotFromDelta:
         mock_snapshot_service.load_delta.return_value = None
         mock_ap_client.run_script.return_value = ""  # Empty result
 
-        result = await processor._refresh_snapshot_from_delta([sample_track], mock_snapshot_service)
+        result = await processor._refresh_snapshot_from_delta(
+            [sample_track],
+            cast("LibrarySnapshotServiceProtocol", cast(object, mock_snapshot_service)),
+        )
         assert result is None
 
     @pytest.mark.asyncio
@@ -403,7 +404,10 @@ class TestRefreshSnapshotFromDelta:
         # Return a new track from the delta fetch (7 fields: ID|NAME|ARTIST|ALBUM_ARTIST|ALBUM|GENRE|DATE_ADDED)
         mock_ap_client.run_script.return_value = "456\x1eNew Track\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2021-01-01\x1d"
 
-        result = await processor._refresh_snapshot_from_delta([sample_track], mock_snapshot_service)
+        result = await processor._refresh_snapshot_from_delta(
+            [sample_track],
+            cast("LibrarySnapshotServiceProtocol", cast(object, mock_snapshot_service)),
+        )
         assert result is not None
         assert len(result) == 2  # Original + delta
 
@@ -429,7 +433,10 @@ class TestRefreshSnapshotFromDelta:
         # Return a new track from the delta fetch
         mock_ap_client.run_script.return_value = "456\x1eNew Track\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2021-01-01\x1d"
 
-        result = await processor._refresh_snapshot_from_delta([sample_track], mock_snapshot_service)
+        result = await processor._refresh_snapshot_from_delta(
+            [sample_track],
+            cast("LibrarySnapshotServiceProtocol", cast(object, mock_snapshot_service)),
+        )
         assert result is not None
         assert len(result) == 2  # Original + delta
 
@@ -532,7 +539,7 @@ class TestFetchTracksByIds:
     @pytest.mark.asyncio
     async def test_processes_batches(self, processor: TrackProcessor, mock_ap_client: AsyncMock) -> None:
         """Test processes tracks in batches."""
-        processor.config["batch_processing"] = {"ids_batch_size": 2}
+        processor.config.batch_processing.ids_batch_size = 2
         mock_ap_client.run_script.return_value = "1\x1eT\x1eA\x1eA\x1eAl\x1eR\x1e2020-01-01\x1d"
 
         await processor.fetch_tracks_by_ids(["1", "2", "3", "4"])
@@ -558,7 +565,7 @@ class TestFetchTracksAsync:
         mock_cache_service: AsyncMock,
     ) -> None:
         """Test updates snapshot when fetching tracks."""
-        processor.config["library_snapshot"]["enabled"] = True
+        processor.config.caching.library_snapshot.enabled = True
         processor.snapshot_service = None
         mock_ap_client.run_script.return_value = "123\x1eTrack\x1eArtist\x1eArtist\x1eAlbum\x1eRock\x1e2020-01-01\x1d"
 

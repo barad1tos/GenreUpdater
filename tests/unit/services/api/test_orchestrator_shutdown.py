@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.orchestrator import ExternalApiOrchestrator
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
@@ -45,39 +46,7 @@ class TestOrchestratorGracefulShutdown:
             pending_verification_service.mark_for_verification = AsyncMock()
             pending_verification_service.remove_from_pending = AsyncMock()
 
-        test_config = {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "itunes_requests_per_second": 10,
-                },
-                "processing": {
-                    "cache_ttl_days": 30,
-                },
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                },
-                "scoring": {
-                    "base_score": 50,
-                    "exact_match_bonus": 30,
-                },
-            },
-            "external_apis": {
-                "timeout": 30,
-                "max_concurrent_requests": 10,
-                "musicbrainz": {"enabled": True},
-                "discogs": {"enabled": True},
-                "applemusic": {"enabled": False},
-            },
-        }
+        test_config = create_test_app_config()
 
         console_logger = MockLogger()
         error_logger = MockLogger()

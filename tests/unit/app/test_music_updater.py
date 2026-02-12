@@ -204,19 +204,21 @@ class TestMusicUpdaterAllure:
     async def test_run_update_years(self) -> None:
         """Test year update operation."""
         deps = self.create_mock_dependencies()
+
+        # Enable year retrieval so process_album_years doesn't short-circuit
+        deps.app_config.year_retrieval.enabled = True
+
         updater = MusicUpdater(deps)
 
-        # Mock Music app running check
-        with patch("app.music_updater.is_music_app_running", return_value=True):
-            # Setup test tracks
-            track1 = DummyTrackData.create(track_id="1", album="Album 1", year="")
-            track2 = DummyTrackData.create(track_id="2", album="Album 2", year="2020")
+        # Setup test tracks
+        track1 = DummyTrackData.create(track_id="1", album="Album 1", year="")
+        track2 = DummyTrackData.create(track_id="2", album="Album 2", year="2020")
 
-            # Mock track fetching
-            await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
+        # Mock track fetching
+        await deps.cache_service.set_async("tracks_Test Artist", [track1, track2])
 
-            # Mock API year retrieval
-            deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
+        # Mock API year retrieval
+        deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
 
         with (
             patch(
