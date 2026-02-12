@@ -65,7 +65,7 @@ def executor(
 ) -> ApiRequestExecutor:
     """Create an ApiRequestExecutor instance."""
     return ApiRequestExecutor(
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
         rate_limiters=mock_rate_limiters,
         console_logger=console_logger,
         error_logger=error_logger,
@@ -99,7 +99,7 @@ class TestInitialization:
     ) -> None:
         """Test initialization with all parameters."""
         executor = ApiRequestExecutor(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             rate_limiters=mock_rate_limiters,
             console_logger=console_logger,
             error_logger=error_logger,
@@ -348,7 +348,7 @@ class TestPrepareRequest:
     ) -> None:
         """Test Discogs request fails without token."""
         executor = ApiRequestExecutor(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             rate_limiters=mock_rate_limiters,
             console_logger=console_logger,
             error_logger=error_logger,
@@ -456,6 +456,30 @@ class TestEnsureSession:
 
         # Should not raise
         executor._ensure_session()
+
+
+class TestSessionGuardInRetryLoop:
+    """Tests for the defensive session guard after _ensure_session."""
+
+    @pytest.mark.asyncio
+    async def test_raises_when_session_none_after_ensure(
+        self,
+        executor: ApiRequestExecutor,
+        mock_rate_limiter: AsyncMock,
+    ) -> None:
+        """Guard raises RuntimeError if session is None despite _ensure_session."""
+        # Bypass _ensure_session to simulate edge case where session is still None
+        with patch.object(executor, "_ensure_session"), pytest.raises(RuntimeError, match="HTTP session lost"):
+            await executor._execute_single_request(
+                api_name="musicbrainz",
+                url="https://api.example.com/test",
+                params=None,
+                request_headers={"User-Agent": "Test"},
+                request_timeout=aiohttp.ClientTimeout(total=30),
+                limiter=mock_rate_limiter,
+                attempt=0,
+                log_url="https://api.example.com/test",
+            )
 
 
 class TestHandleClientError:
@@ -1249,15 +1273,15 @@ class TestHandleRuntimeError:
 
         assert result is None
 
-    def test_handle_runtime_error_clears_session_reference(
+    def test_handle_runtime_error_clears_session_without_closing(
         self,
         executor: ApiRequestExecutor,
     ) -> None:
-        """Test that session reference is cleared without attempting to close.
+        """Session reference is cleared but NOT closed on event-loop errors.
 
-        When encountering "Event loop is closed" errors, the executor should
-        clear its session reference but NOT attempt to close it. Session
-        lifecycle is managed by ExternalApiOrchestrator.
+        Session lifecycle is managed by ExternalApiOrchestrator, not by
+        RequestExecutor. The executor only drops its reference to avoid
+        double-close or race conditions.
         """
         mock_session = MagicMock()
         mock_session.closed = False
@@ -1269,35 +1293,7 @@ class TestHandleRuntimeError:
         result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
 
         assert result is None
-        # Session reference should be cleared
         assert executor.session is None
-        # But close() should NOT have been called
-        mock_session.close.assert_not_called()
-
-    def test_request_executor_does_not_close_session(
-        self,
-        executor: ApiRequestExecutor,
-        mock_session: MagicMock,
-    ) -> None:
-        """RequestExecutor should NOT close the session - that's the owner's job.
-
-        Session lifecycle is managed by ExternalApiOrchestrator, not by
-        RequestExecutor. Even when encountering errors like "Event loop is closed",
-        the executor should only clear its session reference without attempting
-        to close it (which could cause double-close or race conditions).
-        """
-        mock_session.close = AsyncMock()
-        executor.set_session(mock_session)
-
-        error = RuntimeError("Event loop is closed")
-
-        # Trigger error handling that previously would have closed the session
-        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
-
-        assert result is None
-        # Session reference should be cleared
-        assert executor.session is None
-        # But close() should NOT have been called - owner manages lifecycle
         mock_session.close.assert_not_called()
 
 

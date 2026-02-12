@@ -9,18 +9,18 @@ from __future__ import annotations
 import itertools
 from typing import TYPE_CHECKING, Any
 
+from core.logger import get_full_log_path
 from core.tracks.track_base import BaseProcessor
 from core.tracks.track_delta import compute_track_delta
 from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
-from core.logger import get_full_log_path
-from metrics.change_reports import load_track_list
 
 if TYPE_CHECKING:
     import logging
+    from collections.abc import Callable
     from datetime import datetime
 
+    from core.models.protocols import AnalyticsProtocol
     from core.models.track_models import TrackDict
-    from metrics import Analytics
 
 
 class IncrementalFilterService(BaseProcessor):
@@ -30,12 +30,24 @@ class IncrementalFilterService(BaseProcessor):
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         config: dict[str, Any],
         dry_run: bool = False,
+        track_list_loader: Callable[[str], dict[str, TrackDict]] | None = None,
     ) -> None:
-        """Initialize the incremental filter service."""
+        """Initialize the incremental filter service.
+
+        Args:
+            console_logger: Logger for user-facing messages
+            error_logger: Logger for error details
+            analytics: Analytics tracking service
+            config: Application configuration dictionary
+            dry_run: If True, record actions without applying changes
+            track_list_loader: Callable that loads tracks from a CSV path.
+                Injected to avoid core/ depending on metrics/.
+        """
         super().__init__(console_logger, error_logger, analytics, config, dry_run)
+        self._track_list_loader = track_list_loader
 
     def filter_tracks_for_incremental_update(
         self,
@@ -95,10 +107,14 @@ class IncrementalFilterService(BaseProcessor):
 
         Uses TrackDict objects directly, eliminating need for separate TrackSummary fetch.
         """
+        if self._track_list_loader is None:
+            self.console_logger.debug("No track list loader configured; skipping status change detection")
+            return []
+
         try:
             # Load previous track state from CSV
             csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
-            existing_tracks = load_track_list(csv_path)
+            existing_tracks = self._track_list_loader(csv_path)
 
             if not existing_tracks:
                 return []

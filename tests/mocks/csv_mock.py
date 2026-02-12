@@ -212,7 +212,3 @@ class MockAnalytics(Analytics):
 
         # Override events list for testing
         self.events: list[dict[str, Any]] = []
-
-    def track_event(self, event: dict[str, Any]) -> None:
-        """Mock event tracking - override parent method."""
-        self.events.append(event)

@@ -54,7 +54,7 @@ def cache_manager(
 ) -> TrackCacheManager:
     """Create a TrackCacheManager instance."""
     return TrackCacheManager(
-        cache_service=cast("CacheServiceProtocol", mock_cache_service),
+        cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
         snapshot_service=mock_snapshot_service,
         console_logger=logger,
     )
@@ -121,7 +121,7 @@ class TestLoadSnapshot:
     ) -> None:
         """Test returns None when snapshot service is not available."""
         manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -240,7 +240,7 @@ class TestUpdateSnapshot:
     ) -> None:
         """Test does nothing when no snapshot service."""
         manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -295,14 +295,14 @@ class TestUpdateSnapshot:
         mock_snapshot.save_delta = AsyncMock()
 
         manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             snapshot_service=mock_snapshot,
             console_logger=logger,
             current_time_func=lambda: fixed_time,
         )
 
-        # Patch _now() to return consistent time (avoids naive/aware mismatch)
-        with patch("services.cache.snapshot._now", return_value=fixed_time):
+        # Patch _utc_now() to return consistent time (avoids naive/aware mismatch)
+        with patch("core.models.cache_types._utc_now", return_value=fixed_time):
             await manager.update_snapshot(sample_tracks, processed_track_ids=["1", "2"])
 
         mock_snapshot.save_delta.assert_called_once()
@@ -371,7 +371,7 @@ class TestCanUseSnapshot:
     ) -> None:
         """Test returns False when no snapshot service."""
         manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             snapshot_service=None,
             console_logger=logger,
         )
@@ -414,7 +414,7 @@ class TestCustomTimeFunc:
         fixed_time = datetime(2025, 1, 1, 12, tzinfo=UTC)
 
         manager = TrackCacheManager(
-            cache_service=cast("CacheServiceProtocol", mock_cache_service),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             snapshot_service=mock_snapshot_service,
             console_logger=logger,
             current_time_func=lambda: fixed_time,

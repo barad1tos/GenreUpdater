@@ -10,8 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from core.models.track_models import CachedApiResult, TrackDict
-from services.cache.album_cache import AlbumCacheEntry
-from services.pending_verification import PendingAlbumEntry, VerificationReason
+from core.models.cache_types import AlbumCacheEntry, PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

@@ -75,8 +75,8 @@ def create_batch_fetcher(
     """Factory to create BatchTrackFetcher with common dependencies."""
     console_logger, error_logger = loggers
     return BatchTrackFetcher(
-        ap_client=cast("AppleScriptClientProtocol", ap_client),
-        cache_service=cast("CacheServiceProtocol", cache_service),
+        ap_client=cast("AppleScriptClientProtocol", cast(object, ap_client)),
+        cache_service=cast("CacheServiceProtocol", cast(object, cache_service)),
         console_logger=console_logger,
         error_logger=error_logger,
         config=config,
@@ -85,7 +85,6 @@ def create_batch_fetcher(
         snapshot_loader=AsyncMock(return_value=None),
         snapshot_persister=AsyncMock(),
         can_use_snapshot=lambda x: False,
-        dry_run=False,
         analytics=analytics,
     )
 
@@ -217,6 +216,25 @@ class TestFetchTracksWithAnalytics:
         # During execution, suppression should have been True
         if suppress_states:
             assert all(suppress_states), "Console logging should be suppressed during batch fetch"
+
+
+class TestAnalyticsGuard:
+    """Tests for the analytics None guard in _fetch_tracks_in_batches_with_analytics."""
+
+    @pytest.mark.asyncio
+    async def test_raises_when_analytics_is_none(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: dict[str, Any],
+    ) -> None:
+        """Guard raises RuntimeError when analytics is None."""
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
+        assert fetcher.analytics is None
+
+        with pytest.raises(RuntimeError, match="analytics must be initialized"):
+            await fetcher._fetch_tracks_in_batches_with_analytics(100)
 
 
 class TestFetchTracksRawFallback:

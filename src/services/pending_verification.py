@@ -39,13 +39,12 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, TYPE_CHECKING
 
 from core.logger import LogFormat, get_full_log_path
+from core.models.cache_types import PendingAlbumEntry, VerificationReason
 from core.models.metadata_utils import clean_names
 from services.cache.hash_service import UnifiedHashService
 
@@ -53,58 +52,7 @@ if TYPE_CHECKING:
     import logging
 
 # Suffix for the file that tracks the last auto-verification timestamp
-PENDING_LAST_VERIFY_SUFFIX = "_last_verify.txt"
-
-
-class VerificationReason(StrEnum):
-    """Reasons why an album is pending verification."""
-
-    # Original reasons
-    NO_YEAR_FOUND = "no_year_found"
-    PRERELEASE = "prerelease"
-
-    # Rejection reasons from FALLBACK (Issue #75)
-    SUSPICIOUS_YEAR_CHANGE = "suspicious_year_change"
-    IMPLAUSIBLE_EXISTING_YEAR = "implausible_existing_year"
-    ABSURD_YEAR_NO_EXISTING = "absurd_year_no_existing"
-    SPECIAL_ALBUM_COMPILATION = "special_album_compilation"
-    SPECIAL_ALBUM_SPECIAL = "special_album_special"
-    SPECIAL_ALBUM_REISSUE = "special_album_reissue"
-    SUSPICIOUS_ALBUM_NAME = "suspicious_album_name"
-
-    # Additional rejection reasons from year_fallback.py
-    VERY_LOW_CONFIDENCE_NO_EXISTING = "very_low_confidence_no_existing"
-    IMPLAUSIBLE_MATCHING_YEAR = "implausible_matching_year"
-    IMPLAUSIBLE_PROPOSED_YEAR = "implausible_proposed_year"
-
-    @classmethod
-    def from_string(cls, value: str) -> VerificationReason:
-        """Convert string to VerificationReason, defaulting to NO_YEAR_FOUND."""
-        try:
-            return cls(value.strip().lower())
-        except ValueError:
-            return cls.NO_YEAR_FOUND
-
-
-@dataclass(frozen=True, slots=True)
-class PendingAlbumEntry:
-    """Immutable entry representing a pending album verification.
-
-    Attributes:
-        timestamp: When the album was marked for verification
-        artist: Artist name
-        album: Album name
-        reason: Why the album needs verification
-        metadata: JSON-encoded metadata string
-        attempt_count: Number of verification attempts made
-    """
-
-    timestamp: datetime
-    artist: str
-    album: str
-    reason: VerificationReason
-    metadata: str = ""
-    attempt_count: int = 0
+PENDING_LAST_VERIFY_SUFFIX: str = "_last_verify.txt"
 
 
 class Logger(Protocol):

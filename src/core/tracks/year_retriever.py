@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from core.analytics_decorator import track_instance_method
 from core.models.validators import is_empty_year
-from metrics import Analytics
 
 from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.models.protocols import (
+        AnalyticsProtocol,
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
@@ -76,7 +77,7 @@ class YearRetriever:
         retry_handler: DatabaseRetryHandler,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         config: dict[str, Any],
         dry_run: bool = False,
     ) -> None:
@@ -90,7 +91,7 @@ class YearRetriever:
             retry_handler: Retry handler for transient error recovery
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            analytics: Analytics instance for tracking
+            analytics: Service for performance tracking
             config: Configuration dictionary
             dry_run: Whether to run in dry-run mode
 
@@ -277,7 +278,7 @@ class YearRetriever:
         """
         return await self._update_album_years_logic(tracks, force=force)
 
-    @Analytics.track_instance_method("year_discogs_update")
+    @track_instance_method("year_discogs_update")
     async def update_years_from_discogs(
         self,
         tracks: list[TrackDict],

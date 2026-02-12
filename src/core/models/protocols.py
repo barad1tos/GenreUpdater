@@ -27,12 +27,20 @@ from core.models.track_models import TrackDict
 
 if TYPE_CHECKING:
     import asyncio
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
+    from contextlib import AbstractAsyncContextManager
     from datetime import datetime
 
+    from rich.console import Console
+    from rich.status import Status
+
+    from core.models.cache_types import (
+        AlbumCacheEntry,
+        LibraryCacheMetadata,
+        LibraryDeltaCache,
+        PendingAlbumEntry,
+    )
     from core.models.track_models import CachedApiResult
-    from services.cache.album_cache import AlbumCacheEntry
-    from services.pending_verification import PendingAlbumEntry
 
 # Type variable for generic cached values
 T = TypeVar("T")
@@ -622,6 +630,55 @@ class RateLimiterProtocol(Protocol):
 
 
 @runtime_checkable
+class LibrarySnapshotServiceProtocol(Protocol):
+    """Protocol for library snapshot and delta cache operations.
+
+    Defines the interface that core/ uses to interact with snapshot persistence,
+    avoiding a direct dependency on the concrete LibrarySnapshotService in services/.
+    """
+
+    async def load_snapshot(self) -> list[TrackDict] | None:
+        """Load tracks from persisted snapshot."""
+        ...
+
+    async def save_snapshot(self, tracks: Sequence[TrackDict]) -> str:
+        """Persist snapshot and return its hash."""
+        ...
+
+    async def is_snapshot_valid(self) -> bool:
+        """Check whether snapshot meets freshness and integrity requirements."""
+        ...
+
+    async def get_snapshot_metadata(self) -> LibraryCacheMetadata | None:
+        """Load snapshot metadata."""
+        ...
+
+    async def update_snapshot_metadata(self, metadata: LibraryCacheMetadata) -> None:
+        """Persist snapshot metadata."""
+        ...
+
+    async def load_delta(self) -> LibraryDeltaCache | None:
+        """Load delta cache."""
+        ...
+
+    async def save_delta(self, delta: LibraryDeltaCache) -> None:
+        """Persist delta cache."""
+        ...
+
+    async def get_library_mtime(self) -> datetime:
+        """Return modification time of the music library file."""
+        ...
+
+    def is_enabled(self) -> bool:
+        """Check if snapshot service is enabled."""
+        ...
+
+    def is_delta_enabled(self) -> bool:
+        """Check if delta tracking is enabled."""
+        ...
+
+
+@runtime_checkable
 class TrackProcessorProtocol(Protocol):
     """Protocol defining the interface for track processor operations.
 
@@ -655,65 +712,62 @@ class TrackProcessorProtocol(Protocol):
 
 @runtime_checkable
 class AnalyticsProtocol(Protocol):
-    """Protocol defining the interface for analytics services.
+    """Protocol for analytics services providing performance tracking.
 
-    This protocol defines methods for tracking application metrics,
-    performance data, and usage statistics.
+    Defines the contract for executing wrapped function calls
+    (sync and async) with analytics instrumentation, and batch mode
+    for suppressing console output during heavy processing.
     """
 
-    def track_event(
+    async def execute_async_wrapped_call(
         self,
-        event_name: str,
-        properties: dict[str, Any] | None = None,
-    ) -> None:
-        """Track an analytics event.
+        func: Callable[..., Any],
+        event_type: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute an async function with analytics tracking.
 
         Args:
-            event_name: Name of the event
-            properties: Optional event properties
+            func: Async function to execute
+            event_type: Type of event for tracking
+            *args: Function arguments
+            **kwargs: Function keyword arguments
 
         """
         ...
 
-    def track_error(
+    def execute_sync_wrapped_call(
         self,
-        error: Exception,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Track an error occurrence.
+        func: Callable[..., Any],
+        event_type: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a sync function with analytics tracking.
 
         Args:
-            error: Exception that occurred
-            context: Optional context information
+            func: Sync function to execute
+            event_type: Type of event for tracking
+            *args: Function arguments
+            **kwargs: Function keyword arguments
 
         """
         ...
 
-    def track_performance(
+    def batch_mode(
         self,
-        operation: str,
-        duration: float,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Track performance metrics.
+        message: str = "Processing...",
+        console: Console | None = None,
+    ) -> AbstractAsyncContextManager[Status]:
+        """Context manager that suppresses console logging and shows a spinner.
 
         Args:
-            operation: Name of the operation
-            duration: Duration in seconds
-            metadata: Optional additional metadata
-
-        """
-        ...
-
-    def get_statistics(self) -> dict[str, Any]:
-        """Get analytics statistics.
+            message: Message to display next to the spinner
+            console: Optional Rich Console instance
 
         Returns:
-            Dictionary containing analytics data
+            Async context manager yielding a Rich Status object
 
         """
-        ...
-
-    def flush(self) -> None:
-        """Flush any pending analytics data."""
         ...

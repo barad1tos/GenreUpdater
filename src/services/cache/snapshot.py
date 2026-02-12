@@ -9,8 +9,7 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,110 +17,23 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol
 
+from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from core.logger import ensure_directory, spinner
+from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, LibraryDeltaCache
 from core.models.track_models import TrackDict
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
-from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from services.cache.json_utils import dumps_json, loads_json
 
-SNAPSHOT_VERSION = "1.0"
-DEFAULT_MAX_AGE_HOURS = 24
-DELTA_MAX_TRACKED_IDS = 50_000
-DELTA_MAX_AGE = timedelta(days=7)
-DEFAULT_COMPRESS_LEVEL = 6
-JSON_SUFFIX = ".json"
-GZIP_SUFFIX = ".json.gz"
+DEFAULT_MAX_AGE_HOURS: int = 24
+DEFAULT_COMPRESS_LEVEL: int = 6
+JSON_SUFFIX: str = ".json"
+GZIP_SUFFIX: str = ".json.gz"
+FORCE_SCAN_INTERVAL_DAYS: int = 7
 
 
-def _now() -> datetime:
-    """Return naive UTC datetime for consistency."""
-    utc_now = datetime.now(UTC)
-    return utc_now.replace(tzinfo=None)
-
-
-@dataclass
-class LibraryCacheMetadata:
-    """Metadata describing the stored snapshot."""
-
-    last_full_scan: datetime
-    library_mtime: datetime
-    track_count: int
-    snapshot_hash: str
-    version: str = SNAPSHOT_VERSION
-    last_force_scan_time: str | None = None  # ISO format datetime
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize metadata to a JSON-friendly dict."""
-        return {
-            "version": self.version,
-            "last_full_scan": self.last_full_scan.isoformat(),
-            "library_mtime": self.library_mtime.isoformat(),
-            "track_count": self.track_count,
-            "snapshot_hash": self.snapshot_hash,
-            "last_force_scan_time": self.last_force_scan_time,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> LibraryCacheMetadata:
-        """Create metadata from stored json."""
-        return cls(
-            version=data.get("version", SNAPSHOT_VERSION),
-            last_full_scan=datetime.fromisoformat(data["last_full_scan"]),
-            library_mtime=datetime.fromisoformat(data["library_mtime"]),
-            track_count=int(data["track_count"]),
-            snapshot_hash=str(data["snapshot_hash"]),
-            last_force_scan_time=data.get("last_force_scan_time"),
-        )
-
-
-@dataclass
-class LibraryDeltaCache:
-    """Delta cache tracking incremental processing state."""
-
-    last_run: datetime
-    processed_track_ids: set[str] = field(default_factory=set)
-    field_hashes: dict[str, str] = field(default_factory=dict)
-    tracked_since: datetime | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to disk format."""
-        return {
-            "last_run": self.last_run.isoformat(),
-            "processed_track_ids": sorted(self.processed_track_ids),
-            "field_hashes": dict(self.field_hashes),
-            "tracked_since": (self.tracked_since or self.last_run).isoformat(),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> LibraryDeltaCache:
-        """Deserialize delta cache."""
-        tracked_since_raw = data.get("tracked_since")
-        tracked_since = datetime.fromisoformat(tracked_since_raw) if tracked_since_raw else None
-        return cls(
-            last_run=datetime.fromisoformat(data["last_run"]),
-            processed_track_ids=set(map(str, data.get("processed_track_ids", []))),
-            field_hashes=dict(data.get("field_hashes", {})),
-            tracked_since=tracked_since,
-        )
-
-    def should_reset(self, *, now: datetime | None = None) -> bool:
-        """Return True if delta should be cleared because of size or age limits."""
-        current_time = now or _now()
-        if len(self.processed_track_ids) >= DELTA_MAX_TRACKED_IDS:
-            return True
-        tracked_ref = self.tracked_since or self.last_run
-        return current_time - tracked_ref > DELTA_MAX_AGE
-
-    def add_processed_ids(self, track_ids: Iterable[str]) -> None:
-        """Add processed track identifiers while respecting limits."""
-        current_time = _now()
-        if self.should_reset(now=current_time):
-            self.processed_track_ids.clear()
-            self.tracked_since = current_time
-
-        self.processed_track_ids.update(track_ids)
-        if self.tracked_since is None:
-            self.tracked_since = current_time
+def _utc_now_naive() -> datetime:
+    """Return naive UTC datetime for consistent comparisons."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class LibrarySnapshotService:
@@ -221,7 +133,7 @@ class LibrarySnapshotService:
         if library_unchanged:
             self.logger.info(
                 "Library unchanged since snapshot; using cached snapshot (age: %s)",
-                _now() - metadata.last_full_scan,
+                _utc_now_naive() - metadata.last_full_scan,
             )
         else:
             # Library has changed - log it and proceed with additional checks
@@ -233,7 +145,7 @@ class LibrarySnapshotService:
 
             # Check age limit (only relevant if library changed)
             if self.max_age.total_seconds() > 0:
-                age = _now() - metadata.last_full_scan
+                age = _utc_now_naive() - metadata.last_full_scan
                 if age > self.max_age:
                     self.logger.warning("Snapshot expired: age %s exceeds %s", age, self.max_age)
                     return False
@@ -289,7 +201,7 @@ class LibrarySnapshotService:
 
         if delta.should_reset():
             delta.processed_track_ids.clear()
-            delta.tracked_since = _now()
+            delta.tracked_since = _utc_now_naive()
 
         delta_dict = delta.to_dict()
         data = dumps_json(delta_dict, indent=True)
@@ -601,14 +513,14 @@ class LibrarySnapshotService:
             return False, "first run (use --force to detect manual edits)"
 
         last_scan = datetime.fromisoformat(metadata.last_force_scan_time)
-        # Normalize to naive (strip timezone if present) for comparison with _now()
+        # Normalize to naive (strip timezone if present) for comparison with UTC now.
         if last_scan.tzinfo is not None:
             last_scan = last_scan.replace(tzinfo=None)
-        now = _now()
+        now = _utc_now_naive()
         days_since = (now - last_scan).days
 
         # Weekly auto-force for manual edit detection
-        if days_since >= 7:
+        if days_since >= FORCE_SCAN_INTERVAL_DAYS:
             return True, f"weekly scan ({days_since} days since last force)"
 
         return False, f"fast mode ({days_since}d since last force scan)"
@@ -617,7 +529,7 @@ class LibrarySnapshotService:
         """Update metadata with current force scan timestamp."""
         metadata = await self.get_snapshot_metadata()
         if metadata:
-            metadata.last_force_scan_time = _now().isoformat()
+            metadata.last_force_scan_time = _utc_now_naive().isoformat()
             await self.update_snapshot_metadata(metadata)
 
     @staticmethod

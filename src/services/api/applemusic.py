@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
     import logging
 
+# iTunes Search API base URL
+ITUNES_BASE_URL: str = "https://itunes.apple.com"
+
 # Constants for data validation
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")
 
@@ -68,7 +71,7 @@ class AppleMusicClient:
         self.score_release_func = score_release_func
 
         # iTunes Search API configuration
-        self.base_url = "https://itunes.apple.com/search"
+        self.base_url = f"{ITUNES_BASE_URL}/search"
         self.country_code = country_code
         self.entity = entity
         # Ensure limit is positive and within iTunes API bounds [1, 200]
@@ -260,6 +263,26 @@ class AppleMusicClient:
         )
         return scored_releases
 
+    def _parse_release_year(self, release_date: str) -> str | None:
+        """Extract a 4-digit year from an iTunes ISO date string.
+
+        Args:
+            release_date: Date string like ``2024-03-15T12:00:00Z``
+
+        Returns:
+            Year string (e.g. ``"2024"``) or None if unparseable
+
+        """
+        if not release_date:
+            return None
+        try:
+            year = release_date.split("-", maxsplit=1)[0]
+            if year.isdigit() and len(year) == VALID_YEAR_LENGTH:
+                return year
+        except (IndexError, ValueError):
+            self.console_logger.debug("[itunes] Could not parse release date: '%s'", release_date)
+        return None
+
     def _process_itunes_result(self, result: dict[str, Any], target_artist_norm: str, target_album_norm: str) -> ScoredRelease | None:
         """Process a single iTunes Search API result into a ScoredRelease.
 
@@ -283,16 +306,7 @@ class AppleMusicClient:
                 return None
 
             # Extract release year from date
-            release_year = None
-            if release_date:
-                try:
-                    # iTunes returns dates in ISO format: "2024-03-15T12:00:00Z"
-                    release_year = release_date.split("-", maxsplit=1)[0]
-                    if not release_year.isdigit() or len(release_year) != VALID_YEAR_LENGTH:
-                        release_year = None
-                except (IndexError, ValueError):
-                    self.console_logger.debug("[itunes] Could not parse release date: '%s'", release_date)
-                    release_year = None
+            release_year = self._parse_release_year(release_date)
 
             if not release_year:
                 self.console_logger.debug(
@@ -537,7 +551,7 @@ class AppleMusicClient:
             List of album results
 
         """
-        lookup_url = "https://itunes.apple.com/lookup"
+        lookup_url = f"{ITUNES_BASE_URL}/lookup"
         params = {
             "id": str(artist_id),
             "entity": "album",

@@ -13,10 +13,10 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.analytics_decorator import track_instance_method
 from core.logger import LogFormat, spinner
 from core.models.protocols import AppleScriptClientProtocol
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
-from metrics import Analytics
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
 from services.apple.rate_limiter import EnhancedRateLimiter
@@ -25,18 +25,17 @@ from core.apple_script_names import (
     FETCH_TRACK_IDS,
     FETCH_TRACKS,
     FETCH_TRACKS_BY_IDS,
+    NO_TRACKS_FOUND,
     UPDATE_PROPERTY,
 )
 
 if TYPE_CHECKING:
     from core.retry_handler import DatabaseRetryHandler
+    from metrics import Analytics
 
 # Logging constants
-RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
-LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
-
-# AppleScript output markers
-NO_TRACKS_FOUND = "NO_TRACKS_FOUND"
+RESULT_PREVIEW_LENGTH: int = 50  # characters shown when previewing small script results
+LOG_PREVIEW_LENGTH: int = 200  # characters shown when previewing long outputs/stderr
 
 
 # noinspection PyUnboundLocalVariable
@@ -213,7 +212,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         else:
             self.console_logger.warning("AppleScript execution returned None")
 
-    @Analytics.track_instance_method("applescript_run_script")
+    @track_instance_method("applescript_run_script")
     async def run_script(
         self,
         script_name: str,
@@ -312,7 +311,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             self.error_logger.exception(error_msg)
             raise
 
-    @Analytics.track_instance_method("applescript_fetch_by_ids")
+    @track_instance_method("applescript_fetch_by_ids")
     async def fetch_tracks_by_ids(
         self,
         track_ids: list[str],
@@ -373,7 +372,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self.console_logger.info("Fetched %d tracks (requested: %d)", len(all_tracks), len(track_ids))
         return all_tracks
 
-    @Analytics.track_instance_method("applescript_fetch_all_ids")
+    @track_instance_method("applescript_fetch_all_ids")
     async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
         """Fetch just track IDs from Music.app (lightweight operation).
 

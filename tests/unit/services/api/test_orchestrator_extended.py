@@ -141,32 +141,6 @@ class TestApplyPreferredOrder:
         assert result[0] == "musicbrainz"
 
 
-class TestRaiseSessionNotInitialized:
-    """Tests for _raise_session_not_initialized method."""
-
-    def test_raises_runtime_error(self) -> None:
-        """Should raise RuntimeError with correct message."""
-        with pytest.raises(RuntimeError, match="HTTP session is not initialized"):
-            ExternalApiOrchestrator._raise_session_not_initialized()
-
-
-class TestEnsureSessionInitialized:
-    """Tests for _ensure_session_initialized method."""
-
-    @pytest.mark.asyncio
-    async def test_raises_when_session_not_initialized(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should raise RuntimeError when session is not initialized."""
-        orchestrator.session = None
-        with pytest.raises(RuntimeError, match="HTTP session is not initialized"):
-            orchestrator._ensure_session_initialized()
-
-    @pytest.mark.asyncio
-    async def test_passes_when_session_initialized(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should not raise when session is initialized."""
-        await orchestrator.initialize()
-        orchestrator._ensure_session_initialized()  # Should not raise
-
-
 class TestSafeMarkForVerification:
     """Tests for _safe_mark_for_verification method."""
 
@@ -378,28 +352,6 @@ class TestTokenMethods:
         with patch.dict("os.environ", {"TEST_TOKEN_VAR": "env_token_value"}):
             result = orchestrator._get_raw_token(config, "test_key", "TEST_TOKEN_VAR")
         assert result == "env_token_value"
-
-
-class TestEnsureSession:
-    """Tests for _ensure_session method."""
-
-    @pytest.mark.asyncio
-    async def test_creates_session_if_none(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should create session if not exists."""
-        orchestrator.session = None
-        await orchestrator._ensure_session()
-        assert orchestrator.session is not None
-
-    @pytest.mark.asyncio
-    async def test_recreates_closed_session(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Should recreate session if closed."""
-        await orchestrator.initialize()
-        if orchestrator.session is not None:
-            await orchestrator.session.close()
-
-        await orchestrator._ensure_session()
-        assert orchestrator.session is not None
-        assert not orchestrator.session.closed
 
 
 class TestClose:

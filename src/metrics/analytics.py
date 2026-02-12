@@ -5,7 +5,7 @@ Uses decorators to measure execution time, success rates, and patterns.
 
 Features
 --------
-- Function performance tracking (sync & async)
+- Function performance tracking (sync and async)
 - Success and failure monitoring
 - Duration categorization (fast / medium / slow)
 - HTML report generation (via utils.reports.save_html_report)
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import inspect
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -157,62 +158,11 @@ class Analytics:
         """Preferred decorator API - tracks sync/async functions."""
         return self._decorator(event_type)
 
-    @classmethod
-    def track_instance_method(cls: type[Analytics], event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Track instance methods by adding analytics tracking.
-
-        Requires the decorated class to expose `self.analytics` and optional `self.error_logger`.
-        """
-
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            """Decorate instance methods."""
-            is_async = asyncio.iscoroutinefunction(func)
-
-            @wraps(func)
-            async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-                """Wrap async functions with analytics tracking."""
-                analytics_inst: Analytics | None = getattr(self, "analytics", None)
-                if not isinstance(analytics_inst, Analytics):
-                    (getattr(self, "error_logger", None) or cls._null_logger()).error(
-                        f"Analytics missing on {self.__class__.__name__}; {_get_func_name(func)} untracked",
-                    )
-                    return await func(self, *args, **kwargs)
-
-                return await analytics_inst.execute_async_wrapped_call(
-                    func,
-                    event_type,
-                    self,
-                    *args,
-                    **kwargs,
-                )
-
-            @wraps(func)
-            def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-                """Wrap sync functions with analytics tracking."""
-                analytics_inst: Analytics | None = getattr(self, "analytics", None)
-                if not isinstance(analytics_inst, Analytics):
-                    (getattr(self, "error_logger", None) or cls._null_logger()).error(
-                        f"Analytics missing on {self.__class__.__name__}; {_get_func_name(func)} untracked",
-                    )
-                    return func(self, *args, **kwargs)
-
-                return analytics_inst.execute_sync_wrapped_call(
-                    func,
-                    event_type,
-                    self,
-                    *args,
-                    **kwargs,
-                )
-
-            return async_wrapper if is_async else sync_wrapper
-
-        return decorator
-
     # --- Internal decorator factory ---
     def _decorator(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator_function(func: Callable[..., Any]) -> Callable[..., Any]:
             """Create decorator for given function."""
-            is_async = asyncio.iscoroutinefunction(func)
+            is_async = inspect.iscoroutinefunction(func)
 
             if is_async:
 

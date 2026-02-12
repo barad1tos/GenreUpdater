@@ -11,13 +11,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services.cache.snapshot import (
+from core.models.cache_types import (
     DELTA_MAX_AGE,
     DELTA_MAX_TRACKED_IDS,
-    GZIP_SUFFIX,
-    JSON_SUFFIX,
     LibraryCacheMetadata,
     LibraryDeltaCache,
+)
+from services.cache.snapshot import (
+    GZIP_SUFFIX,
+    JSON_SUFFIX,
     LibrarySnapshotService,
 )
 from core.models.track_models import TrackDict

@@ -16,6 +16,7 @@ from metrics.analytics import LoggerContainer
 
 if TYPE_CHECKING:
     from core.models.protocols import (
+        AnalyticsProtocol,
         AppleScriptClientProtocol,
         CacheableKey,
         CacheableValue,
@@ -75,11 +76,6 @@ class _MockAnalytics(Analytics):
         mock_analytics = _MockLogger("analytics")
         loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
         super().__init__(config={}, loggers=loggers, max_events=1000)
-        self.events: list[dict[str, Any]] = []
-
-    def track_event(self, event: dict[str, Any]) -> None:
-        """Track event for testing verification."""
-        self.events.append(event)
 
 
 class _MockAppleScriptClient:
@@ -334,7 +330,7 @@ class TestTrackProcessorAllure:
             console_logger=console_logger,
             error_logger=error_logger,
             config=test_config,
-            analytics=analytics,
+            analytics=cast("AnalyticsProtocol", cast(object, analytics)),
             dry_run=dry_run,
         )
 
@@ -349,7 +345,7 @@ class TestTrackProcessorAllure:
             console_logger=_MockLogger(),
             error_logger=_MockLogger(),
             config={"apple_script": {"timeout": 30}},
-            analytics=_MockAnalytics(),
+            analytics=cast("AnalyticsProtocol", cast(object, _MockAnalytics())),
             dry_run=True,
             security_validator=mock_security_validator,
         )

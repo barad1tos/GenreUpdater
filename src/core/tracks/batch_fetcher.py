@@ -11,8 +11,7 @@ from typing import TYPE_CHECKING, Any
 from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
 from core.tracks.track_delta import LINE_SEPARATOR
-from services.apple.applescript_client import NO_TRACKS_FOUND
-from core.apple_script_names import FETCH_TRACKS
+from core.apple_script_names import FETCH_TRACKS, NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
     import logging
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 
     from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
     from core.models.track_models import TrackDict
-    from metrics import Analytics
+    from core.models.protocols import AnalyticsProtocol
 
 
 # Maximum consecutive parse failures before aborting batch processing
@@ -50,7 +49,7 @@ class BatchTrackFetcher:
         snapshot_persister: Callable[[list[TrackDict], list[str] | None], Awaitable[None]],
         can_use_snapshot: Callable[[str | None], bool],
         dry_run: bool = False,
-        analytics: Analytics | None = None,
+        analytics: AnalyticsProtocol | None = None,
     ) -> None:
         """Initialize the batch track fetcher.
 
@@ -130,8 +129,9 @@ class BatchTrackFetcher:
 
     async def _fetch_tracks_in_batches_with_analytics(self, batch_size: int) -> list[TrackDict]:
         """Batch fetch with analytics batch_mode (suppresses per-call console logs)."""
-        # Called only when self.analytics is not None (see fetch_tracks_in_batches)
-        assert self.analytics is not None
+        if self.analytics is None:
+            msg = "analytics must be initialized before batch track fetching"
+            raise RuntimeError(msg)
 
         all_tracks: list[TrackDict] = []
         offset = 1

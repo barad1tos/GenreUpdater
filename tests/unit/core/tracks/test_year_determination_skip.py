@@ -27,7 +27,7 @@ from core.models.protocols import (
 from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import YearDeterminator
 from core.tracks.year_fallback import YearFallbackHandler
-from services.pending_verification import PendingAlbumEntry, VerificationReason
+from core.models.cache_types import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
     from core.models.types import TrackDict

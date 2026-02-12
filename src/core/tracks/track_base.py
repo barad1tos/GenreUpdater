@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import logging
-    from metrics import Analytics
+
+    from core.models.protocols import AnalyticsProtocol
 
 
 class BaseProcessor:
@@ -24,7 +25,7 @@ class BaseProcessor:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         config: dict[str, Any],
         dry_run: bool,
     ) -> None:
@@ -33,7 +34,7 @@ class BaseProcessor:
         Args:
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            analytics: Analytics instance for tracking
+            analytics: Service for performance tracking
             config: Configuration dictionary
             dry_run: Whether to run in dry-run mode
 

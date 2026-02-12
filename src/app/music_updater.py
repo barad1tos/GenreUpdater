@@ -25,6 +25,7 @@ from core.tracks.track_delta import has_identity_changed
 from core.tracks.track_processor import TrackProcessor
 from core.tracks.year_retriever import YearRetriever
 from metrics.change_reports import (
+    load_track_list,
     save_changes_report,
     sync_track_list_with_current,
 )
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
-    from services.pending_verification import PendingAlbumEntry
+    from core.models.cache_types import PendingAlbumEntry
 
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
@@ -113,6 +114,7 @@ class MusicUpdater:
             analytics=deps.analytics,
             config=deps.config,
             dry_run=deps.dry_run,
+            track_list_loader=load_track_list,
         )
 
         # Pipeline snapshot manager

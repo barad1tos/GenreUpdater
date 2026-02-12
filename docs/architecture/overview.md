@@ -285,10 +285,11 @@ src/
 │       └── verify/             # Database verification
 │
 ├── core/                       # Business logic
+│   ├── analytics_decorator.py  # Standalone track_instance_method
 │   ├── core_config.py          # Configuration loading
 │   ├── logger.py               # Logging setup
 │   ├── dry_run.py              # Dry-run simulation
-│   ├── models/                 # Data models (Track, protocols, validators)
+│   ├── models/                 # Data models, protocols, cache types
 │   ├── tracks/                 # Track processing (processor, genre, year)
 │   └── utils/                  # Shared utilities
 │
@@ -304,12 +305,12 @@ src/
 
 ## Layer Responsibilities
 
-| Layer | Path | What it does |
-|-------|------|--------------|
-| **App** | `src/app/` | Entry point, command routing, pipeline selection |
-| **Core** | `src/core/` | Business logic: genre calculation, year determination, track filtering |
-| **Services** | `src/services/` | I/O adapters: AppleScript, cache, external API clients |
-| **Metrics** | `src/metrics/` | Observability: timing, reports, error tracking |
+| Layer        | Path            | What it does                                                           |
+|--------------|-----------------|------------------------------------------------------------------------|
+| **App**      | `src/app/`      | Entry point, command routing, pipeline selection                       |
+| **Core**     | `src/core/`     | Business logic: genre calculation, year determination, track filtering |
+| **Services** | `src/services/` | I/O adapters: AppleScript, cache, external API clients                 |
+| **Metrics**  | `src/metrics/`  | Observability: timing, reports, error tracking                         |
 
 ## Key Design Patterns
 
@@ -328,13 +329,28 @@ year_retriever = container.year_retriever
 
 ### Protocol-Based Interfaces
 
-Interfaces defined with `typing.Protocol`:
+Interfaces defined with `typing.Protocol` in `core/models/protocols.py`:
+
+- `CacheServiceProtocol` — unified cache operations
+- `ExternalApiServiceProtocol` — external API clients
+- `AppleScriptClientProtocol` — Music.app communication
+- `PendingVerificationServiceProtocol` — verification queue
+- `AnalyticsProtocol` — wrapped call execution and batch mode
+- `LibrarySnapshotServiceProtocol` — snapshot persistence
+
+`core/` depends only on protocols, never on concrete service classes.
+The `track_instance_method` decorator in `core/analytics_decorator.py`
+uses duck typing (MRO-based method lookup) to avoid importing the
+concrete `Analytics` class. When analytics is missing on a decorated
+instance, the wrapper logs an error and falls back to untracked execution.
+Test factories use `cast(Protocol, cast(object, mock))` to satisfy strict
+type checkers when passing mock objects as protocol-typed parameters.
 
 ```python test="skip"
 class ExternalApiServiceProtocol(Protocol):
-    async def fetch_year(
-        self, artist: str, album: str
-    ) -> tuple[int | None, int]: ...
+    async def get_album_year(
+            self, artist: str, album: str, ...
+    ) -> tuple[str | None, bool, int, dict]: ...
 ```
 
 ### Async-First
@@ -354,24 +370,24 @@ async def process_tracks(self, tracks: list[Track]) -> None:
 
 Scripts in `applescripts/` directory (canonical names defined in `core/apple_script_names.py`):
 
-| Script | Purpose | Output Format |
-|--------|---------|---------------|
-| `fetch_tracks.applescript` | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
-| `fetch_track_ids.applescript` | Get all track IDs | Comma-separated IDs |
-| `fetch_tracks_by_ids.applescript` | Get specific tracks by ID list | Same as `fetch_tracks` |
-| `update_property.applescript` | Set single track property | "Success: ..." or "No Change: ..." |
-| `batch_update_tracks.applescript` | Batch updates (experimental) | JSON status array |
+| Script                            | Purpose                              | Output Format                                    |
+|-----------------------------------|--------------------------------------|--------------------------------------------------|
+| `fetch_tracks.applescript`        | Get all tracks or filtered by artist | ASCII-delimited: `\x1E` (field), `\x1D` (record) |
+| `fetch_track_ids.applescript`     | Get all track IDs                    | Comma-separated IDs                              |
+| `fetch_tracks_by_ids.applescript` | Get specific tracks by ID list       | Same as `fetch_tracks`                           |
+| `update_property.applescript`     | Set single track property            | "Success: ..." or "No Change: ..."               |
+| `batch_update_tracks.applescript` | Batch updates (experimental)         | JSON status array                                |
 
 ## Error Handling
 
 Errors categorized by recoverability:
 
-| Category | Action |
-|----------|--------|
-| Transient | Retry with backoff |
-| Rate Limit | Wait and retry |
-| Not Found | Log and skip |
-| Permanent | Fail fast |
+| Category   | Action             |
+|------------|--------------------|
+| Transient  | Retry with backoff |
+| Rate Limit | Wait and retry     |
+| Not Found  | Log and skip       |
+| Permanent  | Fail fast          |
 
 ## Testing Strategy
 
