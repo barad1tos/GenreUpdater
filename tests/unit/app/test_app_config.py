@@ -329,19 +329,21 @@ class TestLegacyTestArtistsMigration:
     """Tests for AppConfig.migrate_legacy_test_artists validator."""
 
     def test_migrates_top_level_to_development(self) -> None:
-        """Top-level test_artists should migrate into development.test_artists."""
-        app_config = _make_test_app_config(
-            test_artists=["Metallica", "Slayer"],
-            development={"test_artists": []},
-        )
+        """Top-level test_artists should migrate and emit deprecation warning."""
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            app_config = _make_test_app_config(
+                test_artists=["Metallica", "Slayer"],
+                development={"test_artists": []},
+            )
         assert app_config.development.test_artists == ["Metallica", "Slayer"]
 
     def test_no_migration_when_development_has_values(self) -> None:
-        """When development.test_artists is non-empty, top-level is ignored."""
-        app_config = _make_test_app_config(
-            test_artists=["Metallica"],
-            development={"test_artists": ["Iron Maiden"]},
-        )
+        """When both are set, top-level is ignored with a warning."""
+        with pytest.warns(DeprecationWarning, match="ignored"):
+            app_config = _make_test_app_config(
+                test_artists=["Metallica"],
+                development={"test_artists": ["Iron Maiden"]},
+            )
         assert app_config.development.test_artists == ["Iron Maiden"]
 
     def test_no_migration_when_top_level_is_empty(self) -> None:

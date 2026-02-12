@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from enum import StrEnum
 from typing import Any, Literal, TypedDict, TypeVar
 
@@ -477,6 +478,17 @@ class AppConfig(BaseModel):
         """
         if self.test_artists and not self.development.test_artists:
             self.development.test_artists = list(self.test_artists)
+            warnings.warn(
+                "Top-level 'test_artists' is deprecated. Move it to 'development.test_artists' in your config file.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        elif self.test_artists and self.development.test_artists:
+            warnings.warn(
+                "Both top-level 'test_artists' and 'development.test_artists' are set. Top-level value is ignored; using development section.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return self
 
 
