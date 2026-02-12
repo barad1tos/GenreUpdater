@@ -1,5 +1,7 @@
 """Comprehensive unit tests for DependencyContainer."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from pathlib import Path
@@ -11,6 +13,7 @@ import pytest
 from services.dependency_container import (
     DependencyContainer,
 )
+from tests.factories import create_test_app_config
 
 
 class TestDependencyContainer:
@@ -83,6 +86,7 @@ class TestDependencyContainer:
         """Test service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),
+            patch("services.dependency_container.configure_album_patterns") as mock_configure,
             patch("services.dependency_container.Analytics") as mock_analytics,
             patch("services.dependency_container.CacheOrchestrator") as mock_cache,
             patch("services.dependency_container.PendingVerificationService") as mock_pending,
@@ -90,6 +94,10 @@ class TestDependencyContainer:
             patch("services.dependency_container.create_external_api_orchestrator") as mock_api,
             patch.object(container, "_initialize_apple_script_client") as mock_init_ap,
         ):
+            # Provide typed config so app_config property works
+            test_app_config = create_test_app_config()
+            container._app_config = test_app_config
+
             # Set up mock services
             mock_analytics_instance = AsyncMock()
             mock_cache_instance = AsyncMock()
@@ -110,6 +118,10 @@ class TestDependencyContainer:
             container._ap_client.initialize = AsyncMock()
 
             await container.initialize()
+
+            # Verify typed AppConfig is wired to services (not legacy dict)
+            mock_configure.assert_called_once_with(test_app_config)
+            mock_cache.assert_called_once_with(test_app_config, container.console_logger)
 
             # Verify services were created using public accessors
             assert container.analytics is not None
@@ -152,12 +164,16 @@ class TestDependencyContainer:
         # or create a test helper that doesn't use private methods
         with (
             patch.object(container, "_load_config", return_value={}),
+            patch("services.dependency_container.configure_album_patterns"),
             patch("services.dependency_container.Analytics"),
             patch("services.dependency_container.CacheOrchestrator") as mock_cache,
             patch("services.dependency_container.LibrarySnapshotService") as mock_snapshot,
             patch("services.dependency_container.PendingVerificationService") as mock_pending,
             patch("services.dependency_container.create_external_api_orchestrator") as mock_api,
         ):
+            # Provide typed config so app_config property works
+            container._app_config = create_test_app_config()
+
             mock_cache_instance = MagicMock()
             mock_cache_instance.initialize = AsyncMock()
             mock_cache.return_value = mock_cache_instance
@@ -493,6 +509,7 @@ class TestDependencyContainer:
         """Test concurrent service initialization."""
         with (
             patch.object(container, "_load_config", return_value=mock_config),
+            patch("services.dependency_container.configure_album_patterns"),
             patch("services.dependency_container.Analytics"),
             patch("services.dependency_container.CacheOrchestrator"),
             patch("services.dependency_container.PendingVerificationService"),
@@ -500,6 +517,9 @@ class TestDependencyContainer:
             patch.object(container, "_initialize_apple_script_client") as mock_init_ap,
             patch.object(container, "_ap_client", AsyncMock()),
         ):
+            # Provide typed config so app_config property works
+            container._app_config = create_test_app_config()
+
             # Mock the AppleScript client initialization to do nothing
             mock_init_ap.return_value = None
 

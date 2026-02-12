@@ -130,13 +130,19 @@ class PendingVerificationConfig(BaseModel):
 
 
 class AlbumTypeDetectionConfig(BaseModel):
-    """Album type detection patterns for year fallback logic."""
+    """Album type detection patterns for year fallback logic.
 
-    special_patterns: list[str] = Field(default_factory=list)
-    compilation_patterns: list[str] = Field(default_factory=list)
-    reissue_patterns: list[str] = Field(default_factory=list)
-    soundtrack_patterns: list[str] = Field(default_factory=list)
-    various_artists_names: list[str] = Field(default_factory=list)
+    Semantics for pattern fields:
+        - ``None`` (default): use built-in defaults
+        - ``[]`` (empty list): explicitly disable the category
+        - ``["pattern", ...]``: use the provided patterns
+    """
+
+    special_patterns: list[str] | None = None
+    compilation_patterns: list[str] | None = None
+    reissue_patterns: list[str] | None = None
+    soundtrack_patterns: list[str] | None = None
+    various_artists_names: list[str] | None = None
 
 
 class LibrarySnapshotConfig(BaseModel):

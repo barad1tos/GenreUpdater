@@ -10,29 +10,29 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from services.cache.orchestrator import CacheOrchestrator
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+
+    from core.models.track_models import AppConfig
 
 pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def cache_config() -> dict[str, Any]:
+def cache_config() -> AppConfig:
     """Return a minimal cache configuration for testing."""
     temp_dir = tempfile.mkdtemp()
-    return {
-        "caching": {
+    return create_test_app_config(
+        caching={
             "default_ttl_seconds": 5,
             "cleanup_interval_seconds": 1,
             "api_result_cache_path": str(Path(temp_dir) / "api_results.json"),
             "album_cache_sync_interval": 1,
         },
-        "api_cache_file": str(Path(temp_dir) / "cache.json"),
-        "logging": {
-            "base_dir": temp_dir,
-        },
-    }
+        api_cache_file=str(Path(temp_dir) / "cache.json"),
+    )
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def cache_logger() -> logging.Logger:
 
 
 @pytest.fixture
-async def orchestrator(cache_config: dict[str, Any], cache_logger: logging.Logger) -> AsyncGenerator[CacheOrchestrator]:
+async def orchestrator(cache_config: AppConfig, cache_logger: logging.Logger) -> AsyncGenerator[CacheOrchestrator]:
     """Yield an initialized CacheOrchestrator instance."""
     orchestrator = CacheOrchestrator(cache_config, cache_logger)
     await orchestrator.initialize()

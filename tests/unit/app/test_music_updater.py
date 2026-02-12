@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.music_updater import MusicUpdater
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
     MockAppleScriptClient,
@@ -42,7 +43,7 @@ class TestMusicUpdaterAllure:
         # Analytics
         deps.analytics = MockAnalytics()
 
-        # Configuration
+        # Configuration — raw dict for services still on dict (B2+ scope)
         deps.config = {
             "logs_base_dir": "/tmp/test_logs",
             "apple_script": {"timeout": 30},
@@ -74,6 +75,12 @@ class TestMusicUpdaterAllure:
                 "unwanted_phrases": ["(Remastered)", "(Deluxe Edition)"],
             },
         }
+
+        # Typed AppConfig for services migrated in B1
+        deps.app_config = create_test_app_config(
+            logs_base_dir="/tmp/test_logs",
+            development={"test_artists": ["Test Artist"]},
+        )
 
         # Flags
         deps.dry_run = False

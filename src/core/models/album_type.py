@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final
 
+from core.models.track_models import AlbumTypeDetectionConfig, AppConfig
+
 __all__ = [
     "AlbumType",
     "AlbumTypeInfo",
@@ -182,61 +184,55 @@ class AlbumTypePatterns:
         )
 
     @classmethod
-    def from_config(cls, config: dict[str, Any]) -> AlbumTypePatterns:
-        """Create patterns from configuration dict.
+    def from_config(cls, config: AppConfig | dict[str, Any]) -> AlbumTypePatterns:
+        """Create patterns from configuration.
 
         Args:
-            config: Application configuration dictionary
+            config: Typed AppConfig or legacy dict
 
         Returns:
             AlbumTypePatterns loaded from config (with defaults as fallback)
 
-        Config format:
-            ```yaml
-            album_type_detection:
-              special_patterns: [...]
-              compilation_patterns: [...]
-              reissue_patterns: [...]
-            ```
         """
-        album_type_config = config.get("album_type_detection", {})
-
-        special_list = album_type_config.get(
-            "special_patterns",
-            list(_DEFAULT_SPECIAL_PATTERNS),
-        )
-        compilation_list = album_type_config.get(
-            "compilation_patterns",
-            list(_DEFAULT_COMPILATION_PATTERNS),
-        )
-        reissue_list = album_type_config.get(
-            "reissue_patterns",
-            list(_DEFAULT_REISSUE_PATTERNS),
-        )
+        detection = _resolve_album_type_detection(config)
 
         return cls(
-            special=frozenset(special_list),
-            compilation=frozenset(compilation_list),
-            reissue=frozenset(reissue_list),
+            special=frozenset(detection.special_patterns) if detection.special_patterns is not None else _DEFAULT_SPECIAL_PATTERNS,
+            compilation=frozenset(detection.compilation_patterns) if detection.compilation_patterns is not None else _DEFAULT_COMPILATION_PATTERNS,
+            reissue=frozenset(detection.reissue_patterns) if detection.reissue_patterns is not None else _DEFAULT_REISSUE_PATTERNS,
         )
+
+
+def _resolve_album_type_detection(config: AppConfig | dict[str, Any]) -> AlbumTypeDetectionConfig:
+    """Extract AlbumTypeDetectionConfig from AppConfig or legacy dict.
+
+    Args:
+        config: Typed AppConfig or legacy dict
+
+    Returns:
+        AlbumTypeDetectionConfig with detection patterns
+
+    """
+    if isinstance(config, AppConfig):
+        return config.album_type_detection
+
+    # Legacy dict path
+    raw = config.get("album_type_detection", {})
+    return AlbumTypeDetectionConfig(**raw) if raw else AlbumTypeDetectionConfig()
 
 
 # Module-level singleton for configured patterns
 _configured_patterns: AlbumTypePatterns | None = None
 
 
-def configure_patterns(config: dict[str, Any]) -> None:
+def configure_patterns(config: AppConfig | dict[str, Any]) -> None:
     """Configure album type patterns from application config.
 
     This should be called during application initialization.
     After calling, all detection functions will use the configured patterns.
 
     Args:
-        config: Application configuration dictionary
-
-    Example:
-        >>> from core.models.album_type import configure_patterns
-        >>> configure_patterns({"album_type_detection": {"special_patterns": ["demo"]}})
+        config: Typed AppConfig or legacy dict
     """
     global _configured_patterns  # noqa: PLW0603
     _configured_patterns = AlbumTypePatterns.from_config(config)

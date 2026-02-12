@@ -15,10 +15,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from core.models.track_models import AppConfig
 
 
 class CacheContentType(Enum):
@@ -69,37 +71,29 @@ class SmartCacheConfig:
     # Default TTL for negative results (failed lookups) - 30 days
     DEFAULT_NEGATIVE_RESULT_TTL = MONTH
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: AppConfig | None = None) -> None:
         """Initialize smart cache configuration.
 
         Args:
-            config: Optional application config dict to read cache settings from
+            config: Optional typed application configuration
         """
         self.logger = logging.getLogger(__name__)
-        self._config = config or {}
+        self._config = config
         self._policies = self._create_default_policies()
 
     def _get_negative_result_ttl(self) -> int:
         """Get TTL for negative results (failed lookups) from config.
 
         Reads caching.negative_result_ttl from config, falling back to
-        DEFAULT_NEGATIVE_RESULT_TTL (30 days) if not set or invalid.
+        DEFAULT_NEGATIVE_RESULT_TTL (30 days) if not set.
 
         Returns:
             TTL in seconds for caching failed lookup results.
 
         """
-        caching_config = self._config.get("caching", {})
-        value = caching_config.get("negative_result_ttl", self.DEFAULT_NEGATIVE_RESULT_TTL)
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            self.logger.warning(
-                "Invalid negative_result_ttl %r, using default %d",
-                value,
-                self.DEFAULT_NEGATIVE_RESULT_TTL,
-            )
+        if self._config is None:
             return self.DEFAULT_NEGATIVE_RESULT_TTL
+        return int(self._config.caching.negative_result_ttl)
 
     def _create_default_policies(self) -> dict[CacheContentType, CachePolicy]:
         """Create default cache policies for different content types.

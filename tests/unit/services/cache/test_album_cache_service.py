@@ -6,7 +6,7 @@ import csv
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,20 +15,22 @@ from core.models.cache_types import AlbumCacheEntry
 from services.cache.album_cache import AlbumCacheService
 from services.cache.cache_config import CacheContentType
 from services.cache.hash_service import UnifiedHashService
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestAlbumCacheService:
     """Comprehensive tests for AlbumCacheService."""
 
     @staticmethod
-    def create_service(config: dict[str, Any] | None = None) -> AlbumCacheService:
+    def create_service(config: AppConfig | None = None) -> AlbumCacheService:
         """Create an AlbumCacheService instance for testing."""
-        # Use tempfile for secure temporary paths
-        temp_dir = tempfile.gettempdir()
-        default_config = {"album_years_cache_file": f"{temp_dir}/test_album_years.csv", "log_directory": f"{temp_dir}/logs"}
-        test_config = {**default_config, **(config or {})}
+        if config is None:
+            config = create_test_app_config()
         mock_logger = MagicMock()
-        return AlbumCacheService(test_config, mock_logger)
+        return AlbumCacheService(config, mock_logger)
 
     @pytest.mark.asyncio
     async def test_initialization(self) -> None:
@@ -303,7 +305,8 @@ class TestAlbumCacheService:
     async def test_temp_file_cleanup_on_replace_failure(self, tmp_path: Path) -> None:
         """Test temp file is cleaned up when replace operation fails."""
         cache_path = tmp_path / "album_years.csv"
-        service = TestAlbumCacheService.create_service({"album_years_cache_file": str(cache_path)})
+        service = TestAlbumCacheService.create_service()
+        service.album_years_cache_file = cache_path
         await service.initialize()
         await service.store_album_year("Artist", "Album", "2023")
         # Track temp file path

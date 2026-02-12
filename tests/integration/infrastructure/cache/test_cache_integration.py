@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,22 +25,20 @@ from services.cache.api_cache import ApiCacheService
 from services.cache.generic_cache import GenericCacheService
 from services.cache.fingerprint import FingerprintGenerator, FingerprintGenerationError
 from services.cache.hash_service import UnifiedHashService
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
-def mock_config() -> dict[str, Any]:
+def mock_config() -> AppConfig:
     """Create a mock configuration for cache tests."""
-    return {
-        "logs_base_dir": "/tmp/test_cache",
-        "caching": {
-            "default_ttl_seconds": 3600,
-            "album_years_ttl": 86400,
-            "api_cache_ttl": 7200,
-        },
-        "cache_ttl_seconds": 3600,
-        "max_generic_entries": 100,
-        "cleanup_interval": 300,
-    }
+    return create_test_app_config(
+        logs_base_dir="/tmp/test_cache",
+        cache_ttl_seconds=3600,
+        max_generic_entries=100,
+    )
 
 
 @pytest.fixture
@@ -55,7 +53,7 @@ class TestAlbumCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_album_cache_store_and_retrieve(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test basic store and retrieve operations."""
@@ -85,7 +83,7 @@ class TestAlbumCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_album_cache_entry_with_confidence(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test that confidence scores are properly stored and retrieved."""
@@ -107,7 +105,7 @@ class TestAlbumCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_album_cache_invalidation(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test cache invalidation for specific album."""
@@ -135,7 +133,7 @@ class TestAlbumCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_album_cache_invalidate_all(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test clearing all album cache entries."""
@@ -161,7 +159,7 @@ class TestAlbumCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_album_cache_concurrent_writes(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test concurrent write operations don't corrupt cache."""
@@ -196,7 +194,7 @@ class TestApiCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_api_cache_store_and_retrieve(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test basic API cache store and retrieve."""
@@ -225,7 +223,7 @@ class TestApiCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_api_cache_different_sources(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test cache isolates different API sources."""
@@ -259,7 +257,7 @@ class TestApiCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_api_cache_failed_lookup(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test caching failed API lookups."""
@@ -285,7 +283,7 @@ class TestApiCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_api_cache_invalidate_for_album(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test invalidating all API cache entries for an album."""
@@ -316,7 +314,7 @@ class TestGenericCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_generic_cache_basic_operations(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test basic get/set operations."""
@@ -338,7 +336,7 @@ class TestGenericCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_generic_cache_invalidation(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test explicit cache entry invalidation."""
@@ -360,7 +358,7 @@ class TestGenericCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_generic_cache_invalidate_all(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test clearing all cache entries."""
@@ -380,13 +378,12 @@ class TestGenericCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_generic_cache_lru_eviction(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test LRU eviction when cache reaches max size."""
         # Create cache with small max size
-        config = mock_config.copy()
-        config["max_generic_entries"] = 3
+        config = mock_config.model_copy(update={"max_generic_entries": 3})
 
         cache = GenericCacheService(config, mock_logger)
 
@@ -412,7 +409,7 @@ class TestGenericCacheServiceIntegration:
     @pytest.mark.asyncio
     async def test_generic_cache_ttl_expiration(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test TTL-based expiration."""
@@ -608,7 +605,7 @@ class TestCacheIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_album_and_api_cache_consistency(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test that album cache and API cache can be used together."""
@@ -647,7 +644,7 @@ class TestCacheIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_cache_stats_available(
         self,
-        mock_config: dict[str, Any],
+        mock_config: AppConfig,
         mock_logger: logging.Logger,
     ) -> None:
         """Test that all cache services provide stats."""

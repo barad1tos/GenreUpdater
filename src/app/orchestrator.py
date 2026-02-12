@@ -36,7 +36,7 @@ class Orchestrator:
         """
         self.deps = deps
         self.music_updater = MusicUpdater(deps)
-        self.config = deps.config
+        self.config = deps.app_config
         self.console_logger = deps.console_logger
         self.error_logger = deps.error_logger
 
@@ -69,12 +69,12 @@ class Orchestrator:
 
         # Set dry-run context if needed
         if args.dry_run or getattr(args, "test_mode", False):
-            test_artists = set(self.config.get("development", {}).get("test_artists", []))
+            test_artists = set(self.config.development.test_artists)
             mode = "test" if getattr(args, "test_mode", False) else "dry_run"
             self.music_updater.set_dry_run_context(mode, test_artists)
 
         # ALWAYS apply test_artists from config if configured (even in --force mode)
-        elif test_artists_config := set(self.config.get("development", {}).get("test_artists", [])):
+        elif test_artists_config := set(self.config.development.test_artists):
             self.console_logger.info("Using test_artists from config in normal mode: %s", sorted(test_artists_config))
             self.music_updater.set_dry_run_context("normal", test_artists_config)
 
@@ -194,7 +194,7 @@ class Orchestrator:
     async def _run_test_mode(self, args: argparse.Namespace) -> None:
         """Run in test mode with a limited artist set."""
         self.console_logger.info("--- Running in Test Mode ---")
-        test_artists = self.config.get("development", {}).get("test_artists", [])
+        test_artists = self.config.development.test_artists
         self.console_logger.info(
             "Processing tracks only for test artists: %s",
             test_artists,

@@ -20,6 +20,7 @@ from core.logger import LogFormat, ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheableKey, CacheableValue
+    from core.models.track_models import AppConfig
 else:  # pragma: no cover - runtime-only aliasing for type hints
     CacheableKey = Any
     CacheableValue = Any
@@ -28,11 +29,11 @@ else:  # pragma: no cover - runtime-only aliasing for type hints
 class GenericCacheService:
     """Generic in-memory cache service with TTL support and automatic cleanup."""
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         """Initialize generic cache service.
 
         Args:
-            config: Cache configuration dictionary
+            config: Typed application configuration
             logger: Optional logger instance
         """
         self.config = config
@@ -44,7 +45,7 @@ class GenericCacheService:
         self.cache: OrderedDict[str, tuple[CacheableValue, float]] = OrderedDict()
 
         # Max cache size for LRU eviction (evicts on set() when exceeded)
-        self.max_size: int = config.get("max_generic_entries", 10000)
+        self.max_size: int = config.max_generic_entries
 
         # Cleanup task reference
         self._cleanup_task: asyncio.Task[None] | None = None
@@ -64,13 +65,12 @@ class GenericCacheService:
         self.logger.info("%s initialized with %ds default TTL", LogFormat.entity("GenericCacheService"), self.default_ttl)
 
     def _resolve_default_ttl(self) -> int:
-        """Resolve default TTL from configuration sources.
+        """Resolve default TTL from typed configuration.
 
-        Checks multiple config locations in order:
-        1. config.cache_ttl_seconds
-        2. config.cache_ttl
-        3. config.caching.default_ttl_seconds
-        4. Falls back to SmartCacheConfig default for GENERIC type
+        Priority order:
+        1. ``config.caching.default_ttl_seconds`` (nested section)
+        2. ``config.cache_ttl_seconds`` (top-level legacy key)
+        3. SmartCacheConfig default for GENERIC type
 
         Returns:
             TTL in seconds as positive integer.
@@ -78,23 +78,15 @@ class GenericCacheService:
         """
         fallback = self.cache_config.get_ttl(CacheContentType.GENERIC)
 
-        caching_section = self.config.get("caching")
-        candidate_values: list[Any] = []
-        if isinstance(caching_section, dict):
-            candidate_values.append(caching_section.get("default_ttl_seconds"))
-        # Legacy top-level key — lower priority than caching section
-        candidate_values.append(self.config.get("cache_ttl_seconds"))
+        # Prefer nested caching section, then top-level legacy key
+        candidate_values: list[int] = [
+            self.config.caching.default_ttl_seconds,
+            self.config.cache_ttl_seconds,
+        ]
 
-        for value in candidate_values:
-            if value in (None, ""):
-                continue
-            try:
-                ttl = int(value)
-                if ttl > 0:
-                    return ttl
-                self.logger.warning("Ignoring non-positive TTL override (%s); using fallback %ds", value, fallback)
-            except (TypeError, ValueError):
-                self.logger.warning("Invalid TTL override '%s'; using fallback %ds", value, fallback)
+        for ttl in candidate_values:
+            if ttl > 0:
+                return ttl
 
         return fallback
 
@@ -107,8 +99,7 @@ class GenericCacheService:
         The task handles cancellation gracefully and logs any errors during cleanup.
 
         """
-        caching_section = self.config.get("caching", {})
-        cleanup_interval: int = caching_section.get("cleanup_interval_seconds", 300) if isinstance(caching_section, dict) else 300
+        cleanup_interval: int = self.config.caching.cleanup_interval_seconds
 
         if self._cleanup_task and not self._cleanup_task.done():
             self.logger.debug("Cleanup task already running; skipping restart")

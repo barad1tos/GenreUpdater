@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from services.cache.generic_cache import GenericCacheService
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -70,7 +71,8 @@ async def test_csv_lookup_uses_cache(tmp_path: Path) -> None:
     logger = logging.getLogger("test.csv_index.cache")
     logger.addHandler(logging.NullHandler())
 
-    cache_service = GenericCacheService({"cleanup_interval": 300}, logger)
+    app_config = create_test_app_config()
+    cache_service = GenericCacheService(app_config, logger)
     index = SimpleCsvArtistIndex(csv_path, cache_service)
 
     first_lookup = await index.get_tracks_by_artist(ARTIST_ZHADAN)
@@ -93,7 +95,8 @@ async def test_csv_lookup_cache_miss_for_new_artist(tmp_path: Path) -> None:
     logger = logging.getLogger("test.csv_index.cache_miss")
     logger.addHandler(logging.NullHandler())
 
-    cache_service = GenericCacheService({"cleanup_interval": 300}, logger)
+    app_config = create_test_app_config()
+    cache_service = GenericCacheService(app_config, logger)
     index = SimpleCsvArtistIndex(csv_path, cache_service)
 
     result = await index.get_tracks_by_artist("Unknown Artist")

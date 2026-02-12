@@ -17,7 +17,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, ensure_directory, get_full_log_path
 from core.models.normalization import are_names_equal
@@ -25,15 +25,18 @@ from core.models.track_models import CachedApiResult
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
 
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
+
 
 class ApiCacheService:
     """Specialized cache service for external API responses with JSON persistence."""
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         """Initialize API cache service.
 
         Args:
-            config: Cache configuration dictionary
+            config: Typed application configuration
             logger: Optional logger instance
         """
         self.config = config

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -15,25 +14,22 @@ from core.models.track_models import CachedApiResult
 from services.cache.api_cache import ApiCacheService
 from services.cache.cache_config import CacheEvent, CacheEventType
 from services.cache.hash_service import UnifiedHashService
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestApiCacheService:
     """Comprehensive tests for ApiCacheService."""
 
     @staticmethod
-    def create_service(config: dict[str, Any] | None = None) -> ApiCacheService:
+    def create_service(config: AppConfig | None = None) -> ApiCacheService:
         """Create an ApiCacheService instance for testing."""
-        temp_path = Path(tempfile.mkdtemp(prefix="api-cache-service-test-"))
-        log_directory = temp_path / "logs"
-        log_directory.mkdir(parents=True, exist_ok=True)
-
-        default_config = {
-            "api_cache_file": str(temp_path / "test_cache.json"),
-            "log_directory": str(log_directory),
-        }
-        test_config = {**default_config, **(config or {})}
+        if config is None:
+            config = create_test_app_config()
         mock_logger = MagicMock()
-        return ApiCacheService(test_config, mock_logger)
+        return ApiCacheService(config, mock_logger)
 
     @staticmethod
     def create_cached_result(

@@ -3,40 +3,35 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 
 from services.cache.api_cache import ApiCacheService
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestApiCacheShutdown:
     """Tests for ApiCacheService shutdown method."""
 
     @staticmethod
-    def create_service(config: dict[str, Any] | None = None) -> ApiCacheService:
+    def create_service(config: AppConfig | None = None) -> ApiCacheService:
         """Create an ApiCacheService instance for testing.
 
         Args:
-            config: Optional configuration overrides.
+            config: Optional typed configuration override.
 
         Returns:
             Configured ApiCacheService instance with mock logger.
         """
-        temp_path = Path(tempfile.mkdtemp(prefix="api-cache-shutdown-test-"))
-        log_directory = temp_path / "logs"
-        log_directory.mkdir(parents=True, exist_ok=True)
-
-        default_config = {
-            "api_cache_file": str(temp_path / "test_cache.json"),
-            "log_directory": str(log_directory),
-        }
-        test_config = {**default_config, **(config or {})}
+        if config is None:
+            config = create_test_app_config()
         mock_logger = MagicMock()
-        return ApiCacheService(test_config, mock_logger)
+        return ApiCacheService(config, mock_logger)
 
     @pytest.mark.asyncio
     async def test_shutdown_waits_for_background_tasks(self) -> None:

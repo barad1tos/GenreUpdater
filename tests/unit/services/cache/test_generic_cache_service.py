@@ -6,38 +6,29 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from services.cache.generic_cache import GenericCacheService
 from services.cache.hash_service import UnifiedHashService
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestGenericCacheService:
     """Comprehensive tests for GenericCacheService."""
 
     @staticmethod
-    def create_service(config: dict[str, Any] | None = None) -> GenericCacheService:
+    def create_service(config: AppConfig | None = None) -> GenericCacheService:
         """Create a GenericCacheService instance for testing."""
-        default_config = {
-            "cleanup_interval": 1,  # Short interval for testing
-            "max_generic_entries": 100,
-            "logs_base_dir": tempfile.gettempdir(),
-            "logging": {},
-        }
-
-        test_config = default_config.copy()
-        if config:
-            if logging_cfg := config.get("logging"):
-                existing_logging = test_config.get("logging", {})
-                merged_logging = {**existing_logging, **logging_cfg}
-                test_config["logging"] = merged_logging
-            for key, value in config.items():
-                if key != "logging":
-                    test_config[key] = value
+        if config is None:
+            config = create_test_app_config(max_generic_entries=100)
         mock_logger = MagicMock()
-        return GenericCacheService(test_config, mock_logger)
+        return GenericCacheService(config, mock_logger)
 
     @pytest.mark.asyncio
     async def test_initialization(self) -> None:
@@ -136,8 +127,7 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_enforce_size_limits(self) -> None:
         """Test cache size limit enforcement."""
-        config = {"max_generic_entries": 5}
-        service = TestGenericCacheService.create_service(config)
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=5))
         await service.initialize()
 
         try:
@@ -186,7 +176,10 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_periodic_cleanup_task(self) -> None:
         """Test periodic cleanup task."""
-        config = {"cleanup_interval": 0.1}  # Very short interval for testing
+        config = create_test_app_config(
+            max_generic_entries=100,
+            caching={"cleanup_interval_seconds": 1},
+        )
         service = TestGenericCacheService.create_service(config)
         await service.initialize()
 
@@ -194,7 +187,7 @@ class TestGenericCacheService:
             service.set("expired1", {"value": 1}, ttl=-1)
             service.set("expired2", {"value": 2}, ttl=-1)
             service.set("valid", {"value": 3}, ttl=60)
-            await asyncio.sleep(0.2)  # Wait for cleanup to run
+            await asyncio.sleep(1.2)  # Wait for cleanup to run
             # The cleanup task should have removed expired entries
             assert len(service.cache) <= 3  # May have been cleaned
 
@@ -204,7 +197,12 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_cleanup_task_error_handling(self) -> None:
         """Test error handling in cleanup task."""
-        service = TestGenericCacheService.create_service({"cleanup_interval": 0.1})
+        service = TestGenericCacheService.create_service(
+            create_test_app_config(
+                max_generic_entries=100,
+                caching={"cleanup_interval_seconds": 1},
+            )
+        )
 
         with (
             patch.object(service, "cleanup_expired", side_effect=Exception("Test error")),
@@ -245,12 +243,8 @@ class TestGenericCacheService:
         """Ensure cache entries are written to the configured JSON file."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             cache_path = Path(tmp_dir) / "generic_cache.json"
-            service = TestGenericCacheService.create_service(
-                {
-                    "logs_base_dir": tmp_dir,
-                    "logging": {"generic_cache_file": cache_path.name},
-                }
-            )
+            service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=100))
+            service.cache_file = cache_path
             await service.initialize()
 
             try:
@@ -278,12 +272,8 @@ class TestGenericCacheService:
             with cache_path.open("w", encoding="utf-8") as tmp_file:
                 json.dump(payload, tmp_file)
 
-            service = TestGenericCacheService.create_service(
-                {
-                    "logs_base_dir": tmp_dir,
-                    "logging": {"generic_cache_file": cache_path.name},
-                }
-            )
+            service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=100))
+            service.cache_file = cache_path
             await service.initialize()
 
             try:
@@ -295,7 +285,13 @@ class TestGenericCacheService:
 
     def test_default_ttl_override_from_config(self) -> None:
         """Ensure explicit TTL in config is applied."""
-        service = TestGenericCacheService.create_service({"cache_ttl_seconds": 42})
+        service = TestGenericCacheService.create_service(
+            create_test_app_config(
+                cache_ttl_seconds=42,
+                max_generic_entries=100,
+                caching={"default_ttl_seconds": 0},
+            )
+        )
         assert service.default_ttl == 42
 
     @pytest.mark.asyncio
@@ -321,8 +317,7 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_cache_evicts_lru_when_max_size_exceeded(self) -> None:
         """Cache should evict LRU entries when max_size is exceeded."""
-        config = {"max_generic_entries": 3}  # Small size for testing
-        service = TestGenericCacheService.create_service(config)
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=3))
         await service.initialize()
 
         try:
@@ -345,8 +340,7 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_get_updates_lru_order(self) -> None:
         """Accessing an entry via get() should update its LRU position."""
-        config = {"max_generic_entries": 3}
-        service = TestGenericCacheService.create_service(config)
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=3))
         await service.initialize()
 
         try:
@@ -374,8 +368,7 @@ class TestGenericCacheService:
     @pytest.mark.asyncio
     async def test_set_existing_key_updates_lru_order(self) -> None:
         """Re-setting an existing key should update its LRU position without eviction."""
-        config = {"max_generic_entries": 3}
-        service = TestGenericCacheService.create_service(config)
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=3))
         await service.initialize()
 
         try:

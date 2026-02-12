@@ -17,8 +17,9 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
-    from services.api.applemusic import AppleMusicClient
+    from core.models.track_models import AppConfig
     from services.api.api_base import ScoredRelease
+    from services.api.applemusic import AppleMusicClient
     from services.api.discogs import DiscogsClient
     from services.api.musicbrainz import MusicBrainzClient
     from services.api.year_scoring import ReleaseScorer
@@ -54,7 +55,7 @@ class YearSearchCoordinator:
         *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         preferred_api: str,
         musicbrainz_client: MusicBrainzClient,
         discogs_client: DiscogsClient,
@@ -67,7 +68,7 @@ class YearSearchCoordinator:
         Args:
             console_logger: Logger for console output
             error_logger: Logger for error output
-            config: Full application config dict
+            config: Typed application configuration
             preferred_api: Preferred API name for ordering
             musicbrainz_client: MusicBrainz API client
             discogs_client: Discogs API client
@@ -175,11 +176,13 @@ class YearSearchCoordinator:
 
     def _get_script_config_priorities(self, script_type: ScriptType) -> dict[str, Any]:
         """Get script-specific API priorities from configuration file."""
-        year_config = self.config.get("year_retrieval", {})
-        script_api_priorities = year_config.get("script_api_priorities", {})
-        default_config = script_api_priorities.get("default", {})
-        script_priorities: dict[str, Any] = script_api_priorities.get(script_type.value, default_config)
-        return script_priorities
+        script_api_priorities = self.config.year_retrieval.script_api_priorities
+        default_priority = script_api_priorities.get("default")
+        default_config: dict[str, Any] = {"primary": default_priority.primary, "fallback": default_priority.fallback} if default_priority else {}
+        script_priority = script_api_priorities.get(script_type.value)
+        if script_priority is None:
+            return default_config
+        return {"primary": script_priority.primary, "fallback": script_priority.fallback}
 
     def _apply_preferred_order(self, api_list: list[str]) -> list[str]:
         """Apply preferred API ordering to a list."""

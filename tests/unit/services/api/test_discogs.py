@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import pytest
 
 from services.api.discogs import DiscogsClient
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -47,6 +48,7 @@ class TestDiscogsClientAllure:
         mock_analytics = MockAnalytics()
 
         test_api_token = "test_token"  # noqa: S105
+        app_config = create_test_app_config()
         return DiscogsClient(
             token=test_api_token,
             console_logger=MockLogger(),  # type: ignore[arg-type]
@@ -55,8 +57,8 @@ class TestDiscogsClientAllure:
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
             cache_service=mock_cache_service,
-            scoring_config={"weight_match_year": 0.3, "weight_match_artist": 0.4},
-            config={"discogs": {"search_limit": 10}},
+            scoring_config=app_config.year_retrieval,
+            config=app_config,
         )
 
     @staticmethod
