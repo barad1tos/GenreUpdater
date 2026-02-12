@@ -421,3 +421,7 @@ tests/
 ├── integration/   # Service tests with real cache
 └── e2e/          # Full tests with Music.app
 ```
+
+Tests run with `pytest-xdist` (parallel workers). Module-level singletons
+like `album_type._configured_patterns` require `reset_patterns()` autouse
+fixtures to prevent cross-worker state pollution.
