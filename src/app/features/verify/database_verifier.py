@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from core.models.types import TrackDict
     import logging
     from core.models.protocols import AppleScriptClientProtocol
+    from core.models.track_models import AppConfig
     from metrics import Analytics
 
 
@@ -39,7 +40,7 @@ class DatabaseVerifier:
         db_verify_logger: logging.Logger,
         *,
         analytics: Analytics,
-        config: dict[str, Any],
+        config: AppConfig,
         dry_run: bool = False,
     ) -> None:
         """Initialize the DatabaseVerifier.
@@ -50,7 +51,7 @@ class DatabaseVerifier:
             error_logger: Logger for error messages
             db_verify_logger: Logger for verification log file
             analytics: Analytics instance for tracking
-            config: Configuration dictionary
+            config: Typed application configuration
             dry_run: Whether to run in dry-run mode
 
         """
@@ -126,8 +127,7 @@ class DatabaseVerifier:
             True if auto-verify should run, False otherwise
 
         """
-        verify_config = self.config.get("database_verification", {})
-        auto_verify_days = verify_config.get("auto_verify_days", 7)
+        auto_verify_days = self.config.database_verification.auto_verify_days
 
         if auto_verify_days <= 0:
             return False
@@ -194,7 +194,7 @@ class DatabaseVerifier:
             return True
 
         # Get configuration values
-        interval_minutes = self.config.get("incremental_interval_minutes", 1440)
+        interval_minutes = self.config.incremental_interval_minutes
         last_run_file = get_full_log_path(
             self.config,
             "last_incremental_run_file",
@@ -396,9 +396,7 @@ class DatabaseVerifier:
             List of tracks to verify
 
         """
-        dev_test_artists = self.config.get("development", {}).get("test_artists", [])
-        legacy_test_artists = self.config.get("test_artists", [])
-        resolved_test_artists = dev_test_artists or legacy_test_artists
+        resolved_test_artists = self.config.development.test_artists
         if apply_test_filter and self.dry_run and (test_artists := set(resolved_test_artists)):
             tracks: list[TrackDict] = [t for t in existing_tracks if t.get("artist") in test_artists]
             self.console_logger.info(
@@ -490,8 +488,7 @@ class DatabaseVerifier:
 
         """
         # Load configuration and database
-        verify_config = self.config.get("database_verification", {})
-        auto_verify_days = verify_config.get("auto_verify_days", 7)
+        auto_verify_days = self.config.database_verification.auto_verify_days
 
         csv_path = get_full_log_path(
             self.config,

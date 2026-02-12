@@ -323,3 +323,38 @@ class TestConfigResolvedPath:
         # _resolve_config_path handles OSError gracefully
         result = config._resolve_config_path()
         assert "config.yaml" in result
+
+
+class TestLegacyTestArtistsMigration:
+    """Tests for AppConfig.migrate_legacy_test_artists validator."""
+
+    def test_migrates_top_level_to_development(self) -> None:
+        """Top-level test_artists should migrate into development.test_artists."""
+        app_config = _make_test_app_config(
+            test_artists=["Metallica", "Slayer"],
+            development={"test_artists": []},
+        )
+        assert app_config.development.test_artists == ["Metallica", "Slayer"]
+
+    def test_no_migration_when_development_has_values(self) -> None:
+        """When development.test_artists is non-empty, top-level is ignored."""
+        app_config = _make_test_app_config(
+            test_artists=["Metallica"],
+            development={"test_artists": ["Iron Maiden"]},
+        )
+        assert app_config.development.test_artists == ["Iron Maiden"]
+
+    def test_no_migration_when_top_level_is_empty(self) -> None:
+        """When top-level test_artists is empty, nothing changes."""
+        app_config = _make_test_app_config(
+            test_artists=[],
+            development={"test_artists": []},
+        )
+        assert app_config.development.test_artists == []
+
+    def test_default_no_top_level_key(self) -> None:
+        """When top-level test_artists is not provided, development keeps its value."""
+        app_config = _make_test_app_config(
+            development={"test_artists": ["Opeth"]},
+        )
+        assert app_config.development.test_artists == ["Opeth"]

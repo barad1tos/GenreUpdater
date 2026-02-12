@@ -190,7 +190,7 @@ async def test_main_pipeline_reuses_track_snapshot(
         },
     )
 
-    analytics = Analytics(config, LoggerContainer(logger, logger, logger))
+    analytics = Analytics(app_config, LoggerContainer(logger, logger, logger))
 
     # Create retry handler for testing
     retry_policy = RetryPolicy(

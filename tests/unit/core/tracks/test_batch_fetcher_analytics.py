@@ -10,10 +10,12 @@ import pytest
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
+    from core.models.track_models import AppConfig
     from core.models.types import AppleScriptClientProtocol
 
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from metrics.analytics import Analytics, LoggerContainer
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 
 @pytest.fixture
@@ -53,23 +55,20 @@ def analytics_loggers() -> LoggerContainer:
 @pytest.fixture
 def analytics(analytics_loggers: LoggerContainer) -> Analytics:
     """Create Analytics instance."""
-    config = {"analytics": {"enabled": True}}
-    return Analytics(config, analytics_loggers)
+    return Analytics(create_test_app_config(), analytics_loggers)
 
 
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> AppConfig:
     """Create test config."""
-    return {
-        "batch_processing": {"ids_batch_size": 100},
-    }
+    return create_test_app_config()
 
 
 def create_batch_fetcher(
     ap_client: MagicMock,
     cache_service: MagicMock,
     loggers: tuple[logging.Logger, logging.Logger],
-    config: dict[str, Any],
+    config: AppConfig,
     analytics: Analytics | None = None,
 ) -> BatchTrackFetcher:
     """Factory to create BatchTrackFetcher with common dependencies."""
@@ -97,7 +96,7 @@ class TestBatchFetcherInit:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should initialize without analytics parameter."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -108,7 +107,7 @@ class TestBatchFetcherInit:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: Analytics,
     ) -> None:
         """Should initialize with analytics parameter."""
@@ -125,7 +124,7 @@ class TestFetchTracksInBatchesRouting:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: Analytics,
     ) -> None:
         """Should use analytics batch mode when analytics is available."""
@@ -145,7 +144,7 @@ class TestFetchTracksInBatchesRouting:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should use raw method when analytics is not available."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -165,7 +164,7 @@ class TestFetchTracksWithAnalytics:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: Analytics,
     ) -> None:
         """Should use analytics.batch_mode context manager."""
@@ -198,7 +197,7 @@ class TestFetchTracksWithAnalytics:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: Analytics,
     ) -> None:
         """Should suppress console logging while fetching."""
@@ -227,7 +226,7 @@ class TestAnalyticsGuard:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Guard raises RuntimeError when analytics is None."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -246,7 +245,7 @@ class TestFetchTracksRawFallback:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should work correctly without analytics."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -263,7 +262,7 @@ class TestFetchTracksRawFallback:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should use Rich Console status for progress display."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -292,7 +291,7 @@ class TestProcessSingleBatch:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should return None when batch returns no results."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -308,7 +307,7 @@ class TestProcessSingleBatch:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should return None and log error on exception."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
@@ -329,7 +328,7 @@ class TestProcessSingleBatch:
         mock_ap_client: MagicMock,
         mock_cache_service: MagicMock,
         loggers: tuple[logging.Logger, logging.Logger],
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should return (tracks, new_offset, failures, continue) on success."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)

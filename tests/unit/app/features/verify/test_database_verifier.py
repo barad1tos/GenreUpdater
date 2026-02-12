@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
@@ -13,6 +13,10 @@ import pytest
 from app.features.verify.database_verifier import DatabaseVerifier
 from core.models.track_models import TrackDict
 from core.models.types import AppleScriptClientProtocol
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 def _create_track(track_id: str, name: str = "Track") -> TrackDict:
@@ -39,24 +43,26 @@ def mock_analytics() -> Any:
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict[str, Any]:
+def config(tmp_path: Path) -> AppConfig:
     """Create test configuration."""
-    return {
-        "logs_base_dir": str(tmp_path / "logs"),
-        "logging": {
-            "last_incremental_run_file": "last_run.log",
+    return create_test_app_config(
+        logs_base_dir=str(tmp_path / "logs"),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
             "csv_output_file": "track_list.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "last_run.log",
+            "pending_verification_file": "pending.json",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {"console": "INFO", "main_file": "INFO", "analytics_file": "INFO"},
         },
-        "incremental_interval_minutes": 60,
-        "database_verification": {
-            "batch_size": 10,
-            "pause_seconds": 0.1,
-            "auto_verify_days": 7,
-        },
-        "development": {
-            "test_artists": [],
-        },
-    }
+        incremental_interval_minutes=60,
+        database_verification={"batch_size": 10, "auto_verify_days": 7},
+        development={"test_artists": []},
+    )
 
 
 @pytest.fixture
@@ -66,7 +72,7 @@ def verifier(
     error_logger: logging.Logger,
     db_verify_logger: logging.Logger,
     mock_analytics: Any,
-    config: dict[str, Any],
+    config: AppConfig,
 ) -> DatabaseVerifier:
     """Create DatabaseVerifier instance."""
     return DatabaseVerifier(
@@ -89,7 +95,7 @@ class TestDatabaseVerifierInit:
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: MagicMock,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should store all dependencies correctly."""
         verifier = DatabaseVerifier(
@@ -115,7 +121,7 @@ class TestDatabaseVerifierInit:
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: MagicMock,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should set dry_run flag when specified."""
         verifier = DatabaseVerifier(
@@ -251,7 +257,7 @@ class TestHandleInvalidTracks:
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: Any,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should record action in dry run mode."""
         verifier = DatabaseVerifier(
@@ -287,10 +293,30 @@ class TestShouldAutoVerify:
     """Tests for should_auto_verify method."""
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_disabled(self, verifier: DatabaseVerifier) -> None:
+    async def test_returns_false_when_disabled(
+        self,
+        mock_ap_client: Any,
+        console_logger: logging.Logger,
+        error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
+        mock_analytics: Any,
+        config: AppConfig,
+    ) -> None:
         """Should return False when auto_verify_days is 0 or negative."""
-        verifier.config["database_verification"] = {"auto_verify_days": 0}
-        result = await verifier.should_auto_verify()
+        from core.models.track_models import DatabaseVerificationConfig
+
+        disabled_config = config.model_copy(
+            update={"database_verification": DatabaseVerificationConfig(batch_size=10, auto_verify_days=0)},
+        )
+        disabled_verifier = DatabaseVerifier(
+            ap_client=mock_ap_client,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            db_verify_logger=db_verify_logger,
+            analytics=mock_analytics,
+            config=disabled_config,
+        )
+        result = await disabled_verifier.should_auto_verify()
         assert result is False
 
     @pytest.mark.asyncio
@@ -423,17 +449,21 @@ class TestGetTracksToVerify:
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: Any,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
         """Should filter by test_artists when in dry_run mode."""
-        config["development"]["test_artists"] = ["Artist1"]
+        from core.models.track_models import DevelopmentConfig
+
+        filtered_config = config.model_copy(
+            update={"development": DevelopmentConfig(test_artists=["Artist1"])},
+        )
         verifier = DatabaseVerifier(
             ap_client=mock_ap_client,
             console_logger=console_logger,
             error_logger=error_logger,
             db_verify_logger=db_verify_logger,
             analytics=mock_analytics,
-            config=config,
+            config=filtered_config,
             dry_run=True,
         )
 
@@ -445,25 +475,28 @@ class TestGetTracksToVerify:
         assert len(result) == 1
         assert result[0].id == "1"
 
-    def test_falls_back_to_legacy_test_artists(
+    def test_returns_all_when_no_test_artists(
         self,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: Any,
-        config: dict[str, Any],
+        config: AppConfig,
     ) -> None:
-        """Should fall back to top-level test_artists when development section is empty."""
-        config["development"]["test_artists"] = []
-        config["test_artists"] = ["Artist1"]
+        """Should return all tracks when development.test_artists is empty."""
+        from core.models.track_models import DevelopmentConfig
+
+        empty_config = config.model_copy(
+            update={"development": DevelopmentConfig(test_artists=[])},
+        )
         verifier = DatabaseVerifier(
             ap_client=mock_ap_client,
             console_logger=console_logger,
             error_logger=error_logger,
             db_verify_logger=db_verify_logger,
             analytics=mock_analytics,
-            config=config,
+            config=empty_config,
             dry_run=True,
         )
 
@@ -472,8 +505,7 @@ class TestGetTracksToVerify:
         tracks = [track1, track2]
 
         result = verifier._get_tracks_to_verify(tracks, apply_test_filter=True)
-        assert len(result) == 1
-        assert result[0].id == "1"
+        assert len(result) == 2
 
 
 class TestUpdateVerificationTimestamp:
@@ -487,7 +519,7 @@ class TestUpdateVerificationTimestamp:
         error_logger: logging.Logger,
         db_verify_logger: logging.Logger,
         mock_analytics: Any,
-        config: dict[str, Any],
+        config: AppConfig,
         tmp_path: Path,
     ) -> None:
         """Should skip updating timestamp in dry run mode."""

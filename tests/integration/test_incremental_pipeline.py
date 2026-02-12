@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 import pytest
 
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.models.track_models import TrackDict
 from metrics.analytics import Analytics
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestIncrementalPipelineIntegration:
@@ -18,16 +22,11 @@ class TestIncrementalPipelineIntegration:
 
     @staticmethod
     def create_incremental_filter(
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         dry_run: bool = False,
     ) -> IncrementalFilterService:
         """Create an IncrementalFilterService instance for testing."""
-        test_config = config or {
-            "logs_base_dir": "/tmp/test_logs",
-            "force_update": False,
-            "processing": {"batch_size": 100},
-            "paths": {"csv_output_file": "csv/track_list.csv"},
-        }
+        test_config = config or create_test_app_config()
 
         return IncrementalFilterService(
             console_logger=MockLogger(),  # type: ignore[arg-type]

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
 
 from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -22,10 +26,10 @@ def loggers() -> LoggerContainer:
 
 
 @pytest.fixture
-def config() -> dict:
+def config() -> AppConfig:
     """Create minimal config for testing."""
-    return {
-        "analytics": {
+    return create_test_app_config(
+        analytics={
             "enabled": True,
             "max_events": 1000,
             "duration_thresholds": {
@@ -33,12 +37,13 @@ def config() -> dict:
                 "medium_max": 5,
                 "long_max": 10,
             },
-        }
-    }
+            "compact_time": False,
+        },
+    )
 
 
 @pytest.fixture
-def analytics(config: dict, loggers: LoggerContainer) -> Analytics:
+def analytics(config: AppConfig, loggers: LoggerContainer) -> Analytics:
     """Create Analytics instance for testing."""
     return Analytics(config, loggers)
 

@@ -13,7 +13,7 @@ from core.models.validators import SecurityValidator
 from core.tracks.track_processor import TrackProcessor
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
-from tests.factories import create_test_app_config
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.protocols import (
@@ -77,7 +77,7 @@ class _MockAnalytics(Analytics):
         mock_error = _MockLogger("error")
         mock_analytics = _MockLogger("analytics")
         loggers = LoggerContainer(mock_console, mock_error, mock_analytics)
-        super().__init__(config={}, loggers=loggers, max_events=1000)
+        super().__init__(config=create_test_app_config(), loggers=loggers, max_events=1000)
 
 
 class _MockAppleScriptClient:

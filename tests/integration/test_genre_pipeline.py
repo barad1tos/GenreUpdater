@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from core.tracks.genre_manager import GenreManager
@@ -11,7 +11,11 @@ from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
 from metrics.analytics import Analytics
 
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestGenrePipelineIntegration:
@@ -20,7 +24,7 @@ class TestGenrePipelineIntegration:
     @staticmethod
     def create_genre_manager(
         mock_track_processor: AsyncMock | None,
-        config: dict[str, Any] | None,
+        config: AppConfig | None,
         dry_run: bool,
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
@@ -28,7 +32,9 @@ class TestGenrePipelineIntegration:
             mock_track_processor = AsyncMock()
             mock_track_processor.update_track_async = AsyncMock(return_value=True)
 
-        test_config = config or {"force_update": False, "processing": {"batch_size": 100}, "genre_update": {"concurrent_limit": 5}}
+        test_config = config or create_test_app_config(
+            genre_update={"batch_size": 100, "concurrent_limit": 5},
+        )
 
         return GenreManager(
             track_processor=mock_track_processor,
@@ -215,7 +221,7 @@ class TestGenrePipelineIntegration:
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
 
         # Configure for batch processing
-        batch_config = {"processing": {"batch_size": 10}, "genre_update": {"concurrent_limit": 3}}
+        batch_config = create_test_app_config(genre_update={"batch_size": 10, "concurrent_limit": 3})
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(None, batch_config, False)
         start_time = datetime.now(UTC)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)

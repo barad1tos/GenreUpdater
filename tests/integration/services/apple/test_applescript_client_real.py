@@ -87,7 +87,7 @@ def analytics(
         error_logger=error_logger,
         analytics_logger=analytics_logger,
     )
-    return Analytics(config=app_config.model_dump(), loggers=loggers)
+    return Analytics(config=app_config, loggers=loggers)
 
 
 @pytest.fixture
