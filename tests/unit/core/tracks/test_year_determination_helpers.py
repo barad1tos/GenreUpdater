@@ -25,7 +25,7 @@ from core.tracks.year_determination import (
     YearDeterminator,
 )
 from core.tracks.year_fallback import YearFallbackHandler
-from services.cache.album_cache import AlbumCacheEntry
+from core.models.cache_types import AlbumCacheEntry
 
 
 def _create_track(
@@ -100,9 +100,12 @@ def _create_year_determinator(
 ) -> YearDeterminator:
     """Create YearDeterminator with mock dependencies."""
     return YearDeterminator(
-        cache_service=cast(CacheServiceProtocol, cache_service or _create_mock_cache_service()),
-        external_api=cast(ExternalApiServiceProtocol, external_api or _create_mock_external_api()),
-        pending_verification=cast(PendingVerificationServiceProtocol, pending_verification or _create_mock_pending_verification()),
+        cache_service=cast(CacheServiceProtocol, cast(object, cache_service or _create_mock_cache_service())),
+        external_api=cast(ExternalApiServiceProtocol, cast(object, external_api or _create_mock_external_api())),
+        pending_verification=cast(
+            PendingVerificationServiceProtocol,
+            cast(object, pending_verification or _create_mock_pending_verification()),
+        ),
         consistency_checker=cast(YearConsistencyChecker, consistency_checker or _create_mock_consistency_checker()),
         fallback_handler=cast(YearFallbackHandler, fallback_handler or _create_mock_fallback_handler()),
         console_logger=logging.getLogger("test.console"),
@@ -122,7 +125,7 @@ class TestTryLocalSources:
         consistency_checker.get_dominant_year = MagicMock(return_value="2020")
 
         determinator = _create_year_determinator(consistency_checker=consistency_checker)
-        tracks = [_create_track("1", year="2020")]
+        tracks = [_create_track(year="2020")]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -143,7 +146,7 @@ class TestTryLocalSources:
         cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
 
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -164,7 +167,7 @@ class TestTryLocalSources:
         cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
 
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -181,7 +184,7 @@ class TestTryLocalSources:
             cache_service=cache_service,
             consistency_checker=consistency_checker,
         )
-        tracks = [_create_track("1", release_year="2018")]
+        tracks = [_create_track(release_year="2018")]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -197,7 +200,7 @@ class TestTryLocalSources:
     async def test_returns_none_when_no_local_sources(self) -> None:
         """Should return None when no local sources have year data."""
         determinator = _create_year_determinator()
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -223,7 +226,7 @@ class TestTryLocalSources:
             cache_service=cache_service,
             consistency_checker=consistency_checker,
         )
-        tracks = [_create_track("1", year="2020")]
+        tracks = [_create_track(year="2020")]
 
         result = await determinator._try_local_sources("Artist", "Album", tracks)
 
@@ -251,7 +254,7 @@ class TestFetchFromApi:
             external_api=external_api,
             fallback_handler=fallback_handler,
         )
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -270,7 +273,7 @@ class TestFetchFromApi:
         external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
 
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -292,7 +295,7 @@ class TestFetchFromApi:
             external_api=external_api,
             fallback_handler=fallback_handler,
         )
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -307,7 +310,7 @@ class TestFetchFromApi:
         external_api.get_album_year = AsyncMock(side_effect=RuntimeError("API error"))
 
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -320,7 +323,7 @@ class TestFetchFromApi:
         external_api.get_album_year = AsyncMock(side_effect=OSError("Network error"))
 
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -333,7 +336,7 @@ class TestFetchFromApi:
         external_api.get_album_year = AsyncMock(side_effect=ValueError("Invalid data"))
 
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
 
@@ -345,7 +348,7 @@ class TestFetchFromApi:
         external_api = _create_mock_external_api()
 
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track("1", date_added="2020-01-01")]
+        tracks = [_create_track(date_added="2020-01-01")]
 
         await determinator._fetch_from_api("Artist", "Album", tracks, "2019")
 
@@ -365,7 +368,7 @@ class TestFetchFromApi:
             external_api=external_api,
             fallback_handler=fallback_handler,
         )
-        tracks = [_create_track("1")]
+        tracks = [_create_track()]
 
         await determinator._fetch_from_api("Artist", "Album", tracks, "2020")
 

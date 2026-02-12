@@ -406,7 +406,9 @@ class ApiRequestExecutor:
             self.request_counts[api_name] = self.request_counts.get(api_name, 0) + 1
 
             self._ensure_session()
-            assert self.session is not None  # _ensure_session() guarantees this
+            if self.session is None:  # type narrowing — _ensure_session() raises if unavailable
+                msg = f"HTTP session lost before {api_name} request to {log_url}"
+                raise RuntimeError(msg)
 
             # iTunes API requires %20 for spaces, not + (which aiohttp uses by default)
             if api_name == "itunes" and params:

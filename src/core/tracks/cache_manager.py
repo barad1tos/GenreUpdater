@@ -11,16 +11,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from core.models.cache_types import LibraryCacheMetadata, LibraryDeltaCache
 from core.models.track_models import TrackDict
 from core.models.validators import is_valid_track_item
-from services.cache.snapshot import LibraryCacheMetadata, LibraryDeltaCache
 
 if TYPE_CHECKING:
     import logging
     from collections.abc import Callable, Sequence
 
-    from core.models.protocols import CacheServiceProtocol
-    from services.cache.snapshot import LibrarySnapshotService
+    from core.models.protocols import CacheServiceProtocol, LibrarySnapshotServiceProtocol
 
 
 class TrackCacheManager:
@@ -35,7 +34,7 @@ class TrackCacheManager:
     def __init__(
         self,
         cache_service: CacheServiceProtocol,
-        snapshot_service: LibrarySnapshotService | None,
+        snapshot_service: LibrarySnapshotServiceProtocol | None,
         console_logger: logging.Logger,
         current_time_func: Callable[[], datetime] | None = None,
     ) -> None:

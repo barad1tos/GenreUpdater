@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo, _get_func_name
+from core.analytics_decorator import track_instance_method
+from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
 
 
 @pytest.fixture
@@ -212,7 +213,7 @@ class TestTrackInstanceMethod:
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
 
-            @Analytics.track_instance_method("method_event")
+            @track_instance_method("method_event")
             def my_method(self, x: int) -> int:
                 """Test method that doubles input."""
                 return x * 2
@@ -232,7 +233,7 @@ class TestTrackInstanceMethod:
             def __init__(self, analytics_inst: Analytics) -> None:
                 self.analytics = analytics_inst
 
-            @Analytics.track_instance_method("async_method_event")
+            @track_instance_method("async_method_event")
             async def my_async_method(self, x: int) -> int:
                 """Test async method that triples input."""
                 await asyncio.sleep(0.01)
@@ -447,7 +448,7 @@ class TestGcCollection:
                 simple_func()
 
             # GC may have been called (depends on implementation)
-            # The patch ensures gc.collect doesn't actually run during test
+            # The patch ensures gc.collect doesn't run during test
 
 
 class TestNullLogger:
@@ -462,24 +463,27 @@ class TestNullLogger:
 
 
 class TestGetFuncName:
-    """Tests for _get_func_name helper function."""
+    """Tests for tracked function name handling."""
 
-    def test_regular_function_has_name(self) -> None:
-        """Test that regular function returns its __name__."""
+    def test_regular_function_has_name(self, analytics: Analytics) -> None:
+        """Test that regular function names are tracked."""
 
+        @analytics.track("test_event")
         def sample_func() -> None:
             """Sample function for testing."""
 
-        assert _get_func_name(sample_func) == "sample_func"
+        sample_func()
+        assert "sample_func" in analytics.call_counts
 
-    def test_lambda_function(self) -> None:
-        """Test that lambda returns its repr when no __name__."""
+    def test_lambda_function(self, analytics: Analytics) -> None:
+        """Test that lambda names are tracked."""
         my_lambda = lambda x: x * 2  # noqa: E731
-        name = _get_func_name(my_lambda)
-        assert name == "<lambda>"
+        wrapped = analytics.track("test_event")(my_lambda)
+        wrapped(2)
+        assert "<lambda>" in analytics.call_counts
 
-    def test_callable_without_name(self) -> None:
-        """Test callable without __name__ returns repr."""
+    def test_callable_without_name(self, analytics: Analytics) -> None:
+        """Test callable without __name__ is tracked via repr."""
 
         class CallableWithoutName:
             """Callable object without __name__ attribute."""
@@ -492,11 +496,12 @@ class TestGetFuncName:
                 return "CustomCallable()"
 
         obj = CallableWithoutName()
-        name = _get_func_name(obj)
-        assert name == "CustomCallable()"
+        wrapped = analytics.track("test_event")(obj)
+        wrapped()
+        assert "CustomCallable()" in analytics.call_counts
 
-    def test_method_has_name(self) -> None:
-        """Test that method returns its __name__."""
+    def test_method_has_name(self, analytics: Analytics) -> None:
+        """Test that method names are tracked."""
 
         class MyClass:
             """Test class with method."""
@@ -504,5 +509,6 @@ class TestGetFuncName:
             def my_method(self) -> None:
                 """Test method."""
 
-        assert _get_func_name(MyClass.my_method) == "my_method"
-        assert _get_func_name(MyClass().my_method) == "my_method"
+        wrapped = analytics.track("test_event")(MyClass().my_method)
+        wrapped()
+        assert "my_method" in analytics.call_counts

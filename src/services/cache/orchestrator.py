@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from core.logger import LogFormat
-from core.run_tracking import IncrementalRunTracker
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
-from services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
+from core.run_tracking import IncrementalRunTracker
+from services.cache.album_cache import AlbumCacheService
 from services.cache.api_cache import ApiCacheService
 from services.cache.cache_config import CacheEvent, CacheEventType
 from services.cache.generic_cache import GenericCacheService
@@ -29,6 +29,7 @@ from services.cache.hash_service import UnifiedHashService
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from core.models.cache_types import AlbumCacheEntry
     from core.models.track_models import CachedApiResult, TrackDict
 
 T = TypeVar("T")

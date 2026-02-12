@@ -17,7 +17,7 @@ from core.models.album_type import (
     detect_album_type,
 )
 from core.models.validators import is_empty_year
-from services.pending_verification import VerificationReason
+from core.models.cache_types import VerificationReason
 
 if TYPE_CHECKING:
     import logging

@@ -285,10 +285,11 @@ src/
 │       └── verify/             # Database verification
 │
 ├── core/                       # Business logic
+│   ├── analytics_decorator.py  # Standalone track_instance_method
 │   ├── core_config.py          # Configuration loading
 │   ├── logger.py               # Logging setup
 │   ├── dry_run.py              # Dry-run simulation
-│   ├── models/                 # Data models (Track, protocols, validators)
+│   ├── models/                 # Data models, protocols, cache types
 │   ├── tracks/                 # Track processing (processor, genre, year)
 │   └── utils/                  # Shared utilities
 │
@@ -328,13 +329,23 @@ year_retriever = container.year_retriever
 
 ### Protocol-Based Interfaces
 
-Interfaces defined with `typing.Protocol`:
+Interfaces defined with `typing.Protocol` in `core/models/protocols.py`:
+
+- `CacheServiceProtocol` — unified cache operations
+- `ExternalApiServiceProtocol` — external API clients
+- `AppleScriptClientProtocol` — Music.app communication
+- `AnalyticsProtocol` — performance tracking
+- `LibrarySnapshotServiceProtocol` — snapshot persistence
+
+`core/` depends only on protocols, never on concrete service classes.
+The `track_instance_method` decorator in `core/analytics_decorator.py`
+uses duck typing to avoid importing the concrete `Analytics` class.
 
 ```python test="skip"
 class ExternalApiServiceProtocol(Protocol):
-    async def fetch_year(
-        self, artist: str, album: str
-    ) -> tuple[int | None, int]: ...
+    async def get_album_year(
+        self, artist: str, album: str, ...
+    ) -> tuple[str | None, bool, int, dict]: ...
 ```
 
 ### Async-First

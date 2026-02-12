@@ -24,7 +24,8 @@ from .track_utils import parse_track_date_added as _parse_track_date_added
 
 if TYPE_CHECKING:
     import logging
-    from metrics import Analytics
+
+    from core.models.protocols import AnalyticsProtocol
 
     from .track_processor import TrackProcessor
 
@@ -37,7 +38,7 @@ class GenreManager(BaseProcessor):
         track_processor: TrackProcessor,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         config: dict[str, Any],
         dry_run: bool = False,
     ) -> None:
@@ -307,26 +308,6 @@ class GenreManager(BaseProcessor):
 
         return successful_results
 
-    def _log_artist_debug_info(self, artist_name: str, artist_tracks: list[TrackDict]) -> None:
-        """Log debug information for specific artists.
-
-        Args:
-            artist_name: Name of the artist
-            artist_tracks: All tracks by this artist
-
-        """
-        if artist_name == "Green Carnation":
-            self.console_logger.info("DEBUG: Green Carnation tracks details:")
-            for track in artist_tracks:
-                track_id = track.id or ""
-                track_name = track.name or ""
-                current_genre = track.genre or ""
-                track_status = track.track_status or ""
-                album = track.album or ""
-                self.console_logger.info(
-                    "  Track %s: %s | Album: %s | Genre: %s | Status: %s", track_id, track_name, album, current_genre, track_status
-                )
-
     @staticmethod
     def process_batch_results(batch_results: list[Any], updated_tracks: list[TrackDict], change_logs: list[ChangeLogEntry]) -> None:
         """Process batch results and update collections.
@@ -378,9 +359,6 @@ class GenreManager(BaseProcessor):
         if not dominant_genre:
             self.console_logger.warning("Could not determine dominant genre for artist: %s", artist_name)
             return [], []
-
-        # DEBUG: Log track details for specific artists
-        self._log_artist_debug_info(artist_name, all_artist_tracks)
 
         # Decide which tracks to update
         target_tracks = tracks_to_update if tracks_to_update is not None else all_artist_tracks
@@ -634,10 +612,6 @@ class GenreManager(BaseProcessor):
     ) -> list[Any]:
         """Test-only access to _gather_with_error_handling method."""
         return await self._gather_with_error_handling(tasks, operation_name)
-
-    def test_log_artist_debug_info(self, artist_name: str, artist_tracks: list[TrackDict]) -> None:
-        """Test-only access to _log_artist_debug_info method."""
-        return self._log_artist_debug_info(artist_name, artist_tracks)
 
     def test_filter_tracks_for_update(
         self,

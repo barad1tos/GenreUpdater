@@ -8,9 +8,11 @@ import time
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
+
 import pytest
 
-from services.cache.album_cache import AlbumCacheEntry, AlbumCacheService
+from core.models.cache_types import AlbumCacheEntry
+from services.cache.album_cache import AlbumCacheService
 from services.cache.cache_config import CacheContentType
 from services.cache.hash_service import UnifiedHashService
 
@@ -309,6 +311,7 @@ class TestAlbumCacheService:
         original_mkstemp = tempfile.mkstemp
 
         def tracking_mkstemp(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            """Track temp file path."""
             nonlocal created_temp_path
             fd, path = original_mkstemp(*args, **kwargs)
             created_temp_path = path

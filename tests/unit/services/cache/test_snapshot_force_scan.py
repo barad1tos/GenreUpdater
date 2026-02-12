@@ -12,7 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.cache.snapshot import LibraryCacheMetadata, LibrarySnapshotService
+from core.models.cache_types import LibraryCacheMetadata
+from services.cache.snapshot import LibrarySnapshotService
 
 
 @pytest.fixture

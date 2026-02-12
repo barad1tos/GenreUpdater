@@ -14,13 +14,13 @@ from typing import TYPE_CHECKING, Any
 from core.models.track_status import can_edit_metadata
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
+from core.analytics_decorator import track_instance_method
 from core.apple_script_names import BATCH_UPDATE_TRACKS, UPDATE_PROPERTY
-from metrics import Analytics
 
 if TYPE_CHECKING:
     import logging
 
-    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol
 
 
 # ASCII separator constants for batch commands (same as fetch_tracks.applescript)
@@ -49,7 +49,7 @@ class TrackUpdateExecutor:
         config: dict[str, Any],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         *,
         dry_run: bool = False,
     ) -> None:
@@ -588,7 +588,7 @@ class TrackUpdateExecutor:
 
         return all_success
 
-    @Analytics.track_instance_method("track_update")
+    @track_instance_method("track_update")
     async def update_track_async(
         self,
         track_id: str,
@@ -703,7 +703,7 @@ class TrackUpdateExecutor:
 
         return sanitized_track_id, sanitized_artist, current_artist
 
-    @Analytics.track_instance_method("track_artist_update")
+    @track_instance_method("track_artist_update")
     async def update_artist_async(
         self,
         track: TrackDict,

@@ -19,6 +19,9 @@ from typing import Any, NotRequired, TypedDict, TYPE_CHECKING
 if TYPE_CHECKING:
     import logging
 
+# Small time buffer added after rate-limit wait to avoid edge-case rejections
+RATE_LIMIT_BUFFER_SECONDS: float = 0.01
+
 
 class ScoredRelease(TypedDict):
     """Type definition for a scored release with metadata and scoring details."""
@@ -118,7 +121,7 @@ class EnhancedRateLimiter:
 
             if wait_time > 0:
                 # Add a small buffer to avoid edge cases
-                wait_time += 0.01
+                wait_time += RATE_LIMIT_BUFFER_SECONDS
                 await asyncio.sleep(wait_time)
 
                 # Clean up again after waiting

@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from core.models.track_models import TrackDict
     from core.retry_handler import DatabaseRetryHandler
     from core.tracks.track_processor import TrackProcessor
-    from metrics import Analytics
+    from core.models.protocols import AnalyticsProtocol
 
 
 _PROGRESS_DESCRIPTION = "Processing albums"
@@ -78,7 +78,7 @@ class YearBatchProcessor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: dict[str, Any],
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         dry_run: bool = False,
     ) -> None:
         """Initialize the YearBatchProcessor.
@@ -388,7 +388,7 @@ class YearBatchProcessor:
 
         album_tracks = editable_tracks
 
-        self.console_logger.debug("DEBUG: Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
+        self.console_logger.debug("Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
         # Safety checks (never bypassed by force - these are data integrity guards)
         if await self.year_determinator.check_suspicious_album(artist, album, album_tracks):
@@ -932,8 +932,10 @@ class YearBatchProcessor:
                 _do_update,
                 f"track_update:{track_id}",
             )
-            # Type narrowing for ty (can't infer TypeVar from callable return type)
-            assert isinstance(retry_result, bool)
+            # Type narrowing — ty can't infer TypeVar from callable return type
+            if not isinstance(retry_result, bool):
+                msg = f"execute_with_retry returned {type(retry_result).__name__}, expected bool (track_id={track_id})"
+                raise TypeError(msg)
             return retry_result
         except (OSError, ValueError, RuntimeError):
             # All retries exhausted

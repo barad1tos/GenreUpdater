@@ -10,9 +10,9 @@ import asyncio
 import urllib.parse
 from typing import Any, TypedDict, cast, TYPE_CHECKING
 
+from core.analytics_decorator import track_instance_method
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
-from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
 
@@ -20,8 +20,13 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     import logging
 
+    from metrics import Analytics
+
 # Type alias for MusicBrainz API response data
 MBApiData = dict[str, Any]
+
+# MusicBrainz Web Service v2 base URL
+MUSICBRAINZ_BASE_URL: str = "https://musicbrainz.org/ws/2"
 
 
 # MusicBrainz Type Definitions
@@ -274,7 +279,7 @@ class MusicBrainzClient(BaseApiClient):
 
         return False
 
-    @Analytics.track_instance_method("musicbrainz_artist_search")
+    @track_instance_method("musicbrainz_artist_search")
     async def get_artist_info(self, artist_norm: str, include_aliases: bool = False) -> dict[str, Any] | None:
         """Get artist information from MusicBrainz.
 
@@ -290,7 +295,7 @@ class MusicBrainzClient(BaseApiClient):
             Artist information or None if not found
 
         """
-        search_url = "https://musicbrainz.org/ws/2/artist/"
+        search_url = f"{MUSICBRAINZ_BASE_URL}/artist/"
         # Non-fielded search matches aliases; see _perform_primary_search for script detection
         params = {
             "query": self._escape_lucene(artist_norm),
@@ -310,7 +315,7 @@ class MusicBrainzClient(BaseApiClient):
 
         return None
 
-    @Analytics.track_instance_method("musicbrainz_artist_period")
+    @track_instance_method("musicbrainz_artist_period")
     async def get_artist_activity_period(self, artist_norm: str) -> tuple[str | None, str | None]:
         """Get artist's activity period from MusicBrainz.
 
@@ -336,7 +341,7 @@ class MusicBrainzClient(BaseApiClient):
 
         return begin_year, end_year
 
-    @Analytics.track_instance_method("musicbrainz_artist_region")
+    @track_instance_method("musicbrainz_artist_region")
     async def get_artist_region(self, artist_norm: str) -> str | None:
         """Get an artist's region/country from MusicBrainz.
 
@@ -391,7 +396,7 @@ class MusicBrainzClient(BaseApiClient):
             List of release groups from primary search
 
         """
-        base_search_url = "https://musicbrainz.org/ws/2/release-group/"
+        base_search_url = f"{MUSICBRAINZ_BASE_URL}/release-group/"
 
         # Attempt 1: Search with provided artist name
         results = await self._fielded_release_group_search(base_search_url, artist_norm, album_norm, attempt_num=1)
@@ -467,7 +472,7 @@ class MusicBrainzClient(BaseApiClient):
             List of filtered release groups
 
         """
-        base_search_url = "https://musicbrainz.org/ws/2/release-group/"
+        base_search_url = f"{MUSICBRAINZ_BASE_URL}/release-group/"
         params = {"fmt": "json", "limit": "10", "query": query}
 
         rg_data = await self._make_api_request("musicbrainz", base_search_url, params=params)
@@ -524,7 +529,7 @@ class MusicBrainzClient(BaseApiClient):
             if not rg_id:
                 continue
 
-            release_search_url = "https://musicbrainz.org/ws/2/release/"
+            release_search_url = f"{MUSICBRAINZ_BASE_URL}/release/"
             release_params: dict[str, str] = {
                 "release-group": rg_id,
                 "inc": "media+artist-credits",  # Include artist-credits for scoring
@@ -682,7 +687,7 @@ class MusicBrainzClient(BaseApiClient):
             "source": "musicbrainz",
         }
 
-    @Analytics.track_instance_method("musicbrainz_release_search")
+    @track_instance_method("musicbrainz_release_search")
     async def get_scored_releases(
         self,
         artist_norm: str,

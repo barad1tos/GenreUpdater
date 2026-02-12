@@ -9,28 +9,17 @@ import logging
 import os
 import tempfile
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.logger import LogFormat, ensure_directory, get_full_log_path
+from core.models.cache_types import AlbumCacheEntry
 from core.models.normalization import are_names_equal
 from services.cache.cache_config import CacheContentType, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
-from core.logger import LogFormat, ensure_directory, get_full_log_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-
-@dataclass(slots=True)
-class AlbumCacheEntry:
-    """Album cache entry with timestamp for TTL management."""
-
-    artist: str
-    album: str
-    year: str
-    timestamp: float
-    confidence: int = 0  # 0-100, higher = more trustworthy
 
 
 class AlbumCacheService:

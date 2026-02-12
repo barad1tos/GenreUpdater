@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from core.models.protocols import AnalyticsProtocol
 from core.tracks.genre_manager import GenreManager
 from core.models.track_models import ChangeLogEntry, TrackDict
-from metrics.analytics import Analytics
 
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.csv_mock import MockLogger
 from tests.mocks.track_data import DummyTrackData
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ class TestGenreManager:
 
         console_logger = MockLogger()
         error_logger = MockLogger()
-        analytics = cast(Analytics, cast(object, MockAnalytics()))
+        analytics = cast(AnalyticsProtocol, cast(object, MagicMock(spec=AnalyticsProtocol)))
         test_config = config or {
             "genre_update": {
                 "batch_size": 10,
@@ -217,7 +217,6 @@ class TestGenreManager:
 
         track = DummyTrackData.create(
             track_id="123",
-            genre="Rock",  # Same as new_genre
         )
 
         result_track, change_log = await manager.test_update_track_genre(track, "Rock", True)
@@ -225,7 +224,7 @@ class TestGenreManager:
         # Force mode still syncs to Music.app
         assert result_track is not None
         mock_processor.update_track_async.assert_called_once()
-        # But no change_log since genre didn't actually change
+        # But no change_log since genre didn't change
         assert change_log is None
 
     @pytest.mark.asyncio
@@ -312,25 +311,6 @@ class TestGenreManager:
 
         assert len(results) == 2  # Only successful results
         assert all(result == "success" for result in results)
-
-    def test_log_artist_debug_info_green_carnation(self) -> None:
-        """Test debug logging for Green Carnation artist."""
-        manager = TestGenreManager.create_manager()
-        tracks = [
-            DummyTrackData.create(track_id="1", name="Song 1", album="Album 1"),
-            DummyTrackData.create(track_id="2", name="Song 2", album="Album 2"),
-        ]
-
-        # Should not raise exception
-        manager.test_log_artist_debug_info("Green Carnation", tracks)
-
-    def test_log_artist_debug_info_other_artist(self) -> None:
-        """Test debug logging for other artists (should not log details)."""
-        manager = TestGenreManager.create_manager()
-        tracks = [DummyTrackData.create(track_id="1", name="Song 1")]
-
-        # Should not raise exception
-        manager.test_log_artist_debug_info("Other Artist", tracks)
 
     def test_process_batch_results_with_updates(self) -> None:
         """Test processing batch results with updates."""
@@ -575,7 +555,7 @@ class TestGenreManager:
         This covers lines 385-386: `if not target_tracks: return [], []`
         """
         manager = TestGenreManager.create_manager()
-        all_tracks = [DummyTrackData.create(track_id="1", genre="Rock")]
+        all_tracks = [DummyTrackData.create(track_id="1")]
 
         with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             # Return a valid dominant genre so we don't exit at line 377

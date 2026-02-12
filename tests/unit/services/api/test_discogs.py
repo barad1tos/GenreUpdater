@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import urlparse
-import pytest
-from services.api.discogs import DiscogsClient
 
+import pytest
+
+from services.api.discogs import DiscogsClient
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -39,9 +40,8 @@ class TestDiscogsClientAllure:
             """Mock analytics service that bypasses tracking."""
 
             @staticmethod
-            async def execute_async_wrapped_call(func: Any, *args: Any, **kwargs: Any) -> Any:
+            async def execute_async_wrapped_call(func: Any, _event_type: str, *args: Any, **kwargs: Any) -> Any:
                 """Execute async function without tracking."""
-                # Simply call the function without tracking
                 return await func(*args, **kwargs)
 
         mock_analytics = MockAnalytics()

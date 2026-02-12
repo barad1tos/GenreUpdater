@@ -10,14 +10,20 @@ import re
 import urllib.parse
 from typing import Any, TypedDict, TYPE_CHECKING
 
+from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
-from metrics import Analytics
 
 from .api_base import BaseApiClient, ScoredRelease
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     import logging
+
+    from metrics import Analytics
+
+
+# Discogs API v2 base URL
+DISCOGS_BASE_URL: str = "https://api.discogs.com"
 
 
 # Discogs Type Definitions
@@ -138,7 +144,7 @@ class DiscogsClient(BaseApiClient):
         self.config = config
         self.cache_ttl_days = cache_ttl_days
 
-    @Analytics.track_instance_method("discogs_release_details")
+    @track_instance_method("discogs_release_details")
     async def _fetch_discogs_release_details(self, release_id: int) -> dict[str, Any] | None:
         """Fetch detailed information for a specific Discogs release.
 
@@ -150,7 +156,7 @@ class DiscogsClient(BaseApiClient):
 
         """
         try:
-            detail_url = f"https://api.discogs.com/releases/{release_id}"
+            detail_url = f"{DISCOGS_BASE_URL}/releases/{release_id}"
             params: dict[str, Any] = {}  # Auth is handled in headers
 
             self.console_logger.debug("[discogs] Fetching details for release ID %s", release_id)
@@ -167,7 +173,7 @@ class DiscogsClient(BaseApiClient):
             self.error_logger.exception(f"[discogs] Error fetching release details for ID {release_id}: {e}")
             return None
 
-    @Analytics.track_instance_method("discogs_master_release")
+    @track_instance_method("discogs_master_release")
     async def _fetch_master_release_year(self, master_id: int) -> int | None:
         """Fetch the original release year from a Discogs master release.
 
@@ -192,7 +198,7 @@ class DiscogsClient(BaseApiClient):
             return int(cached_year)
 
         try:
-            master_url = f"https://api.discogs.com/masters/{master_id}"
+            master_url = f"{DISCOGS_BASE_URL}/masters/{master_id}"
             params: dict[str, Any] = {}
 
             self.console_logger.debug("[discogs] Fetching master release ID %s", master_id)
@@ -311,7 +317,7 @@ class DiscogsClient(BaseApiClient):
         # Check both with and without "The" prefix
         return target_normalized in title_normalized or target_no_the in title_normalized
 
-    @Analytics.track_instance_method("discogs_year_search")
+    @track_instance_method("discogs_year_search")
     async def get_year_from_discogs(self, artist: str, album: str) -> str | None:
         """Get year from Discogs (for backward compatibility).
 
@@ -385,7 +391,7 @@ class DiscogsClient(BaseApiClient):
             Discogs search response dict or None if failed/no results
 
         """
-        search_url = "https://api.discogs.com/database/search"
+        search_url = f"{DISCOGS_BASE_URL}/database/search"
         log_url = f"{search_url}?{urllib.parse.urlencode(params, safe=':/')}"
         self.console_logger.debug(f"[discogs] {strategy_name} URL: {log_url}")
 
@@ -765,7 +771,7 @@ class DiscogsClient(BaseApiClient):
 
         return scored_releases
 
-    @Analytics.track_instance_method("discogs_release_search")
+    @track_instance_method("discogs_release_search")
     async def get_scored_releases(
         self,
         artist_norm: str,

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
@@ -90,11 +91,13 @@ class TestIncrementalFilterService:
     """Tests for IncrementalFilterService class."""
 
     @staticmethod
-    def create_service() -> IncrementalFilterService:
+    def create_service(
+        track_list_loader: _MockLoadTrackList | None = None,
+    ) -> IncrementalFilterService:
         """Create a service instance for testing."""
         console_logger = _create_mock_logger()
         error_logger = _create_mock_logger()
-        analytics = MagicMock()
+        analytics = cast(AnalyticsProtocol, cast(object, MagicMock(spec=AnalyticsProtocol)))
         config: dict[str, Any] = {"logs_base_dir": "/tmp/test_logs", "csv_output_file": "csv/track_list.csv"}
 
         return IncrementalFilterService(
@@ -102,6 +105,7 @@ class TestIncrementalFilterService:
             error_logger=error_logger,
             analytics=analytics,
             config=config,
+            track_list_loader=track_list_loader,
         )
 
     def test_filter_tracks_no_last_run(self) -> None:
@@ -128,7 +132,8 @@ class TestIncrementalFilterService:
 
     def test_filter_tracks_with_new_tracks(self) -> None:
         """Test filtering with new tracks based on date_added."""
-        service = TestIncrementalFilterService.create_service()
+        mock_loader = _MockLoadTrackList([])
+        service = TestIncrementalFilterService.create_service(track_list_loader=mock_loader)
         last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
 
         tracks = [
@@ -136,14 +141,9 @@ class TestIncrementalFilterService:
             _create_track(track_id="2", date_added="2024-01-02 12:00:00"),  # Newer
         ]
 
-        # Mock empty CSV data so no status changes are detected
-        mock_load_track_list = _MockLoadTrackList([])
         mock_get_full_log_path = _MockGetFullLogPath()
 
-        with (
-            patch("core.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
+        with patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,
@@ -155,7 +155,8 @@ class TestIncrementalFilterService:
 
     def test_filter_tracks_missing_genre(self) -> None:
         """Test filtering includes tracks with missing or unknown genre."""
-        service = TestIncrementalFilterService.create_service()
+        mock_loader = _MockLoadTrackList([])
+        service = TestIncrementalFilterService.create_service(track_list_loader=mock_loader)
         last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
 
         tracks = [
@@ -164,14 +165,9 @@ class TestIncrementalFilterService:
             _create_track(track_id="3", genre="Unknown", date_added="2023-12-31 12:00:00"),  # Old, unknown genre
         ]
 
-        # Mock empty CSV data so no status changes are detected
-        mock_load_track_list = _MockLoadTrackList([])
         mock_get_full_log_path = _MockGetFullLogPath()
 
-        with (
-            patch("core.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
+        with patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,
@@ -184,14 +180,15 @@ class TestIncrementalFilterService:
 
     def test_filter_tracks_status_changes(self) -> None:
         """Test filtering includes tracks with status changes."""
-        service = TestIncrementalFilterService.create_service()
-        last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
-
         # Mock CSV data showing old status
         old_tracks = [
             _create_track(track_id="1", track_status="prerelease", genre="Jazz", date_added="2023-12-31 12:00:00"),  # Status changed
             _create_track(track_id="2", genre="Blues", date_added="2023-12-31 12:00:00"),  # Status unchanged (subscription default)
         ]
+
+        mock_loader = _MockLoadTrackList(old_tracks)
+        service = TestIncrementalFilterService.create_service(track_list_loader=mock_loader)
+        last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
 
         # Current tracks with new status
         tracks = [
@@ -199,13 +196,9 @@ class TestIncrementalFilterService:
             _create_track(track_id="2", date_added="2023-12-31 12:00:00", genre="Blues"),  # Status unchanged
         ]
 
-        mock_load_track_list = _MockLoadTrackList(old_tracks)
         mock_get_full_log_path = _MockGetFullLogPath()
 
-        with (
-            patch("core.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
+        with patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,
@@ -216,17 +209,18 @@ class TestIncrementalFilterService:
         assert result[0].id == "1"
 
         # Verify mocks were called
-        assert mock_load_track_list.load_called
+        assert mock_loader.load_called
         assert mock_get_full_log_path.get_called
 
     def test_filter_tracks_combined_criteria(self) -> None:
         """Test filtering with multiple criteria combined."""
-        service = TestIncrementalFilterService.create_service()
-        last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
-
         old_tracks = [
             _create_track(track_id="1", track_status="prerelease"),  # Status changed
         ]
+
+        mock_loader = _MockLoadTrackList(old_tracks)
+        service = TestIncrementalFilterService.create_service(track_list_loader=mock_loader)
+        last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
 
         tracks = [
             _create_track(track_id="1", date_added="2023-12-31 12:00:00"),  # Old, status changed
@@ -235,13 +229,9 @@ class TestIncrementalFilterService:
             _create_track(track_id="4", date_added="2023-12-31 12:00:00", genre="Pop"),  # Old, has genre
         ]
 
-        mock_load_track_list = _MockLoadTrackList(old_tracks)
         mock_get_full_log_path = _MockGetFullLogPath()
 
-        with (
-            patch("core.tracks.incremental_filter.load_track_list", mock_load_track_list),
-            patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path),
-        ):
+        with patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path):
             result = service.filter_tracks_for_incremental_update(
                 tracks=tracks,
                 last_run_time=last_run_time,

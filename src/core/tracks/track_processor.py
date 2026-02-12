@@ -15,18 +15,16 @@ from core.tracks.update_executor import TrackUpdateExecutor
 from core.utils.datetime_utils import datetime_to_applescript_timestamp
 from core.models.metadata_utils import parse_tracks
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
-from services.apple.applescript_client import NO_TRACKS_FOUND
-from core.apple_script_names import FETCH_TRACKS, FETCH_TRACKS_BY_IDS
+from core.apple_script_names import FETCH_TRACKS, FETCH_TRACKS_BY_IDS, NO_TRACKS_FOUND
+from core.analytics_decorator import track_instance_method
 from core.models.validators import SecurityValidationError, SecurityValidator
-from metrics import Analytics
 
 if TYPE_CHECKING:
-    from core.tracks.artist_renamer import ArtistRenamer
-    from services.cache.snapshot import LibrarySnapshotService
     from collections.abc import Sequence
     import logging
-    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
+
+    from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol, LibrarySnapshotServiceProtocol
+    from core.tracks.artist_renamer import ArtistRenamer
 
 
 class TrackProcessor:
@@ -37,11 +35,11 @@ class TrackProcessor:
         ap_client: AppleScriptClientProtocol,
         cache_service: CacheServiceProtocol,
         *,
-        library_snapshot_service: LibrarySnapshotService | None = None,
+        library_snapshot_service: LibrarySnapshotServiceProtocol | None = None,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: dict[str, Any],
-        analytics: Analytics,
+        analytics: AnalyticsProtocol,
         dry_run: bool = False,
         security_validator: SecurityValidator | None = None,
     ) -> None:
@@ -254,7 +252,7 @@ class TrackProcessor:
     async def _refresh_snapshot_from_delta(
         self,
         snapshot_tracks: list[TrackDict],
-        snapshot_service: LibrarySnapshotService,
+        snapshot_service: LibrarySnapshotServiceProtocol,
     ) -> list[TrackDict] | None:
         """Merge snapshot with delta updates when available."""
         metadata = await snapshot_service.get_snapshot_metadata()
@@ -380,21 +378,17 @@ class TrackProcessor:
 
             raw_output = await self.ap_client.run_script(FETCH_TRACKS, args, timeout=timeout)
 
-            # DEBUG: Log raw output details
-            self.error_logger.info(f"DEBUG: AppleScript returned {len(raw_output) if raw_output else 0} characters")
-            if raw_output:
-                self.error_logger.info(f"DEBUG: First 200 chars: {raw_output[:200]}")
-                field_sep_found = FIELD_SEPARATOR in raw_output
-                line_sep_found = LINE_SEPARATOR in raw_output
-                self.error_logger.info(f"DEBUG: Raw output contains separators (\\x1E): {field_sep_found}, line (\\x1D): {line_sep_found}")
-
             if not raw_output:
-                self.error_logger.error("AppleScript returned empty output")
+                self.error_logger.error("AppleScript returned empty output (artist=%s)", artist or "all")
                 return []
 
             # Check for AppleScript status codes
             if raw_output.startswith("ERROR:"):
-                self.error_logger.error(f"AppleScript error: {raw_output}")
+                self.error_logger.error(
+                    "AppleScript error in fetch_tracks (artist=%s): %s",
+                    artist or "all",
+                    raw_output,
+                )
                 return []
             if raw_output == NO_TRACKS_FOUND:
                 self.console_logger.info("No tracks found matching filter criteria")
@@ -402,9 +396,6 @@ class TrackProcessor:
 
             # Parse the raw output
             tracks = parse_tracks(raw_output, self.error_logger)
-
-            # TEMPORARY DEBUG
-            # Parsed tracks count (noise reduction)
 
             # Validate each track for security
             validated_tracks = self._validate_tracks_security(tracks)
@@ -422,7 +413,7 @@ class TrackProcessor:
 
         return validated_tracks
 
-    @Analytics.track_instance_method("track_fetch_by_ids")
+    @track_instance_method("track_fetch_by_ids")
     async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
         """Fetch detailed track metadata for the provided track IDs."""
 
@@ -462,7 +453,7 @@ class TrackProcessor:
 
         return collected
 
-    @Analytics.track_instance_method("track_fetch_all")
+    @track_instance_method("track_fetch_all")
     async def fetch_tracks_async(
         self,
         artist: str | None = None,
@@ -522,7 +513,7 @@ class TrackProcessor:
 
         return result or []
 
-    @Analytics.track_instance_method("track_fetch_batches")
+    @track_instance_method("track_fetch_batches")
     async def fetch_tracks_in_batches(
         self,
         batch_size: int = 500,

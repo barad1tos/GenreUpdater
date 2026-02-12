@@ -19,11 +19,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import random
 import re
 import ssl
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, NoReturn, TypedDict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import aiohttp
 import certifi
@@ -44,11 +45,12 @@ from services.api.year_search_coordinator import YearSearchCoordinator
 from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
 if TYPE_CHECKING:
+    import logging
+    from collections.abc import Coroutine
+
+    from metrics import Analytics
     from services.cache.orchestrator import CacheOrchestrator
     from services.pending_verification import PendingVerificationService
-    from metrics import Analytics
-    from collections.abc import Coroutine
-    import logging
 
 
 def normalize_name(name: str) -> str:
@@ -97,14 +99,21 @@ def normalize_name(name: str) -> str:
 
 
 # Constants
-WAIT_TIME_LOG_THRESHOLD = 0.1
-HTTP_TOO_MANY_REQUESTS = 429
-HTTP_SERVER_ERROR = 500
-YEAR_LENGTH = 4
-API_RESPONSE_LOG_LIMIT = 500  # Unified limit for all API response logging
-ACTIVITY_PERIOD_TUPLE_LENGTH = 2  # Expected length for activity period tuple
-PENDING_TASKS_SHUTDOWN_TIMEOUT = 5.0  # Timeout for pending tasks during graceful shutdown
-SECURE_RANDOM = __import__("random").SystemRandom()
+WAIT_TIME_LOG_THRESHOLD: float = 0.1
+HTTP_TOO_MANY_REQUESTS: int = 429
+HTTP_SERVER_ERROR: int = 500
+YEAR_LENGTH: int = 4
+API_RESPONSE_LOG_LIMIT: int = 500  # Unified limit for all API response logging
+ACTIVITY_PERIOD_TUPLE_LENGTH: int = 2  # Expected length for activity period tuple
+PENDING_TASKS_SHUTDOWN_TIMEOUT: float = 5.0  # Timeout for pending tasks during graceful shutdown
+
+# Connection pool settings (optimized for long-running API sessions, Issue #104)
+CONNECTOR_LIMIT_PER_HOST: int = 10
+CONNECTOR_LIMIT_TOTAL: int = 50
+KEEPALIVE_TIMEOUT_SECONDS: int = 30
+DNS_CACHE_TTL_SECONDS: int = 300
+
+SECURE_RANDOM: random.SystemRandom = random.SystemRandom()
 
 
 # Type definitions for structured data
@@ -407,7 +416,9 @@ class ExternalApiOrchestrator:
 
     def _decrypt_token(self, encrypted_token: str, key: str) -> str:
         """Decrypt an encrypted token."""
-        assert self.secure_config is not None  # Caller ensures this
+        if self.secure_config is None:
+            msg = f"secure_config must be initialized before decrypting token (key={key})"
+            raise RuntimeError(msg)
         try:
             decrypted_token = self.secure_config.decrypt_token(encrypted_token, key)
             self.console_logger.debug("Successfully decrypted %s", key)
@@ -419,7 +430,9 @@ class ExternalApiOrchestrator:
 
     def _encrypt_token_for_future_storage(self, raw_token: str, key: str) -> None:
         """Encrypt a plaintext token and log the encrypted value for future use."""
-        assert self.secure_config is not None  # Caller ensures this
+        if self.secure_config is None:
+            msg = f"secure_config must be initialized before encrypting token (key={key})"
+            raise RuntimeError(msg)
         try:
             encrypted_token = self.secure_config.encrypt_token(raw_token, key)
             self.console_logger.info("Token '%s' encrypted. Update config.yaml with the encrypted value.", key)
@@ -564,17 +577,6 @@ class ExternalApiOrchestrator:
 
         # Scoring function is now properly injected during API client initialization
 
-    def _ensure_session_initialized(self) -> None:
-        """Ensure the session is initialized, raise an error if not."""
-        if self.session is None:
-            self._raise_session_not_initialized()
-
-    @staticmethod
-    def _raise_session_not_initialized() -> NoReturn:
-        """Raise runtime error for uninitialized session."""
-        msg = "HTTP session is not initialized. Call initialize() method first."
-        raise RuntimeError(msg)
-
     async def initialize(self, force: bool = False) -> None:
         """Initialize the aiohttp ClientSession and API clients.
 
@@ -627,11 +629,11 @@ class ExternalApiOrchestrator:
         # - keepalive_timeout=30: Keep idle connections alive for 30 seconds
         # - enable_cleanup_closed=True: Properly cleanup SSL connections
         connector = aiohttp.TCPConnector(
-            limit_per_host=10,
-            limit=50,
-            keepalive_timeout=30,
+            limit_per_host=CONNECTOR_LIMIT_PER_HOST,
+            limit=CONNECTOR_LIMIT_TOTAL,
+            keepalive_timeout=KEEPALIVE_TIMEOUT_SECONDS,
             enable_cleanup_closed=True,
-            ttl_dns_cache=300,
+            ttl_dns_cache=DNS_CACHE_TTL_SECONDS,
             ssl=ssl_context,
         )
         headers: dict[str, str] = {
@@ -640,20 +642,6 @@ class ExternalApiOrchestrator:
             "Accept-Encoding": "gzip, deflate",
         }
         return aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers)
-
-    async def _ensure_session(self) -> None:
-        """Ensure that self.session is an open aiohttp.ClientSession."""
-        if self.session is None or self.session.closed:
-            # Close the existing session if it exists but is closed
-            if self.session is not None:
-                try:
-                    if not self.session.closed:
-                        await self.session.close()
-                except (aiohttp.ClientError, TimeoutError, RuntimeError):
-                    self.error_logger.exception("Error closing existing session")
-
-            # Create a new session
-            self.session = self._create_client_session()
 
     async def close(self) -> None:
         """Close the orchestrator and clean up resources gracefully.
@@ -1350,8 +1338,8 @@ class ExternalApiOrchestrator:
             Artist's career start year, or None if not found
 
         Cache TTL:
-            - Positive result: 1 year (31536000 seconds)
-            - Negative result: 1 day (86400 seconds)
+            - Positive result: 1 year (31,536,000 seconds)
+            - Negative result: 1 day (86,400 seconds)
 
         """
         cache_key = f"artist_start_year:{artist_norm}"
