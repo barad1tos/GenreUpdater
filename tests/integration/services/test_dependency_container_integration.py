@@ -374,6 +374,26 @@ class TestDependencyContainerInitialization:
         with pytest.raises(RuntimeError, match="Retry handler not initialized"):
             _ = container.retry_handler
 
+    def test_app_config_before_initialization_raises_error(
+        self,
+        temp_config_file: Path,
+        mock_loggers: dict[str, Any],
+    ) -> None:
+        """Test that app_config raises RuntimeError before initialize()."""
+        from services.dependency_container import DependencyContainer
+
+        container = DependencyContainer(
+            config_path=str(temp_config_file),
+            console_logger=mock_loggers["console"],
+            error_logger=mock_loggers["error"],
+            analytics_logger=mock_loggers["analytics"],
+            db_verify_logger=mock_loggers["db_verify"],
+            skip_api_validation=True,
+        )
+
+        with pytest.raises(RuntimeError, match="AppConfig not loaded"):
+            _ = container.app_config
+
     @pytest.mark.asyncio
     async def test_logger_properties_always_accessible(
         self,
@@ -758,6 +778,109 @@ class TestDependencyContainerConfigLoading:
             # Check for a key that exists after Pydantic validation
             assert "music_library_path" in container.config
             assert container.config["music_library_path"] == "/tmp/test_library"
+
+    def test_load_config_stores_app_config(
+        self,
+        temp_config_file: Path,
+        mock_loggers: dict[str, Any],
+    ) -> None:
+        """Test that _load_config stores AppConfig in _app_config."""
+        from core.models.track_models import AppConfig
+        from services.dependency_container import DependencyContainer
+
+        container = DependencyContainer(
+            config_path=str(temp_config_file),
+            console_logger=mock_loggers["console"],
+            error_logger=mock_loggers["error"],
+            analytics_logger=mock_loggers["analytics"],
+            db_verify_logger=mock_loggers["db_verify"],
+            skip_api_validation=True,
+        )
+
+        assert container._app_config is None
+
+        result = container._load_config()
+
+        # _app_config should now be a validated AppConfig instance
+        assert isinstance(container._app_config, AppConfig)
+        # Return value should be a dict from model_dump()
+        assert isinstance(result, dict)
+        assert result["music_library_path"] == "/tmp/test_library"
+
+    def test_load_config_validates_api_auth(
+        self,
+        mock_loggers: dict[str, Any],
+    ) -> None:
+        """Test that _load_config validates api_auth when not skipped."""
+        from services.dependency_container import DependencyContainer
+
+        config_data = _get_complete_config_data()
+        temp_path = PROJECT_ROOT / f".test_apiauth_{uuid.uuid4().hex[:8]}.yaml"
+        with temp_path.open("w", encoding="utf-8") as f:
+            yaml.dump(config_data, f)
+
+        try:
+            container = DependencyContainer(
+                config_path=str(temp_path),
+                console_logger=mock_loggers["console"],
+                error_logger=mock_loggers["error"],
+                analytics_logger=mock_loggers["analytics"],
+                db_verify_logger=mock_loggers["db_verify"],
+                skip_api_validation=False,
+            )
+
+            result = container._load_config()
+
+            # Should succeed — api_auth in fixture has valid tokens
+            assert isinstance(result, dict)
+            assert container._app_config is not None
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
+
+    @pytest.mark.asyncio
+    async def test_app_config_accessible_after_initialization(
+        self,
+        temp_config_file: Path,
+        mock_loggers: dict[str, Any],
+    ) -> None:
+        """Test that app_config property works after initialize()."""
+        from core.models.track_models import AppConfig
+        from services.dependency_container import DependencyContainer
+
+        container = DependencyContainer(
+            config_path=str(temp_config_file),
+            console_logger=mock_loggers["console"],
+            error_logger=mock_loggers["error"],
+            analytics_logger=mock_loggers["analytics"],
+            db_verify_logger=mock_loggers["db_verify"],
+            dry_run=True,
+            skip_api_validation=True,
+        )
+
+        with (
+            patch("services.dependency_container.AppleScriptClient"),
+            patch("services.dependency_container.DryRunAppleScriptClient") as mock_dry_run_cls,
+            patch("services.dependency_container.CacheOrchestrator") as mock_cache_cls,
+            patch("services.dependency_container.LibrarySnapshotService") as mock_snapshot_cls,
+            patch("services.dependency_container.PendingVerificationService") as mock_pending_cls,
+            patch("services.dependency_container.create_external_api_orchestrator") as mock_api_factory,
+        ):
+            for mock_cls in [mock_dry_run_cls, mock_cache_cls, mock_snapshot_cls, mock_pending_cls]:
+                mock_instance = MagicMock()
+                mock_instance.initialize = AsyncMock()
+                mock_instance.apple_scripts_dir = "/tmp/scripts"
+                mock_cls.return_value = mock_instance
+
+            mock_api = MagicMock()
+            mock_api.initialize = AsyncMock()
+            mock_api_factory.return_value = mock_api
+
+            await container.initialize()
+
+        app_config = container.app_config
+        assert isinstance(app_config, AppConfig)
+        assert app_config.music_library_path == "/tmp/test_library"
 
     def test_missing_config_file_raises_error(
         self,

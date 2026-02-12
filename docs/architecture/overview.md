@@ -451,3 +451,8 @@ Shared test infrastructure lives in `tests/factories.py`:
 - `MINIMAL_CONFIG_DATA` — canonical dict with all required `AppConfig` fields
 - `create_test_app_config(**overrides)` — factory that returns typed `AppConfig`
   instances with sensible defaults, accepting keyword overrides for any field
+
+Integration tests for `DependencyContainer` cover the full `app_config`
+property lifecycle: error on access before `initialize()`, typed access
+after initialization, and `_load_config()` storing `AppConfig` alongside
+the legacy dict view.
