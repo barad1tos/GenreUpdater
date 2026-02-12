@@ -277,7 +277,7 @@ class DependencyContainer:
         if dry_run:
             # Create the real client first
             real_client = AppleScriptClient(
-                self._config,
+                self.app_config,
                 analytics,
                 self._console_logger,
                 self._error_logger,
@@ -293,7 +293,7 @@ class DependencyContainer:
             self._console_logger.info("Dry run enabled - using %s", LogFormat.entity("DryRunAppleScriptClient"))
         else:
             self._ap_client = AppleScriptClient(
-                self._config,
+                self.app_config,
                 analytics,
                 self._console_logger,
                 self._error_logger,
@@ -327,7 +327,7 @@ class DependencyContainer:
         if self._cache_service is None:
             self._cache_service = CacheOrchestrator(self.app_config, self._console_logger)
         if self._library_snapshot_service is None:
-            self._library_snapshot_service = LibrarySnapshotService(self._config, self._console_logger)
+            self._library_snapshot_service = LibrarySnapshotService(self.app_config, self._console_logger)
         if self._pending_verification_service is None:
             self._pending_verification_service = PendingVerificationService(self._config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:

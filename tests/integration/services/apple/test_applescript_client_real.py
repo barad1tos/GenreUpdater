@@ -8,16 +8,22 @@ These tests require:
 Run with: pytest tests/integration/services/apple/ -v --tb=short
 """
 
+from __future__ import annotations
+
 import logging
 import platform
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from app.app_config import Config
 from metrics.analytics import Analytics, LoggerContainer
 from services.apple.applescript_client import AppleScriptClient
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 def is_music_app_running() -> bool:
@@ -70,7 +76,7 @@ def error_logger() -> logging.Logger:
 
 @pytest.fixture
 def analytics(
-    app_config: dict,
+    app_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> Analytics:
@@ -81,20 +87,19 @@ def analytics(
         error_logger=error_logger,
         analytics_logger=analytics_logger,
     )
-    return Analytics(config=app_config, loggers=loggers)
+    return Analytics(config=app_config.model_dump(), loggers=loggers)
 
 
 @pytest.fixture
-def app_config() -> dict:
-    """Load real application config as dict for services not yet migrated to AppConfig."""
+def app_config() -> AppConfig:
+    """Load real application config."""
     config = Config()
-    app_config = config.load()
-    return app_config.model_dump()
+    return config.load()
 
 
 @pytest.fixture
 def applescript_client(
-    app_config: dict,
+    app_config: AppConfig,
     analytics: Analytics,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
