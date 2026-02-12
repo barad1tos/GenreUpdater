@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
 
+### Changed
+- **Config type safety (C1)**: migrated `ReleaseScorer` from `dict[str, Any]` to typed `ScoringConfig` Pydantic model; replaced 33 `.get()` calls with typed attribute access; added 3 missing scoring fields (`artist_substring_penalty`, `artist_mismatch_penalty`, `current_year_penalty`); changed all scoring fields from `float` to `int` to match config.yaml and downstream usage; removed dead `ScoringConfig` TypedDict and `_get_default_scoring_config()`; updated orchestrator to pass `ScoringConfig` object directly instead of `model_dump()` dict
+
 ### Added
 - Batch error handling tests: sequential processing, CancelledError, config validation
 - Track ID validation and bulk update mixed-results tests

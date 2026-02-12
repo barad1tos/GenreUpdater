@@ -303,8 +303,8 @@ class ExternalApiOrchestrator:
         self.rate_limits_config = year_cfg.rate_limits
         processing = year_cfg.processing
         logic = year_cfg.logic
-        # scoring_config stays as dict for ReleaseScorer compatibility (PR C migration)
-        self.scoring_config: dict[str, Any] = year_cfg.scoring.model_dump()
+        self.scoring_config = year_cfg.scoring
+        self.major_market_codes = logic.major_market_codes
 
         # Extract processing parameters
         self.preferred_api = self._normalize_api_name(year_cfg.preferred_api.value)
@@ -484,6 +484,7 @@ class ExternalApiOrchestrator:
             definitive_score_threshold=self.definitive_score_threshold,
             console_logger=self.console_logger,
             remaster_keywords=remaster_keywords,
+            major_market_codes=self.major_market_codes,
         )
         self.year_score_resolver = YearScoreResolver(
             console_logger=self.console_logger,
