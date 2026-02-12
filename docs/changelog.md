@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
 
 ### Changed
+- **Config type safety (B4)**: migrated `Analytics`, `PendingVerificationService`, `DatabaseVerifier`, `GenreManager` from `dict[str, Any]` to typed `AppConfig`; added missing `AnalyticsConfig` fields; fixed `definitive_score_threshold/diff` model types (`float` → `int`)
 - **Config type safety (B3)**: migrated core year pipeline (`ExternalApiOrchestrator`, `YearRetriever`, `YearBatchProcessor`, `TrackUpdateExecutor`, `YearDetermination`, `TrackProcessor`) from `dict[str, Any]` to typed `AppConfig`; removed dead dict-validation methods replaced by Pydantic
 - **Config type safety (B2)**: migrated `LibrarySnapshotService` and `AppleScriptClient` from `dict[str, Any]` to typed `AppConfig`; loc-based validation assertions per Sourcery
 - **Config type safety (B1)**: migrated 24 services from `dict[str, Any]` to typed `AppConfig` for config access (cache, tracks, API, orchestrator modules)

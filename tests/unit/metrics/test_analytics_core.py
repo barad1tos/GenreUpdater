@@ -5,13 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.analytics_decorator import track_instance_method
 from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -24,10 +28,11 @@ def loggers() -> LoggerContainer:
 
 
 @pytest.fixture
-def config() -> dict:
+def config() -> AppConfig:
     """Create minimal config for testing."""
-    return {
-        "analytics": {
+    return create_test_app_config(
+        logs_base_dir="/tmp/test_logs",
+        analytics={
             "enabled": True,
             "max_events": 1000,
             "duration_thresholds": {
@@ -35,13 +40,13 @@ def config() -> dict:
                 "medium_max": 5,
                 "long_max": 10,
             },
+            "compact_time": False,
         },
-        "logs_base_dir": "/tmp/test_logs",
-    }
+    )
 
 
 @pytest.fixture
-def analytics(config: dict, loggers: LoggerContainer) -> Analytics:
+def analytics(config: AppConfig, loggers: LoggerContainer) -> Analytics:
     """Create Analytics instance for testing."""
     return Analytics(config, loggers)
 
@@ -49,8 +54,8 @@ def analytics(config: dict, loggers: LoggerContainer) -> Analytics:
 @pytest.fixture
 def disabled_analytics(loggers: LoggerContainer) -> Analytics:
     """Create disabled Analytics instance for testing."""
-    config = {
-        "analytics": {
+    config = create_test_app_config(
+        analytics={
             "enabled": False,
             "max_events": 100,
             "duration_thresholds": {
@@ -58,8 +63,9 @@ def disabled_analytics(loggers: LoggerContainer) -> Analytics:
                 "medium_max": 5,
                 "long_max": 10,
             },
-        }
-    }
+            "compact_time": False,
+        },
+    )
     return Analytics(config, loggers)
 
 
@@ -120,7 +126,7 @@ class TestAnalyticsInit:
         """Test Analytics is enabled by default when config says so."""
         assert analytics.enabled is True
 
-    def test_analytics_has_unique_instance_id(self, config: dict, loggers: LoggerContainer) -> None:
+    def test_analytics_has_unique_instance_id(self, config: AppConfig, loggers: LoggerContainer) -> None:
         """Test each Analytics instance gets unique ID."""
         a1 = Analytics(config, loggers)
         a2 = Analytics(config, loggers)
@@ -391,11 +397,18 @@ class TestClearOldEvents:
         removed = analytics.clear_old_events()
         assert removed == 0
 
-    def test_clear_old_events_with_tracked_events_compact_mode(self, config: dict, loggers: LoggerContainer) -> None:
+    def test_clear_old_events_with_tracked_events_compact_mode(self, loggers: LoggerContainer) -> None:
         """Test clearing events in compact_time mode."""
         # Enable compact_time mode
-        config["analytics"]["compact_time"] = True
-        analytics = Analytics(config, loggers)
+        compact_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 1000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": True,
+            },
+        )
+        analytics = Analytics(compact_config, loggers)
 
         @analytics.track("test_event")
         def test_func() -> None:
@@ -419,7 +432,7 @@ class TestClearOldEvents:
 class TestMergeWith:
     """Tests for merge_with method."""
 
-    def test_merge_with_combines_events(self, config: dict, loggers: LoggerContainer) -> None:
+    def test_merge_with_combines_events(self, config: AppConfig, loggers: LoggerContainer) -> None:
         """Test merging two Analytics instances."""
         analytics1 = Analytics(config, loggers)
         analytics2 = Analytics(config, loggers)
@@ -441,7 +454,7 @@ class TestMergeWith:
         # Events from analytics2 should be added
         assert len(analytics1.events) >= events_before
 
-    def test_merge_with_combines_counts(self, config: dict, loggers: LoggerContainer) -> None:
+    def test_merge_with_combines_counts(self, config: AppConfig, loggers: LoggerContainer) -> None:
         """Test that counts are combined correctly."""
         analytics1 = Analytics(config, loggers)
         analytics2 = Analytics(config, loggers)
@@ -472,17 +485,16 @@ class TestMergeWith:
 class TestGenerateReports:
     """Tests for generate_reports method."""
 
-    def test_generate_reports_creates_files(self, analytics: Analytics, tmp_path: Path) -> None:
+    def test_generate_reports_creates_files(self, loggers: LoggerContainer, tmp_path: Path) -> None:
         """Test that generate_reports creates report files."""
+        report_config = create_test_app_config(logs_base_dir=str(tmp_path))
+        analytics = Analytics(report_config, loggers)
 
         @analytics.track("report_event")
         def test_func() -> None:
             """Test helper function."""
 
         test_func()
-
-        # Override logs_base_dir for test
-        analytics.config["logs_base_dir"] = str(tmp_path)
 
         analytics.generate_reports()
 
@@ -523,10 +535,18 @@ class TestDurationSymbol:
 class TestGcCollection:
     """Tests for GC collection behavior."""
 
-    def test_gc_collection_threshold(self, config: dict, loggers: LoggerContainer) -> None:
+    def test_gc_collection_threshold(self, loggers: LoggerContainer) -> None:
         """Test that GC collection happens after threshold."""
-        config["analytics"]["gc_enabled"] = True
-        analytics = Analytics(config, loggers)
+        gc_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 10000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": False,
+                "enable_gc_collect": True,
+            },
+        )
+        analytics = Analytics(gc_config, loggers)
 
         @analytics.track("gc_event")
         def simple_func() -> None:

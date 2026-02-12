@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.models.protocols import AnalyticsProtocol
+    from core.models.track_models import AppConfig
 
     from .track_processor import TrackProcessor
 
@@ -39,7 +40,7 @@ class GenreManager(BaseProcessor):
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
-        config: dict[str, Any],
+        config: AppConfig,
         dry_run: bool = False,
     ) -> None:
         """Initialize the GenreManager.
@@ -49,7 +50,7 @@ class GenreManager(BaseProcessor):
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics: Service for performance tracking
-            config: Configuration dictionary
+            config: Typed application configuration
             dry_run: Whether to run in dry-run mode
 
         """
@@ -373,7 +374,7 @@ class GenreManager(BaseProcessor):
                 return await self._update_track_genre(track, dominant_genre, force_update)
 
         # Process in batches for better progress tracking and memory management
-        batch_size = self.config.get("genre_update", {}).get("batch_size", 50)
+        batch_size = self.config.genre_update.batch_size
         updated_tracks: list[TrackDict] = []
         change_logs: list[ChangeLogEntry] = []
 
@@ -439,12 +440,12 @@ class GenreManager(BaseProcessor):
 
         # Two-level concurrency control:
         # 1. Artist-level semaphore: limits concurrent artist processing
-        concurrent_limit = self.config.get("genre_update", {}).get("concurrent_limit", 5)
+        concurrent_limit = self.config.genre_update.concurrent_limit
         artist_semaphore = asyncio.Semaphore(concurrent_limit)
 
         # 2. AppleScript-level semaphore: GLOBAL limit on concurrent AppleScript calls
         #    Shared across all artists to prevent overwhelming Music.app
-        applescript_concurrency = self.config.get("apple_script_concurrency", 2)
+        applescript_concurrency = self.config.apple_script_concurrency
         applescript_semaphore = asyncio.Semaphore(applescript_concurrency)
 
         # Create tasks for all artists via a thin wrapper to reduce complexity here
@@ -679,5 +680,5 @@ class GenreManager(BaseProcessor):
             Tuple of (updated_tracks, change_logs) for this artist.
         """
         if applescript_semaphore is None:
-            applescript_semaphore = asyncio.Semaphore(self.config.get("apple_script_concurrency", 2))
+            applescript_semaphore = asyncio.Semaphore(self.config.apple_script_concurrency)
         return await self._process_single_artist_wrapper(artist_name, artist_tracks, last_run, force, artist_semaphore, applescript_semaphore)

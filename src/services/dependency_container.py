@@ -321,7 +321,7 @@ class DependencyContainer:
                 self._analytics_logger,
             )
             self._analytics = Analytics(
-                self._config,
+                self.app_config,
                 loggers,
             )
         if self._cache_service is None:
@@ -329,7 +329,7 @@ class DependencyContainer:
         if self._library_snapshot_service is None:
             self._library_snapshot_service = LibrarySnapshotService(self.app_config, self._console_logger)
         if self._pending_verification_service is None:
-            self._pending_verification_service = PendingVerificationService(self._config, self._console_logger, self._error_logger)
+            self._pending_verification_service = PendingVerificationService(self.app_config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
                 self.app_config,
@@ -527,20 +527,20 @@ class DependencyContainer:
         try:
             scripts_path = Path(scripts_dir_str)
             if not scripts_path.is_dir():
-                short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+                short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
                 self._console_logger.error("AppleScripts directory does not exist: %s", short_path)
                 return
         except PermissionError as exc:
-            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Permission denied for AppleScripts directory: %s. Error: %s", short_path, exc)
             return
         except Exception as exc:
-            short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+            short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Error checking AppleScripts directory: %s. Error: %s", short_path, exc)
             return
 
         # Log the directory being used with shortened path
-        short_path = shorten_path(scripts_dir_str, self._config, self._error_logger)
+        short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
         run_type = "DRY RUN - " if is_dry_run else ""
         self._console_logger.info("%sAppleScripts: %s", run_type, short_path)
 

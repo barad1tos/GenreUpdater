@@ -257,6 +257,8 @@ class AnalyticsConfig(BaseModel):
     duration_thresholds: DurationThresholds
     max_events: int = Field(ge=0)
     compact_time: bool
+    time_format: str = "%Y-%m-%d %H:%M:%S"
+    enable_gc_collect: bool = True
 
 
 class GenreUpdateConfig(BaseModel):
@@ -302,8 +304,8 @@ class LogicConfig(BaseModel):
     min_valid_year: int = Field(ge=1000)
     absurd_year_threshold: int = Field(default=1970, ge=1000)
     suspicion_threshold_years: int = Field(default=10, ge=0)
-    definitive_score_threshold: float = Field(ge=0, le=100)
-    definitive_score_diff: float = Field(ge=0)
+    definitive_score_threshold: int = Field(ge=0, le=100)
+    definitive_score_diff: int = Field(ge=0)
     min_confidence_for_new_year: float = Field(default=30, ge=0, le=100)
     preferred_countries: list[str]
     major_market_codes: list[str]

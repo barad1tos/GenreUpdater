@@ -5,17 +5,19 @@ import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
+from core.models.track_models import AppConfig
 from services.cache.hash_service import UnifiedHashService
 from services.pending_verification import (
     PendingAlbumEntry,
     PendingVerificationService,
     VerificationReason,
 )
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 
 async def initialize_service_without_io(service: PendingVerificationService) -> None:
@@ -32,20 +34,23 @@ async def initialize_service_without_io(service: PendingVerificationService) -> 
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict[str, Any]:
+def config(tmp_path: Path) -> AppConfig:
     """Provide a minimal configuration dictionary."""
-    return {
-        "logs_base_dir": str(tmp_path),
-        "logging": {
+    return create_test_app_config(
+        logs_base_dir=str(tmp_path),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
+            "csv_output_file": "output.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "lastrun.json",
             "pending_verification_file": "pending_verification.csv",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {"console": "INFO", "main_file": "INFO", "analytics_file": "INFO"},
         },
-        "year_retrieval": {
-            "processing": {
-                "pending_verification_interval_days": 30,
-                "prerelease_recheck_days": 7,
-            },
-        },
-    }
+    )
 
 
 @pytest.fixture
@@ -62,7 +67,7 @@ def error_logger() -> MagicMock:
 
 @pytest.fixture
 def service(
-    config: dict[str, Any],
+    config: AppConfig,
     console_logger: MagicMock,
     error_logger: MagicMock,
 ) -> PendingVerificationService:
@@ -106,7 +111,7 @@ async def test_mark_for_verification(service: PendingVerificationService) -> Non
     assert entry.reason == VerificationReason.PRERELEASE
     metadata = json.loads(entry.metadata)
     assert metadata["year"] == 2024
-    assert metadata["recheck_days"] == 7
+    assert metadata["recheck_days"] == service.prerelease_recheck_days
     assert save_mock.await_count == 1
 
 

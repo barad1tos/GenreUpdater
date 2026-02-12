@@ -12,7 +12,8 @@ import yaml
 from app.cli import CLI
 from app.orchestrator import Orchestrator
 from services.dependency_container import DependencyContainer
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 # noinspection PyUnusedLocal
@@ -51,6 +52,7 @@ class TestCLIE2E:
 
         # Basic services
         mock_deps.config = config
+        mock_deps.app_config = create_test_app_config()
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()

@@ -82,7 +82,7 @@ class MusicUpdater:
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,
-            config=deps.config,
+            config=deps.app_config,
             dry_run=deps.dry_run,
         )
 
@@ -105,7 +105,7 @@ class MusicUpdater:
             error_logger=deps.error_logger,
             db_verify_logger=deps.db_verify_logger,
             analytics=deps.analytics,
-            config=deps.config,
+            config=deps.app_config,
             dry_run=deps.dry_run,
         )
 

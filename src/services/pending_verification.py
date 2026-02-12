@@ -51,6 +51,8 @@ from services.cache.hash_service import UnifiedHashService
 if TYPE_CHECKING:
     import logging
 
+    from core.models.track_models import AppConfig
+
 # Suffix for the file that tracks the last auto-verification timestamp
 PENDING_LAST_VERIFY_SUFFIX: str = "_last_verify.txt"
 
@@ -98,7 +100,7 @@ class PendingVerificationService:
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -107,7 +109,7 @@ class PendingVerificationService:
         Does NOT perform file loading here. Use the async initialize method.
 
         Args:
-            config: Application configuration dictionary
+            config: Typed application configuration
             console_logger: Logger for console output
             error_logger: Logger for error logging.
 
@@ -117,15 +119,9 @@ class PendingVerificationService:
         self.error_logger = error_logger
 
         # Get verification interval from config or use default (30 days)
-        year_retrieval_config = config.get("year_retrieval", {})
-        processing_config = year_retrieval_config.get("processing", {})
-        self.verification_interval_days = processing_config.get(
-            "pending_verification_interval_days",
-            30,
-        )
-        self.prerelease_recheck_days = (
-            self._normalize_recheck_days(processing_config.get("prerelease_recheck_days")) or self.verification_interval_days
-        )
+        processing_config = config.year_retrieval.processing
+        self.verification_interval_days = processing_config.pending_verification_interval_days
+        self.prerelease_recheck_days = self._normalize_recheck_days(processing_config.prerelease_recheck_days) or self.verification_interval_days
 
         # Set up the pending file path using the utility function
         self.pending_file_path = get_full_log_path(
@@ -726,10 +722,7 @@ class PendingVerificationService:
             report_path = get_full_log_path(
                 self.config,
                 "reporting",
-                self.config.get("reporting", {}).get(
-                    "problematic_albums_path",
-                    "reports/albums_without_year.csv",
-                ),
+                self.config.reporting.problematic_albums_path,
             )
 
         # Track attempts per album
@@ -825,8 +818,7 @@ class PendingVerificationService:
             True if auto-verify should run, False otherwise
 
         """
-        pending_config = self.config.get("pending_verification", {})
-        auto_verify_days = pending_config.get("auto_verify_days", 14)
+        auto_verify_days = self.config.pending_verification.auto_verify_days
 
         if auto_verify_days <= 0:
             return False

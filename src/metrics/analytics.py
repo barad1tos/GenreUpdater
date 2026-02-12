@@ -32,6 +32,7 @@ from metrics.change_reports import save_html_report
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
+    from core.models.track_models import AppConfig
     from rich.console import Console
     from rich.status import Status
 
@@ -106,7 +107,7 @@ class Analytics:
     # --- Init ---
     def __init__(
         self,
-        config: dict[str, Any],
+        config: AppConfig,
         loggers: LoggerContainer,
         max_events: int | None = None,
     ) -> None:
@@ -115,7 +116,7 @@ class Analytics:
         self.instance_id = Analytics._instances
 
         # Check if analytics is enabled (default: True)
-        self.enabled = config.get("analytics", {}).get("enabled", True)
+        self.enabled = config.analytics.enabled
 
         # Data stores
         self.events: list[dict[str, Any]] = []
@@ -130,18 +131,18 @@ class Analytics:
         self.analytics_logger = loggers.analytics
 
         # Limits & thresholds
-        self.max_events = max_events or config.get("analytics", {}).get("max_events", 10_000)
-        thresholds = config.get("analytics", {}).get("duration_thresholds", {})
-        self.short_max = thresholds.get("short_max", 2)
-        self.medium_max = thresholds.get("medium_max", 5)
-        self.long_max = thresholds.get("long_max", 10)
+        self.max_events = max_events or config.analytics.max_events
+        thresholds = config.analytics.duration_thresholds
+        self.short_max = thresholds.short_max
+        self.medium_max = thresholds.medium_max
+        self.long_max = thresholds.long_max
 
         # Time formatting
-        self.time_format = config.get("analytics", {}).get("time_format", "%Y-%m-%d %H:%M:%S")
-        self.compact_time = config.get("analytics", {}).get("compact_time", False)
+        self.time_format = config.analytics.time_format
+        self.compact_time = config.analytics.compact_time
 
         # Performance options
-        self.enable_gc_collect = config.get("analytics", {}).get("enable_gc_collect", True)
+        self.enable_gc_collect = config.analytics.enable_gc_collect
 
         # Batch mode state (suppresses console logging, shows spinner instead)
         self._suppress_console_logging = False
