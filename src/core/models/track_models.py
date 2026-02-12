@@ -518,6 +518,7 @@ class AppConfig(BaseModel):
                 )
         return self
 
+
 # API Response Models
 
 

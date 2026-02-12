@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
+- Ruff format: missing blank line in `track_models.py` after Sourcery walrus operator refactor
 
 ### Changed
 - **Config type safety (C2)**: removed `DependencyContainer.config` dict property and `Config._config` dict storage — all config access now goes through typed `AppConfig`; migrated `MusicUpdater` from `deps.config` dict to `deps.app_config`; removed dict branches from `search_strategy`, `album_type`, `html_reports`; deleted 155 lines of dead accessor methods (`.get()`, `.get_path()`, `.get_list()`, `.get_dict()`, `.get_bool()`, `.get_int()`, `.get_float()`) from `Config` class; migrated 12 test files from dict configs to `create_test_app_config()` factory
