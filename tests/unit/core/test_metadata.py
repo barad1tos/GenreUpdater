@@ -16,7 +16,8 @@ from core.models.metadata_utils import (
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
 )
-from core.models.track_models import TrackDict
+from core.models.track_models import AppConfig, TrackDict
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     LogCaptureFixture = pytest.LogCaptureFixture
@@ -507,14 +508,14 @@ class TestCleanNamesSuffixRemoval:
     """Test album suffix removal for EP/Single variations."""
 
     @staticmethod
-    def _make_config(suffixes: list[str]) -> dict[str, Any]:
-        return {
-            "cleaning": {
+    def _make_config(suffixes: list[str]) -> AppConfig:
+        return create_test_app_config(
+            cleaning={
                 "remaster_keywords": [],
                 "album_suffixes_to_remove": suffixes,
             },
-            "exceptions": {"track_cleaning": []},
-        }
+            exceptions={"track_cleaning": []},
+        )
 
     @staticmethod
     def _make_loggers() -> tuple[logging.Logger, logging.Logger]:

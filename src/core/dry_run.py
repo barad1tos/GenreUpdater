@@ -16,6 +16,8 @@ from core.models.types import AppleScriptClientProtocol
 if TYPE_CHECKING:
     import logging
 
+    from core.models.track_models import AppConfig
+
 DRY_RUN_SUCCESS_MESSAGE = "Success (dry run)"
 
 
@@ -25,7 +27,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
     def __init__(
         self,
         real_client: AppleScriptClientProtocol,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -33,7 +35,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
 
         Args:
             real_client: The real AppleScript client to delegate fetch operations to
-            config: Configuration dictionary
+            config: Typed application configuration
             console_logger: Logger for console output
             error_logger: Logger for error output
 
@@ -43,7 +45,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         self.error_logger = error_logger
         self.config = config
         self.actions: list[dict[str, Any]] = []
-        self.apple_scripts_dir: str = config.get("apple_scripts_dir", "")  # For type checking
+        self.apple_scripts_dir: str = config.apple_scripts_dir
 
     async def initialize(self) -> None:
         """Initialize the DryRunAppleScriptClient.
@@ -85,7 +87,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         if isinstance(script_name, str) and script_name.startswith("fetch"):
             # For fetch operations, we need REAL data from Music.app
             # Apply test_artists filter if configured
-            test_artists = self.config.get("development", {}).get("test_artists", [])
+            test_artists = self.config.development.test_artists
 
             # If test_artists is configured, and we're fetching all tracks (no args),
             # this is handled by the higher-level music_updater logic

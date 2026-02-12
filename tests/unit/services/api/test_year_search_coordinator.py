@@ -1,13 +1,19 @@
 """Tests for YearSearchCoordinator - coordinating API calls for release years."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from core.models.script_detection import ScriptType
 from services.api.year_search_coordinator import YearSearchCoordinator
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -41,10 +47,11 @@ def mock_release_scorer() -> MagicMock:
 
 
 @pytest.fixture
-def default_config() -> dict[str, Any]:
+def default_config() -> AppConfig:
     """Create default configuration."""
-    return {
-        "year_retrieval": {
+    return create_test_app_config(
+        year_retrieval={
+            **create_test_app_config().year_retrieval.model_dump(),
             "script_api_priorities": {
                 "default": {
                     "primary": ["musicbrainz"],
@@ -54,16 +61,16 @@ def default_config() -> dict[str, Any]:
                     "primary": ["discogs", "musicbrainz"],
                     "fallback": ["itunes"],
                 },
-            }
-        }
-    }
+            },
+        },
+    )
 
 
 @pytest.fixture
 def coordinator(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
-    default_config: dict[str, Any],
+    default_config: AppConfig,
     mock_musicbrainz_client: AsyncMock,
     mock_discogs_client: AsyncMock,
     mock_applemusic_client: AsyncMock,
@@ -89,7 +96,7 @@ class TestInitialization:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        default_config: dict[str, Any],
+        default_config: AppConfig,
         mock_musicbrainz_client: AsyncMock,
         mock_discogs_client: AsyncMock,
         mock_applemusic_client: AsyncMock,
@@ -155,7 +162,7 @@ class TestApplyPreferredOrder:
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        default_config: dict[str, Any],
+        default_config: AppConfig,
         mock_musicbrainz_client: AsyncMock,
         mock_discogs_client: AsyncMock,
         mock_applemusic_client: AsyncMock,

@@ -9,6 +9,7 @@ from app.music_updater import MusicUpdater
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
+from tests.factories import create_test_app_config
 
 
 class MockDependencyContainer:
@@ -173,6 +174,22 @@ async def test_main_pipeline_reuses_track_snapshot(
         "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
     }
 
+    app_config = create_test_app_config(
+        logs_base_dir=str(tmp_dir),
+        logging={
+            "max_runs": 3,
+            "main_log_file": "test.log",
+            "analytics_log_file": "analytics.log",
+            "csv_output_file": "csv/track_list.csv",
+            "changes_report_file": "changes.json",
+            "dry_run_report_file": "dryrun.json",
+            "last_incremental_run_file": "lastrun.json",
+            "pending_verification_file": "pending.json",
+            "last_db_verify_log": "dbverify.log",
+            "levels": {"console": "INFO", "main_file": "INFO", "analytics_file": "INFO"},
+        },
+    )
+
     analytics = Analytics(config, LoggerContainer(logger, logger, logger))
 
     # Create retry handler for testing
@@ -187,6 +204,7 @@ async def test_main_pipeline_reuses_track_snapshot(
 
     deps = MockDependencyContainer(
         config=config,
+        app_config=app_config,
         console_logger=logger,
         error_logger=logger,
         analytics=analytics,

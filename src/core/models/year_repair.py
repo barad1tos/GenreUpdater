@@ -16,6 +16,8 @@ from core.logger import get_full_log_path
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from core.models.track_models import AppConfig
+
 
 @dataclass
 class RevertTarget:
@@ -56,7 +58,7 @@ def _changes_row_to_target(
 
 
 def _read_changes_report(
-    config: dict[str, Any],
+    config: AppConfig,
     artist: str,
     album: str | None,
 ) -> list[RevertTarget]:
@@ -222,7 +224,7 @@ async def _revert_track_year(
 
 def build_revert_targets(
     *,
-    config: dict[str, Any],
+    config: AppConfig,
     artist: str,
     album: str | None,
     backup_csv_path: str | None = None,

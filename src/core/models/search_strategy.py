@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final
 
+from core.models.track_models import AppConfig
+
 __all__ = [
     "SearchStrategy",
     "SearchStrategyInfo",
@@ -67,12 +69,17 @@ _DEFAULT_VARIOUS_ARTISTS: Final[frozenset[str]] = frozenset(
 _UNUSUAL_BRACKET_MIN_LENGTH: Final[int] = 10
 
 
-def _get_patterns(config: dict[str, Any]) -> tuple[frozenset[str], frozenset[str]]:
+def _get_patterns(config: AppConfig | dict[str, Any]) -> tuple[frozenset[str], frozenset[str]]:
     """Get soundtrack and various artists patterns from config or defaults."""
-    album_config = config.get("album_type_detection", {})
-    soundtrack = frozenset(album_config.get("soundtrack_patterns", list(_DEFAULT_SOUNDTRACK_PATTERNS)))
-    various = frozenset(album_config.get("various_artists_names", list(_DEFAULT_VARIOUS_ARTISTS)))
-    return soundtrack, various
+    if isinstance(config, AppConfig):
+        detection = config.album_type_detection
+        soundtrack_list = detection.soundtrack_patterns or list(_DEFAULT_SOUNDTRACK_PATTERNS)
+        various_list = detection.various_artists_names or list(_DEFAULT_VARIOUS_ARTISTS)
+    else:
+        album_config = config.get("album_type_detection", {})
+        soundtrack_list = album_config.get("soundtrack_patterns", list(_DEFAULT_SOUNDTRACK_PATTERNS))
+        various_list = album_config.get("various_artists_names", list(_DEFAULT_VARIOUS_ARTISTS))
+    return frozenset(soundtrack_list), frozenset(various_list)
 
 
 def _is_soundtrack(album: str, patterns: frozenset[str]) -> str | None:
@@ -116,7 +123,7 @@ def _has_unusual_brackets(album: str) -> tuple[bool, str | None]:
 def detect_search_strategy(
     artist: str,
     album: str,
-    config: dict[str, Any],
+    config: AppConfig | dict[str, Any],
 ) -> SearchStrategyInfo:
     """Detect which search strategy to use for API queries.
 

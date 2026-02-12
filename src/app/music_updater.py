@@ -51,6 +51,7 @@ class MusicUpdater:
         """
         self.deps = deps
         self.config = deps.config
+        self.app_config = deps.app_config
         self.console_logger = deps.console_logger
         self.error_logger = deps.error_logger
         self.analytics = deps.analytics
@@ -112,7 +113,7 @@ class MusicUpdater:
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,
-            config=deps.config,
+            config=deps.app_config,
             dry_run=deps.dry_run,
             track_list_loader=load_track_list,
         )
@@ -126,7 +127,7 @@ class MusicUpdater:
         # Track cleaning service
         self.cleaning_service = TrackCleaningService(
             track_processor=self.track_processor,
-            config=deps.config,
+            config=deps.app_config,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
         )
@@ -136,7 +137,7 @@ class MusicUpdater:
             track_processor=self.track_processor,
             year_retriever=self.year_retriever,
             snapshot_manager=self.snapshot_manager,
-            config=deps.config,
+            config=deps.app_config,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             cleaning_service=self.cleaning_service,
@@ -147,7 +148,7 @@ class MusicUpdater:
         self.genre_service = GenreUpdateService(
             track_processor=self.track_processor,
             genre_manager=self.genre_manager,
-            config=deps.config,
+            config=deps.app_config,
             console_logger=self.console_logger,
             error_logger=self.error_logger,
             cleaning_service=self.cleaning_service,
@@ -718,7 +719,7 @@ class MusicUpdater:
         if force:
             return None
 
-        tracker = IncrementalRunTracker(self.config)
+        tracker = IncrementalRunTracker(self.app_config)
         return await tracker.get_last_run_timestamp()
 
     async def _update_all_genres(

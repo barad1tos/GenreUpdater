@@ -17,7 +17,7 @@ import asyncio
 import sys
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from core.core_config import load_config
 from core.logger import get_loggers
@@ -30,13 +30,15 @@ if str(project_root) not in sys.path:
 
 # Import after path setup to avoid import errors
 from app.music_updater import MusicUpdater  # noqa: E402
-from services.dependency_container import DependencyContainer  # noqa: E402
 from core.logger import get_full_log_path  # noqa: E402
 from core.models.metadata_utils import is_music_app_running  # noqa: E402
 from metrics.change_reports import sync_track_list_with_current  # noqa: E402
+from services.dependency_container import DependencyContainer  # noqa: E402
 
 if TYPE_CHECKING:
     import logging
+
+    from core.models.track_models import AppConfig
     from core.tracks.track_processor import TrackProcessor
     from services.cache.orchestrator import CacheOrchestrator
 
@@ -45,7 +47,7 @@ if TYPE_CHECKING:
 async def run_full_resync(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
-    config: dict[str, Any],
+    config: AppConfig,
     cache_service: CacheOrchestrator,
     track_processor: TrackProcessor,
 ) -> None:
@@ -57,7 +59,7 @@ async def run_full_resync(
     Args:
         console_logger: Logger for console output
         error_logger: Logger for error output
-        config: Configuration dictionary
+        config: Typed application configuration
         cache_service: Cache service instance
 
         track_processor: Track processor instance
@@ -162,7 +164,13 @@ async def main() -> None:
 
         # Run the full resync
         print("Starting full media library resync...")
-        await run_full_resync(console_logger, error_logger, deps.config, deps.cache_service, music_updater.track_processor)
+        await run_full_resync(
+            console_logger,
+            error_logger,
+            deps.app_config,
+            deps.cache_service,
+            music_updater.track_processor
+        )
 
         print("✅ Full resync completed!")
         print("track_list.csv is now synchronized with Music.app")

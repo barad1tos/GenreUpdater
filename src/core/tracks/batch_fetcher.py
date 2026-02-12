@@ -6,7 +6,7 @@ timeouts when processing large libraries.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
@@ -17,9 +17,8 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable, Callable
 
-    from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol
-    from core.models.track_models import TrackDict
-    from core.models.protocols import AnalyticsProtocol
+    from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol
+    from core.models.track_models import AppConfig, TrackDict
 
 
 # Maximum consecutive parse failures before aborting batch processing
@@ -41,7 +40,7 @@ class BatchTrackFetcher:
         cache_service: CacheServiceProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         *,
         track_validator: Callable[[list[TrackDict]], list[TrackDict]],
         artist_processor: Callable[[list[TrackDict]], Awaitable[None]],
@@ -58,7 +57,7 @@ class BatchTrackFetcher:
             cache_service: Cache service for storing fetched tracks
             console_logger: Logger for info/debug messages
             error_logger: Logger for error messages
-            config: Configuration dictionary
+            config: Typed application configuration
             track_validator: Callback to validate tracks for security
             artist_processor: Async callback to process artist renames
             snapshot_loader: Async callback to load tracks from snapshot

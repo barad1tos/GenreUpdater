@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from app.music_updater import MusicUpdater
 from app.orchestrator import Orchestrator
+from tests.factories import create_test_app_config
 
 _TEST_PASSWORD = "test-password"  # noqa: S105 - test-only credential placeholder
 
@@ -21,6 +22,9 @@ class TestOrchestratorAllure:
         """Create a mock DependencyContainer."""
         deps = Mock()
         deps.config = {"development": {"test_artists": ["Test Artist 1", "Test Artist 2"]}}
+        deps.app_config = create_test_app_config(
+            development={"test_artists": ["Test Artist 1", "Test Artist 2"]},
+        )
         deps.console_logger = Mock()
         deps.error_logger = Mock()
         deps.config_path = Path("/test/config.yaml")
@@ -67,7 +71,7 @@ class TestOrchestratorAllure:
         orchestrator = Orchestrator(deps)
         assert orchestrator.deps is deps
         assert isinstance(orchestrator.music_updater, MusicUpdater)
-        assert orchestrator.config == deps.config
+        assert orchestrator.config == deps.app_config
         assert orchestrator.console_logger == deps.console_logger
         assert orchestrator.error_logger == deps.error_logger
 
@@ -390,6 +394,9 @@ class TestMaybeAutoVerifyPending:
         """Create a mock DependencyContainer."""
         deps = Mock()
         deps.config = {"development": {"test_artists": ["Test Artist 1", "Test Artist 2"]}}
+        deps.app_config = create_test_app_config(
+            development={"test_artists": ["Test Artist 1", "Test Artist 2"]},
+        )
         deps.console_logger = Mock()
         deps.error_logger = Mock()
         deps.config_path = Path("/test/config.yaml")

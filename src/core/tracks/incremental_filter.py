@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from core.models.protocols import AnalyticsProtocol
-    from core.models.track_models import TrackDict
+    from core.models.track_models import AppConfig, TrackDict
 
 
 class IncrementalFilterService(BaseProcessor):
@@ -31,7 +31,7 @@ class IncrementalFilterService(BaseProcessor):
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
-        config: dict[str, Any],
+        config: AppConfig,
         dry_run: bool = False,
         track_list_loader: Callable[[str], dict[str, TrackDict]] | None = None,
     ) -> None:
@@ -41,7 +41,7 @@ class IncrementalFilterService(BaseProcessor):
             console_logger: Logger for user-facing messages
             error_logger: Logger for error details
             analytics: Analytics tracking service
-            config: Application configuration dictionary
+            config: Typed application configuration
             dry_run: If True, record actions without applying changes
             track_list_loader: Callable that loads tracks from a CSV path.
                 Injected to avoid core/ depending on metrics/.

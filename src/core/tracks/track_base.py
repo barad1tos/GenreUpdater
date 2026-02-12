@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.models.protocols import AnalyticsProtocol
+    from core.models.track_models import AppConfig
 
 
 class BaseProcessor:
@@ -26,7 +27,7 @@ class BaseProcessor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
-        config: dict[str, Any],
+        config: AppConfig,
         dry_run: bool,
     ) -> None:
         """Initialize the base processor.
@@ -35,7 +36,7 @@ class BaseProcessor:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics: Service for performance tracking
-            config: Configuration dictionary
+            config: Typed application configuration
             dry_run: Whether to run in dry-run mode
 
         """

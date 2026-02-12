@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.models.metadata_utils import clean_names
 from core.models.track_models import ChangeLogEntry, TrackFieldValue
@@ -26,7 +26,7 @@ def _normalize_whitespace(value: str) -> str:
 if TYPE_CHECKING:
     import logging
 
-    from core.models.track_models import TrackDict
+    from core.models.track_models import AppConfig, TrackDict
     from core.tracks.track_processor import TrackProcessor
 
 
@@ -40,7 +40,7 @@ class TrackCleaningService:
     def __init__(
         self,
         track_processor: TrackProcessor,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -48,7 +48,7 @@ class TrackCleaningService:
 
         Args:
             track_processor: Processor for updating tracks.
-            config: Application configuration.
+            config: Typed application configuration.
             console_logger: Logger for console output.
             error_logger: Logger for error output.
         """
