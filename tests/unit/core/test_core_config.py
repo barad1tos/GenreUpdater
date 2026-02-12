@@ -23,7 +23,7 @@ from core.core_config import (
     validate_api_auth,
     validate_required_env_vars,
 )
-from core.models.track_models import DevelopmentConfig
+from core.models.track_models import ApiAuthConfig, DevelopmentConfig
 
 if TYPE_CHECKING:
     import pathlib
@@ -258,35 +258,46 @@ class TestFormatPydanticErrors:
 class TestValidateApiAuth:
     """Tests for validate_api_auth function."""
 
-    def test_raises_for_empty_auth(self) -> None:
-        """Should raise ValueError for empty api_auth."""
-        with pytest.raises(ValueError, match="'api_auth' section is missing"):
-            validate_api_auth({})
-
-    def test_raises_for_missing_discogs_token(self) -> None:
-        """Should raise ValueError when discogs_token is missing."""
-        api_auth: dict[str, Any] = {
-            "contact_email": "test@example.com",
-        }
+    def test_raises_for_empty_discogs_token(self) -> None:
+        """Should raise ValueError when discogs_token resolves to empty string."""
+        api_auth = ApiAuthConfig(
+            discogs_token="",
+            musicbrainz_app_name="test",
+            contact_email="test@example.com",
+        )
 
         with pytest.raises(ValueError, match="DISCOGS_TOKEN"):
             validate_api_auth(api_auth)
 
-    def test_raises_for_missing_contact_email(self) -> None:
-        """Should raise ValueError when contact_email is missing."""
-        api_auth: dict[str, Any] = {
-            "discogs_token": "token123",
-        }
+    def test_raises_for_empty_contact_email(self) -> None:
+        """Should raise ValueError when contact_email resolves to empty string."""
+        api_auth = ApiAuthConfig(
+            discogs_token="token123",
+            musicbrainz_app_name="test",
+            contact_email="",
+        )
 
         with pytest.raises(ValueError, match="CONTACT_EMAIL"):
             validate_api_auth(api_auth)
 
+    def test_raises_for_both_empty(self) -> None:
+        """Should list both missing fields when both are empty."""
+        api_auth = ApiAuthConfig(
+            discogs_token="",
+            musicbrainz_app_name="test",
+            contact_email="",
+        )
+
+        with pytest.raises(ValueError, match=r"DISCOGS_TOKEN.*CONTACT_EMAIL"):
+            validate_api_auth(api_auth)
+
     def test_accepts_valid_complete_auth(self) -> None:
         """Should not raise for complete valid auth."""
-        api_auth: dict[str, Any] = {
-            "discogs_token": "token123",
-            "contact_email": "test@example.com",
-        }
+        api_auth = ApiAuthConfig(
+            discogs_token="token123",
+            musicbrainz_app_name="TestApp/1.0",
+            contact_email="test@example.com",
+        )
 
         # Should not raise
         validate_api_auth(api_auth)

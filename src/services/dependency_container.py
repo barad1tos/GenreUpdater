@@ -557,8 +557,7 @@ class DependencyContainer:
 
             # Validate API auth configuration (fail-fast for API-dependent commands)
             if not self._skip_api_validation:
-                api_auth_dict = app_config.year_retrieval.api_auth.model_dump()
-                validate_api_auth(api_auth_dict)
+                validate_api_auth(app_config.year_retrieval.api_auth)
 
         except FileNotFoundError as e:
             short_path = Path(self._config_path).name

@@ -13,7 +13,7 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from core.models.track_models import AppConfig
+from core.models.track_models import ApiAuthConfig, AppConfig
 
 # Type definitions for configuration
 ConfigValue = dict[str, Any] | list[Any] | str | int | float | bool | None
@@ -299,24 +299,23 @@ def format_pydantic_errors(error: ValidationError) -> str:
     return "\n".join(error_messages)
 
 
-def validate_api_auth(api_auth: dict[str, Any]) -> None:
-    """Validate API authentication configuration.
+def validate_api_auth(api_auth: ApiAuthConfig) -> None:
+    """Validate that API authentication fields are non-empty after env var resolution.
+
+    Pydantic ensures ``ApiAuthConfig`` fields exist, but they may resolve
+    to empty strings when the corresponding environment variables are unset.
 
     Args:
-        api_auth: Dictionary containing API authentication settings.
+        api_auth: Typed API authentication configuration.
 
     Raises:
-        ValueError: If api_auth section is missing or incomplete
+        ValueError: If required credentials are empty.
 
     """
-    if not api_auth:
-        msg = "'api_auth' section is missing in year_retrieval config"
-        raise ValueError(msg)
-
     missing_fields: list[str] = []
-    if not api_auth.get("discogs_token"):
+    if not api_auth.discogs_token:
         missing_fields.append("DISCOGS_TOKEN")
-    if not api_auth.get("contact_email"):
+    if not api_auth.contact_email:
         missing_fields.append("CONTACT_EMAIL")
 
     for field in missing_fields:
