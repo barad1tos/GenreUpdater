@@ -9,7 +9,7 @@ import pytest
 from core.tracks.genre_manager import GenreManager
 from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
-from metrics.analytics import Analytics
+from core.models.protocols import AnalyticsProtocol
 
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
@@ -40,7 +40,7 @@ class TestGenrePipelineIntegration:
             track_processor=mock_track_processor,
             console_logger=MockLogger(),  # type: ignore[arg-type]
             error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=cast(Analytics, cast(object, MockAnalytics())),
+            analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
         )

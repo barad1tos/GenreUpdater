@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `AlbumTypeDetectionConfig` pattern fields now use `None` vs `[]` semantics (`None` = defaults, `[]` = disabled)
 - Dependabot PRs failing CI due to missing env vars in `load_config()` validation
+- `DiscogsClient` received empty dict instead of typed `AppConfig`/`YearRetrievalConfig` — latent runtime crash on `_get_reissue_keywords()`
+- Test cast mismatch: `cast(Analytics, ...)` → `cast(AnalyticsProtocol, ...)` to match `GenreManager` signature
 
 ## [3.0.0] - 2026-01-12
 

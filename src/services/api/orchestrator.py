@@ -457,8 +457,8 @@ class ExternalApiOrchestrator:
             analytics=self.analytics,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
-            scoring_config=self.scoring_config,
-            config={},  # Provide empty config dict
+            scoring_config=self.config.year_retrieval,
+            config=self.config,
             cache_service=self.cache_service,
         )
 
