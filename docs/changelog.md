@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Applied ruff format to all new test files
 
 ### Fixed
+- `AlbumTypeDetectionConfig` pattern fields now use `None` vs `[]` semantics (`None` = defaults, `[]` = disabled)
 - Dependabot PRs failing CI due to missing env vars in `load_config()` validation
 
 ## [3.0.0] - 2026-01-12

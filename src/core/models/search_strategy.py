@@ -73,8 +73,8 @@ def _get_patterns(config: AppConfig | dict[str, Any]) -> tuple[frozenset[str], f
     """Get soundtrack and various artists patterns from config or defaults."""
     if isinstance(config, AppConfig):
         detection = config.album_type_detection
-        soundtrack_list = detection.soundtrack_patterns or list(_DEFAULT_SOUNDTRACK_PATTERNS)
-        various_list = detection.various_artists_names or list(_DEFAULT_VARIOUS_ARTISTS)
+        soundtrack_list = detection.soundtrack_patterns if detection.soundtrack_patterns is not None else list(_DEFAULT_SOUNDTRACK_PATTERNS)
+        various_list = detection.various_artists_names if detection.various_artists_names is not None else list(_DEFAULT_VARIOUS_ARTISTS)
     else:
         album_config = config.get("album_type_detection", {})
         soundtrack_list = album_config.get("soundtrack_patterns", list(_DEFAULT_SOUNDTRACK_PATTERNS))

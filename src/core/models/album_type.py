@@ -197,9 +197,9 @@ class AlbumTypePatterns:
         detection = _resolve_album_type_detection(config)
 
         return cls(
-            special=frozenset(detection.special_patterns) if detection.special_patterns else _DEFAULT_SPECIAL_PATTERNS,
-            compilation=frozenset(detection.compilation_patterns) if detection.compilation_patterns else _DEFAULT_COMPILATION_PATTERNS,
-            reissue=frozenset(detection.reissue_patterns) if detection.reissue_patterns else _DEFAULT_REISSUE_PATTERNS,
+            special=frozenset(detection.special_patterns) if detection.special_patterns is not None else _DEFAULT_SPECIAL_PATTERNS,
+            compilation=frozenset(detection.compilation_patterns) if detection.compilation_patterns is not None else _DEFAULT_COMPILATION_PATTERNS,
+            reissue=frozenset(detection.reissue_patterns) if detection.reissue_patterns is not None else _DEFAULT_REISSUE_PATTERNS,
         )
 
 
