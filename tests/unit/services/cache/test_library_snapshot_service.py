@@ -6,7 +6,7 @@ import gzip
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,12 +17,16 @@ from core.models.cache_types import (
     LibraryCacheMetadata,
     LibraryDeltaCache,
 )
+from core.models.track_models import TrackDict
 from services.cache.snapshot import (
     GZIP_SUFFIX,
     JSON_SUFFIX,
     LibrarySnapshotService,
 )
-from core.models.track_models import TrackDict
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig, LibrarySnapshotConfig
 
 
 class MockAppleScriptClient:
@@ -79,11 +83,11 @@ class MockAppleScriptClient:
         self._run_script_result = result
 
 
-def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False) -> dict:
+def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False, **overrides: object) -> AppConfig:
     root = tmp_path.mktemp("cache-root")
     music_library = root / "Music Library.musiclibrary"
     music_library.write_text("", encoding="utf-8")
-    return {
+    defaults: dict[str, object] = {
         "logs_base_dir": str(root),
         "music_library_path": str(music_library),
         "caching": {
@@ -93,9 +97,11 @@ def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False) ->
                 "cache_file": "cache/library_snapshot.json",
                 "compress": compress,
                 "compress_level": 6,
-            }
+            },
         },
     }
+    defaults.update(overrides)
+    return create_test_app_config(**defaults)
 
 
 def _make_tracks() -> list[TrackDict]:
@@ -359,8 +365,10 @@ class TestIsSnapshotValid:
     @pytest.mark.asyncio
     async def test_returns_false_when_library_not_found(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when music library path doesn't exist."""
-        config = _make_config(tmp_path_factory)
-        config["music_library_path"] = "/nonexistent/path/library.musiclibrary"
+        config = _make_config(
+            tmp_path_factory,
+            music_library_path="/nonexistent/path/library.musiclibrary",
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
@@ -498,8 +506,18 @@ class TestLoadDeltaEdgeCases:
     @pytest.mark.asyncio
     async def test_returns_none_when_delta_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return None when delta is disabled."""
-        config = _make_config(tmp_path_factory)
-        config["caching"]["library_snapshot"]["delta_enabled"] = False
+        config = _make_config(
+            tmp_path_factory,
+            caching={
+                "library_snapshot": {
+                    "enabled": True,
+                    "delta_enabled": False,
+                    "cache_file": "cache/library_snapshot.json",
+                    "compress": False,
+                    "compress_level": 6,
+                },
+            },
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
@@ -562,8 +580,18 @@ class TestSaveDeltaEdgeCases:
     @pytest.mark.asyncio
     async def test_does_nothing_when_delta_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return early when delta is disabled."""
-        config = _make_config(tmp_path_factory)
-        config["caching"]["library_snapshot"]["delta_enabled"] = False
+        config = _make_config(
+            tmp_path_factory,
+            caching={
+                "library_snapshot": {
+                    "enabled": True,
+                    "delta_enabled": False,
+                    "cache_file": "cache/library_snapshot.json",
+                    "compress": False,
+                    "compress_level": 6,
+                },
+            },
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
@@ -604,8 +632,7 @@ class TestGetLibraryMtime:
     @pytest.mark.asyncio
     async def test_raises_when_path_not_configured(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise FileNotFoundError when path is not configured."""
-        config = _make_config(tmp_path_factory)
-        del config["music_library_path"]
+        config = _make_config(tmp_path_factory, music_library_path="")
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
@@ -615,8 +642,10 @@ class TestGetLibraryMtime:
     @pytest.mark.asyncio
     async def test_raises_when_file_not_exists(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should raise FileNotFoundError when file doesn't exist."""
-        config = _make_config(tmp_path_factory)
-        config["music_library_path"] = "/nonexistent/path.musiclibrary"
+        config = _make_config(
+            tmp_path_factory,
+            music_library_path="/nonexistent/path.musiclibrary",
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
@@ -919,8 +948,18 @@ class TestIsEnabled:
 
     def test_is_enabled_returns_false(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when disabled."""
-        config = _make_config(tmp_path_factory)
-        config["caching"]["library_snapshot"]["enabled"] = False
+        config = _make_config(
+            tmp_path_factory,
+            caching={
+                "library_snapshot": {
+                    "enabled": False,
+                    "delta_enabled": True,
+                    "cache_file": "cache/library_snapshot.json",
+                    "compress": False,
+                    "compress_level": 6,
+                },
+            },
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_enabled() is False
 
@@ -932,15 +971,35 @@ class TestIsEnabled:
 
     def test_is_delta_enabled_returns_false_when_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when delta disabled."""
-        config = _make_config(tmp_path_factory)
-        config["caching"]["library_snapshot"]["delta_enabled"] = False
+        config = _make_config(
+            tmp_path_factory,
+            caching={
+                "library_snapshot": {
+                    "enabled": True,
+                    "delta_enabled": False,
+                    "cache_file": "cache/library_snapshot.json",
+                    "compress": False,
+                    "compress_level": 6,
+                },
+            },
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_delta_enabled() is False
 
     def test_is_delta_enabled_returns_false_when_main_disabled(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should return False when main snapshot disabled."""
-        config = _make_config(tmp_path_factory)
-        config["caching"]["library_snapshot"]["enabled"] = False
+        config = _make_config(
+            tmp_path_factory,
+            caching={
+                "library_snapshot": {
+                    "enabled": False,
+                    "delta_enabled": True,
+                    "cache_file": "cache/library_snapshot.json",
+                    "compress": False,
+                    "compress_level": 6,
+                },
+            },
+        )
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         assert service.is_delta_enabled() is False
 
@@ -992,7 +1051,7 @@ class TestWriteBytesAtomic:
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
 
-        target_path = Path(config["logs_base_dir"]) / "test_file.txt"
+        target_path = Path(config.logs_base_dir) / "test_file.txt"
         data = b"test data"
 
         service._write_bytes_atomic(target_path, data)
@@ -1005,7 +1064,7 @@ class TestWriteBytesAtomic:
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
 
-        target_path = Path(config["logs_base_dir"]) / "test_file.txt"
+        target_path = Path(config.logs_base_dir) / "test_file.txt"
         temp_file_path = target_path.parent / "temp_file"
 
         with patch("tempfile.NamedTemporaryFile") as mock_temp:
@@ -1082,36 +1141,42 @@ class TestEnsureSingleCacheFormat:
 class TestResolveCacheFilePath:
     """Tests for _resolve_cache_file_path static method."""
 
+    @staticmethod
+    def _snapshot_cfg(cache_file: str = "cache/library_snapshot.json") -> LibrarySnapshotConfig:
+        from core.models.track_models import LibrarySnapshotConfig as _Cfg
+
+        return _Cfg(cache_file=cache_file)
+
     def test_handles_gz_suffix(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should normalize .gz suffix to .json."""
         config = _make_config(tmp_path_factory)
-        options = {"cache_file": "cache/snapshot.gz", "logs_base_dir": config["logs_base_dir"]}
+        snapshot_cfg = self._snapshot_cfg("cache/snapshot.gz")
 
-        result = LibrarySnapshotService._resolve_cache_file_path(config, options)
+        result = LibrarySnapshotService._resolve_cache_file_path(config, snapshot_cfg)
         assert result.suffix == JSON_SUFFIX
 
     def test_adds_json_suffix_if_missing(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should add .json suffix if missing."""
         config = _make_config(tmp_path_factory)
-        options = {"cache_file": "cache/snapshot", "logs_base_dir": config["logs_base_dir"]}
+        snapshot_cfg = self._snapshot_cfg("cache/snapshot")
 
-        result = LibrarySnapshotService._resolve_cache_file_path(config, options)
+        result = LibrarySnapshotService._resolve_cache_file_path(config, snapshot_cfg)
         assert result.suffix == JSON_SUFFIX
 
     def test_uses_absolute_path_as_is(self) -> None:
         """Should use absolute path as is."""
-        config: dict[str, Any] = {}
-        options = {"cache_file": "/absolute/path/snapshot.json"}
+        config = create_test_app_config()
+        snapshot_cfg = self._snapshot_cfg("/absolute/path/snapshot.json")
 
-        result = LibrarySnapshotService._resolve_cache_file_path(config, options)
+        result = LibrarySnapshotService._resolve_cache_file_path(config, snapshot_cfg)
         assert result == Path("/absolute/path/snapshot.json")
 
     def test_uses_cwd_when_no_logs_base_dir(self) -> None:
         """Should use cwd when logs_base_dir not set."""
-        config: dict[str, Any] = {}
-        options: dict[str, Any] = {"cache_file": "cache/snapshot.json"}
+        config = create_test_app_config(logs_base_dir="")
+        snapshot_cfg = self._snapshot_cfg("cache/snapshot.json")
 
-        result = LibrarySnapshotService._resolve_cache_file_path(config, options)
+        result = LibrarySnapshotService._resolve_cache_file_path(config, snapshot_cfg)
         assert result.is_absolute()
 
 
@@ -1123,23 +1188,24 @@ class TestResolveMusicLibraryPath:
 
     def test_returns_none_when_not_configured(self) -> None:
         """Should return None when path not configured."""
-        result = LibrarySnapshotService._resolve_music_library_path({}, {})
+        config = create_test_app_config(music_library_path="")
+        result = LibrarySnapshotService._resolve_music_library_path(config)
         assert result is None
 
     def test_resolves_relative_path(self) -> None:
         """Should resolve relative path."""
-        config = {"music_library_path": "relative/path.musiclibrary"}
+        config = create_test_app_config(music_library_path="relative/path.musiclibrary")
 
-        result = LibrarySnapshotService._resolve_music_library_path(config, {})
+        result = LibrarySnapshotService._resolve_music_library_path(config)
         assert result is not None
         assert result.is_absolute()
 
     def test_handles_resolve_error(self) -> None:
         """Should fallback to absolute() on resolve error."""
-        config = {"music_library_path": "path/with\x00nullbyte.lib"}
+        config = create_test_app_config(music_library_path="path/with\x00nullbyte.lib")
 
         with patch.object(Path, "resolve", side_effect=OSError("Invalid path")):
-            result = LibrarySnapshotService._resolve_music_library_path(config, {})
+            result = LibrarySnapshotService._resolve_music_library_path(config)
 
         assert result is not None
 

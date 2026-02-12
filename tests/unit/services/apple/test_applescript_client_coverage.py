@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from services.apple.applescript_client import AppleScriptClient
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
-def base_config(tmp_path: Path) -> dict[str, Any]:
+def base_config(tmp_path: Path) -> AppConfig:
     """Create base config with scripts directory."""
     scripts_dir = tmp_path / "applescripts"
     scripts_dir.mkdir()
@@ -21,16 +25,16 @@ def base_config(tmp_path: Path) -> dict[str, Any]:
     (scripts_dir / "update_property.applescript").write_text("-- test script")
     (scripts_dir / "fetch_tracks.applescript").write_bytes(b"-- test script")
 
-    return {
-        "apple_scripts_dir": str(scripts_dir),
-        "apple_script_concurrency": 2,
-        "applescript_timeout_seconds": 30,
-    }
+    return create_test_app_config(
+        apple_scripts_dir=str(scripts_dir),
+        apple_script_concurrency=2,
+        applescript_timeout_seconds=30,
+    )
 
 
 @pytest.fixture
 def client(
-    base_config: dict[str, Any],
+    base_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> AppleScriptClient:
@@ -46,36 +50,37 @@ def client(
 class TestInitializationErrors:
     """Tests for initialization error paths."""
 
-    def test_init_logs_critical_when_scripts_dir_missing(
+    def test_init_logs_critical_when_scripts_dir_empty(
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Test logs critical error when apple_scripts_dir is missing."""
-        config: dict[str, Any] = {}  # Missing apple_scripts_dir
+        """Test logs critical error when apple_scripts_dir is empty string."""
+        config = create_test_app_config(apple_scripts_dir="")
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),
             console_logger=console_logger,
             error_logger=error_logger,
         )
-        assert client.apple_scripts_dir is None
+        # Empty string is falsy — __init__ logs critical
+        assert client.apple_scripts_dir == ""
 
     @pytest.mark.asyncio
-    async def test_initialize_raises_when_scripts_dir_none(
+    async def test_initialize_raises_when_dir_nonexistent(
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Test initialize() raises ValueError when scripts dir is None."""
-        config: dict[str, Any] = {}  # Missing apple_scripts_dir
+        """Test initialize() raises FileNotFoundError for nonexistent dir."""
+        config = create_test_app_config(apple_scripts_dir="/nonexistent/scripts/dir")
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),
             console_logger=console_logger,
             error_logger=error_logger,
         )
-        with pytest.raises(ValueError, match="AppleScript directory is not set"):
+        with pytest.raises(FileNotFoundError, match="not accessible"):
             await client.initialize()
 
     @pytest.mark.asyncio
@@ -85,7 +90,7 @@ class TestInitializationErrors:
         error_logger: logging.Logger,
     ) -> None:
         """Test initialize() raises FileNotFoundError for non-existent dir."""
-        config = {"apple_scripts_dir": "/nonexistent/path/to/scripts"}
+        config = create_test_app_config(apple_scripts_dir="/nonexistent/path/to/scripts")
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),
@@ -107,10 +112,10 @@ class TestInitializationErrors:
         scripts_dir.mkdir()
         # Don't create the required scripts
 
-        config = {
-            "apple_scripts_dir": str(scripts_dir),
-            "apple_script_concurrency": 2,
-        }
+        config = create_test_app_config(
+            apple_scripts_dir=str(scripts_dir),
+            apple_script_concurrency=2,
+        )
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),
@@ -121,29 +126,15 @@ class TestInitializationErrors:
         await client.initialize()
         assert client.semaphore is not None
 
-    @pytest.mark.asyncio
-    async def test_initialize_raises_on_invalid_concurrency(
-        self,
-        tmp_path: Path,
-        console_logger: logging.Logger,
-        error_logger: logging.Logger,
-    ) -> None:
-        """Test initialize() raises ValueError for invalid concurrency."""
-        scripts_dir = tmp_path / "applescripts"
-        scripts_dir.mkdir()
+    def test_appconfig_rejects_invalid_concurrency(self) -> None:
+        """Test AppConfig rejects invalid concurrency at validation time."""
+        from pydantic import ValidationError
 
-        config = {
-            "apple_scripts_dir": str(scripts_dir),
-            "apple_script_concurrency": 0,  # Invalid - must be positive
-        }
-        client = AppleScriptClient(
-            config=config,
-            analytics=MagicMock(),
-            console_logger=console_logger,
-            error_logger=error_logger,
-        )
-        with pytest.raises(ValueError, match="Invalid concurrency limit"):
-            await client.initialize()
+        with pytest.raises(ValidationError) as excinfo:
+            create_test_app_config(apple_script_concurrency=0)
+
+        errors = excinfo.value.errors()
+        assert any(err.get("loc") == ("apple_script_concurrency",) for err in errors)
 
     @pytest.mark.asyncio
     async def test_initialize_skips_if_already_initialized(self, client: AppleScriptClient) -> None:
@@ -191,13 +182,13 @@ class TestRunScript:
     """Tests for run_script method."""
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_scripts_dir_none(
+    async def test_returns_none_when_scripts_dir_empty(
         self,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Test returns None when apple_scripts_dir is None."""
-        config: dict[str, Any] = {}
+        """Test returns None when apple_scripts_dir is empty string."""
+        config = create_test_app_config(apple_scripts_dir="")
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),
@@ -280,10 +271,10 @@ class TestInitializeOSError:
         (scripts_dir / "update_property.applescript").write_text("-- test")
         (scripts_dir / "fetch_tracks.applescript").write_bytes(b"-- test")
 
-        config = {
-            "apple_scripts_dir": str(scripts_dir),
-            "apple_script_concurrency": 2,
-        }
+        config = create_test_app_config(
+            apple_scripts_dir=str(scripts_dir),
+            apple_script_concurrency=2,
+        )
         client = AppleScriptClient(
             config=config,
             analytics=MagicMock(),

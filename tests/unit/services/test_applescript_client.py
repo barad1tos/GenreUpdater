@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from services.apple import (
@@ -15,7 +16,11 @@ from services.apple import (
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
 )
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 @pytest.fixture
@@ -132,27 +137,21 @@ class TestAppleScriptClientAllure:
 
     @staticmethod
     def create_client(
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         analytics: Any = None,
     ) -> AppleScriptClient:
         """Create an AppleScriptClient instance for testing."""
-        # Use temp scripts dir if available, otherwise fall back to default
         scripts_dir = TestAppleScriptClientAllure._temp_scripts_dir or "applescripts/"
 
-        test_config = dict(config) if config else {"apple_script": {"timeout": 30, "concurrency": 5}, "apple_scripts_dir": scripts_dir}
-
-        # If config doesn't have apple_scripts_dir or uses placeholder paths, use temp dir
-        if TestAppleScriptClientAllure._temp_scripts_dir and (
-            "apple_scripts_dir" not in test_config or test_config.get("apple_scripts_dir") in ("applescripts/", "custom_scripts/")
-        ):
-            test_config["apple_scripts_dir"] = TestAppleScriptClientAllure._temp_scripts_dir
+        if config is None:
+            config = create_test_app_config(apple_scripts_dir=scripts_dir)
 
         console_logger = MockLogger()
         error_logger = MockLogger()
         test_analytics = analytics or MockAnalytics()
 
         return AppleScriptClient(
-            config=test_config,
+            config=config,
             console_logger=console_logger,
             error_logger=error_logger,
             analytics=test_analytics,
@@ -160,10 +159,16 @@ class TestAppleScriptClientAllure:
 
     def test_client_initialization_comprehensive(self) -> None:
         """Test comprehensive AppleScript client initialization."""
-        config = {"apple_script": {"timeout": 45, "concurrency": 10, "max_retries": 3}, "apple_scripts_dir": "custom_scripts/"}
+        scripts_dir = TestAppleScriptClientAllure._temp_scripts_dir or "applescripts/"
+        config = create_test_app_config(
+            apple_scripts_dir=scripts_dir,
+            apple_script_concurrency=10,
+            applescript_timeout_seconds=45,
+            max_retries=3,
+        )
         client = TestAppleScriptClientAllure.create_client(config=config)
-        # Check apple_script settings are preserved (path may be replaced by temp dir)
-        assert client.config["apple_script"] == config["apple_script"]
+        assert client.config.apple_script_concurrency == 10
+        assert client.config.applescript_timeout_seconds == 45
         assert hasattr(client, "console_logger")
         assert hasattr(client, "error_logger")
         assert hasattr(client, "analytics")
@@ -246,7 +251,10 @@ Track 3|Artist 3|Album 3|2022|Pop"""
 
     def test_script_path_validation(self) -> None:
         """Test script path validation."""
-        config = {"apple_script": {"timeout": 30}, "apple_scripts_dir": "/test/scripts/"}
+        config = create_test_app_config(
+            apple_scripts_dir="/test/scripts/",
+            applescript_timeout_seconds=30,
+        )
         client = TestAppleScriptClientAllure.create_client(config=config)
         # Test valid path
         valid = client.file_validator.validate_script_path("/test/scripts/test.scpt")

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol
+    from core.models.track_models import AppConfig, LibrarySnapshotConfig
 
 from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from core.logger import ensure_directory, spinner
@@ -39,22 +40,21 @@ def _utc_now_naive() -> datetime:
 class LibrarySnapshotService:
     """Service providing persistent library snapshot and delta caching."""
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
 
-        options = self._resolve_options(config)
-        self.enabled = bool(options.get("enabled", True))
-        self.delta_enabled = bool(options.get("delta_enabled", True))
-        self.compress = bool(options.get("compress", False))
-        self.max_age = timedelta(hours=int(options.get("max_age_hours", DEFAULT_MAX_AGE_HOURS)))
-        compress_level = int(options.get("compress_level", DEFAULT_COMPRESS_LEVEL))
-        self.compress_level = min(max(compress_level, 1), 9)
+        snapshot_cfg = config.caching.library_snapshot
+        self.enabled = snapshot_cfg.enabled
+        self.delta_enabled = snapshot_cfg.delta_enabled
+        self.compress = snapshot_cfg.compress
+        self.max_age = timedelta(hours=snapshot_cfg.max_age_hours)
+        self.compress_level = min(max(snapshot_cfg.compress_level, 1), 9)
 
-        self._base_cache_path = self._resolve_cache_file_path(config, options)
+        self._base_cache_path = self._resolve_cache_file_path(config, snapshot_cfg)
         self._metadata_path = self._base_cache_path.with_suffix(".meta.json")
         self._delta_path = self._base_cache_path.parent / "library_delta.json"
-        self._music_library_path = self._resolve_music_library_path(config, options)
+        self._music_library_path = self._resolve_music_library_path(config)
 
         # Lock to prevent concurrent snapshot writes
         self._write_lock = asyncio.Lock()
@@ -601,20 +601,11 @@ class LibrarySnapshotService:
         return self._base_cache_path.with_suffix(GZIP_SUFFIX) if self.compress else self._base_cache_path.with_suffix(JSON_SUFFIX)
 
     @staticmethod
-    def _resolve_options(config: dict[str, Any]) -> dict[str, Any]:
-        caching = config.get("caching", {})
-        if isinstance(caching, dict):
-            options = caching.get("library_snapshot", {})
-            if isinstance(options, dict):
-                return options
-        return {}
-
-    @staticmethod
-    def _resolve_cache_file_path(config: dict[str, Any], options: dict[str, Any]) -> Path:
-        raw_path = str(options.get("cache_file", "cache/library_snapshot.json"))
+    def _resolve_cache_file_path(config: AppConfig, snapshot_cfg: LibrarySnapshotConfig) -> Path:
+        raw_path = str(snapshot_cfg.cache_file)
         expanded = Path(os.path.expandvars(raw_path)).expanduser()
         if not expanded.is_absolute():
-            logs_base = options.get("logs_base_dir") or config.get("logs_base_dir") or os.getenv("LOGS_BASE_DIR") or ""
+            logs_base = config.logs_base_dir or os.getenv("LOGS_BASE_DIR") or ""
             expanded = Path(logs_base).expanduser() / expanded if logs_base else Path.cwd() / expanded
         if expanded.suffix == ".gz":
             expanded = expanded.with_suffix(JSON_SUFFIX)
@@ -623,8 +614,8 @@ class LibrarySnapshotService:
         return expanded
 
     @staticmethod
-    def _resolve_music_library_path(config: dict[str, Any], options: dict[str, Any]) -> Path | None:
-        library_path = options.get("music_library_path") or config.get("music_library_path")
+    def _resolve_music_library_path(config: AppConfig) -> Path | None:
+        library_path = config.music_library_path
         if not library_path:
             return None
         resolved = Path(os.path.expandvars(str(library_path))).expanduser()

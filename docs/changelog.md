@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Property-based tests for hash service (Hypothesis): determinism, format invariants, collision resistance
 
 ### Changed
+- **Config type safety (B2)**: migrated `LibrarySnapshotService` and `AppleScriptClient` from `dict[str, Any]` to typed `AppConfig`; loc-based validation assertions per Sourcery
 - **Config type safety (B1)**: migrated 24 services from `dict[str, Any]` to typed `AppConfig` for config access (cache, tracks, API, orchestrator modules)
 - Removed dead temp-file execution infrastructure from AppleScript executor (superseded by bulk verification)
 - Added `from __future__ import annotations` to 33 source files, moved type-only imports to `TYPE_CHECKING` blocks
