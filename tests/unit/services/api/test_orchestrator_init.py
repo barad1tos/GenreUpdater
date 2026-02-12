@@ -225,3 +225,38 @@ class TestInitializeClosesSessionOnFailure:
             # Assert: close() should NOT be called since session was already closed
             mock_session.close.assert_not_awaited()
             assert orchestrator.session is None
+
+
+class TestSecureConfigGuards:
+    """Tests for RuntimeError guards when secure_config is None."""
+
+    def _create_orchestrator(self) -> ExternalApiOrchestrator:
+        """Create orchestrator without secure_config."""
+        config = create_test_config()
+        cache_service = create_mock_cache_service()
+        pending_verification_service = create_mock_pending_verification_service()
+
+        orchestrator = ExternalApiOrchestrator(
+            config=config,
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            cache_service=cache_service,
+            pending_verification_service=pending_verification_service,
+        )
+        orchestrator.secure_config = None
+        return orchestrator
+
+    def test_decrypt_token_raises_without_secure_config(self) -> None:
+        """_decrypt_token raises RuntimeError if secure_config is None."""
+        orchestrator = self._create_orchestrator()
+
+        with pytest.raises(RuntimeError, match="secure_config must be initialized"):
+            orchestrator._decrypt_token("encrypted_value", "discogs_token")
+
+    def test_encrypt_token_raises_without_secure_config(self) -> None:
+        """_encrypt_token_for_future_storage raises if secure_config is None."""
+        orchestrator = self._create_orchestrator()
+
+        with pytest.raises(RuntimeError, match="secure_config must be initialized"):
+            orchestrator._encrypt_token_for_future_storage("raw_token", "discogs_token")

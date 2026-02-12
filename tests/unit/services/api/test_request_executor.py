@@ -458,6 +458,30 @@ class TestEnsureSession:
         executor._ensure_session()
 
 
+class TestSessionGuardInRetryLoop:
+    """Tests for the defensive session guard after _ensure_session."""
+
+    @pytest.mark.asyncio
+    async def test_raises_when_session_none_after_ensure(
+        self,
+        executor: ApiRequestExecutor,
+        mock_rate_limiter: AsyncMock,
+    ) -> None:
+        """Guard raises RuntimeError if session is None despite _ensure_session."""
+        # Bypass _ensure_session to simulate edge case where session is still None
+        with patch.object(executor, "_ensure_session"), pytest.raises(RuntimeError, match="HTTP session lost"):
+            await executor._execute_single_request(
+                api_name="musicbrainz",
+                url="https://api.example.com/test",
+                params=None,
+                request_headers={"User-Agent": "Test"},
+                request_timeout=aiohttp.ClientTimeout(total=30),
+                limiter=mock_rate_limiter,
+                attempt=0,
+                log_url="https://api.example.com/test",
+            )
+
+
 class TestHandleClientError:
     """Tests for _handle_client_error method."""
 

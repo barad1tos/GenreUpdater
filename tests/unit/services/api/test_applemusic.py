@@ -531,6 +531,30 @@ class TestProcessItunesResult:
         assert result["barcode"] is None
 
 
+class TestParseReleaseYear:
+    """Tests for _parse_release_year helper method."""
+
+    def test_parses_standard_iso_date(self, client: AppleMusicClient) -> None:
+        """Standard iTunes ISO date returns 4-digit year."""
+        assert client._parse_release_year("2024-03-15T12:00:00Z") == "2024"
+
+    def test_returns_none_for_empty_string(self, client: AppleMusicClient) -> None:
+        """Empty string returns None."""
+        assert client._parse_release_year("") is None
+
+    def test_returns_none_for_non_digit_year(self, client: AppleMusicClient) -> None:
+        """Non-digit prefix returns None."""
+        assert client._parse_release_year("ABCD-01-01T00:00:00Z") is None
+
+    def test_returns_none_for_short_year(self, client: AppleMusicClient) -> None:
+        """Year shorter than 4 digits returns None."""
+        assert client._parse_release_year("20-01-01T00:00:00Z") is None
+
+    def test_handles_date_with_no_dash(self, client: AppleMusicClient) -> None:
+        """Date without dash — split produces full string, len != 4."""
+        assert client._parse_release_year("20240315") is None
+
+
 class TestConstants:
     """Tests for module constants."""
 

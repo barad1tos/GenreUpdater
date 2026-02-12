@@ -340,7 +340,9 @@ Interfaces defined with `typing.Protocol` in `core/models/protocols.py`:
 
 `core/` depends only on protocols, never on concrete service classes.
 The `track_instance_method` decorator in `core/analytics_decorator.py`
-uses duck typing to avoid importing the concrete `Analytics` class.
+uses duck typing (MRO-based method lookup) to avoid importing the
+concrete `Analytics` class. When analytics is missing on a decorated
+instance, the wrapper logs an error and falls back to untracked execution.
 
 ```python test="skip"
 class ExternalApiServiceProtocol(Protocol):

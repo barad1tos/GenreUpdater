@@ -244,6 +244,96 @@ class TestTrackInstanceMethod:
         assert result == 15
 
 
+class TestTrackInstanceMethodFallback:
+    """Tests for track_instance_method when analytics is missing."""
+
+    def test_sync_fallback_when_analytics_is_none(self) -> None:
+        """Sync decorated method runs without analytics, logs error."""
+        from core.analytics_decorator import track_instance_method
+
+        class NoAnalytics:
+            """Class without analytics attribute."""
+
+            error_logger = MagicMock(spec=logging.Logger)
+
+            @track_instance_method("test_event")
+            def compute(self, x: int) -> int:
+                """Double input."""
+                return x * 2
+
+        obj = NoAnalytics()
+        result = obj.compute(7)
+        assert result == 14
+        obj.error_logger.error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_async_fallback_when_analytics_is_none(self) -> None:
+        """Async decorated method runs without analytics, logs error."""
+        from core.analytics_decorator import track_instance_method
+
+        class NoAnalytics:
+            """Class without analytics attribute."""
+
+            error_logger = MagicMock(spec=logging.Logger)
+
+            @track_instance_method("test_event")
+            async def compute(self, x: int) -> int:
+                """Triple input."""
+                return x * 3
+
+        obj = NoAnalytics()
+        result = await obj.compute(5)
+        assert result == 15
+        obj.error_logger.error.assert_called_once()
+
+    def test_sync_fallback_uses_null_logger_when_no_error_logger(self) -> None:
+        """Sync fallback uses _null_logger when error_logger is absent."""
+        from core.analytics_decorator import track_instance_method
+
+        class Bare:
+            """Class with neither analytics nor error_logger."""
+
+            @track_instance_method("test_event")
+            def compute(self, x: int) -> int:
+                """Double input."""
+                return x * 2
+
+        obj = Bare()
+        result = obj.compute(3)
+        assert result == 6
+
+    def test_get_analytics_rejects_magicmock(self) -> None:
+        """_get_analytics returns None for MagicMock analytics."""
+        from core.analytics_decorator import _get_analytics
+
+        instance = MagicMock()
+        instance.analytics = MagicMock()
+        result = _get_analytics(instance, "execute_sync_wrapped_call")
+        assert result is None
+
+
+class TestStandaloneNullLogger:
+    """Tests for standalone _null_logger in analytics_decorator."""
+
+    def test_null_logger_returns_logger_with_handler(self) -> None:
+        """_null_logger returns a logger with NullHandler attached."""
+        from core.analytics_decorator import _null_logger
+
+        logger = _null_logger()
+        assert isinstance(logger, logging.Logger)
+        assert any(isinstance(h, logging.NullHandler) for h in logger.handlers)
+
+    def test_null_logger_is_idempotent(self) -> None:
+        """Calling _null_logger twice does not duplicate handlers."""
+        from core.analytics_decorator import _null_logger
+
+        logger1 = _null_logger()
+        handler_count = len(logger1.handlers)
+        logger2 = _null_logger()
+        assert logger2 is logger1
+        assert len(logger2.handlers) == handler_count
+
+
 class TestGetStats:
     """Tests for get_stats method."""
 

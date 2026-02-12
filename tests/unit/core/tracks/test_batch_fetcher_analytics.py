@@ -219,6 +219,25 @@ class TestFetchTracksWithAnalytics:
             assert all(suppress_states), "Console logging should be suppressed during batch fetch"
 
 
+class TestAnalyticsGuard:
+    """Tests for the analytics None guard in _fetch_tracks_in_batches_with_analytics."""
+
+    @pytest.mark.asyncio
+    async def test_raises_when_analytics_is_none(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: dict[str, Any],
+    ) -> None:
+        """Guard raises RuntimeError when analytics is None."""
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config)
+        assert fetcher.analytics is None
+
+        with pytest.raises(RuntimeError, match="analytics must be initialized"):
+            await fetcher._fetch_tracks_in_batches_with_analytics(100)
+
+
 class TestFetchTracksRawFallback:
     """Tests for batch fetching without analytics (raw fallback)."""
 
