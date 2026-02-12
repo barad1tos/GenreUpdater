@@ -130,8 +130,11 @@ class TestInitializationErrors:
         """Test AppConfig rejects invalid concurrency at validation time."""
         from pydantic import ValidationError
 
-        with pytest.raises(ValidationError, match="greater_than_equal"):
+        with pytest.raises(ValidationError) as excinfo:
             create_test_app_config(apple_script_concurrency=0)
+
+        errors = excinfo.value.errors()
+        assert any(err.get("loc") == ("apple_script_concurrency",) for err in errors)
 
     @pytest.mark.asyncio
     async def test_initialize_skips_if_already_initialized(self, client: AppleScriptClient) -> None:
