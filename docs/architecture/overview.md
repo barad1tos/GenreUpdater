@@ -445,3 +445,9 @@ tests/
 Tests run with `pytest-xdist` (parallel workers). Module-level singletons
 like `album_type._configured_patterns` require `reset_patterns()` autouse
 fixtures to prevent cross-worker state pollution.
+
+Shared test infrastructure lives in `tests/factories.py`:
+
+- `MINIMAL_CONFIG_DATA` — canonical dict with all required `AppConfig` fields
+- `create_test_app_config(**overrides)` — factory that returns typed `AppConfig`
+  instances with sensible defaults, accepting keyword overrides for any field

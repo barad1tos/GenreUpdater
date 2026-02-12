@@ -1080,25 +1080,14 @@ class TestAppConfigPath:
 
     @staticmethod
     def _make_app_config(tmp_path: PathLib) -> Any:
-        """Create a minimal AppConfig with tmp_path as logs_base_dir."""
-        from core.models.track_models import AppConfig
+        """Create an AppConfig with tmp_path as logs_base_dir."""
+        from tests.factories import create_test_app_config
 
-        base: dict[str, Any] = {
-            "music_library_path": str(tmp_path / "library"),
-            "apple_scripts_dir": str(tmp_path / "scripts"),
-            "logs_base_dir": str(tmp_path / "logs"),
-            "python_settings": {"prevent_bytecode": False},
-            "apple_script_concurrency": 2,
-            "applescript_timeout_seconds": 60,
-            "max_retries": 3,
-            "retry_delay_seconds": 1.0,
-            "incremental_interval_minutes": 15,
-            "cache_ttl_seconds": 1200,
-            "cleaning": {"remaster_keywords": [], "album_suffixes_to_remove": []},
-            "exceptions": {"track_cleaning": []},
-            "database_verification": {"auto_verify_days": 7, "batch_size": 10},
-            "development": {"test_artists": []},
-            "logging": {
+        return create_test_app_config(
+            music_library_path=str(tmp_path / "library"),
+            apple_scripts_dir=str(tmp_path / "scripts"),
+            logs_base_dir=str(tmp_path / "logs"),
+            logging={
                 "max_runs": 3,
                 "main_log_file": "main.log",
                 "analytics_log_file": "analytics.log",
@@ -1110,69 +1099,7 @@ class TestAppConfigPath:
                 "last_db_verify_log": "dbverify.log",
                 "levels": {"console": "DEBUG", "main_file": "DEBUG", "analytics_file": "INFO"},
             },
-            "analytics": {
-                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
-                "max_events": 10000,
-                "compact_time": False,
-            },
-            "genre_update": {"batch_size": 50, "concurrent_limit": 5},
-            "year_retrieval": {
-                "enabled": False,
-                "preferred_api": "musicbrainz",
-                "api_auth": {
-                    "discogs_token": "t",
-                    "musicbrainz_app_name": "T/1.0",
-                    "contact_email": "t@t.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "concurrent_api_calls": 3,
-                },
-                "processing": {
-                    "batch_size": 10,
-                    "delay_between_batches": 60,
-                    "adaptive_delay": False,
-                    "cache_ttl_days": 30,
-                    "pending_verification_interval_days": 30,
-                },
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                    "preferred_countries": [],
-                    "major_market_codes": [],
-                },
-                "reissue_detection": {"reissue_keywords": []},
-                "scoring": {
-                    "base_score": 0,
-                    "artist_exact_match_bonus": 0,
-                    "album_exact_match_bonus": 0,
-                    "perfect_match_bonus": 0,
-                    "album_variation_bonus": 0,
-                    "album_substring_penalty": 0,
-                    "album_unrelated_penalty": 0,
-                    "mb_release_group_match_bonus": 0,
-                    "type_album_bonus": 0,
-                    "type_ep_single_penalty": 0,
-                    "type_compilation_live_penalty": 0,
-                    "status_official_bonus": 0,
-                    "status_bootleg_penalty": 0,
-                    "status_promo_penalty": 0,
-                    "reissue_penalty": 0,
-                    "year_diff_penalty_scale": 0,
-                    "year_diff_max_penalty": 0,
-                    "year_before_start_penalty": 0,
-                    "year_after_end_penalty": 0,
-                    "year_near_start_bonus": 0,
-                    "country_artist_match_bonus": 0,
-                    "country_major_market_bonus": 0,
-                    "source_mb_bonus": 0,
-                    "source_discogs_bonus": 0,
-                },
-            },
-        }
-        return AppConfig(**base)
+        )
 
     def test_get_full_log_path_with_app_config(self, tmp_path: PathLib) -> None:
         """get_full_log_path should resolve paths from AppConfig."""

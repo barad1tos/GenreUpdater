@@ -29,11 +29,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 
 @pytest.fixture(autouse=True)
-def _set_required_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+def set_required_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure load_config() env var validation passes in CI.
 
-    load_config() validates DISCOGS_TOKEN and CONTACT_EMAIL before
-    reading the config file. In dependabot CI runs these env vars
+    The loader validates DISCOGS_TOKEN and CONTACT_EMAIL before
+    reading the config file.  In Dependabot CI runs these env vars
     are absent (secrets not exposed), causing ValueError.
     """
     monkeypatch.setenv("DISCOGS_TOKEN", "test_token_for_ci")
