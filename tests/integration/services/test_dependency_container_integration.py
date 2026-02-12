@@ -29,11 +29,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 
 @pytest.fixture(autouse=True)
-def _set_required_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+def set_required_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure load_config() env var validation passes in CI.
 
-    load_config() validates DISCOGS_TOKEN and CONTACT_EMAIL before
-    reading the config file. In dependabot CI runs these env vars
+    The loader validates DISCOGS_TOKEN and CONTACT_EMAIL before
+    reading the config file.  In Dependabot CI runs these env vars
     are absent (secrets not exposed), causing ValueError.
     """
     monkeypatch.setenv("DISCOGS_TOKEN", "test_token_for_ci")
@@ -811,16 +811,16 @@ class TestDependencyContainerRetryHandler:
     """Test retry handler initialization and configuration."""
 
     @pytest.mark.asyncio
-    async def test_retry_handler_uses_default_values(
+    async def test_retry_handler_uses_config_values(
         self,
         temp_config_file: Path,
         mock_loggers: dict[str, Any],
     ) -> None:
-        """Test that retry handler is initialized with default policy values.
+        """Test that retry handler is initialized from applescript_retry config.
 
-        Note: The DependencyContainer reads from config.get("applescript_retry", {})
-        but this key is not included in the Pydantic-validated config (it's not in
-        AppConfig model). Therefore, default values are always used.
+        The ``applescript_retry`` section is now a typed Pydantic model
+        (``AppleScriptRetryConfig``) inside ``AppConfig``. Values from the
+        config file are validated and used instead of hardcoded fallbacks.
         """
         from services.dependency_container import DependencyContainer
 
@@ -856,14 +856,14 @@ class TestDependencyContainerRetryHandler:
 
             await container.initialize()
 
-            # Verify retry handler uses default values
-            # (since applescript_retry is not in Pydantic config)
+            # Verify retry handler uses values from temp config file
+            # (applescript_retry section in _get_complete_config_data)
             retry_handler = container.retry_handler
-            assert retry_handler.database_policy.max_retries == 3  # Default
-            assert retry_handler.database_policy.base_delay_seconds == 1.0  # Default
-            assert retry_handler.database_policy.max_delay_seconds == 10.0  # Default
-            assert retry_handler.database_policy.jitter_range == 0.2  # Default
-            assert retry_handler.database_policy.operation_timeout_seconds == 60.0  # Default
+            assert retry_handler.database_policy.max_retries == 3
+            assert retry_handler.database_policy.base_delay_seconds == 0.1
+            assert retry_handler.database_policy.max_delay_seconds == 1.0
+            assert retry_handler.database_policy.jitter_range == 0.1
+            assert retry_handler.database_policy.operation_timeout_seconds == 30.0
 
 
 @pytest.mark.integration

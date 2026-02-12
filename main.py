@@ -55,9 +55,7 @@ async def _setup_environment(args: argparse.Namespace) -> tuple[DependencyContai
     config = config_manager.load()
 
     # Apply runtime environment settings derived from configuration
-    python_settings = config.get("python_settings", {}) if isinstance(config, dict) else {}
-    prevent_bytecode = python_settings.get("prevent_bytecode")
-    if prevent_bytecode:
+    if config.python_settings.prevent_bytecode:
         os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     else:
         os.environ.pop("PYTHONDONTWRITEBYTECODE", None)

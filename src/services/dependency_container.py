@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from core.logger import SafeQueueListener
     from core.models.protocols import AppleScriptClientProtocol
+    from core.models.track_models import AppConfig
 
 T = TypeVar("T")
 
@@ -98,6 +99,7 @@ class DependencyContainer:
 
         # Initialize service references
         self._config_path = config_path
+        self._app_config: AppConfig | None = None
         self._config: dict[str, Any] = {}
         self._analytics: Analytics | None = None
         self._ap_client: AppleScriptClientProtocol | None = None
@@ -116,8 +118,16 @@ class DependencyContainer:
 
     @property
     def config(self) -> dict[str, Any]:
-        """Get the application configuration."""
+        """Get the application configuration as a dict (legacy access)."""
         return self._config
+
+    @property
+    def app_config(self) -> AppConfig:
+        """Get the typed application configuration."""
+        if self._app_config is None:
+            msg = "AppConfig not loaded — call initialize() first"
+            raise RuntimeError(msg)
+        return self._app_config
 
     @property
     def config_path(self) -> Path:
@@ -537,27 +547,31 @@ class DependencyContainer:
     def _load_config(self) -> dict[str, Any]:
         """Load and validate application configuration.
 
+        Stores the validated ``AppConfig`` in ``_app_config`` and returns a
+        ``dict`` view via ``model_dump()`` for backward compatibility with
+        services that still expect a raw dictionary.
+
         Returns:
-            dict: The loaded configuration
+            Dictionary representation of the validated configuration.
 
         Raises:
-            FileNotFoundError: If the config file doesn't exist
-            yaml.YAMLError: If there's an error parsing the YAML
-            ValueError: If API authentication configuration is incomplete
-            RuntimeError: For any other errors during loading
+            FileNotFoundError: If the config file doesn't exist.
+            yaml.YAMLError: If there's an error parsing the YAML.
+            ValueError: If API authentication configuration is incomplete.
+            RuntimeError: For any other errors during loading.
 
         """
         try:
-            config = load_config(self._config_path)
+            app_config = load_config(self._config_path)
+            self._app_config = app_config
             self._console_logger.info("Configuration: [cyan]%s[/cyan]", Path(self._config_path).name)
 
             # Validate API auth configuration (fail-fast for API-dependent commands)
             if not self._skip_api_validation:
-                year_config = config.get("year_retrieval", {})
-                api_auth = year_config.get("api_auth", {})
-                validate_api_auth(api_auth)
+                api_auth_dict = app_config.year_retrieval.api_auth.model_dump()
+                validate_api_auth(api_auth_dict)
 
-            return config
+            return app_config.model_dump()
         except FileNotFoundError as e:
             short_path = Path(self._config_path).name
             self._error_logger.exception("Configuration file not found: %s", short_path)

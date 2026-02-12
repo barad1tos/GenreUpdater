@@ -376,6 +376,26 @@ before they reach runtime:
 | `album_type_detection`      | `AlbumTypeDetectionConfig`    |
 | `batch_processing`          | `BatchProcessingConfig`       |
 | `experimental`              | `ExperimentalConfig`          |
+| `applescript_retry`         | `AppleScriptRetryConfig`      |
+
+#### Dual-Access Pattern (Migration)
+
+Config is being migrated from `dict[str, Any]` to typed `AppConfig`.
+During migration, both access paths coexist:
+
+```python test="skip"
+# Typed access (preferred, new code)
+container.app_config.year_retrieval.api_auth.discogs_token
+
+# Dict access (legacy, existing services)
+container.config["year_retrieval"]["api_auth"]["discogs_token"]
+```
+
+`DependencyContainer` stores both `_app_config: AppConfig` and
+`_config: dict` (via `model_dump()`). Logger functions accept
+`AppConfig | dict[str, Any]` via the `_resolve_config_dict()` helper.
+`Config.load()` returns `AppConfig` directly; `main.py` uses typed
+attribute access for `python_settings.prevent_bytecode`.
 
 ### Async-First
 
@@ -425,3 +445,9 @@ tests/
 Tests run with `pytest-xdist` (parallel workers). Module-level singletons
 like `album_type._configured_patterns` require `reset_patterns()` autouse
 fixtures to prevent cross-worker state pollution.
+
+Shared test infrastructure lives in `tests/factories.py`:
+
+- `MINIMAL_CONFIG_DATA` — canonical dict with all required `AppConfig` fields
+- `create_test_app_config(**overrides)` — factory that returns typed `AppConfig`
+  instances with sensible defaults, accepting keyword overrides for any field

@@ -58,3 +58,8 @@ def error_logger(request: pytest.FixtureRequest) -> logging.Logger:
     """Auto-named error logger from test module."""
     module_name = request.module.__name__.split(".")[-1]
     return logging.getLogger(f"test.{module_name}.error")
+
+
+# ---------------------------------------------------------------------------
+# AppConfig test factory: use tests.factories.create_test_app_config()
+# ---------------------------------------------------------------------------

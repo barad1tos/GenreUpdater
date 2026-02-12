@@ -86,9 +86,10 @@ def analytics(
 
 @pytest.fixture
 def app_config() -> dict:
-    """Load real application config."""
+    """Load real application config as dict for services not yet migrated to AppConfig."""
     config = Config()
-    return config.load()
+    app_config = config.load()
+    return app_config.model_dump()
 
 
 @pytest.fixture

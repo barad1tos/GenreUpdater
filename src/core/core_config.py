@@ -46,6 +46,28 @@ class ConfigurationError(Exception):
         self.config_path = config_path
 
 
+def _expand_string_env_var(value: str) -> str:
+    """Expand environment variables and home directory in a string value.
+
+    Handles ``${VAR}`` pure syntax (returns empty when unset) and
+    mixed path patterns with ``~``, ``$VAR``, ``${VAR}``.
+    """
+    # Handle pure ${VAR} syntax — return empty string if var not set
+    if value.startswith("${") and value.endswith("}"):
+        var_name = value[2:-1]
+        return os.getenv(var_name, "")
+    # Handle path expansion patterns: ~, $VAR, ${VAR}
+    if "~" not in value and "$" not in value:
+        return value
+    result = value
+    if "$" in result:
+        result = os.path.expandvars(result)
+    # Expand user home directory (~) using getpwuid (works without HOME env var)
+    if "~" in result or result.startswith("${HOME}"):
+        result = str(pathlib.Path(result).expanduser())
+    return result
+
+
 def resolve_env_vars(config: ConfigValue) -> ConfigValue:
     """Recursively resolve environment variables in config values.
 
@@ -53,7 +75,7 @@ def resolve_env_vars(config: ConfigValue) -> ConfigValue:
         config: Configuration value (dict, list, or primitive).
 
     Returns:
-        ConfigValue: Config with environment variables resolved.
+        Config with environment variables resolved.
 
     """
     if isinstance(config, dict):
@@ -61,21 +83,7 @@ def resolve_env_vars(config: ConfigValue) -> ConfigValue:
     if isinstance(config, list):
         return [resolve_env_vars(item) for item in config]
     if isinstance(config, str):
-        # Handle pure ${VAR} syntax - return empty string if var not set
-        if config.startswith("${") and config.endswith("}"):
-            var_name = config[2:-1]
-            return os.getenv(var_name, "")
-        # Handle path expansion patterns: ~, $VAR, ${VAR}
-        if "~" in config or "$" in config:
-            result = config
-            # First, expand environment variables ($VAR and ${VAR})
-            if "$" in result:
-                result = os.path.expandvars(result)
-            # Then, expand user home directory (~) using getpwuid (works without HOME env var)
-            # This also handles cases where ${HOME} wasn't expanded due to missing env var
-            if "~" in result or result.startswith("${HOME}"):
-                result = str(pathlib.Path(result).expanduser())
-            return result
+        return _expand_string_env_var(config)
     return config
 
 
@@ -154,7 +162,7 @@ def _read_and_parse_config(path: pathlib.Path) -> dict[str, Any] | list[Any] | s
 
     Raises:
         ValueError: If config file exceeds maximum size (1MB).
-        yaml.YAMLError: If YAML parsing fails.
+        YAMLError: If YAML parsing fails.
         OSError: If file cannot be read.
 
     """
@@ -203,20 +211,20 @@ def _validate_config_data_type(config_data: dict[str, Any] | list[Any] | str | f
     return config_data
 
 
-def load_config(config_path: str) -> dict[str, Any]:
+def load_config(config_path: str) -> AppConfig:
     """Load the configuration from a YAML file, resolve environment variables, and validate it.
 
     Args:
         config_path: Path to the configuration YAML file.
 
     Returns:
-        dict: Dictionary containing the validated configuration with resolved env vars.
+        Validated AppConfig Pydantic model with resolved env vars.
 
     Raises:
         FileNotFoundError: If the config file does not exist.
         ValueError: If the configuration is invalid, the path is insecure, or env vars are missing.
         PermissionError: If the config file cannot be read.
-        yaml.YAMLError: If there is an error parsing the YAML file.
+        YAMLError: If there is an error parsing the YAML file.
         RuntimeError: For unexpected errors during additional validation steps.
 
     """
@@ -247,21 +255,13 @@ def load_config(config_path: str) -> dict[str, Any]:
         # Validate with Pydantic
         try:
             config_model = AppConfig(**config_data)
-            # Convert Pydantic model to dict using modern v2 method
-            # Use model_dump() for Pydantic v2, with intelligent fallback
-            if hasattr(config_model, "model_dump") and callable(config_model.model_dump):
-                validated_config: dict[str, Any] = config_model.model_dump()
-            else:
-                # Fallback for edge cases - use model_fields for field extraction
-                fields = getattr(config_model, "model_fields", {})
-                validated_config = {field_name: getattr(config_model, field_name) for field_name in fields}
         except ValidationError as e:
             error_details = format_pydantic_errors(e)
             msg = f"Configuration validation failed:\n{error_details}"
             raise ValueError(msg) from e
 
         logger.info("Configuration successfully loaded and validated.")
-        return validated_config
+        return config_model
 
     except (FileNotFoundError, PermissionError, ValueError, yaml.YAMLError) as e:
         logger.critical("Configuration loading failed: %s", e)

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from core.core_config import load_config as load_yaml_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 try:
     from dotenv import load_dotenv
@@ -52,6 +55,7 @@ class Config:
         # config_path is guaranteed to be not None at this point
         self.config_path = config_path
         self._resolved_path: str | None = None
+        self._app_config: AppConfig | None = None
         self._config: dict[str, Any] = {}
         self._loaded = False
 
@@ -69,23 +73,29 @@ class Config:
             # If resolve fails, use absolute path as fallback
             return str(load_path.absolute())
 
-    def load(self) -> dict[str, Any]:
+    def load(self) -> AppConfig:
         """Load configuration from the file.
 
         Returns:
-            Configuration dictionary
+            Validated AppConfig Pydantic model.
 
         """
         if not self._loaded:
             load_path = Path(os.path.expandvars(self.config_path)).expanduser()
             try:
-                self._config = load_yaml_config(str(load_path))
+                app_config = load_yaml_config(str(load_path))
             except Exception as e:
                 msg = f"Failed to load configuration from '{load_path}': {e}"
                 raise RuntimeError(msg) from e
+            self._app_config = app_config
+            self._config = app_config.model_dump()
             self._resolved_path = self._resolve_config_path()
             self._loaded = True
-        return self._config
+
+        if self._app_config is None:
+            msg = "Configuration not loaded — call load() first"
+            raise RuntimeError(msg)
+        return self._app_config
 
     @property
     def resolved_path(self) -> str:

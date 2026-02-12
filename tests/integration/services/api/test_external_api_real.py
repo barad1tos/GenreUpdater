@@ -78,7 +78,8 @@ def app_config() -> dict[str, Any]:
     if missing:
         pytest.skip(f"Missing required secrets: {', '.join(missing)}")
     config = Config()
-    return config.load()
+    app_config = config.load()
+    return app_config.model_dump()
 
 
 @pytest.fixture

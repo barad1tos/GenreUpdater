@@ -1073,3 +1073,57 @@ class TestCreateFallbackLoggers:
         captured = capsys.readouterr()
         assert "FATAL ERROR" in captured.err
         assert "Type mismatch" in captured.err
+
+
+class TestAppConfigPath:
+    """Tests that logger functions accept AppConfig alongside dict."""
+
+    @staticmethod
+    def _make_app_config(tmp_path: PathLib) -> Any:
+        """Create an AppConfig with tmp_path as logs_base_dir."""
+        from tests.factories import create_test_app_config
+
+        return create_test_app_config(
+            music_library_path=str(tmp_path / "library"),
+            apple_scripts_dir=str(tmp_path / "scripts"),
+            logs_base_dir=str(tmp_path / "logs"),
+            logging={
+                "max_runs": 3,
+                "main_log_file": "main.log",
+                "analytics_log_file": "analytics.log",
+                "csv_output_file": "output.csv",
+                "changes_report_file": "changes.json",
+                "dry_run_report_file": "dryrun.json",
+                "last_incremental_run_file": "lastrun.json",
+                "pending_verification_file": "pending.json",
+                "last_db_verify_log": "dbverify.log",
+                "levels": {"console": "DEBUG", "main_file": "DEBUG", "analytics_file": "INFO"},
+            },
+        )
+
+    def test_get_full_log_path_with_app_config(self, tmp_path: PathLib) -> None:
+        """get_full_log_path should resolve paths from AppConfig."""
+        app_config = self._make_app_config(tmp_path)
+        result = get_full_log_path(app_config, "main_log_file", "default.log")
+
+        expected_base = str(tmp_path / "logs")
+        assert result.startswith(expected_base)
+        assert "main.log" in result
+
+    def test_get_html_report_path_with_app_config(self, tmp_path: PathLib) -> None:
+        """get_html_report_path should resolve path from AppConfig."""
+        app_config = self._make_app_config(tmp_path)
+        result = get_html_report_path(app_config)
+
+        assert "analytics_incremental.html" in result
+        expected_analytics_dir = tmp_path / "logs" / "analytics"
+        assert expected_analytics_dir.exists()
+
+    def test_get_log_levels_from_config_with_app_config(self, tmp_path: PathLib) -> None:
+        """get_log_levels_from_config should parse levels from AppConfig."""
+        app_config = self._make_app_config(tmp_path)
+        levels = get_log_levels_from_config(app_config)
+
+        assert levels["console"] == logging.DEBUG
+        assert levels["main_file"] == logging.DEBUG
+        assert levels["analytics_file"] == logging.INFO

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from app.app_config import Config
+from tests.factories import create_test_app_config as _make_test_app_config
 
 
 class TestConfigInit:
@@ -76,23 +77,26 @@ class TestConfigInit:
 class TestConfigLoad:
     """Tests for Config.load() method."""
 
-    def test_load_valid_yaml(self) -> None:
-        """Config should load valid YAML file."""
-        mock_config = {"database": {"host": "localhost", "port": 5432}}
+    def test_load_returns_app_config(self) -> None:
+        """Config.load should return a validated AppConfig instance."""
+        from core.models.track_models import AppConfig
 
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
+        mock_app_config = _make_test_app_config()
+
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
             config = Config("/fake/config.yaml")
-            data = config.load()
+            result = config.load()
 
-        assert data["database"]["host"] == "localhost"
-        assert data["database"]["port"] == 5432
+        assert isinstance(result, AppConfig)
         assert config._loaded is True
+        # Verify internal dict is populated for accessor methods
+        assert isinstance(config._config, dict)
 
     def test_load_caches_result(self) -> None:
         """Config should only load file once."""
-        mock_config = {"key": "value"}
+        mock_app_config = _make_test_app_config()
 
-        with patch("app.app_config.load_yaml_config", return_value=mock_config) as mock_load:
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config) as mock_load:
             config = Config("/fake/config.yaml")
             data1 = config.load()
             data2 = config.load()
@@ -110,19 +114,22 @@ class TestConfigLoad:
 
 
 class TestConfigGet:
-    """Tests for Config.get() method."""
+    """Tests for Config.get() method with dict-based accessor."""
 
     @pytest.fixture
     def loaded_config(self) -> Config:
-        """Create a loaded config for testing."""
-        mock_config = {
+        """Create a loaded config with custom dict data for accessor testing.
+
+        Bypasses load() and sets ``_config`` directly to test accessor methods
+        with arbitrary keys that don't match the AppConfig schema.
+        """
+        config = Config("/fake/config.yaml")
+        config._config = {
             "database": {"host": "localhost", "port": 5432, "nested": {"value": "deep"}},
             "features": {"enabled": True},
             "count": 42,
         }
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
-            config = Config("/fake/config.yaml")
-            config.load()
+        config._loaded = True
         return config
 
     def test_get_simple_key(self, loaded_config: Config) -> None:
@@ -143,14 +150,15 @@ class TestConfigGet:
 
     def test_get_auto_loads_config(self) -> None:
         """Get should auto-load config if not loaded."""
-        mock_config = {"key": "auto_loaded"}
+        mock_app_config = _make_test_app_config()
 
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
             config = Config("/fake/config.yaml")
             assert config._loaded is False
 
-            value = config.get("key")
-            assert value == "auto_loaded"
+            # Access a key that exists in AppConfig model_dump()
+            value = config.get("apple_script_concurrency")
+            assert value == 2
             assert config._loaded is True
 
 
@@ -159,8 +167,12 @@ class TestConfigTypedGetters:
 
     @pytest.fixture
     def config_with_types(self) -> Config:
-        """Create config with various types."""
-        mock_config = {
+        """Create config with various types for accessor testing.
+
+        Sets ``_config`` directly to test accessors with arbitrary keys.
+        """
+        config = Config("/fake/config.yaml")
+        config._config = {
             "string_val": "hello",
             "int_val": 42,
             "float_val": 3.14,
@@ -177,9 +189,7 @@ class TestConfigTypedGetters:
             "path_val": "~/documents/file.txt",
             "path_with_env": "$HOME/config",
         }
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
-            config = Config("/fake/config.yaml")
-            config.load()
+        config._loaded = True
         return config
 
     def test_get_bool_true_values(self, config_with_types: Config) -> None:
@@ -253,8 +263,8 @@ class TestConfigResolvedPath:
         config_file = tmp_path / "config.yaml"
         config_file.write_text("key: value")
 
-        mock_config = {"key": "value"}
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
+        mock_app_config = _make_test_app_config()
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
             config = Config(str(config_file))
             resolved = config.resolved_path
 
@@ -262,9 +272,9 @@ class TestConfigResolvedPath:
 
     def test_resolved_path_auto_loads(self) -> None:
         """resolved_path should auto-load config."""
-        mock_config = {"key": "value"}
+        mock_app_config = _make_test_app_config()
 
-        with patch("app.app_config.load_yaml_config", return_value=mock_config):
+        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
             config = Config("/fake/config.yaml")
             assert config._loaded is False
 
