@@ -52,7 +52,7 @@ class TrackProcessor:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             config: Configuration dictionary
-            analytics: Analytics instance for tracking method calls
+            analytics: Service for tracking method calls
             dry_run: Whether to run in dry-run mode
             security_validator: Optional security validator for input sanitization
 

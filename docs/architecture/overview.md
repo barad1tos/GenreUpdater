@@ -334,6 +334,7 @@ Interfaces defined with `typing.Protocol` in `core/models/protocols.py`:
 - `CacheServiceProtocol` — unified cache operations
 - `ExternalApiServiceProtocol` — external API clients
 - `AppleScriptClientProtocol` — Music.app communication
+- `PendingVerificationServiceProtocol` — verification queue
 - `AnalyticsProtocol` — performance tracking
 - `LibrarySnapshotServiceProtocol` — snapshot persistence
 

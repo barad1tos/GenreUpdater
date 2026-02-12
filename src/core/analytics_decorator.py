@@ -2,7 +2,7 @@
 
 Extracted from ``metrics.analytics.Analytics.track_instance_method`` so that
 ``core/`` no longer imports the concrete ``Analytics`` class at runtime.
-The decorator relies on duck typing (``hasattr``) instead of ``isinstance``
+The decorator relies on duck typing instead of ``isinstance``
 to remain compatible with any object that exposes
 ``execute_async_wrapped_call`` / ``execute_sync_wrapped_call``.
 """
@@ -17,23 +17,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from core.models.protocols import AnalyticsProtocol
+
 
 def _get_func_name(func: Callable[..., Any]) -> str:
     """Safely get function name, handling callables without ``__name__``."""
     return getattr(func, "__name__", repr(func))
-
-
-def _has_analytics_method(instance: Any, method_name: str) -> bool:
-    """Check if analytics instance has a real (non-mock) method.
-
-    Returns False for None, MagicMock, and objects without the method.
-    This prevents MagicMock.execute_async_wrapped_call from being treated
-    as a real analytics method (MagicMock auto-creates attributes).
-    """
-    if instance is None:
-        return False
-    # Check that the method exists on the actual class, not via __getattr__
-    return method_name in type(instance).__dict__ or any(method_name in base.__dict__ for base in type(instance).__mro__[1:])
 
 
 def _null_logger() -> logging.Logger:
@@ -42,6 +31,20 @@ def _null_logger() -> logging.Logger:
     if not logger.handlers:
         logger.addHandler(logging.NullHandler())
     return logger
+
+
+def _get_analytics(instance: Any, method_name: str) -> AnalyticsProtocol | None:
+    """Return the analytics object if it has a real (non-mock) method.
+
+    Returns None for MagicMock and objects without the method.
+    MagicMock auto-creates attributes via ``__getattr__``, so we check
+    that the method exists in the actual class ``__dict__`` via MRO.
+    """
+    analytics_inst = getattr(instance, "analytics", None)
+    if analytics_inst is None:
+        return None
+    has_method = any(method_name in cls.__dict__ for cls in type(analytics_inst).__mro__)
+    return analytics_inst if has_method else None
 
 
 def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -57,12 +60,14 @@ def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Cal
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        """Wrap function with analytics tracking based on sync/async type."""
         is_async = inspect.iscoroutinefunction(func)
 
         @wraps(func)
         async def async_wrapper(self_arg: Any, *args: Any, **kwargs: Any) -> Any:
-            analytics_inst = getattr(self_arg, "analytics", None)
-            if not _has_analytics_method(analytics_inst, "execute_async_wrapped_call"):
+            """Wrap async method with analytics tracking."""
+            analytics = _get_analytics(self_arg, "execute_async_wrapped_call")
+            if analytics is None:
                 error_logger = getattr(self_arg, "error_logger", None) or _null_logger()
                 error_logger.error(
                     "Analytics missing on %s; %s untracked",
@@ -71,7 +76,7 @@ def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Cal
                 )
                 return await func(self_arg, *args, **kwargs)
 
-            return await analytics_inst.execute_async_wrapped_call(
+            return await analytics.execute_async_wrapped_call(
                 func,
                 event_type,
                 self_arg,
@@ -81,8 +86,9 @@ def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Cal
 
         @wraps(func)
         def sync_wrapper(self_arg: Any, *args: Any, **kwargs: Any) -> Any:
-            analytics_inst = getattr(self_arg, "analytics", None)
-            if not _has_analytics_method(analytics_inst, "execute_sync_wrapped_call"):
+            """Wrap sync method with analytics tracking."""
+            analytics = _get_analytics(self_arg, "execute_sync_wrapped_call")
+            if analytics is None:
                 error_logger = getattr(self_arg, "error_logger", None) or _null_logger()
                 error_logger.error(
                     "Analytics missing on %s; %s untracked",
@@ -91,7 +97,7 @@ def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Cal
                 )
                 return func(self_arg, *args, **kwargs)
 
-            return analytics_inst.execute_sync_wrapped_call(
+            return analytics.execute_sync_wrapped_call(
                 func,
                 event_type,
                 self_arg,

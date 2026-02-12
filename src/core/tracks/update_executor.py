@@ -62,7 +62,7 @@ class TrackUpdateExecutor:
             config: Configuration dictionary
             console_logger: Logger for info/debug messages
             error_logger: Logger for error messages
-            analytics: Analytics instance for performance tracking
+            analytics: Service for performance tracking
             dry_run: If True, record actions without executing
         """
         self.ap_client = ap_client

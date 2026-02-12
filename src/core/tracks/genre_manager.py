@@ -48,7 +48,7 @@ class GenreManager(BaseProcessor):
             track_processor: Track processor for updating tracks
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            analytics: Analytics instance for tracking
+            analytics: Service for performance tracking
             config: Configuration dictionary
             dry_run: Whether to run in dry-run mode
 

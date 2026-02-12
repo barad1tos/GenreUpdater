@@ -90,7 +90,7 @@ class YearBatchProcessor:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             config: Configuration dictionary
-            analytics: Analytics instance for tracking
+            analytics: Service for performance tracking
             dry_run: Whether to run in dry-run mode
 
         """
