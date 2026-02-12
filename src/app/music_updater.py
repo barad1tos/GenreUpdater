@@ -63,7 +63,7 @@ class MusicUpdater:
             library_snapshot_service=deps.library_snapshot_service,
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
-            config=deps.config,
+            config=deps.app_config,
             analytics=deps.analytics,
             dry_run=deps.dry_run,
         )
@@ -95,7 +95,7 @@ class MusicUpdater:
             console_logger=deps.console_logger,
             error_logger=deps.error_logger,
             analytics=deps.analytics,
-            config=deps.config,
+            config=deps.app_config,
             dry_run=deps.dry_run,
         )
 

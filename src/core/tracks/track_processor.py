@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol, LibrarySnapshotServiceProtocol
+    from core.models.track_models import AppConfig
     from core.tracks.artist_renamer import ArtistRenamer
 
 
@@ -38,7 +39,7 @@ class TrackProcessor:
         library_snapshot_service: LibrarySnapshotServiceProtocol | None = None,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        config: dict[str, Any],
+        config: AppConfig,
         analytics: AnalyticsProtocol,
         dry_run: bool = False,
         security_validator: SecurityValidator | None = None,
@@ -51,7 +52,7 @@ class TrackProcessor:
             library_snapshot_service: Optional library snapshot service for cached snapshots
             console_logger: Logger for console output
             error_logger: Logger for error messages
-            config: Configuration dictionary
+            config: Typed application configuration
             analytics: Service for tracking method calls
             dry_run: Whether to run in dry-run mode
             security_validator: Optional security validator for input sanitization
@@ -143,7 +144,7 @@ class TrackProcessor:
         if self.dry_run_test_artists and self.dry_run_mode == "test":
             test_artists_list = list(self.dry_run_test_artists)
             self.console_logger.info("Using test artist filter from dry run context: %s", test_artists_list)
-        elif config_test_artists := self.config.get("development", {}).get("test_artists", []):
+        elif config_test_artists := self.config.development.test_artists:
             test_artists_list = config_test_artists
             self.console_logger.info("Using test artist filter from config: %s", test_artists_list)
         else:
@@ -200,7 +201,7 @@ class TrackProcessor:
             return None
 
         test_tracks = await self._process_test_artists(force_refresh)
-        if test_tracks or self.config.get("development", {}).get("test_artists", []):
+        if test_tracks or self.config.development.test_artists:
             return test_tracks
         return None
 
@@ -344,13 +345,10 @@ class TrackProcessor:
         Returns:
             Timeout value in seconds
         """
+        timeouts = self.config.applescript_timeouts
         if is_single_artist:
-            # Single artist fetch - shorter timeout (artist was explicitly provided)
-            timeout_value = self.config.get("applescript_timeouts", {}).get("single_artist_fetch", 600)
-            return int(timeout_value) if timeout_value is not None else 600
-        # Full library fetch or test artist scenario - longer timeout
-        timeout_value = self.config.get("applescript_timeouts", {}).get("full_library_fetch", 3600)
-        return int(timeout_value) if timeout_value is not None else 3600
+            return timeouts.single_artist_fetch
+        return timeouts.full_library_fetch
 
     async def _fetch_tracks_from_applescript(
         self,
@@ -420,13 +418,11 @@ class TrackProcessor:
         if not track_ids:
             return []
 
-        batch_size = int(self.config.get("batch_processing", {}).get("ids_batch_size", 200))
-        batch_size = max(batch_size, 1)
-        batch_size = min(batch_size, 1000)  # Enforce upper limit to prevent excessive memory/performance issues
+        batch_size = min(max(self.config.batch_processing.ids_batch_size, 1), 1000)
 
         # Use dedicated timeout for ID-based batch fetch (default 120s = 2 min per batch)
         # This is much shorter than full_library_fetch because we're fetching by specific IDs
-        timeout = int(self.config.get("applescript_timeouts", {}).get("ids_batch_fetch", 120))
+        timeout = self.config.applescript_timeouts.ids_batch_fetch
 
         collected: list[TrackDict] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size

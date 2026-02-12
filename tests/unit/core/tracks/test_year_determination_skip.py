@@ -12,11 +12,12 @@ Also tests the pre-check pipeline added in Issue #75:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from tests.factories import create_test_app_config
 from tests.unit.core.tracks.conftest import create_test_track
 
 from core.models.protocols import (
@@ -30,6 +31,7 @@ from core.tracks.year_fallback import YearFallbackHandler
 from core.models.cache_types import PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
     from core.models.types import TrackDict
 
 
@@ -79,7 +81,7 @@ def _create_year_determinator(
     pending_verification: MagicMock | None = None,
     consistency_checker: MagicMock | None = None,
     fallback_handler: MagicMock | None = None,
-    config: dict[str, Any] | None = None,
+    config: AppConfig | None = None,
 ) -> YearDeterminator:
     """Create YearDeterminator with mock dependencies."""
     # Cast through object to satisfy type checker for mock objects
@@ -91,7 +93,7 @@ def _create_year_determinator(
         fallback_handler=cast(YearFallbackHandler, fallback_handler or _create_mock_fallback_handler()),
         console_logger=logging.getLogger("test.console"),
         error_logger=logging.getLogger("test.error"),
-        config=config or {},
+        config=config or create_test_app_config(),
     )
 
 

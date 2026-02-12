@@ -18,7 +18,7 @@ from core.models.validators import is_empty_year
 from .year_batch import YearBatchProcessor
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
-from .year_fallback import DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR, YearFallbackHandler
+from .year_fallback import YearFallbackHandler
 from .year_utils import (
     normalize_collaboration_artist,
     resolve_non_negative_float,
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    from core.models.track_models import ChangeLogEntry, TrackDict
+    from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
     from core.retry_handler import DatabaseRetryHandler
 
     from .track_processor import TrackProcessor
@@ -78,7 +78,7 @@ class YearRetriever:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
-        config: dict[str, Any],
+        config: AppConfig,
         dry_run: bool = False,
     ) -> None:
         """Initialize the YearRetriever.
@@ -92,11 +92,11 @@ class YearRetriever:
             console_logger: Logger for console output
             error_logger: Logger for error messages
             analytics: Service for performance tracking
-            config: Configuration dictionary
+            config: Typed application configuration
             dry_run: Whether to run in dry-run mode
 
         """
-        # Store references for backward compatibility
+        # Store references
         self.track_processor = track_processor
         self.cache_service = cache_service
         self.external_api = external_api
@@ -106,32 +106,19 @@ class YearRetriever:
         self.analytics = analytics
         self.config = config
         self.dry_run = dry_run
-        self._dry_run_actions: list[dict[str, Any]] = []
+        self._dry_run_actions: list[dict[str, object]] = []
         self._last_updated_tracks: list[TrackDict] = []
 
-        # Extract configuration
-        year_config = self.config.get("year_retrieval", {}) if isinstance(self.config, dict) else {}
-        fallback_config = year_config.get("fallback", {}) if isinstance(year_config, dict) else {}
-        logic_config = year_config.get("logic", {}) if isinstance(year_config, dict) else {}
+        # Extract configuration from typed model
+        fallback_cfg = config.year_retrieval.fallback
+        logic_cfg = config.year_retrieval.logic
 
         # Configuration values (exposed for backward compatibility)
-        self.fallback_enabled = bool(fallback_config.get("enabled", self.DEFAULT_FALLBACK_ENABLED))
-        self.year_difference_threshold = resolve_positive_int(
-            fallback_config.get("year_difference_threshold"),
-            default=self.DEFAULT_YEAR_DIFFERENCE_THRESHOLD,
-        )
-        self.absurd_year_threshold = resolve_positive_int(
-            logic_config.get("absurd_year_threshold"),
-            default=self.DEFAULT_ABSURD_YEAR_THRESHOLD,
-        )
-        self.suspicion_threshold_years = resolve_positive_int(
-            logic_config.get("suspicion_threshold_years"),
-            default=self.DEFAULT_SUSPICION_THRESHOLD_YEARS,
-        )
-        self.min_confidence_for_new_year = resolve_positive_int(
-            logic_config.get("min_confidence_for_new_year"),
-            default=DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
-        )
+        self.fallback_enabled = fallback_cfg.enabled
+        self.year_difference_threshold = fallback_cfg.year_difference_threshold
+        self.absurd_year_threshold = logic_cfg.absurd_year_threshold
+        self.suspicion_threshold_years = logic_cfg.suspicion_threshold_years
+        self.min_confidence_for_new_year = int(logic_cfg.min_confidence_for_new_year)
 
         # Initialize consistency checker
         self.year_consistency_checker = YearConsistencyChecker(
@@ -198,7 +185,7 @@ class YearRetriever:
             True if successful, False otherwise
 
         """
-        if not self.config.get("year_retrieval", {}).get("enabled", True):
+        if not self.config.year_retrieval.enabled:
             self.console_logger.info("Year retrieval is disabled in config")
             return True
 
@@ -243,8 +230,7 @@ class YearRetriever:
                 )
 
             # Generate report for problematic albums
-            raw_min_attempts = self.config.get("reporting", {}).get("min_attempts_for_report", 3)
-            min_attempts = resolve_positive_int(raw_min_attempts, default=3)
+            min_attempts = int(self.config.reporting.min_attempts_for_report)
             problematic_count = await self.pending_verification.generate_problematic_albums_report(min_attempts=min_attempts)
             if problematic_count > 0:
                 self.console_logger.warning(

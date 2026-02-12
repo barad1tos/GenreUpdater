@@ -8,11 +8,13 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_retriever import YearRetriever
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.protocols import (
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
-    from metrics.analytics import Analytics
+    from core.models.track_models import AppConfig
 
 
 class _MockLogger:
@@ -151,7 +153,7 @@ class TestYearRetrieverAllure:
         cache_service: Any = None,
         external_api: Any = None,
         pending_verification: Any = None,
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         dry_run: bool = False,
         retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
@@ -176,7 +178,7 @@ class TestYearRetrieverAllure:
         error_logger = _MockLogger()
         mock_analytics = _MockAnalytics()
 
-        test_config = config or {"year_retrieval": {"api_timeout": 30, "processing": {"batch_size": 50}, "retry_attempts": 3}}
+        test_config = config or create_test_app_config()
 
         return YearRetriever(
             track_processor=track_processor,
@@ -186,7 +188,7 @@ class TestYearRetrieverAllure:
             retry_handler=retry_handler,
             console_logger=cast("logging.Logger", cast(object, console_logger)),
             error_logger=cast("logging.Logger", cast(object, error_logger)),
-            analytics=cast("Analytics", cast(object, mock_analytics)),
+            analytics=cast(AnalyticsProtocol, cast(object, mock_analytics)),
             config=test_config,
             dry_run=dry_run,
         )
@@ -243,7 +245,7 @@ class TestYearRetrieverAllure:
         mock_pending_verification = cast("PendingVerificationServiceProtocol", cast(object, _MockPendingVerificationService()))
         mock_retry_handler = self._create_retry_handler()
 
-        config = {"year_retrieval": {"api_timeout": 45, "processing": {"batch_size": 100}, "retry_attempts": 5}}
+        config = create_test_app_config()
         retriever = YearRetriever(
             track_processor=mock_track_processor,
             cache_service=mock_cache_service,
@@ -252,7 +254,7 @@ class TestYearRetrieverAllure:
             retry_handler=mock_retry_handler,
             console_logger=cast("logging.Logger", cast(object, _MockLogger())),
             error_logger=cast("logging.Logger", cast(object, _MockLogger())),
-            analytics=cast("Analytics", cast(object, _MockAnalytics())),
+            analytics=cast(AnalyticsProtocol, cast(object, _MockAnalytics())),
             config=config,
             dry_run=True,
         )
@@ -261,7 +263,7 @@ class TestYearRetrieverAllure:
         assert retriever.external_api is mock_external_api
         assert retriever.pending_verification is mock_pending_verification
         assert retriever.dry_run is True
-        assert retriever.config == config
+        assert retriever.config is config
 
         # Verify constants
         assert YearRetriever.MIN_VALID_YEAR == 1900

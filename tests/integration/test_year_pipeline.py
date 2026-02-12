@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
-from metrics.analytics import Analytics
+from core.models.protocols import AnalyticsProtocol
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
@@ -36,7 +38,6 @@ class TestYearPipelineIntegration:
         mock_cache_service: MagicMock | None = None,
         mock_external_api: AsyncMock | None = None,
         mock_pending_verification: MagicMock | None = None,
-        config: dict[str, Any] | None = None,
         dry_run: bool = False,
         retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
@@ -70,7 +71,63 @@ class TestYearPipelineIntegration:
         if retry_handler is None:
             retry_handler = TestYearPipelineIntegration._create_retry_handler()
 
-        test_config = config or {"force_update": False, "processing": {"batch_size": 100}, "year_update": {"concurrent_limit": 5}}
+        test_config = create_test_app_config(
+            year_retrieval={
+                "enabled": True,
+                "preferred_api": "musicbrainz",
+                "api_auth": {
+                    "discogs_token": "test-token",
+                    "musicbrainz_app_name": "TestApp/1.0",
+                    "contact_email": "test@example.com",
+                },
+                "rate_limits": {
+                    "discogs_requests_per_minute": 25,
+                    "musicbrainz_requests_per_second": 1,
+                    "concurrent_api_calls": 3,
+                },
+                "processing": {
+                    "batch_size": 100,
+                    "delay_between_batches": 60,
+                    "adaptive_delay": False,
+                    "cache_ttl_days": 30,
+                    "pending_verification_interval_days": 30,
+                },
+                "logic": {
+                    "min_valid_year": 1900,
+                    "definitive_score_threshold": 85,
+                    "definitive_score_diff": 15,
+                    "preferred_countries": [],
+                    "major_market_codes": [],
+                },
+                "reissue_detection": {"reissue_keywords": []},
+                "scoring": {
+                    "base_score": 0,
+                    "artist_exact_match_bonus": 0,
+                    "album_exact_match_bonus": 0,
+                    "perfect_match_bonus": 0,
+                    "album_variation_bonus": 0,
+                    "album_substring_penalty": 0,
+                    "album_unrelated_penalty": 0,
+                    "mb_release_group_match_bonus": 0,
+                    "type_album_bonus": 0,
+                    "type_ep_single_penalty": 0,
+                    "type_compilation_live_penalty": 0,
+                    "status_official_bonus": 0,
+                    "status_bootleg_penalty": 0,
+                    "status_promo_penalty": 0,
+                    "reissue_penalty": 0,
+                    "year_diff_penalty_scale": 0,
+                    "year_diff_max_penalty": 0,
+                    "year_before_start_penalty": 0,
+                    "year_after_end_penalty": 0,
+                    "year_near_start_bonus": 0,
+                    "country_artist_match_bonus": 0,
+                    "country_major_market_bonus": 0,
+                    "source_mb_bonus": 0,
+                    "source_discogs_bonus": 0,
+                },
+            },
+        )
 
         return YearRetriever(
             track_processor=mock_track_processor,
@@ -80,7 +137,7 @@ class TestYearPipelineIntegration:
             retry_handler=retry_handler,
             console_logger=MockLogger(),  # type: ignore[arg-type]
             error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=cast(Analytics, cast(object, MockAnalytics())),
+            analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
         )

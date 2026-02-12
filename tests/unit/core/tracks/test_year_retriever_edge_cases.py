@@ -13,7 +13,7 @@ for unit testing internal behavior.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,13 +21,39 @@ import pytest
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
+from core.models.protocols import AnalyticsProtocol
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_retriever import YearRetriever
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.protocol_mocks import (
+    MockCacheService,
+    MockExternalApiService,
+    MockPendingVerificationService,
+)  # sourcery skip: dont-import-test-modules
+from tests.mocks.track_data import DummyTrackData  # sourcery skip: dont-import-test-modules
 
-# sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockAnalytics, MockLogger
-from tests.mocks.protocol_mocks import MockCacheService, MockExternalApiService, MockPendingVerificationService
-from tests.mocks.track_data import DummyTrackData
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
+
+
+def _build_config_with_year_overrides(**year_sub_overrides: Any) -> AppConfig:
+    """Build an AppConfig with deep overrides for year_retrieval sub-sections.
+
+    Args:
+        **year_sub_overrides: Keys like ``logic``, ``fallback``, ``processing``
+            whose values are dicts merged into the corresponding sub-model.
+
+    """
+    from tests.factories import MINIMAL_CONFIG_DATA
+
+    base_yr = dict(MINIMAL_CONFIG_DATA["year_retrieval"])
+    for section, overrides in year_sub_overrides.items():
+        if section in base_yr and isinstance(base_yr[section], dict):
+            base_yr[section] = {**base_yr[section], **overrides}
+        else:
+            base_yr[section] = overrides
+    return create_test_app_config(year_retrieval=base_yr)
 
 
 class TestYearRetrieverEdgeCases:
@@ -53,7 +79,7 @@ class TestYearRetrieverEdgeCases:
         cache_service: Any = None,
         external_api: Any = None,
         pending_verification: Any = None,
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         dry_run: bool = False,
         retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
@@ -74,13 +100,7 @@ class TestYearRetrieverEdgeCases:
         if retry_handler is None:
             retry_handler = TestYearRetrieverEdgeCases._create_retry_handler()
 
-        test_config = config or {
-            "year_retrieval": {
-                "api_timeout": 30,
-                "processing": {"batch_size": 50},
-                "retry_attempts": 3,
-            }
-        }
+        test_config = config or create_test_app_config()
 
         return YearRetriever(
             track_processor=track_processor,
@@ -90,7 +110,7 @@ class TestYearRetrieverEdgeCases:
             retry_handler=retry_handler,
             console_logger=MockLogger(),
             error_logger=MockLogger(),
-            analytics=MockAnalytics(),
+            analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
         )
@@ -348,19 +368,13 @@ class TestYearFallbackLogic:
         absurd_year_threshold: int = 1970,
     ) -> YearRetriever:
         """Create YearRetriever with fallback configuration."""
-        config = {
-            "year_retrieval": {
-                "api_timeout": 30,
-                "processing": {"batch_size": 50},
-                "logic": {
-                    "absurd_year_threshold": absurd_year_threshold,
-                },
-                "fallback": {
-                    "enabled": fallback_enabled,
-                    "year_difference_threshold": year_difference_threshold,
-                },
-            }
-        }
+        config = _build_config_with_year_overrides(
+            logic={"absurd_year_threshold": absurd_year_threshold},
+            fallback={
+                "enabled": fallback_enabled,
+                "year_difference_threshold": year_difference_threshold,
+            },
+        )
         return TestYearRetrieverEdgeCases.create_year_retriever(
             external_api=external_api,
             pending_verification=pending_verification,
@@ -656,7 +670,7 @@ class TestYearFallbackLogic:
 class TestAbsurdYearDetection:
     """Tests for absurd year detection (Rule 2 in fallback decision tree).
 
-    Rule 2: IF proposed_year < absurd_threshold AND no existing year → MARK + SKIP
+    Rule 2: IF proposed_year < absurd_threshold AND no existing year then MARK and SKIP
 
     This catches cases like:
     - Gorillaz → 1974 (band formed 1998)
@@ -687,9 +701,8 @@ class TestAbsurdYearDetection:
 
     def test_default_absurd_threshold(self) -> None:
         """Test that default absurd_year_threshold is 1970."""
-        # Create retriever without explicit threshold
-        config = {"year_retrieval": {"api_timeout": 30}}
-        retriever = TestYearRetrieverEdgeCases.create_year_retriever(config=config)
+        # Create retriever without explicit threshold (uses Pydantic default)
+        retriever = TestYearRetrieverEdgeCases.create_year_retriever()
 
         assert retriever.absurd_year_threshold == 1970
 
@@ -755,7 +768,7 @@ class TestAbsurdYearDetection:
 
     @pytest.mark.asyncio
     async def test_absurd_year_with_existing_continues(self) -> None:
-        """Test that absurd year with existing year is caught by plausibility check.
+        """Test that plausibility check catches absurd year with existing year.
 
         Case: Album with existing year 2005, proposed year 1965
         Expected: Skip Rule 2 (has existing), proceed to Rule 5 (dramatic change)
@@ -959,13 +972,7 @@ class TestSuspiciousOldYearDetection:
     @staticmethod
     def create_retriever() -> YearRetriever:
         """Create YearRetriever with default suspicion threshold (10 years)."""
-        config = {
-            "year_retrieval": {
-                "api_timeout": 30,
-                "processing": {"batch_size": 50},
-            }
-        }
-        return TestYearRetrieverEdgeCases.create_year_retriever(config=config)
+        return TestYearRetrieverEdgeCases.create_year_retriever()
 
     def test_equilibrium_equinox_case(self) -> None:
         """Test real-world case: Equilibrium - Equinox.
@@ -1325,20 +1332,14 @@ class TestYearFallbackConfidenceScoring:
         trust_api_score_threshold: int = 70,
     ) -> YearRetriever:
         """Create YearRetriever with fallback configuration."""
-        config = {
-            "year_retrieval": {
-                "api_timeout": 30,
-                "processing": {"batch_size": 50},
-                "logic": {
-                    "absurd_year_threshold": 1970,
-                },
-                "fallback": {
-                    "enabled": True,
-                    "year_difference_threshold": 5,
-                    "trust_api_score_threshold": trust_api_score_threshold,
-                },
-            }
-        }
+        config = _build_config_with_year_overrides(
+            logic={"absurd_year_threshold": 1970},
+            fallback={
+                "enabled": True,
+                "year_difference_threshold": 5,
+                "trust_api_score_threshold": trust_api_score_threshold,
+            },
+        )
         return TestYearRetrieverEdgeCases.create_year_retriever(
             pending_verification=pending_verification or MockPendingVerificationService(),
             config=config,

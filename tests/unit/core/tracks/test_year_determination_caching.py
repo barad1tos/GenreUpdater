@@ -16,6 +16,7 @@ from core.models.track_models import TrackDict
 from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import YearDeterminator
 from core.tracks.year_fallback import YearFallbackHandler
+from tests.factories import create_test_app_config
 from tests.mocks.protocol_mocks import MockPendingVerificationService
 
 
@@ -56,15 +57,7 @@ def create_year_determinator(
         # Default: fallback handler returns the proposed year unchanged
         mock_fallback_handler.apply_year_fallback = AsyncMock(side_effect=lambda proposed_year, **_: proposed_year)
 
-    config: dict[str, Any] = {
-        "year_retrieval": {
-            "processing": {
-                "skip_prerelease": True,
-                "future_year_threshold": 1,
-                "prerelease_recheck_days": 30,
-            }
-        }
-    }
+    config = create_test_app_config()
 
     return YearDeterminator(
         cache_service=cast(Any, mock_cache_service),

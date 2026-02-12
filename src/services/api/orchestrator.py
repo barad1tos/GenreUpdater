@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
+    from core.models.track_models import AppConfig
     from metrics import Analytics
     from services.cache.orchestrator import CacheOrchestrator
     from services.pending_verification import PendingVerificationService
@@ -217,7 +218,7 @@ class ExternalApiOrchestrator:
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: Analytics,
@@ -284,52 +285,21 @@ class ExternalApiOrchestrator:
         # Initialize state flag
         self._initialized = False
 
-    def _validate_config_section(self, config: dict[str, Any] | None, error_message: str) -> dict[str, Any]:
-        """Validate that a configuration section is a dictionary.
-
-        Args:
-            config: Configuration value to validate
-            error_message: Error message to use if validation fails
-
-        Returns:
-            The validated configuration dictionary
-
-        Raises:
-            TypeError: If config is not a dictionary
-
-        """
-        if not isinstance(config, dict):
-            self.error_logger.critical("Configuration error: %s", error_message)
-            msg = f"Configuration error: {error_message}"
-            raise TypeError(msg)
-        return config
-
     def _extract_configuration(self) -> None:
-        """Extract and validate configuration settings."""
-        # Validate year_retrieval configuration section
-        year_config_raw = self.config.get("year_retrieval")
-        year_config = self._validate_config_section(year_config_raw, "'year_retrieval' section missing or not a dictionary.")
-
-        # Extract API authentication configuration
-        api_auth_config_raw = year_config.get("api_auth", {})
-        api_auth_config = self._validate_config_section(
-            api_auth_config_raw,
-            "'year_retrieval.api_auth' subsection missing or invalid.",
-        )
+        """Extract and validate configuration settings from typed AppConfig."""
+        year_cfg = self.config.year_retrieval
+        api_auth = year_cfg.api_auth
 
         # Load API tokens with SecureConfig
         self.discogs_token = self._load_secure_token(
-            api_auth_config,
+            api_auth.discogs_token,
             "discogs_token",
             "DISCOGS_TOKEN",
         )
 
         # Load MusicBrainz identification
-        self.musicbrainz_app_name = api_auth_config.get(
-            "musicbrainz_app_name",
-            "MusicGenreUpdater/UnknownVersion",
-        )
-        self.contact_email = api_auth_config.get("contact_email", "")
+        self.musicbrainz_app_name = api_auth.musicbrainz_app_name or "MusicGenreUpdater/UnknownVersion"
+        self.contact_email = api_auth.contact_email
 
         # Fallback to env var if placeholder unresolved or empty
         if not self.contact_email or str(self.contact_email).startswith("${"):
@@ -353,43 +323,43 @@ class ExternalApiOrchestrator:
             else self.musicbrainz_app_name
         )
 
-        # Extract other configuration sections
-        self.rate_limits_config = year_config.get("rate_limits", {})
-        processing_config = year_config.get("processing", {})
-        logic_config = year_config.get("logic", {})
-        self.scoring_config = year_config.get("scoring", {})
+        # Store typed sub-configs for rate limiter initialization
+        self.rate_limits_config = year_cfg.rate_limits
+        processing = year_cfg.processing
+        logic = year_cfg.logic
+        # scoring_config stays as dict for ReleaseScorer compatibility (PR C migration)
+        self.scoring_config: dict[str, Any] = year_cfg.scoring.model_dump()
 
         # Extract processing parameters
-        preferred_api_raw = year_config.get("preferred_api", "musicbrainz")
-        self.preferred_api = self._normalize_api_name(preferred_api_raw)
+        self.preferred_api = self._normalize_api_name(year_cfg.preferred_api.value)
 
-        self.cache_ttl_days = processing_config.get("cache_ttl_days", 30)
-        self.skip_prerelease = bool(processing_config.get("skip_prerelease", True))
-        self.future_year_threshold = self._coerce_non_negative_int(processing_config.get("future_year_threshold"), default=1)
-        self.prerelease_recheck_days = self._coerce_positive_int(processing_config.get("prerelease_recheck_days"), default=30)
+        self.cache_ttl_days = processing.cache_ttl_days
+        self.skip_prerelease = processing.skip_prerelease
+        self.future_year_threshold = processing.future_year_threshold
+        self.prerelease_recheck_days = processing.prerelease_recheck_days
 
         # Extract logic parameters
-        self.min_valid_year = logic_config.get("min_valid_year", 1900)
-        self.definitive_score_threshold = logic_config.get("definitive_score_threshold", 85)
-        self.definitive_score_diff = logic_config.get("definitive_score_diff", 15)
+        self.min_valid_year = logic.min_valid_year
+        self.definitive_score_threshold = logic.definitive_score_threshold
+        self.definitive_score_diff = logic.definitive_score_diff
         self.current_year = dt.now(UTC).year
 
         # Global retry configuration sourced from top-level settings
-        self.default_api_max_retries = self._coerce_positive_int(self.config.get("max_retries"), default=3)
-        self.default_api_retry_delay = self._coerce_non_negative_float(self.config.get("retry_delay_seconds"), default=1.0)
+        self.default_api_max_retries = self.config.max_retries
+        self.default_api_retry_delay = self.config.retry_delay_seconds
 
-    def _load_secure_token(self, config: dict[str, Any], key: str, env_var: str) -> str:
+    def _load_secure_token(self, config_value: str, key: str, env_var: str) -> str:
         """Load API token using SecureConfig with fallback to environment variables."""
         try:
-            raw_token = self._get_raw_token(config, key, env_var)
+            raw_token = self._get_raw_token(config_value, key, env_var)
             return self._process_token_security(raw_token, key) if raw_token else ""
         except (KeyError, ValueError, SecurityConfigError):
             self.error_logger.exception("Error loading %s", key)
             return ""
 
-    def _get_raw_token(self, config: dict[str, Any], key: str, env_var: str) -> str:
-        """Get raw token from config or environment variables."""
-        raw_token: str = str(config.get(key, ""))
+    def _get_raw_token(self, config_value: str, key: str, env_var: str) -> str:
+        """Get raw token from config value or environment variables."""
+        raw_token: str = str(config_value) if config_value else ""
 
         # Check if it's a placeholder that needs environment resolution
         if not raw_token or raw_token.startswith("${"):
@@ -443,34 +413,21 @@ class ExternalApiOrchestrator:
 
     def _initialize_rate_limiters(self) -> None:
         """Initialize rate limiters for each API provider."""
-        try:
-            self.rate_limiters = {
-                "discogs": EnhancedRateLimiter(
-                    requests_per_window=max(
-                        1,
-                        int(self.rate_limits_config.get("discogs_requests_per_minute", 25)),
-                    ),
-                    window_seconds=60.0,
-                ),
-                "musicbrainz": EnhancedRateLimiter(
-                    requests_per_window=max(
-                        1,
-                        int(self.rate_limits_config.get("musicbrainz_requests_per_second", 1)),
-                    ),
-                    window_seconds=1.0,
-                ),
-                "itunes": EnhancedRateLimiter(
-                    requests_per_window=max(
-                        1,
-                        int(self.rate_limits_config.get("itunes_requests_per_second", 10)),
-                    ),
-                    window_seconds=1.0,
-                ),
-            }
-        except ValueError as e:
-            self.error_logger.critical("Invalid rate limiter configuration: %s", e)
-            msg = f"Invalid rate limiter configuration: {e}"
-            raise ValueError(msg) from e
+        rate_limits = self.rate_limits_config
+        self.rate_limiters = {
+            "discogs": EnhancedRateLimiter(
+                requests_per_window=max(1, rate_limits.discogs_requests_per_minute),
+                window_seconds=60.0,
+            ),
+            "musicbrainz": EnhancedRateLimiter(
+                requests_per_window=max(1, int(rate_limits.musicbrainz_requests_per_second)),
+                window_seconds=1.0,
+            ),
+            "itunes": EnhancedRateLimiter(
+                requests_per_window=10,
+                window_seconds=1.0,
+            ),
+        }
 
     def _initialize_api_clients(self) -> None:
         """Initialize API client instances with dependency injection."""
@@ -540,8 +497,7 @@ class ExternalApiOrchestrator:
     def _initialize_scoring_system(self) -> None:
         """Initialize the release scoring system."""
         # Extract remaster keywords from config for edition normalization
-        cleaning_config = self.config.get("cleaning", {})
-        remaster_keywords = cleaning_config.get("remaster_keywords", [])
+        remaster_keywords = self.config.cleaning.remaster_keywords
 
         # Store for use in scoring (ReleaseScorer uses these for edition normalization)
         self.remaster_keywords: list[str] = remaster_keywords
@@ -989,11 +945,10 @@ class ExternalApiOrchestrator:
         )
 
         # Get script-specific API priorities from config
-        year_config = self.config.get("year_retrieval", {})
-        script_api_priorities = year_config.get("script_api_priorities", {})
-        default_config = script_api_priorities.get("default", {})
-        script_priorities = script_api_priorities.get(script_type.value, default_config)
-        primary_apis = script_priorities.get("primary", ["musicbrainz"])
+        script_api_priorities = self.config.year_retrieval.script_api_priorities
+        default_priority = script_api_priorities.get("default")
+        script_priority = script_api_priorities.get(script_type.value, default_priority)
+        primary_apis = script_priority.primary if script_priority else ["musicbrainz"]
         self.console_logger.info("Primary APIs for %s: %s", script_type.value, primary_apis)
 
     def _log_search_initialization(
@@ -1428,7 +1383,7 @@ class ExternalApiOrchestrator:
 
 # Factory function for easy instantiation
 def create_external_api_orchestrator(
-    config: dict[str, Any],
+    config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     analytics: Analytics,
@@ -1438,7 +1393,7 @@ def create_external_api_orchestrator(
     """Create the configured ExternalApiOrchestrator instance.
 
     Args:
-        config: Configuration dictionary
+        config: Typed application configuration
         console_logger: Logger for general output
         error_logger: Logger for error messages and warnings
         analytics: Analytics service for performance tracking

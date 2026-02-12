@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
-import pytest
-from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
 
+import pytest
+
+from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestExternalApiOrchestratorAllure:
@@ -15,7 +20,7 @@ class TestExternalApiOrchestratorAllure:
 
     @staticmethod
     def create_orchestrator(
-        config: dict[str, Any] | None = None,
+        config: AppConfig | None = None,
         cache_service: Any = None,
         pending_verification_service: Any = None,
         analytics: Any = None,
@@ -36,40 +41,7 @@ class TestExternalApiOrchestratorAllure:
             pending_verification_service.mark_for_verification = AsyncMock()
             pending_verification_service.remove_from_pending = AsyncMock()
 
-        # Create full configuration with year_retrieval section
-        test_config = config or {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 25,
-                    "musicbrainz_requests_per_second": 1,
-                    "itunes_requests_per_second": 10,
-                },
-                "processing": {
-                    "cache_ttl_days": 30,
-                },
-                "logic": {
-                    "min_valid_year": 1900,
-                    "definitive_score_threshold": 85,
-                    "definitive_score_diff": 15,
-                },
-                "scoring": {
-                    "base_score": 50,
-                    "exact_match_bonus": 30,
-                },
-            },
-            "external_apis": {
-                "timeout": 30,
-                "max_concurrent_requests": 10,
-                "musicbrainz": {"enabled": True},
-                "discogs": {"enabled": True},
-                "applemusic": {"enabled": False},
-            },
-        }
+        test_config = config or create_test_app_config()
 
         console_logger = MockLogger()
         error_logger = MockLogger()
@@ -86,38 +58,19 @@ class TestExternalApiOrchestratorAllure:
 
     def test_orchestrator_initialization_comprehensive(self) -> None:
         """Test comprehensive API orchestrator initialization."""
-        config = {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {},
-                "processing": {},
-                "logic": {},
-                "scoring": {},
-            },
-            "external_apis": {
-                "timeout": 45,
-                "max_concurrent_requests": 15,
-                "musicbrainz": {"enabled": True, "rate_limit": 1.0, "base_url": "https://musicbrainz.org"},
-                "discogs": {"enabled": True, "rate_limit": 0.5, "token": "test_token"},
-                "applemusic": {"enabled": False},
-            },
-        }
+        test_config = create_test_app_config()
         mock_cache = MagicMock()
         mock_analytics = MockAnalytics()
 
         orchestrator = ExternalApiOrchestrator(
-            config=config,
+            config=test_config,
             console_logger=MockLogger(),  # type: ignore[arg-type]
             error_logger=MockLogger(),  # type: ignore[arg-type]
             cache_service=mock_cache,
             analytics=mock_analytics,  # type: ignore[arg-type]
             pending_verification_service=MagicMock(),
         )
-        assert orchestrator.config == config
+        assert orchestrator.config == test_config
         assert orchestrator.cache_service is mock_cache
         assert orchestrator.analytics is mock_analytics
 
@@ -142,37 +95,14 @@ class TestExternalApiOrchestratorAllure:
 
     def test_api_provider_configuration(self) -> None:
         """Test API provider configuration and enablement."""
-        config = {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "",  # Empty token effectively disables it
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {},
-                "processing": {},
-                "logic": {},
-                "scoring": {},
-            },
-            "external_apis": {
-                "musicbrainz": {"enabled": True},
-                "discogs": {"enabled": False},  # Disabled
-                "applemusic": {"enabled": False},
-            },
-        }
-        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
-        # Verify configuration is stored
-        assert orchestrator.config["external_apis"]["musicbrainz"]["enabled"] is True
-        assert orchestrator.config["external_apis"]["discogs"]["enabled"] is False
-        assert orchestrator.config["external_apis"]["applemusic"]["enabled"] is False
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        # Verify orchestrator was created and has config
+        assert orchestrator.config is not None
 
-        enabled_providers = [
-            provider
-            for provider, settings in orchestrator.config["external_apis"].items()
-            if isinstance(settings, dict) and settings.get("enabled", False)
-        ]
-
-        assert len(enabled_providers) == 1  # MusicBrainz only
+        # The orchestrator extracts configuration from AppConfig during init
+        # Verify the extracted attributes
+        assert hasattr(orchestrator, "discogs_token")
+        assert hasattr(orchestrator, "preferred_api")
 
     @pytest.mark.asyncio
     async def test_cache_integration_comprehensive(self) -> None:
@@ -225,96 +155,84 @@ class TestExternalApiOrchestratorAllure:
         assert hasattr(orchestrator.analytics, "execute_async_wrapped_call")
         assert hasattr(orchestrator.analytics, "batch_mode")
 
-    @pytest.mark.parametrize(
-        ("config_key", "config_value"),
-        [
-            ("timeout", 30),
-            ("max_concurrent_requests", 10),
-        ],
-    )
-    def test_configuration_validation(self, config_key: str, config_value: Any) -> None:
-        """Test configuration values are stored correctly."""
-        config = {
-            "year_retrieval": {
+    def test_configuration_extraction(self) -> None:
+        """Test configuration values are extracted correctly from AppConfig."""
+        test_config = create_test_app_config(
+            year_retrieval={
+                "enabled": False,
+                "preferred_api": "musicbrainz",
                 "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
+                    "discogs_token": "test-token",
+                    "musicbrainz_app_name": "TestApp/1.0",
                     "contact_email": "test@example.com",
                 },
-                "rate_limits": {},
-                "processing": {},
-                "logic": {},
-                "scoring": {},
+                "rate_limits": {
+                    "discogs_requests_per_minute": 25,
+                    "musicbrainz_requests_per_second": 1,
+                    "concurrent_api_calls": 3,
+                },
+                "processing": {
+                    "batch_size": 10,
+                    "delay_between_batches": 60,
+                    "adaptive_delay": False,
+                    "cache_ttl_days": 30,
+                    "pending_verification_interval_days": 30,
+                },
+                "logic": {
+                    "min_valid_year": 1900,
+                    "definitive_score_threshold": 85,
+                    "definitive_score_diff": 15,
+                    "preferred_countries": [],
+                    "major_market_codes": [],
+                },
+                "reissue_detection": {"reissue_keywords": []},
+                "scoring": {
+                    "base_score": 0,
+                    "artist_exact_match_bonus": 0,
+                    "album_exact_match_bonus": 0,
+                    "perfect_match_bonus": 0,
+                    "album_variation_bonus": 0,
+                    "album_substring_penalty": 0,
+                    "album_unrelated_penalty": 0,
+                    "mb_release_group_match_bonus": 0,
+                    "type_album_bonus": 0,
+                    "type_ep_single_penalty": 0,
+                    "type_compilation_live_penalty": 0,
+                    "status_official_bonus": 0,
+                    "status_bootleg_penalty": 0,
+                    "status_promo_penalty": 0,
+                    "reissue_penalty": 0,
+                    "year_diff_penalty_scale": 0,
+                    "year_diff_max_penalty": 0,
+                    "year_before_start_penalty": 0,
+                    "year_after_end_penalty": 0,
+                    "year_near_start_bonus": 0,
+                    "country_artist_match_bonus": 0,
+                    "country_major_market_bonus": 0,
+                    "source_mb_bonus": 0,
+                    "source_discogs_bonus": 0,
+                },
             },
-            "external_apis": {
-                config_key: config_value,
-                "musicbrainz": {"enabled": True},
-                "discogs": {"enabled": True},
-            },
-        }
-        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
-        assert orchestrator.config["external_apis"][config_key] == config_value
+            max_retries=3,
+            retry_delay_seconds=1.0,
+        )
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=test_config)
+        # Verify configuration was extracted from the AppConfig model
+        assert orchestrator.min_valid_year == 1900
+        assert orchestrator.cache_ttl_days == 30
 
     def test_http_session_management(self) -> None:
         """Test HTTP session management capabilities."""
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
         # The orchestrator should be designed to handle HTTP sessions
         assert hasattr(orchestrator, "config")
-
-        # Configuration should support session-related settings
-        config = orchestrator.config.get("external_apis", {})
-        assert isinstance(config, dict)
-
-        # Should support timeout configuration
-        _timeout_configured = "timeout" in config or any(
-            "timeout" in provider_config for provider_config in config.values() if isinstance(provider_config, dict)
-        )
+        assert hasattr(orchestrator, "session")
 
     def test_rate_limiting_configuration(self) -> None:
         """Test rate limiting configuration and setup."""
-        config = {
-            "year_retrieval": {
-                "api_auth": {
-                    "discogs_token": "test_token",
-                    "musicbrainz_app_name": "TestApp",
-                    "contact_email": "test@example.com",
-                },
-                "rate_limits": {
-                    "discogs_requests_per_minute": 30,  # 30 requests per minute
-                    "musicbrainz_requests_per_second": 1,  # 1 request per second
-                    "itunes_requests_per_second": 10,  # 10 requests per second
-                },
-                "processing": {},
-                "logic": {},
-                "scoring": {},
-            },
-            "external_apis": {
-                "musicbrainz": {
-                    "enabled": True,
-                    "rate_limit": 1.0,  # 1 request per second
-                },
-                "discogs": {
-                    "enabled": True,
-                    "rate_limit": 0.5,  # 2 seconds between requests
-                },
-                "itunes": {
-                    "enabled": True,
-                    "rate_limit": 10.0,  # 10 requests per second
-                },
-            },
-        }
-        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=config)
-        api_config = orchestrator.config["external_apis"]
-
-        # Verify rate limits are configured
-        assert api_config["musicbrainz"]["rate_limit"] == 1.0
-        assert api_config["discogs"]["rate_limit"] == 0.5
-        assert api_config["itunes"]["rate_limit"] == 10.0
-
-        rate_limits = {
-            provider: settings.get("rate_limit", 0)
-            for provider, settings in api_config.items()
-            if isinstance(settings, dict) and "rate_limit" in settings
-        }
-
-        assert len(rate_limits) == 3
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        # Verify rate limiters were initialized from config
+        assert hasattr(orchestrator, "rate_limiters")
+        assert isinstance(orchestrator.rate_limiters, dict)
+        assert "musicbrainz" in orchestrator.rate_limiters
+        assert "discogs" in orchestrator.rate_limiters
