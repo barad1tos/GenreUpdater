@@ -353,6 +353,30 @@ class ExternalApiServiceProtocol(Protocol):
     ) -> tuple[str | None, bool, int, dict]: ...
 ```
 
+### Configuration Type Safety
+
+All YAML config sections have corresponding Pydantic v2 models in
+`core/models/track_models.py`. The root model `AppConfig` validates
+every config section at load time, catching typos and type mismatches
+before they reach runtime:
+
+| Config Section              | Pydantic Model                |
+|-----------------------------|-------------------------------|
+| `processing`                | `ProcessingConfig`            |
+| `logic`                     | `LogicConfig`                 |
+| `scoring`                   | `ScoringConfig`               |
+| `caching`                   | `CachingConfig`               |
+| `caching.library_snapshot`  | `LibrarySnapshotConfig`       |
+| `year_retrieval`            | `YearRetrievalConfig`         |
+| `analytics`                 | `AnalyticsConfig`             |
+| `database_verification`     | `DatabaseVerificationConfig`  |
+| `development`               | `DevelopmentConfig`           |
+| `applescript_timeouts`      | `AppleScriptTimeoutsConfig`   |
+| `apple_script_rate_limit`   | `AppleScriptRateLimitConfig`  |
+| `album_type_detection`      | `AlbumTypeDetectionConfig`    |
+| `batch_processing`          | `BatchProcessingConfig`       |
+| `experimental`              | `ExperimentalConfig`          |
+
 ### Async-First
 
 All I/O operations use `async/await`:
@@ -397,3 +421,7 @@ tests/
 ├── integration/   # Service tests with real cache
 └── e2e/          # Full tests with Music.app
 ```
+
+Tests run with `pytest-xdist` (parallel workers). Module-level singletons
+like `album_type._configured_patterns` require `reset_patterns()` autouse
+fixtures to prevent cross-worker state pollution.

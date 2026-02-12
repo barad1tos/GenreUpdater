@@ -230,7 +230,8 @@ class TestInitializeClosesSessionOnFailure:
 class TestSecureConfigGuards:
     """Tests for RuntimeError guards when secure_config is None."""
 
-    def _create_orchestrator(self) -> ExternalApiOrchestrator:
+    @staticmethod
+    def _create_orchestrator() -> ExternalApiOrchestrator:
         """Create orchestrator without secure_config."""
         config = create_test_config()
         cache_service = create_mock_cache_service()

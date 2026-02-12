@@ -75,6 +75,71 @@ class PythonSettings(BaseModel):
     prevent_bytecode: bool
 
 
+class AppleScriptTimeoutsConfig(BaseModel):
+    """Per-operation AppleScript timeout overrides."""
+
+    default: int = Field(default=3600, ge=1)
+    full_library_fetch: int = Field(default=3600, ge=1)
+    single_artist_fetch: int = Field(default=600, ge=1)
+    batch_update: int = Field(default=1800, ge=1)
+    ids_batch_fetch: int = Field(default=120, ge=1)
+
+
+class AppleScriptRateLimitConfig(BaseModel):
+    """AppleScript operation rate limiter settings."""
+
+    enabled: bool = False
+    requests_per_window: int = Field(default=10, ge=1)
+    window_size_seconds: float = Field(default=1.0, gt=0)
+
+
+class ExperimentalConfig(BaseModel):
+    """Experimental feature toggles."""
+
+    batch_updates_enabled: bool = False
+    max_batch_size: int = Field(default=5, ge=1)
+
+
+class BatchProcessingConfig(BaseModel):
+    """Batch processing size configuration."""
+
+    ids_batch_size: int = Field(default=200, ge=1)
+    batch_size: int = Field(default=1000, ge=1)
+
+
+class ArtistRenamerConfig(BaseModel):
+    """Artist renamer configuration."""
+
+    config_path: str = "artist-renames.yaml"
+
+
+class PendingVerificationConfig(BaseModel):
+    """Pending verification auto-run settings."""
+
+    auto_verify_days: int = Field(default=14, ge=0)
+
+
+class AlbumTypeDetectionConfig(BaseModel):
+    """Album type detection patterns for year fallback logic."""
+
+    special_patterns: list[str] = Field(default_factory=list)
+    compilation_patterns: list[str] = Field(default_factory=list)
+    reissue_patterns: list[str] = Field(default_factory=list)
+    soundtrack_patterns: list[str] = Field(default_factory=list)
+    various_artists_names: list[str] = Field(default_factory=list)
+
+
+class LibrarySnapshotConfig(BaseModel):
+    """Library snapshot persistence settings."""
+
+    enabled: bool = True
+    delta_enabled: bool = True
+    cache_file: str = "cache/library_snapshot.json"
+    max_age_hours: int = Field(default=24, ge=1)
+    compress: bool = True
+    compress_level: int = Field(default=6, ge=1, le=9)
+
+
 class CleaningConfig(BaseModel):
     """Cleaning configuration."""
 
@@ -172,6 +237,7 @@ class DurationThresholds(BaseModel):
 class AnalyticsConfig(BaseModel):
     """Analytics configuration."""
 
+    enabled: bool = True
     duration_thresholds: DurationThresholds
     max_events: int = Field(ge=0)
     compact_time: bool
@@ -201,21 +267,28 @@ class RateLimitsConfig(BaseModel):
 
 
 class ProcessingConfig(BaseModel):
-    """Processing configuration."""
+    """Processing configuration for year retrieval."""
 
     batch_size: int = Field(ge=1)
     delay_between_batches: float = Field(ge=0)
     adaptive_delay: bool
     cache_ttl_days: int = Field(ge=0)
     pending_verification_interval_days: int = Field(ge=0)
+    skip_prerelease: bool = True
+    future_year_threshold: int = Field(default=1, ge=0)
+    prerelease_recheck_days: int = Field(default=30, ge=0)
+    prerelease_handling: str = "process_editable"
 
 
 class LogicConfig(BaseModel):
-    """Logic configuration."""
+    """Year retrieval logic configuration."""
 
     min_valid_year: int = Field(ge=1000)
+    absurd_year_threshold: int = Field(default=1970, ge=1000)
+    suspicion_threshold_years: int = Field(default=10, ge=0)
     definitive_score_threshold: float = Field(ge=0, le=100)
     definitive_score_diff: float = Field(ge=0)
+    min_confidence_for_new_year: float = Field(default=30, ge=0, le=100)
     preferred_countries: list[str]
     major_market_codes: list[str]
 
@@ -253,6 +326,25 @@ class ScoringConfig(BaseModel):
     country_major_market_bonus: float
     source_mb_bonus: float
     source_discogs_bonus: float
+    source_itunes_bonus: float = 0
+    future_year_penalty: float = Field(default=0, le=0)
+    artist_cross_script_penalty: float = Field(default=0, le=0)
+    soundtrack_compensation_bonus: float = 0
+
+
+class FallbackConfig(BaseModel):
+    """Year retrieval fallback settings."""
+
+    enabled: bool = True
+    year_difference_threshold: int = Field(default=5, ge=0)
+    trust_api_score_threshold: float = Field(default=70, ge=0, le=100)
+
+
+class ScriptApiPriority(BaseModel):
+    """API priority configuration for a specific script type."""
+
+    primary: list[str]
+    fallback: list[str] = Field(default_factory=list)
 
 
 class YearRetrievalConfig(BaseModel):
@@ -266,13 +358,20 @@ class YearRetrievalConfig(BaseModel):
     logic: LogicConfig
     reissue_detection: ReissueDetectionConfig
     scoring: ScoringConfig
+    script_api_priorities: dict[str, ScriptApiPriority] = Field(default_factory=dict)
+    fallback: FallbackConfig = Field(default_factory=FallbackConfig)
 
 
 class CachingConfig(BaseModel):
     """Caching configuration."""
 
+    default_ttl_seconds: int = Field(default=900, ge=0)
+    album_cache_sync_interval: int = Field(default=300, ge=0)
+    cleanup_error_retry_delay: int = Field(default=60, ge=0)
+    cleanup_interval_seconds: int = Field(default=300, ge=0)
     negative_result_ttl: float = Field(default=2592000, ge=0)  # 30 days
     api_result_cache_path: str = "cache/api_results.json"
+    library_snapshot: LibrarySnapshotConfig = Field(default_factory=LibrarySnapshotConfig)
 
 
 class ReportingConfig(BaseModel):
@@ -297,6 +396,12 @@ class AppConfig(BaseModel):
     # Execution and performance
     apple_script_concurrency: int = Field(ge=1)
     applescript_timeout_seconds: int = Field(ge=1)
+    applescript_timeouts: AppleScriptTimeoutsConfig = Field(
+        default_factory=AppleScriptTimeoutsConfig,
+    )
+    apple_script_rate_limit: AppleScriptRateLimitConfig = Field(
+        default_factory=AppleScriptRateLimitConfig,
+    )
     max_retries: int = Field(ge=0)
     retry_delay_seconds: float = Field(ge=0)
     incremental_interval_minutes: int = Field(ge=1)
@@ -307,6 +412,17 @@ class AppConfig(BaseModel):
     exceptions: ExceptionsConfig
     database_verification: DatabaseVerificationConfig
     development: DevelopmentConfig
+    artist_renamer: ArtistRenamerConfig = Field(default_factory=ArtistRenamerConfig)
+    pending_verification: PendingVerificationConfig = Field(
+        default_factory=PendingVerificationConfig,
+    )
+    album_type_detection: AlbumTypeDetectionConfig = Field(
+        default_factory=AlbumTypeDetectionConfig,
+    )
+    batch_processing: BatchProcessingConfig = Field(
+        default_factory=BatchProcessingConfig,
+    )
+    experimental: ExperimentalConfig = Field(default_factory=ExperimentalConfig)
 
     # Logging and analytics
     logging: LoggingConfig
@@ -318,11 +434,15 @@ class AppConfig(BaseModel):
     # Year retrieval
     year_retrieval: YearRetrievalConfig
 
+    # Cache paths
+    album_years_cache_file: str = "cache/album_years.csv"
+
     # Optional sections
     caching: CachingConfig = Field(default_factory=CachingConfig)
     reporting: ReportingConfig = Field(default_factory=ReportingConfig)
 
-    # Validation is handled by individual field validators in nested models
+    # Legacy / compat — top-level test_artists (prefer development.test_artists)
+    test_artists: list[str] = Field(default_factory=list)
 
 
 # API Response Models

@@ -78,13 +78,12 @@ class GenericCacheService:
         """
         fallback = self.cache_config.get_ttl(CacheContentType.GENERIC)
 
-        candidate_values: list[Any] = [
-            self.config.get("cache_ttl_seconds"),
-            self.config.get("cache_ttl"),
-        ]
         caching_section = self.config.get("caching")
+        candidate_values: list[Any] = []
         if isinstance(caching_section, dict):
             candidate_values.append(caching_section.get("default_ttl_seconds"))
+        # Legacy top-level key — lower priority than caching section
+        candidate_values.append(self.config.get("cache_ttl_seconds"))
 
         for value in candidate_values:
             if value in (None, ""):
@@ -108,7 +107,8 @@ class GenericCacheService:
         The task handles cancellation gracefully and logs any errors during cleanup.
 
         """
-        cleanup_interval = self.config.get("cleanup_interval", 300)  # 5 minutes default
+        caching_section = self.config.get("caching", {})
+        cleanup_interval: int = caching_section.get("cleanup_interval_seconds", 300) if isinstance(caching_section, dict) else 300
 
         if self._cleanup_task and not self._cleanup_task.done():
             self.logger.debug("Cleanup task already running; skipping restart")
