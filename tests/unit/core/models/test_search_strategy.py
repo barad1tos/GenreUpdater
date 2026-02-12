@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from core.models.search_strategy import (
@@ -9,6 +11,10 @@ from core.models.search_strategy import (
     SearchStrategyInfo,
     detect_search_strategy,
 )
+from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestSearchStrategyEnum:
@@ -51,56 +57,57 @@ class TestDetectSearchStrategy:
     """Tests for detect_search_strategy function."""
 
     @pytest.fixture
-    def config(self) -> dict:
+    def config(self) -> AppConfig:
         """Provide test config with patterns."""
-        return {
-            "album_type_detection": {
+        return create_test_app_config(
+            album_type_detection={
                 "soundtrack_patterns": ["soundtrack", "original score", "OST"],
                 "various_artists_names": ["Various Artists", "Various", "VA"],
             }
-        }
+        )
 
-    def test_normal_album_returns_normal(self, config: dict) -> None:
+    def test_normal_album_returns_normal(self, config: AppConfig) -> None:
         """Regular albums should return NORMAL strategy."""
         info = detect_search_strategy("Metallica", "Master of Puppets", config)
         assert info.strategy == SearchStrategy.NORMAL
         assert info.detected_pattern is None
 
-    def test_soundtrack_detected(self, config: dict) -> None:
+    def test_soundtrack_detected(self, config: AppConfig) -> None:
         """Soundtrack albums should be detected."""
         info = detect_search_strategy("Hans Zimmer", "Inception (Original Soundtrack)", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
 
-    def test_ost_pattern_detected(self, config: dict) -> None:
+    def test_ost_pattern_detected(self, config: AppConfig) -> None:
         """OST pattern should be detected."""
         info = detect_search_strategy("Various", "Interstellar OST", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
 
-    def test_various_artists_detected(self, config: dict) -> None:
+    def test_various_artists_detected(self, config: AppConfig) -> None:
         """Various Artists should be detected."""
         info = detect_search_strategy("Various Artists", "Metal Hammer Presents", config)
         assert info.strategy == SearchStrategy.VARIOUS_ARTISTS
         assert info.modified_artist is None  # Search without artist
 
-    def test_brackets_detected(self, config: dict) -> None:
+    def test_brackets_detected(self, config: AppConfig) -> None:
         """Special bracket content should trigger strip strategy."""
         info = detect_search_strategy("Ghost", "Prequelle [MESSAGE FROM THE CLERGY]", config)
         assert info.strategy == SearchStrategy.STRIP_BRACKETS
         assert info.modified_album == "Prequelle"
 
-    def test_normal_brackets_not_stripped(self, config: dict) -> None:
+    def test_normal_brackets_not_stripped(self, config: AppConfig) -> None:
         """Normal brackets like (Deluxe) should not trigger strip."""
         info = detect_search_strategy("Artist", "Album (Deluxe Edition)", config)
         assert info.strategy == SearchStrategy.NORMAL
 
-    def test_empty_album_returns_normal(self, config: dict) -> None:
+    def test_empty_album_returns_normal(self, config: AppConfig) -> None:
         """Empty album should return NORMAL."""
         info = detect_search_strategy("Artist", "", config)
         assert info.strategy == SearchStrategy.NORMAL
 
-    def test_empty_config_uses_defaults(self) -> None:
-        """Empty config should use default patterns."""
-        info = detect_search_strategy("Hans Zimmer", "Inception (Original Soundtrack)", {})
+    def test_default_config_uses_defaults(self) -> None:
+        """Default config should use default patterns."""
+        config = create_test_app_config()
+        info = detect_search_strategy("Hans Zimmer", "Inception (Original Soundtrack)", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
 
 
@@ -108,35 +115,31 @@ class TestEdgeCases:
     """Tests for edge cases and Unicode handling."""
 
     @pytest.fixture
-    def config(self) -> dict:
-        """
-        The fixture provides a configuration dictionary for album type detection.
-        Returns:
-            dict: Configuration with custom soundtrack patterns and various artists names.
-        """
-        return {
-            "album_type_detection": {
+    def config(self) -> AppConfig:
+        """Provide test config with custom soundtrack and various artists patterns."""
+        return create_test_app_config(
+            album_type_detection={
                 "soundtrack_patterns": ["soundtrack", "OST"],
                 "various_artists_names": ["Various Artists", "Різні виконавці"],
             }
-        }
+        )
 
-    def test_unicode_various_artists(self, config: dict) -> None:
+    def test_unicode_various_artists(self, config: AppConfig) -> None:
         """Ukrainian Various Artists should be detected."""
         info = detect_search_strategy("Різні виконавці", "Ukrainian Hits", config)
         assert info.strategy == SearchStrategy.VARIOUS_ARTISTS
 
-    def test_case_insensitive_patterns(self, config: dict) -> None:
+    def test_case_insensitive_patterns(self, config: AppConfig) -> None:
         """Pattern matching should be case insensitive."""
         info = detect_search_strategy("Artist", "Album SOUNDTRACK", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
 
-    def test_whitespace_handling(self, config: dict) -> None:
+    def test_whitespace_handling(self, config: AppConfig) -> None:
         """Whitespace should be handled gracefully."""
         info = detect_search_strategy("  Various Artists  ", "Album", config)
         assert info.strategy == SearchStrategy.VARIOUS_ARTISTS
 
-    def test_detection_priority(self, config: dict) -> None:
+    def test_detection_priority(self, config: AppConfig) -> None:
         """Soundtrack takes priority over Various Artists."""
         info = detect_search_strategy("Various Artists", "Movie Soundtrack", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK

@@ -20,6 +20,7 @@ from metrics.html_reports import (
     group_events_by_duration_and_success,
     save_html_report,
 )
+from tests.factories import create_test_app_config
 
 
 def _create_simple_event(
@@ -410,7 +411,7 @@ class TestSaveHtmlReport:
         sample_events: list[dict[str, Any]],
     ) -> None:
         """Should create HTML report with events."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
         call_counts = {"process_track": 1, "fetch_data": 1, "save_result": 1}
         success_counts = {"process_track": 1, "fetch_data": 1, "save_result": 0}
         decorator_overhead = {"process_track": 0.01}
@@ -428,7 +429,7 @@ class TestSaveHtmlReport:
 
     def test_creates_empty_template_when_no_data(self, tmp_path: Path) -> None:
         """Should create empty template when no events or counts."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
 
         save_html_report(
             events=[],
@@ -449,7 +450,7 @@ class TestSaveHtmlReport:
         sample_events: list[dict[str, Any]],
     ) -> None:
         """Should use full report filename in force mode."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
 
         save_html_report(
             events=sample_events,
@@ -468,7 +469,7 @@ class TestSaveHtmlReport:
         tmp_path: Path,
     ) -> None:
         """Should group short successful calls when enabled."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
         events = [
             {
                 "Function": "fast_func",
@@ -498,7 +499,7 @@ class TestSaveHtmlReport:
         sample_events: list[dict[str, Any]],
     ) -> None:
         """Should use default loggers when not provided."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
 
         save_html_report(
             events=sample_events,
@@ -515,7 +516,7 @@ class TestSaveHtmlReport:
         error_logger: logging.Logger,
     ) -> None:
         """Should handle file save errors."""
-        config: dict[str, Any] = {"logs_base_dir": str(tmp_path)}
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
 
         with patch("metrics.html_reports.Path.open", side_effect=OSError("Write error")):
             save_html_report(

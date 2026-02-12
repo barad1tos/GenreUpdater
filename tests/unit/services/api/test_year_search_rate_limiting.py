@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from services.api.year_search_coordinator import YearSearchCoordinator
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 def _create_mock_client() -> MagicMock:
@@ -26,13 +30,13 @@ def _create_mock_client() -> MagicMock:
 
 def _create_coordinator(
     max_concurrent_api_calls: int = 50,
-    config: dict[str, Any] | None = None,
+    config: AppConfig | None = None,
 ) -> YearSearchCoordinator:
     """Create YearSearchCoordinator with mock dependencies."""
     return YearSearchCoordinator(
         console_logger=logging.getLogger("test.console"),
         error_logger=logging.getLogger("test.error"),
-        config=config or {},
+        config=config or create_test_app_config(),
         preferred_api="musicbrainz",
         musicbrainz_client=_create_mock_client(),
         discogs_client=_create_mock_client(),
@@ -124,7 +128,7 @@ class TestYearSearchRateLimiting:
         coordinator = YearSearchCoordinator(
             console_logger=logging.getLogger("test.console"),
             error_logger=logging.getLogger("test.error"),
-            config={},
+            config=create_test_app_config(),
             preferred_api="musicbrainz",
             musicbrainz_client=_create_mock_client(),
             discogs_client=_create_mock_client(),

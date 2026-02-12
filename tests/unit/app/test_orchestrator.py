@@ -21,7 +21,6 @@ class TestOrchestratorAllure:
     def create_mock_deps() -> Mock:
         """Create a mock DependencyContainer."""
         deps = Mock()
-        deps.config = {"development": {"test_artists": ["Test Artist 1", "Test Artist 2"]}}
         deps.app_config = create_test_app_config(
             development={"test_artists": ["Test Artist 1", "Test Artist 2"]},
         )
@@ -393,7 +392,6 @@ class TestMaybeAutoVerifyPending:
     def create_mock_deps() -> Mock:
         """Create a mock DependencyContainer."""
         deps = Mock()
-        deps.config = {"development": {"test_artists": ["Test Artist 1", "Test Artist 2"]}}
         deps.app_config = create_test_app_config(
             development={"test_artists": ["Test Artist 1", "Test Artist 2"]},
         )

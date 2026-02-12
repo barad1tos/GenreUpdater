@@ -176,6 +176,7 @@ async def test_main_pipeline_reuses_track_snapshot(
 
     app_config = create_test_app_config(
         logs_base_dir=str(tmp_dir),
+        batch_processing={"batch_size": 10},
         logging={
             "max_runs": 3,
             "main_log_file": "test.log",

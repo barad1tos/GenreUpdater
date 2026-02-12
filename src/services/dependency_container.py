@@ -100,7 +100,6 @@ class DependencyContainer:
         # Initialize service references
         self._config_path = config_path
         self._app_config: AppConfig | None = None
-        self._config: dict[str, Any] = {}
         self._analytics: Analytics | None = None
         self._ap_client: AppleScriptClientProtocol | None = None
         self._cache_service: CacheOrchestrator | None = None
@@ -115,11 +114,6 @@ class DependencyContainer:
     def dry_run(self) -> bool:
         """Get the dry run status."""
         return self._dry_run
-
-    @property
-    def config(self) -> dict[str, Any]:
-        """Get the application configuration as a dict (legacy access)."""
-        return self._config
 
     @property
     def app_config(self) -> AppConfig:
@@ -307,8 +301,8 @@ class DependencyContainer:
         self._console_logger.info("Starting async initialization of services...")
 
         # Load configuration first
-        if not self._config:
-            self._config = self._load_config()
+        if self._app_config is None:
+            self._load_config()
 
         # Configure album type detection patterns from config
         configure_album_patterns(self.app_config)
@@ -544,15 +538,10 @@ class DependencyContainer:
         run_type = "DRY RUN - " if is_dry_run else ""
         self._console_logger.info("%sAppleScripts: %s", run_type, short_path)
 
-    def _load_config(self) -> dict[str, Any]:
+    def _load_config(self) -> None:
         """Load and validate application configuration.
 
-        Stores the validated ``AppConfig`` in ``_app_config`` and returns a
-        ``dict`` view via ``model_dump()`` for backward compatibility with
-        services that still expect a raw dictionary.
-
-        Returns:
-            Dictionary representation of the validated configuration.
+        Stores the validated ``AppConfig`` in ``_app_config``.
 
         Raises:
             FileNotFoundError: If the config file doesn't exist.
@@ -571,7 +560,6 @@ class DependencyContainer:
                 api_auth_dict = app_config.year_retrieval.api_auth.model_dump()
                 validate_api_auth(api_auth_dict)
 
-            return app_config.model_dump()
         except FileNotFoundError as e:
             short_path = Path(self._config_path).name
             self._error_logger.exception("Configuration file not found: %s", short_path)

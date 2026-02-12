@@ -18,7 +18,7 @@ class TestConfigInit:
         """Config should use provided path directly."""
         config = Config(config_path="/path/to/config.yaml")
         assert config.config_path == "/path/to/config.yaml"
-        assert config._loaded is False
+        assert config._app_config is None
 
     def test_init_with_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Config should use CONFIG_PATH env var when no path provided."""
@@ -88,9 +88,7 @@ class TestConfigLoad:
             result = config.load()
 
         assert isinstance(result, AppConfig)
-        assert config._loaded is True
-        # Verify internal dict is populated for accessor methods
-        assert isinstance(config._config, dict)
+        assert config._app_config is result
 
     def test_load_caches_result(self) -> None:
         """Config should only load file once."""
@@ -104,8 +102,8 @@ class TestConfigLoad:
         assert data1 is data2
         mock_load.assert_called_once()
 
-    def test_load_stores_app_config_and_dict(self) -> None:
-        """load() should store both _app_config and _config dict."""
+    def test_load_stores_app_config(self) -> None:
+        """load() should store AppConfig in _app_config."""
         from core.models.track_models import AppConfig
 
         mock_app_config = _make_test_app_config()
@@ -114,31 +112,8 @@ class TestConfigLoad:
             config = Config("/fake/config.yaml")
             result = config.load()
 
-        # _app_config holds the Pydantic model
         assert config._app_config is result
         assert isinstance(config._app_config, AppConfig)
-        # _config holds the dict view from model_dump()
-        assert config._config == result.model_dump()
-        assert config._config["apple_script_concurrency"] == 2
-
-    def test_load_guard_clause_unreachable(self) -> None:
-        """Defensive guard after load should raise if _app_config is somehow None.
-
-        This tests the branch at lines 95-97 which is a defensive check
-        that should never be reached in normal operation.
-        """
-        mock_app_config = _make_test_app_config()
-
-        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
-            config = Config("/fake/config.yaml")
-            config.load()
-
-        # Force _app_config to None to simulate corrupted state
-        config._app_config = None
-        config._loaded = True
-
-        with pytest.raises(RuntimeError, match="Configuration not loaded"):
-            config.load()
 
     def test_load_raises_on_invalid_path(self) -> None:
         """Config should raise RuntimeError for load failures."""
@@ -147,147 +122,6 @@ class TestConfigLoad:
 
             with pytest.raises(RuntimeError, match="Failed to load configuration"):
                 config.load()
-
-
-class TestConfigGet:
-    """Tests for Config.get() method with dict-based accessor."""
-
-    @pytest.fixture
-    def loaded_config(self) -> Config:
-        """Create a loaded config with custom dict data for accessor testing.
-
-        Bypasses load() and sets ``_config`` directly to test accessor methods
-        with arbitrary keys that don't match the AppConfig schema.
-        """
-        config = Config("/fake/config.yaml")
-        config._config = {
-            "database": {"host": "localhost", "port": 5432, "nested": {"value": "deep"}},
-            "features": {"enabled": True},
-            "count": 42,
-        }
-        config._loaded = True
-        return config
-
-    def test_get_simple_key(self, loaded_config: Config) -> None:
-        """Get should retrieve simple keys."""
-        assert loaded_config.get("count") == 42
-
-    def test_get_nested_key_with_dot_notation(self, loaded_config: Config) -> None:
-        """Get should support dot notation for nested keys."""
-        assert loaded_config.get("database.host") == "localhost"
-        assert loaded_config.get("database.port") == 5432
-        assert loaded_config.get("database.nested.value") == "deep"
-
-    def test_get_returns_default_for_missing_key(self, loaded_config: Config) -> None:
-        """Get should return default for missing keys."""
-        assert loaded_config.get("nonexistent") is None
-        assert loaded_config.get("nonexistent", "default") == "default"
-        assert loaded_config.get("database.missing", 123) == 123
-
-    def test_get_auto_loads_config(self) -> None:
-        """Get should auto-load config if not loaded."""
-        mock_app_config = _make_test_app_config()
-
-        with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
-            config = Config("/fake/config.yaml")
-            assert config._loaded is False
-
-            # Access a key that exists in AppConfig model_dump()
-            value = config.get("apple_script_concurrency")
-            assert value == 2
-            assert config._loaded is True
-
-
-class TestConfigTypedGetters:
-    """Tests for typed getter methods."""
-
-    @pytest.fixture
-    def config_with_types(self) -> Config:
-        """Create config with various types for accessor testing.
-
-        Sets ``_config`` directly to test accessors with arbitrary keys.
-        """
-        config = Config("/fake/config.yaml")
-        config._config = {
-            "string_val": "hello",
-            "int_val": 42,
-            "float_val": 3.14,
-            "bool_true": True,
-            "bool_false": False,
-            "bool_yes": "yes",
-            "bool_no": "no",
-            "bool_on": "on",
-            "bool_off": "off",
-            "bool_one": "1",
-            "bool_zero": "0",
-            "list_val": ["item1", "item2"],
-            "dict_val": {"key1": "val1", "key2": "val2"},
-            "path_val": "~/documents/file.txt",
-            "path_with_env": "$HOME/config",
-        }
-        config._loaded = True
-        return config
-
-    def test_get_bool_true_values(self, config_with_types: Config) -> None:
-        """get_bool should handle various true representations."""
-        assert config_with_types.get_bool("bool_true") is True
-        assert config_with_types.get_bool("bool_yes") is True
-        assert config_with_types.get_bool("bool_on") is True
-        assert config_with_types.get_bool("bool_one") is True
-
-    def test_get_bool_false_values(self, config_with_types: Config) -> None:
-        """get_bool should handle various false representations."""
-        assert config_with_types.get_bool("bool_false") is False
-        assert config_with_types.get_bool("bool_no") is False
-        assert config_with_types.get_bool("bool_off") is False
-        assert config_with_types.get_bool("bool_zero") is False
-
-    def test_get_bool_default(self, config_with_types: Config) -> None:
-        """get_bool should return default for missing keys."""
-        assert config_with_types.get_bool("nonexistent") is False
-        assert config_with_types.get_bool("nonexistent", True) is True
-
-    def test_get_int(self, config_with_types: Config) -> None:
-        """get_int should parse integer values."""
-        assert config_with_types.get_int("int_val") == 42
-        assert config_with_types.get_int("nonexistent") == 0
-        assert config_with_types.get_int("nonexistent", 99) == 99
-        assert config_with_types.get_int("string_val", 10) == 10  # Invalid, returns default
-
-    def test_get_float(self, config_with_types: Config) -> None:
-        """get_float should parse float values."""
-        assert config_with_types.get_float("float_val") == pytest.approx(3.14)
-        assert config_with_types.get_float("int_val") == pytest.approx(42.0)
-        assert config_with_types.get_float("nonexistent") == pytest.approx(0.0)
-        assert config_with_types.get_float("nonexistent", 1.5) == pytest.approx(1.5)
-
-    def test_get_list(self, config_with_types: Config) -> None:
-        """get_list should return list values."""
-        result = config_with_types.get_list("list_val")
-        assert result == ["item1", "item2"]
-        assert config_with_types.get_list("nonexistent") == []
-        assert config_with_types.get_list("nonexistent", ["default"]) == ["default"]
-        assert config_with_types.get_list("string_val") == []  # Invalid type, returns default
-
-    def test_get_dict(self, config_with_types: Config) -> None:
-        """get_dict should return dict values."""
-        result = config_with_types.get_dict("dict_val")
-        assert result == {"key1": "val1", "key2": "val2"}
-        assert config_with_types.get_dict("nonexistent") == {}
-        assert config_with_types.get_dict("nonexistent", {"default": "val"}) == {"default": "val"}
-
-    def test_get_path(self, config_with_types: Config) -> None:
-        """get_path should return expanded Path objects."""
-        result = config_with_types.get_path("path_val")
-        assert isinstance(result, Path)
-        assert "~" not in str(result)  # Should be expanded
-        assert result.name == "file.txt"
-
-    def test_get_path_expands_env_vars(self, config_with_types: Config, monkeypatch: pytest.MonkeyPatch) -> None:
-        """get_path should expand environment variables."""
-        monkeypatch.setenv("HOME", "/home/testuser")
-        result = config_with_types.get_path("path_with_env")
-        assert "/home/testuser" in str(result)
 
 
 class TestConfigResolvedPath:
@@ -312,10 +146,10 @@ class TestConfigResolvedPath:
 
         with patch("app.app_config.load_yaml_config", return_value=mock_app_config):
             config = Config("/fake/config.yaml")
-            assert config._loaded is False
+            assert config._app_config is None
 
             _ = config.resolved_path
-            assert config._loaded is True
+            assert config._app_config is not None
 
     def test_resolve_config_path_fallback_on_error(self) -> None:
         """_resolve_config_path should fallback to absolute path on resolve errors."""

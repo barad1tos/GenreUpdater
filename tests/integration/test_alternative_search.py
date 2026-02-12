@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from services.api.year_search_coordinator import YearSearchCoordinator
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 
 class TestAlternativeSearchFallback:
@@ -17,15 +21,12 @@ class TestAlternativeSearchFallback:
     def mock_coordinator(self) -> YearSearchCoordinator:
         """Create coordinator with mocked dependencies."""
         mock_logger = MagicMock()
-        config = {
-            "year_retrieval": {
-                "preferred_api": "musicbrainz",
-            },
-            "album_type_detection": {
+        config: AppConfig = create_test_app_config(
+            album_type_detection={
                 "soundtrack_patterns": ["soundtrack", "OST"],
                 "various_artists_names": ["Various Artists"],
             },
-        }
+        )
 
         return YearSearchCoordinator(
             console_logger=mock_logger,
@@ -59,12 +60,11 @@ class TestAlternativeSearchFallback:
         """Fallback triggered for soundtrack albums."""
         call_count = 0
 
-        async def mock_search(*args: Any, **kwargs: Any) -> list[dict[str, str | int]]:
+        async def mock_search(*_args: Any, **_kwargs: Any) -> list[dict[str, str | int]]:
+            """Return empty on first call, results on later calls."""
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                return []
-            return [{"year": "2010", "score": 85}]
+            return [] if call_count == 1 else [{"year": "2010", "score": 85}]
 
         mock_coordinator._execute_standard_api_search = AsyncMock(side_effect=mock_search)
 
@@ -101,12 +101,11 @@ class TestAlternativeSearchFallback:
         """Fallback triggered for Various Artists albums."""
         call_count = 0
 
-        async def mock_search(*args: Any, **kwargs: Any) -> list[dict[str, str | int]]:
+        async def mock_search(*_args: Any, **_kwargs: Any) -> list[dict[str, str | int]]:
+            """Return empty on first call, results on later calls."""
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                return []
-            return [{"year": "2015", "score": 80}]
+            return [] if call_count == 1 else [{"year": "2015", "score": 80}]
 
         mock_coordinator._execute_standard_api_search = AsyncMock(side_effect=mock_search)
 
@@ -126,12 +125,11 @@ class TestAlternativeSearchFallback:
         """Fallback triggered for albums with unusual bracket content."""
         call_count = 0
 
-        async def mock_search(*args: Any, **kwargs: Any) -> list[dict[str, str | int]]:
+        async def mock_search(*_args: Any, **_kwargs: Any) -> list[dict[str, str | int]]:
+            """Return empty on first call, results on later calls."""
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                return []
-            return [{"year": "2018", "score": 90}]
+            return [] if call_count == 1 else [{"year": "2018", "score": 90}]
 
         mock_coordinator._execute_standard_api_search = AsyncMock(side_effect=mock_search)
 

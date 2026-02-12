@@ -13,9 +13,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Final
+from typing import TYPE_CHECKING, Final
 
-from core.models.track_models import AppConfig
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
 __all__ = [
     "SearchStrategy",
@@ -69,16 +70,11 @@ _DEFAULT_VARIOUS_ARTISTS: Final[frozenset[str]] = frozenset(
 _UNUSUAL_BRACKET_MIN_LENGTH: Final[int] = 10
 
 
-def _get_patterns(config: AppConfig | dict[str, Any]) -> tuple[frozenset[str], frozenset[str]]:
+def _get_patterns(config: AppConfig) -> tuple[frozenset[str], frozenset[str]]:
     """Get soundtrack and various artists patterns from config or defaults."""
-    if isinstance(config, AppConfig):
-        detection = config.album_type_detection
-        soundtrack_list = detection.soundtrack_patterns if detection.soundtrack_patterns is not None else list(_DEFAULT_SOUNDTRACK_PATTERNS)
-        various_list = detection.various_artists_names if detection.various_artists_names is not None else list(_DEFAULT_VARIOUS_ARTISTS)
-    else:
-        album_config = config.get("album_type_detection", {})
-        soundtrack_list = album_config.get("soundtrack_patterns", list(_DEFAULT_SOUNDTRACK_PATTERNS))
-        various_list = album_config.get("various_artists_names", list(_DEFAULT_VARIOUS_ARTISTS))
+    detection = config.album_type_detection
+    soundtrack_list = detection.soundtrack_patterns if detection.soundtrack_patterns is not None else list(_DEFAULT_SOUNDTRACK_PATTERNS)
+    various_list = detection.various_artists_names if detection.various_artists_names is not None else list(_DEFAULT_VARIOUS_ARTISTS)
     return frozenset(soundtrack_list), frozenset(various_list)
 
 
@@ -123,7 +119,7 @@ def _has_unusual_brackets(album: str) -> tuple[bool, str | None]:
 def detect_search_strategy(
     artist: str,
     album: str,
-    config: AppConfig | dict[str, Any],
+    config: AppConfig,
 ) -> SearchStrategyInfo:
     """Detect which search strategy to use for API queries.
 

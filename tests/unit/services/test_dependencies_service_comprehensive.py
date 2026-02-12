@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -27,29 +26,6 @@ class TestDependencyContainer:
             "error": Mock(spec=logging.Logger),
             "analytics": Mock(spec=logging.Logger),
             "db_verify": Mock(spec=logging.Logger),
-        }
-
-    @pytest.fixture
-    def mock_config(self) -> dict[str, Any]:
-        """Create mock configuration."""
-        return {
-            "paths": {
-                "apple_scripts_directory": "/path/to/scripts",
-                "music_library_xml": "/path/to/library.xml",
-                "cache_directory": "/path/to/cache",
-            },
-            "api": {
-                "musicbrainz": {"enabled": True},
-                "discogs": {"enabled": True},
-            },
-            "cache": {
-                "ttl": 3600,
-                "max_size": 1000,
-            },
-            "apple_script": {
-                "concurrency": 5,
-                "batch_size": 100,
-            },
         }
 
     @pytest.fixture
@@ -82,10 +58,10 @@ class TestDependencyContainer:
         assert container.dry_run is True
 
     @pytest.mark.asyncio
-    async def test_initialize_services(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    async def test_initialize_services(self, container: DependencyContainer) -> None:
         """Test service initialization."""
         with (
-            patch.object(container, "_load_config", return_value=mock_config),
+            patch.object(container, "_load_config", return_value=None),
             patch("services.dependency_container.configure_album_patterns") as mock_configure,
             patch("services.dependency_container.Analytics") as mock_analytics,
             patch("services.dependency_container.CacheOrchestrator") as mock_cache,
@@ -237,11 +213,11 @@ class TestDependencyContainer:
         with pytest.raises(RuntimeError, match="Init failed"):
             await init_method(service, "Failing Service")
 
-    def test_initialize_apple_script_client_dry_run(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    def test_initialize_apple_script_client_dry_run(self, container: DependencyContainer) -> None:
         """Test AppleScript client initialization in dry-run mode."""
-        # Use patch.object to mock container attributes
+        test_config = create_test_app_config()
         with (
-            patch.object(container, "_config", mock_config),
+            patch.object(container, "_app_config", test_config),
             patch.object(container, "_dry_run", True),
             patch.object(container, "_analytics", MagicMock()),
             patch("services.dependency_container.AppleScriptClient") as mock_client,
@@ -250,15 +226,14 @@ class TestDependencyContainer:
             mock_client_instance = MagicMock()
             mock_client.return_value = mock_client_instance
 
-            # Test through public interface if possible, or acknowledge test limitation
-            # This test validates that the client would be initialized correctly
+            # Validates that dry_run flag is wired correctly
             assert container.dry_run is True
 
-    def test_initialize_apple_script_client_normal(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    def test_initialize_apple_script_client_normal(self, container: DependencyContainer) -> None:
         """Test AppleScript client initialization in normal mode."""
-        # Use patch.object to mock container attributes
+        test_config = create_test_app_config()
         with (
-            patch.object(container, "_config", mock_config),
+            patch.object(container, "_app_config", test_config),
             patch.object(container, "_dry_run", False),
             patch.object(container, "_analytics", MagicMock()),
             patch("services.dependency_container.AppleScriptClient") as mock_client,
@@ -266,9 +241,8 @@ class TestDependencyContainer:
             mock_client_instance = MagicMock()
             mock_client.return_value = mock_client_instance
 
-            # Test through public interface
-            # Verify the client can be created with the correct config
-            assert hasattr(container, "dry_run")
+            # Verify typed config is accessible
+            assert container.app_config is test_config
 
     def test_initialize_apple_script_client_no_analytics(self, container: DependencyContainer) -> None:
         """Test AppleScript client initialization without analytics."""
@@ -334,15 +308,15 @@ class TestDependencyContainer:
         # Check listener was cleared
         assert getattr(container, "_listener", None) is None
 
-    def test_load_config(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    def test_load_config(self, container: DependencyContainer) -> None:
         """Test configuration loading."""
         with patch(
             "services.dependency_container.load_config",
-            return_value=mock_config,
+            return_value=create_test_app_config(),
         ):
-            # Test through public interface
-            # This test validates that config loading would work correctly
-            assert container.config_path.exists() or not container.config_path.exists()
+            # Config loading sets _app_config internally
+            container._load_config()
+            assert container.app_config is not None
 
     def test_load_config_file_not_found(self, container: DependencyContainer) -> None:
         """Test configuration loading when file not found."""
@@ -449,18 +423,18 @@ class TestDependencyContainer:
         # This test validates keyboard interrupt handling
         assert container.error_logger is not None
 
-    def test_property_getters(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    def test_property_getters(self, container: DependencyContainer) -> None:
         """Test property getters when services are initialized."""
-        # Set up initialized services using patch.object
+        test_config = create_test_app_config()
         with (
-            patch.object(container, "_config", mock_config),
+            patch.object(container, "_app_config", test_config),
             patch.object(container, "_analytics", MagicMock()),
             patch.object(container, "_ap_client", MagicMock()),
             patch.object(container, "_cache_service", MagicMock()),
             patch.object(container, "_pending_verification_service", MagicMock()),
             patch.object(container, "_api_orchestrator", MagicMock()),
         ):
-            assert container.config == mock_config
+            assert container.app_config is test_config
             assert container.analytics is not None
             assert container.ap_client is not None
             assert container.cache_service is not None
@@ -505,10 +479,10 @@ class TestDependencyContainer:
         mock_listener.stop.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_concurrent_initialization(self, container: DependencyContainer, mock_config: dict[str, Any]) -> None:
+    async def test_concurrent_initialization(self, container: DependencyContainer) -> None:
         """Test concurrent service initialization."""
         with (
-            patch.object(container, "_load_config", return_value=mock_config),
+            patch.object(container, "_load_config", return_value=None),
             patch("services.dependency_container.configure_album_patterns"),
             patch("services.dependency_container.Analytics"),
             patch("services.dependency_container.CacheOrchestrator"),
