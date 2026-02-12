@@ -75,8 +75,8 @@ def create_batch_fetcher(
     """Factory to create BatchTrackFetcher with common dependencies."""
     console_logger, error_logger = loggers
     return BatchTrackFetcher(
-        ap_client=cast("AppleScriptClientProtocol", ap_client),
-        cache_service=cast("CacheServiceProtocol", cache_service),
+        ap_client=cast("AppleScriptClientProtocol", cast(object, ap_client)),
+        cache_service=cast("CacheServiceProtocol", cast(object, cache_service)),
         console_logger=console_logger,
         error_logger=error_logger,
         config=config,
@@ -85,7 +85,6 @@ def create_batch_fetcher(
         snapshot_loader=AsyncMock(return_value=None),
         snapshot_persister=AsyncMock(),
         can_use_snapshot=lambda x: False,
-        dry_run=False,
         analytics=analytics,
     )
 
