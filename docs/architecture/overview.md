@@ -371,7 +371,7 @@ before they reach runtime:
 | `analytics`                 | `AnalyticsConfig`             |
 | `database_verification`     | `DatabaseVerificationConfig`  |
 | `development`               | `DevelopmentConfig`           |
-| `applescript_timeouts`      | `ApplescriptTimeoutsConfig`   |
+| `applescript_timeouts`      | `AppleScriptTimeoutsConfig`   |
 | `apple_script_rate_limit`   | `AppleScriptRateLimitConfig`  |
 | `album_type_detection`      | `AlbumTypeDetectionConfig`    |
 | `batch_processing`          | `BatchProcessingConfig`       |

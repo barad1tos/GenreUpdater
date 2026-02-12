@@ -79,11 +79,11 @@ class GenericCacheService:
         fallback = self.cache_config.get_ttl(CacheContentType.GENERIC)
 
         caching_section = self.config.get("caching")
-        candidate_values: list[Any] = [
-            self.config.get("cache_ttl_seconds"),
-        ]
+        candidate_values: list[Any] = []
         if isinstance(caching_section, dict):
             candidate_values.append(caching_section.get("default_ttl_seconds"))
+        # Legacy top-level key — lower priority than caching section
+        candidate_values.append(self.config.get("cache_ttl_seconds"))
 
         for value in candidate_values:
             if value in (None, ""):

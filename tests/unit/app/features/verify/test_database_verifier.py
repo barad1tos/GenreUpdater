@@ -445,6 +445,36 @@ class TestGetTracksToVerify:
         assert len(result) == 1
         assert result[0].id == "1"
 
+    def test_falls_back_to_legacy_test_artists(
+        self,
+        mock_ap_client: Any,
+        console_logger: logging.Logger,
+        error_logger: logging.Logger,
+        db_verify_logger: logging.Logger,
+        mock_analytics: Any,
+        config: dict[str, Any],
+    ) -> None:
+        """Should fall back to top-level test_artists when development section is empty."""
+        config["development"]["test_artists"] = []
+        config["test_artists"] = ["Artist1"]
+        verifier = DatabaseVerifier(
+            ap_client=mock_ap_client,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            db_verify_logger=db_verify_logger,
+            analytics=mock_analytics,
+            config=config,
+            dry_run=True,
+        )
+
+        track1 = TrackDict(id="1", name="Track1", artist="Artist1", album="Album")
+        track2 = TrackDict(id="2", name="Track2", artist="Artist2", album="Album")
+        tracks = [track1, track2]
+
+        result = verifier._get_tracks_to_verify(tracks, apply_test_filter=True)
+        assert len(result) == 1
+        assert result[0].id == "1"
+
 
 class TestUpdateVerificationTimestamp:
     """Tests for _update_verification_timestamp method."""

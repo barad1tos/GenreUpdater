@@ -75,7 +75,7 @@ class PythonSettings(BaseModel):
     prevent_bytecode: bool
 
 
-class ApplescriptTimeoutsConfig(BaseModel):
+class AppleScriptTimeoutsConfig(BaseModel):
     """Per-operation AppleScript timeout overrides."""
 
     default: int = Field(default=3600, ge=1)
@@ -396,8 +396,8 @@ class AppConfig(BaseModel):
     # Execution and performance
     apple_script_concurrency: int = Field(ge=1)
     applescript_timeout_seconds: int = Field(ge=1)
-    applescript_timeouts: ApplescriptTimeoutsConfig = Field(
-        default_factory=ApplescriptTimeoutsConfig,
+    applescript_timeouts: AppleScriptTimeoutsConfig = Field(
+        default_factory=AppleScriptTimeoutsConfig,
     )
     apple_script_rate_limit: AppleScriptRateLimitConfig = Field(
         default_factory=AppleScriptRateLimitConfig,

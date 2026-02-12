@@ -396,7 +396,10 @@ class DatabaseVerifier:
             List of tracks to verify
 
         """
-        if apply_test_filter and self.dry_run and (test_artists := set(self.config.get("development", {}).get("test_artists", []))):
+        dev_test_artists = self.config.get("development", {}).get("test_artists", [])
+        legacy_test_artists = self.config.get("test_artists", [])
+        resolved_test_artists = dev_test_artists or legacy_test_artists
+        if apply_test_filter and self.dry_run and (test_artists := set(resolved_test_artists)):
             tracks: list[TrackDict] = [t for t in existing_tracks if t.get("artist") in test_artists]
             self.console_logger.info(
                 "DRY RUN: Filtering to %d tracks from test artists",
