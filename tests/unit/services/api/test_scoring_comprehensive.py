@@ -634,3 +634,146 @@ class TestSoundtrackCompensation:
 
         # No substring match → no compensation
         assert score < 30, f"Unrelated album should not get compensation, got {score}"
+
+
+class TestScoringBranchCoverage:
+    """Tests for uncovered scoring branches."""
+
+    @pytest.fixture
+    def scorer(self) -> ReleaseScorer:
+        """Create a scorer with a mock logger."""
+        return ReleaseScorer(console_logger=MagicMock())
+
+    def test_ep_single_type_penalty(self, scorer: ReleaseScorer) -> None:
+        """EP/single releases should receive a penalty."""
+        ep = {"title": "Single", "artist": "A", "year": "2020", "album_type": "single", "source": "test"}
+        album = {"title": "Album", "artist": "A", "year": "2020", "album_type": "album", "source": "test"}
+        assert scorer.score_original_release(album, "a", "album", artist_region=None) > scorer.score_original_release(
+            ep, "a", "single", artist_region=None
+        )
+
+    def test_bootleg_status_penalty(self, scorer: ReleaseScorer) -> None:
+        """Bootleg status should score lower than official."""
+        official = {"title": "X", "artist": "A", "year": "2020", "status": "official", "source": "test"}
+        bootleg = {"title": "X", "artist": "A", "year": "2020", "status": "bootleg", "source": "test"}
+        assert scorer.score_original_release(official, "a", "x", artist_region=None) > scorer.score_original_release(
+            bootleg, "a", "x", artist_region=None
+        )
+
+    def test_promo_status_penalty(self, scorer: ReleaseScorer) -> None:
+        """Promo status should score lower than official."""
+        official = {"title": "X", "artist": "A", "year": "2020", "status": "official", "source": "test"}
+        promo = {"title": "X", "artist": "A", "year": "2020", "status": "promotional", "source": "test"}
+        assert scorer.score_original_release(official, "a", "x", artist_region=None) > scorer.score_original_release(
+            promo, "a", "x", artist_region=None
+        )
+
+    def test_reissue_penalty(self, scorer: ReleaseScorer) -> None:
+        """Reissue indicator should reduce score."""
+        original = {"title": "X", "artist": "A", "year": "2020", "source": "test"}
+        reissue = {"title": "X", "artist": "A", "year": "2020", "source": "test", "is_reissue": True}
+        assert scorer.score_original_release(original, "a", "x", artist_region=None) > scorer.score_original_release(
+            reissue, "a", "x", artist_region=None
+        )
+
+    def test_rg_first_date_match_bonus(self, scorer: ReleaseScorer) -> None:
+        """MusicBrainz release matching RG first date should get a bonus."""
+        release_with_rg = {
+            "title": "X",
+            "artist": "A",
+            "year": "2015",
+            "source": "musicbrainz",
+            "releasegroup_first_date": "2015-03-01",
+        }
+        release_without_rg = {
+            "title": "X",
+            "artist": "A",
+            "year": "2015",
+            "source": "musicbrainz",
+        }
+        score_with = scorer.score_original_release(release_with_rg, "a", "x", artist_region=None, source="musicbrainz")
+        score_without = scorer.score_original_release(release_without_rg, "a", "x", artist_region=None, source="musicbrainz")
+        assert score_with > score_without
+
+    def test_year_before_artist_start_penalty(self, scorer: ReleaseScorer) -> None:
+        """Year before artist start should be penalized."""
+        period: ArtistPeriodContext = {"start_year": 2000, "end_year": 2020}
+        scorer.set_artist_period_context(period)
+        early = {"title": "X", "artist": "A", "year": "1990", "source": "test"}
+        within = {"title": "X", "artist": "A", "year": "2010", "source": "test"}
+        assert scorer.score_original_release(within, "a", "x", artist_region=None) > scorer.score_original_release(
+            early, "a", "x", artist_region=None
+        )
+
+    def test_year_near_artist_start_bonus(self, scorer: ReleaseScorer) -> None:
+        """Year near artist start (0-1 years) should get a bonus."""
+        period: ArtistPeriodContext = {"start_year": 2000, "end_year": 2020}
+        scorer.set_artist_period_context(period)
+        near_start = {"title": "X", "artist": "A", "year": "2000", "source": "test"}
+        mid_career = {"title": "X", "artist": "A", "year": "2010", "source": "test"}
+        score_near = scorer.score_original_release(near_start, "a", "x", artist_region=None)
+        score_mid = scorer.score_original_release(mid_career, "a", "x", artist_region=None)
+        assert score_near > score_mid
+
+    def test_year_after_artist_end_penalty(self, scorer: ReleaseScorer) -> None:
+        """Year well after artist end should be penalized."""
+        period: ArtistPeriodContext = {"start_year": 1980, "end_year": 2000}
+        scorer.set_artist_period_context(period)
+        after = {"title": "X", "artist": "A", "year": "2020", "source": "test"}
+        within = {"title": "X", "artist": "A", "year": "1995", "source": "test"}
+        assert scorer.score_original_release(within, "a", "x", artist_region=None) > scorer.score_original_release(
+            after, "a", "x", artist_region=None
+        )
+
+    def test_year_diff_from_rg_first_year(self, scorer: ReleaseScorer) -> None:
+        """Release year far from RG first year should be penalized."""
+        close = {
+            "title": "X",
+            "artist": "A",
+            "year": "2015",
+            "source": "musicbrainz",
+            "releasegroup_first_date": "2015-01-01",
+        }
+        far = {
+            "title": "X",
+            "artist": "A",
+            "year": "2025",
+            "source": "musicbrainz",
+            "releasegroup_first_date": "2015-01-01",
+        }
+        score_close = scorer.score_original_release(close, "a", "x", artist_region=None, source="musicbrainz")
+        score_far = scorer.score_original_release(far, "a", "x", artist_region=None, source="musicbrainz")
+        assert score_close > score_far
+
+    def test_future_year_penalty(self, scorer: ReleaseScorer) -> None:
+        """Future year releases should be penalized."""
+        current = {"title": "X", "artist": "A", "year": "2020", "source": "test"}
+        future = {"title": "X", "artist": "A", "year": "2099", "source": "test"}
+        assert scorer.score_original_release(current, "a", "x", artist_region=None) > scorer.score_original_release(
+            future, "a", "x", artist_region=None
+        )
+
+    def test_current_year_penalty(self, scorer: ReleaseScorer) -> None:
+        """Current year releases should get a penalty when configured."""
+        # Default current_year_penalty is 0; override to test the branch
+        scorer.scoring_config = scorer.scoring_config.model_copy(update={"current_year_penalty": -10})
+        current_yr = str(scorer.current_year)
+        past_yr = str(scorer.current_year - 5)
+        current = {"title": "X", "artist": "A", "year": current_yr, "source": "test"}
+        past = {"title": "X", "artist": "A", "year": past_yr, "source": "test"}
+        assert scorer.score_original_release(past, "a", "x", artist_region=None) > scorer.score_original_release(
+            current, "a", "x", artist_region=None
+        )
+
+    def test_extract_rg_first_year_invalid(self, scorer: ReleaseScorer) -> None:
+        """Invalid RG first date should not crash, returns None via suppress."""
+        release = {
+            "title": "X",
+            "artist": "A",
+            "year": "2020",
+            "source": "musicbrainz",
+            "releasegroup_first_date": "not-a-date",
+        }
+        # Should not crash; invalid RG date is silently ignored
+        score = scorer.score_original_release(release, "a", "x", artist_region=None, source="musicbrainz")
+        assert isinstance(score, int)

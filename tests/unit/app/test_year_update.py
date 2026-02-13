@@ -10,7 +10,7 @@ import pytest
 
 from app.year_update import YearUpdateService
 from core.models.track_models import ChangeLogEntry, TrackDict
-from tests.factories import create_test_app_config
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -561,38 +561,44 @@ class TestFormatRestoreTarget:
 class TestShouldRestoreTrack:
     """Tests for _should_restore_track static method."""
 
+    @staticmethod
+    def _assert_no_restore(track: TrackDict, threshold: int) -> None:
+        """Assert that a track should NOT be restored."""
+        should_restore, release_year_result = YearUpdateService._should_restore_track(track, threshold)
+        assert should_restore is False
+        assert release_year_result is None
+
+    @staticmethod
+    def _assert_should_restore(track: TrackDict, threshold: int, expected_year: str) -> None:
+        """Assert that a track SHOULD be restored with expected year."""
+        should_restore, release_year_result = YearUpdateService._should_restore_track(track, threshold)
+        assert should_restore is True
+        assert release_year_result == expected_year
+
     def test_returns_false_when_no_release_year(self) -> None:
         """Should return False when track has no release_year."""
         track = TrackDict(id="1", name="Track", artist="Artist", album="Album", genre="Rock", year="2020")
-        should_restore, release_year_result = YearUpdateService._should_restore_track(track, 5)
-        assert should_restore is False
-        assert release_year_result is None
+        self._assert_no_restore(track, threshold=5)
 
     def test_returns_false_when_years_within_threshold(self) -> None:
         """Should return False when year difference is within threshold."""
         track = TrackDict(id="1", name="Track", artist="Artist", album="Album", genre="Rock", year="2020", release_year="2022")
-        should_restore, release_year_result = YearUpdateService._should_restore_track(track, 5)
-        assert should_restore is False
-        assert release_year_result is None
+        self._assert_no_restore(track, threshold=5)
 
     def test_returns_true_when_years_exceed_threshold(self) -> None:
         """Should return True when year difference exceeds threshold."""
         track = TrackDict(id="1", name="Track", artist="Artist", album="Album", genre="Rock", year="2025", release_year="1997")
-        should_restore, release_year_result = YearUpdateService._should_restore_track(track, 5)
-        assert should_restore is True
-        assert release_year_result == "1997"
+        self._assert_should_restore(track, threshold=5, expected_year="1997")
 
     def test_returns_false_when_invalid_years(self) -> None:
         """Should return False when years cannot be parsed."""
         track = TrackDict(id="1", name="Track", artist="Artist", album="Album", genre="Rock", year="invalid", release_year="also_invalid")
-        should_restore, _ = YearUpdateService._should_restore_track(track, 5)
-        assert should_restore is False
+        self._assert_no_restore(track, threshold=5)
 
     def test_exact_threshold_does_not_trigger(self) -> None:
         """Should not restore when difference equals threshold exactly."""
         track = TrackDict(id="1", name="Track", artist="Artist", album="Album", genre="Rock", year="2020", release_year="2015")
-        should_restore, _ = YearUpdateService._should_restore_track(track, 5)
-        assert should_restore is False
+        self._assert_no_restore(track, threshold=5)
 
 
 class TestFindAlbumsNeedingRestoration:
@@ -756,7 +762,7 @@ class TestRunRestoreReleaseYears:
         mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=[])
 
         with caplog.at_level(logging.WARNING):
-            await service.run_restore_release_years(artist=None)
+            await service.run_restore_release_years()
 
         assert "No tracks found" in caplog.text
 
@@ -775,7 +781,7 @@ class TestRunRestoreReleaseYears:
         mock_track_processor.fetch_tracks_in_batches = AsyncMock(return_value=tracks)
 
         with caplog.at_level(logging.INFO):
-            await service.run_restore_release_years(artist=None)
+            await service.run_restore_release_years()
 
         assert "No albums found needing year restoration" in caplog.text
 
@@ -794,7 +800,7 @@ class TestRunRestoreReleaseYears:
         mock_track_processor.update_track_async = AsyncMock(return_value=True)
 
         with caplog.at_level(logging.INFO):
-            await service.run_restore_release_years(artist=None, threshold=5)
+            await service.run_restore_release_years()
 
         assert "Found 1 albums needing year restoration" in caplog.text
         assert "Crematory - Awake" in caplog.text
@@ -814,7 +820,7 @@ class TestRunRestoreReleaseYears:
         mock_track_processor.fetch_tracks_async = AsyncMock(return_value=tracks)
         mock_track_processor.update_track_async = AsyncMock(return_value=True)
 
-        await service.run_restore_release_years(artist="Crematory", album="Awake", threshold=5)
+        await service.run_restore_release_years(artist="Crematory", album="Awake")
 
         # Should only update the Awake track
         assert mock_track_processor.update_track_async.call_count == 1
@@ -836,7 +842,7 @@ class TestRunRestoreReleaseYears:
             patch("app.year_update.save_changes_report") as mock_save,
             patch("app.year_update.get_full_log_path", return_value="/tmp/restore.csv"),
         ):
-            await service.run_restore_release_years(artist=None, threshold=5)
+            await service.run_restore_release_years()
 
             mock_save.assert_called_once()
 
@@ -855,6 +861,6 @@ class TestRunRestoreReleaseYears:
         mock_track_processor.update_track_async = AsyncMock(return_value=False)
 
         with caplog.at_level(logging.INFO):
-            await service.run_restore_release_years(artist=None, threshold=5)
+            await service.run_restore_release_years()
 
         assert "0 tracks updated, 1 failed" in caplog.text
