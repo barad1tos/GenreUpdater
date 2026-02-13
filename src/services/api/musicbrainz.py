@@ -311,7 +311,7 @@ class MusicBrainzClient(BaseApiClient):
             if response and response.get("artists"):
                 return cast(MBApiData, response["artists"][0])
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
-            self.error_logger.exception(f"Failed to get artist info for '{artist_norm}': {e}")
+            self.error_logger.exception("Failed to get artist info for '%s': %s", artist_norm, e)
 
         return None
 
@@ -445,12 +445,12 @@ class MusicBrainzClient(BaseApiClient):
         params = {"fmt": "json", "limit": "10", "query": query}
 
         url = f"{base_url}?{urllib.parse.urlencode(params)}"
-        self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} URL: {url}")
+        self.console_logger.debug("[musicbrainz] Attempt %s URL: %s", attempt_num, url)
 
         rg_data = await self._make_api_request("musicbrainz", base_url, params=params)
 
         if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
-            self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} successful. Found {len(rg_data['release-groups'])} release groups.")
+            self.console_logger.debug("[musicbrainz] Attempt %s successful. Found %s release groups.", attempt_num, len(rg_data["release-groups"]))
             return cast("list[MBApiData]", rg_data["release-groups"])
 
         return []
@@ -479,7 +479,9 @@ class MusicBrainzClient(BaseApiClient):
 
         if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
             filtered_rgs = self._filter_release_groups_by_artist(rg_data["release-groups"], artist_norm)
-            self.console_logger.debug(f"[musicbrainz] Attempt {attempt_num} successful. Found {len(filtered_rgs)} matching groups after filtering.")
+            self.console_logger.debug(
+                "[musicbrainz] Attempt %s successful. Found %s matching groups after filtering.", attempt_num, len(filtered_rgs)
+            )
             return filtered_rgs
 
         return []
@@ -547,7 +549,7 @@ class MusicBrainzClient(BaseApiClient):
             rg_info = release_fetch_tasks[i][1]
 
             if isinstance(result, Exception):
-                self.error_logger.warning(f"Failed to fetch releases for MB RG ID {rg_info.get('id')}: {result}")
+                self.error_logger.warning("Failed to fetch releases for MB RG ID %s: %s", rg_info.get("id"), result)
                 processed_results.append((None, rg_info))
                 continue
 
@@ -713,8 +715,11 @@ class MusicBrainzClient(BaseApiClient):
 
         """
         self.console_logger.debug(
-            f"[musicbrainz] Start search | artist_orig='{artist_orig or artist_norm}' "
-            f"artist_norm='{artist_norm}', album_orig='{album_orig or album_norm}', album_norm='{album_norm}'",
+            "[musicbrainz] Start search | artist_orig='%s' artist_norm='%s', album_orig='%s', album_norm='%s'",
+            artist_orig or artist_norm,
+            artist_norm,
+            album_orig or album_norm,
+            album_norm,
         )
 
         try:
@@ -724,7 +729,7 @@ class MusicBrainzClient(BaseApiClient):
             )
 
             if not all_release_groups:
-                self.console_logger.warning(f"[musicbrainz] All search attempts failed for '{artist_norm} - {album_norm}'.")
+                self.console_logger.warning("[musicbrainz] All search attempts failed for '%s - %s'.", artist_norm, album_norm)
                 return []
 
             # Fetch releases for found release groups
@@ -734,7 +739,7 @@ class MusicBrainzClient(BaseApiClient):
             scored_releases = self._process_and_score_releases(release_results, artist_norm, album_norm, artist_region)
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError, IndexError) as e:
-            self.error_logger.exception(f"Error fetching from MusicBrainz for '{artist_norm} - {album_norm}': {e}")
+            self.error_logger.exception("Error fetching from MusicBrainz for '%s - %s': %s", artist_norm, album_norm, e)
             return []
 
         return sorted(scored_releases, key=lambda x: x["score"], reverse=True)

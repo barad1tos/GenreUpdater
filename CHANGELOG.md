@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgraded GitHub Actions to latest versions (checkout v6, setup-uv v7, upload-artifact v5, codeql v4)
 - README Python badge updated to 3.13+
+- Converted 50 f-string logging calls to lazy `%` formatting for deferred evaluation (#216)
 
 ### Fixed
 

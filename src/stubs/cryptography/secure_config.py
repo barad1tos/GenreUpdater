@@ -65,7 +65,7 @@ class SecureConfig:
         try:
             return self.crypto_manager.is_token_encrypted(token)
         except (CryptographyError, ValueError, TypeError) as e:
-            self.logger.exception(f"Error checking token encryption status: {e!s}")
+            self.logger.exception("Error checking token encryption status: %s", e)
             return False
 
     def decrypt_token(self, token: str, key: str) -> str:
@@ -174,7 +174,7 @@ class SecureConfig:
         try:
             return self.crypto_manager.get_secure_config_status()
         except (CryptographyError, OSError, ValueError) as e:
-            self.logger.exception(f"Error getting security status: {e!s}")
+            self.logger.exception("Error getting security status: %s", e)
             return {
                 "key_file_path": self.key_file_path,
                 "encryption_initialized": False,

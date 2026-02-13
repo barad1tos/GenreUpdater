@@ -161,7 +161,6 @@ ignore = [
     "PLR2004", # Allow magic values in tests and configs
     "TC006", # PyCharm compatibility: Allow types without quotes in cast() - PyCharm expects actual types
     "ANN401", # Allow Any types in existing code (gradual migration)
-    "G004", # Allow f-strings in logging (performance is fine for this use case)
     "PTH110", # Allow os.path usage alongside pathlib (gradual migration)
     "TRY300", # Allow TRY patterns for existing error handling
     "TRY301", # Allow TRY patterns for existing error handling

@@ -64,7 +64,7 @@ class AppleScriptRateLimiter:
         if self.semaphore is None:
             try:
                 self.semaphore = asyncio.Semaphore(self.max_concurrent)
-                self.logger.debug(f"RateLimiter initialized with max_concurrent: {self.max_concurrent}")
+                self.logger.debug("RateLimiter initialized with max_concurrent: %s", self.max_concurrent)
                 # Yield control to event loop to make this properly async
                 await asyncio.sleep(0)
             except (ValueError, TypeError, RuntimeError, asyncio.InvalidStateError) as e:
@@ -118,7 +118,7 @@ class AppleScriptRateLimiter:
             oldest_timestamp = self.request_timestamps[0]
             wait_duration = (oldest_timestamp + self.window_seconds) - now
             if wait_duration > 0:
-                self.logger.debug(f"Rate limit reached. Waiting {wait_duration:.3f}s")
+                self.logger.debug("Rate limit reached. Waiting %.3fs", wait_duration)
                 await asyncio.sleep(wait_duration)
                 return wait_duration + await self._wait_if_needed()
         self.request_timestamps.append(time.monotonic())
