@@ -22,7 +22,7 @@ from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.models.protocols import AnalyticsProtocol
-from core.tracks.year_batch import YearBatchProcessor
+from core.tracks.track_updater import TrackUpdater
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
@@ -192,7 +192,7 @@ class TestYearRetrieverEdgeCases:
         api_year = "1998"
         _year_difference = abs(int(current_year) - int(api_year))
 
-        needs_update = YearBatchProcessor._track_needs_year_update(current_year, api_year)
+        needs_update = TrackUpdater._track_needs_year_update(current_year, api_year)
         # This is expected - the low-level method just checks if years differ
         assert needs_update is True, "_track_needs_year_update only checks if years differ"
 
@@ -238,7 +238,7 @@ class TestYearRetrieverEdgeCases:
         release_year = "2021"  # When Demo Vault was released
 
         # The _track_needs_year_update sees they're different and says "update"
-        needs_update = YearBatchProcessor._track_needs_year_update(original_year, release_year)
+        needs_update = TrackUpdater._track_needs_year_update(original_year, release_year)
         # This is expected - the low-level method just checks if years differ
         assert needs_update is True
 
@@ -282,7 +282,7 @@ class TestTrackNeedsYearUpdate:
     def test_empty_year_needs_update(self, current_year: Any, expected: bool) -> None:
         """Test that empty years correctly trigger updates."""
         target_year = "2020"
-        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
+        result = TrackUpdater._track_needs_year_update(current_year, target_year)
 
         # For "0", the behavior is: str("0") != "2020" → True
         # But we should verify empty year check
@@ -296,7 +296,7 @@ class TestTrackNeedsYearUpdate:
         current_year = "2020"
         target_year = "2020"
 
-        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
+        result = TrackUpdater._track_needs_year_update(current_year, target_year)
 
         assert result is False
 
@@ -311,7 +311,7 @@ class TestTrackNeedsYearUpdate:
     )
     def test_different_year_triggers_update(self, current_year: str, target_year: str) -> None:
         """Test that different years trigger update regardless of difference magnitude."""
-        result = YearBatchProcessor._track_needs_year_update(current_year, target_year)
+        result = TrackUpdater._track_needs_year_update(current_year, target_year)
 
         # Current behavior: ANY difference triggers update
         assert result is True

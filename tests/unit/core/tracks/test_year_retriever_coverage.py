@@ -15,6 +15,7 @@ from core import debug_utils
 from core.models.track_models import ChangeLogEntry, TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
+from core.tracks.track_updater import TrackUpdater
 from core.models.protocols import AnalyticsProtocol
 from core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,  # pyright: ignore[reportPrivateUsage]
@@ -167,19 +168,19 @@ class TestHandleFutureYearsFound:
 
 
 class TestValidateTrackIds:
-    """Tests for _validate_track_ids method on YearBatchProcessor."""
+    """Tests for _validate_track_ids method on TrackUpdater."""
 
     def test_validates_track_ids(self, year_retriever: YearRetriever) -> None:
         """Test validates track IDs."""
         track_ids = ["123", "456"]
-        result = year_retriever._batch_processor._validate_track_ids(track_ids, artist="Test Artist", album="Test Album")
+        result = year_retriever._batch_processor._track_updater._validate_track_ids(track_ids, artist="Test Artist", album="Test Album")
         assert result == ["123", "456"]
 
     def test_logs_warning_for_missing_ids(self, year_retriever: YearRetriever) -> None:
         """Test logs warning for tracks without IDs."""
         # Intentionally pass invalid data to test validation
         track_ids = ["", "123", None]  # type: ignore[list-item]
-        result = year_retriever._batch_processor._validate_track_ids(
+        result = year_retriever._batch_processor._track_updater._validate_track_ids(
             track_ids,
             artist="Test Artist",
             album="Test Album",  # type: ignore[arg-type]
@@ -198,7 +199,7 @@ class TestUpdateTrackWithRetry:
     ) -> None:
         """Test succeeds on first try."""
         mock_track_processor.update_track_async.return_value = True
-        result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
+        result = await year_retriever._batch_processor._track_updater._update_track_with_retry("123", "2021")
         assert result is True
 
     @pytest.mark.asyncio
@@ -214,7 +215,7 @@ class TestUpdateTrackWithRetry:
             OSError("Network error"),
             True,
         ]
-        result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
+        result = await year_retriever._batch_processor._track_updater._update_track_with_retry("123", "2021")
         assert result is True
         assert mock_track_processor.update_track_async.call_count == 2
 
@@ -228,7 +229,7 @@ class TestUpdateTrackWithRetry:
         # The retry_handler fixture has max_retries=2, meaning 1 initial + 2 retries = 3 total attempts
         # Keep raising exceptions
         mock_track_processor.update_track_async.side_effect = OSError("Network error")
-        result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
+        result = await year_retriever._batch_processor._track_updater._update_track_with_retry("123", "2021")
         assert result is False
         # With max_retries=2: 1 initial attempt + 2 retries = 3 total calls
         assert mock_track_processor.update_track_async.call_count == 3
@@ -241,7 +242,7 @@ class TestUpdateTrackWithRetry:
     ) -> None:
         """Test returns False immediately when update returns False (no exception)."""
         mock_track_processor.update_track_async.return_value = False
-        result = await year_retriever._batch_processor._update_track_with_retry("123", "2021")
+        result = await year_retriever._batch_processor._track_updater._update_track_with_retry("123", "2021")
         assert result is False
         # No retries when result is False without exception
         assert mock_track_processor.update_track_async.call_count == 1
@@ -485,7 +486,7 @@ class TestTrackNeedsYearUpdate:
     )
     def test_track_needs_year_update(self, current: str | int | None, target: str, expected: bool) -> None:
         """Test _track_needs_year_update logic."""
-        result = YearBatchProcessor._track_needs_year_update(current, target)
+        result = TrackUpdater._track_needs_year_update(current, target)
         assert result == expected
 
 
@@ -521,7 +522,7 @@ class TestIdentifyTracksNeedingUpdate:
         ]
         target_year = "2020"
         # Identify tracks needing update using the static method
-        track_ids = [t.id for t in tracks if YearBatchProcessor._track_needs_year_update(t.year, target_year)]
+        track_ids = [t.id for t in tracks if TrackUpdater._track_needs_year_update(t.year, target_year)]
         # Tracks 1 (empty) and 3 (different year) need update
         assert "1" in track_ids
         assert "3" in track_ids
@@ -970,7 +971,7 @@ class TestUpdateTracksForAlbum:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        await year_retriever._batch_processor._update_tracks_for_album(
+        await year_retriever._batch_processor._track_updater.update_tracks_for_album(
             artist="Artist",
             album="Album",
             album_tracks=tracks,
@@ -995,9 +996,9 @@ class TestUpdateTracksForAlbum:
         changes_log: list[Any] = []
 
         # Mock bulk update to succeed on the batch processor
-        object.__setattr__(year_retriever._batch_processor, "update_album_tracks_bulk_async", AsyncMock(return_value=(2, 0)))
+        object.__setattr__(year_retriever._batch_processor._track_updater, "update_album_tracks_bulk_async", AsyncMock(return_value=(2, 0)))
 
-        await year_retriever._batch_processor._update_tracks_for_album(
+        await year_retriever._batch_processor._track_updater.update_tracks_for_album(
             artist="Artist",
             album="Album",
             album_tracks=tracks,
@@ -1258,7 +1259,7 @@ class TestProcessDominantYear:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        with unittest.mock.patch.object(year_retriever._batch_processor, "_update_tracks_for_album", mock_update):
+        with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
             result = await year_retriever._batch_processor._process_dominant_year("Artist", "Album", tracks, "2020", updated_tracks, changes_log)
             assert result is True
             mock_update.assert_called_once()
@@ -1279,7 +1280,7 @@ class TestProcessDominantYear:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        with unittest.mock.patch.object(year_retriever._batch_processor, "_update_tracks_for_album", mock_update):
+        with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
             result = await year_retriever._batch_processor._process_dominant_year("Artist", "Album", tracks, "2020", updated_tracks, changes_log)
             assert result is True
             mock_update.assert_called_once()
@@ -1403,7 +1404,7 @@ class TestProcessSingleAlbumIntegration:
 
         with (
             unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
-            unittest.mock.patch.object(year_retriever._batch_processor, "_update_tracks_for_album", mock_update_tracks),
+            unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update_tracks),
         ):
             await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
             mock_determine_year.assert_called_once()
@@ -1427,7 +1428,7 @@ class TestProcessSingleAlbumIntegration:
         with (
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
-            unittest.mock.patch.object(year_retriever._batch_processor, "_update_tracks_for_album", mock_update_tracks),
+            unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update_tracks),
         ):
             await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
             mock_determine_year.assert_called_once()
@@ -1527,7 +1528,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
         target_year = "2020"
         # Filter out tracks with empty IDs and use _track_needs_year_update
         track_ids = [
-            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
+            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and TrackUpdater._track_needs_year_update(t.year, target_year)
         ]
         assert len(track_ids) == 1
         assert "1" in track_ids
@@ -1544,12 +1545,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
         seen_ids: set[str] = set()
         track_ids = []
         for t in tracks:
-            if (
-                t.id
-                and t.id not in seen_ids
-                and can_edit_metadata(t.track_status)
-                and YearBatchProcessor._track_needs_year_update(t.year, target_year)
-            ):
+            if t.id and t.id not in seen_ids and can_edit_metadata(t.track_status) and TrackUpdater._track_needs_year_update(t.year, target_year):
                 track_ids.append(t.id)
                 seen_ids.add(t.id)
         assert len(track_ids) == 1
@@ -1564,7 +1560,7 @@ class TestIdentifyTracksNeedingUpdateBranches:
         ]
         target_year = "2020"
         track_ids = [
-            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and YearBatchProcessor._track_needs_year_update(t.year, target_year)
+            t.id for t in tracks if t.id and can_edit_metadata(t.track_status) and TrackUpdater._track_needs_year_update(t.year, target_year)
         ]
         assert "1" not in track_ids
         assert "2" in track_ids
@@ -1814,9 +1810,9 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
         changes_log: list[Any] = []
 
         # Mock the bulk update on the batch processor
-        object.__setattr__(year_retriever._batch_processor, "update_album_tracks_bulk_async", AsyncMock(return_value=(1, 0)))
+        object.__setattr__(year_retriever._batch_processor._track_updater, "update_album_tracks_bulk_async", AsyncMock(return_value=(1, 0)))
 
-        await year_retriever._batch_processor._update_tracks_for_album(
+        await year_retriever._batch_processor._track_updater.update_tracks_for_album(
             artist="Artist",
             album="Album",
             album_tracks=tracks,
