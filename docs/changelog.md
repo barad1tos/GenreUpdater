@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Narrowed 16 overly broad exception handlers (#214): replaced `except Exception` with specific types in 8 cache/persistence/pipeline locations, replaced `contextlib.suppress(Exception)` with specific types in logger and encryption, added missing `IndexError` catch in MusicBrainz response parsing; kept justified safety nets in API orchestrator verification wrappers and artist context setup
+- Narrowed 16 overly broad exception handlers (#214): replaced `except Exception` with specific types in 8 cache/persistence/pipeline locations, replaced `contextlib.suppress(Exception)` with specific types in logger and encryption, added missing `IndexError` catch in MusicBrainz response parsing; kept justified safety nets in API orchestrator verification wrappers and artist context setup; added 5 error-path tests and fixed 1 vacuous test for full patch coverage
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
 - Ruff format: missing blank line in `track_models.py` after Sourcery walrus operator refactor
 - Sourcery warnings in `test_year_update.py`: extracted duplicate assertion helper, removed default-value arguments, added sourcery skip for test factory import

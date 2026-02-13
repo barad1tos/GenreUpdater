@@ -205,12 +205,12 @@ class TestGenericCacheService:
         )
 
         with (
-            patch.object(service, "cleanup_expired", side_effect=Exception("Test error")),
+            patch.object(service, "cleanup_expired", side_effect=RuntimeError("Test error")),
         ):
             await service.initialize()
 
             # Wait for cleanup to run and handle error
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.2)
 
             # Task should still be running despite error
             assert service._cleanup_task is not None

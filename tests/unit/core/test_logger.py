@@ -365,6 +365,21 @@ class TestCompactFormatter:
 
         assert LEVEL_ABBREV["INFO"] in result
 
+    def test_format_critical_double_failure_reaches_syslog_suppress(self) -> None:
+        """Should reach syslog suppress path on double formatting failure."""
+        formatter = CompactFormatter(fmt="%(message)s")
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="/path/file.py",
+            lineno=10,
+            msg="%s %s %s",
+            args=("only_one",),
+            exc_info=None,
+        )
+        result = formatter.format(record)
+        assert "CRITICAL FORMATTING ERROR" in result
+
     def test_format_shortens_pathname(self) -> None:
         """Should shorten pathname in log output."""
         formatter = CompactFormatter(fmt="%(short_pathname)s - %(message)s")

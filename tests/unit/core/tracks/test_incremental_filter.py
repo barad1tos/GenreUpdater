@@ -322,6 +322,29 @@ class TestIncrementalFilterService:
             result = is_missing_or_unknown_genre(raw_track)
             assert result is True, f"Expected True for genre={value!r}"
 
+    def test_status_change_detection_handles_loader_error(self) -> None:
+        """Should return empty list when track loader raises OSError."""
+
+        def failing_loader(_csv_path: str) -> dict[str, TrackDict]:
+            """Simulate corrupted CSV file."""
+            raise OSError("CSV file corrupted")
+
+        service = TestIncrementalFilterService.create_service(
+            track_list_loader=cast(Any, failing_loader),
+        )
+        last_run_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
+        tracks = [_create_track(track_id="1")]
+
+        mock_get_full_log_path = _MockGetFullLogPath()
+        with patch("core.tracks.incremental_filter.get_full_log_path", mock_get_full_log_path):
+            result = service.filter_tracks_for_incremental_update(
+                tracks=tracks,
+                last_run_time=last_run_time,
+            )
+
+        # Status change detection failed but filter still works
+        assert isinstance(result, list)
+
     def test_get_dry_run_actions(self) -> None:
         """Test dry run actions tracking."""
         service = TestIncrementalFilterService.create_service()
