@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
 - Ruff format: missing blank line in `track_models.py` after Sourcery walrus operator refactor
+- Sourcery warnings in `test_year_update.py`: extracted duplicate assertion helper, removed default-value arguments, added sourcery skip for test factory import
+- Type mismatches in `test_scoring_comprehensive.py`: annotated `ArtistPeriodContext` dicts to match `set_artist_period_context` signature
 
 ### Changed
 - **Config type safety (C3)**: removed `_resolve_config_dict()` bridge from `logger.py`; changed all 12 logger function signatures from `AppConfig | dict[str, Any]` to `AppConfig`; replaced dict `.get()` lookups with typed `config.logging.*` attribute access; moved `AppConfig` import to `TYPE_CHECKING`; added `LogLevelsConfig.normalize_log_level` validator for case-insensitive log level names; migrated 5 test files from dict configs to `create_test_app_config()` factory; removed last `model_dump()` round-trip in `validate_api_auth` — now accepts `ApiAuthConfig` directly
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config type safety (C1)**: migrated `ReleaseScorer` from `dict[str, Any]` to typed `ScoringConfig` Pydantic model; replaced 33 `.get()` calls with typed attribute access; added 3 missing scoring fields (`artist_substring_penalty`, `artist_mismatch_penalty`, `current_year_penalty`); changed all scoring fields from `float` to `int` to match config.yaml and downstream usage; removed dead `ScoringConfig` TypedDict and `_get_default_scoring_config()`; updated orchestrator to pass `ScoringConfig` object directly instead of `model_dump()` dict
 
 ### Added
+- 13 scoring branch coverage tests (`TestScoringBranchCoverage`): EP/single penalty, bootleg/promo status, reissue, RG first date match, artist period penalties/bonuses, year diff, future/current year, invalid RG date
 - Batch error handling tests: sequential processing, CancelledError, config validation
 - Track ID validation and bulk update mixed-results tests
 - Retry exhaustion behavior tests
