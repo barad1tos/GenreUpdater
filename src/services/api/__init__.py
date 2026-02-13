@@ -9,17 +9,17 @@ This package contains specialized clients for different music metadata APIs:
 """
 
 from .applemusic import AppleMusicClient
-from .api_base import BaseApiClient, EnhancedRateLimiter, ScoredRelease
+from .api_base import ApiRateLimiter, BaseApiClient, ScoredRelease
 from .discogs import DiscogsClient
 from .musicbrainz import MusicBrainzClient
 from .orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
 from .year_scoring import ReleaseScorer, create_release_scorer
 
 __all__ = [
+    "ApiRateLimiter",
     "AppleMusicClient",
     "BaseApiClient",
     "DiscogsClient",
-    "EnhancedRateLimiter",
     "ExternalApiOrchestrator",
     "MusicBrainzClient",
     "ReleaseScorer",

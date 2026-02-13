@@ -13,13 +13,13 @@ from collections import deque
 from typing import Any
 
 
-class EnhancedRateLimiter:
+class AppleScriptRateLimiter:
     """Advanced rate limiter using a moving window approach."""
 
     def __init__(
         self,
         requests_per_window: int,
-        window_size: float,
+        window_seconds: float,
         max_concurrent: int = 3,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -27,7 +27,7 @@ class EnhancedRateLimiter:
 
         Args:
             requests_per_window: Maximum requests allowed per time window.
-            window_size: Duration of the sliding window in seconds.
+            window_seconds: Duration of the sliding window in seconds.
             max_concurrent: Maximum concurrent requests (semaphore limit).
             logger: Optional logger instance for debug output.
 
@@ -38,15 +38,15 @@ class EnhancedRateLimiter:
         if requests_per_window <= 0:
             msg = "requests_per_window must be a positive integer"
             raise ValueError(msg)
-        if window_size <= 0:
-            msg = "window_size must be a positive number"
+        if window_seconds <= 0:
+            msg = "window_seconds must be a positive number"
             raise ValueError(msg)
         if max_concurrent <= 0:
             msg = "max_concurrent must be a positive integer"
             raise ValueError(msg)
 
         self.requests_per_window = requests_per_window
-        self.window_size = window_size
+        self.window_seconds = window_seconds
         self.request_timestamps: deque[float] = deque()
         self.semaphore: asyncio.Semaphore | None = None
         self.max_concurrent = max_concurrent
@@ -112,11 +112,11 @@ class EnhancedRateLimiter:
 
         """
         now = time.monotonic()
-        while self.request_timestamps and now - self.request_timestamps[0] > self.window_size:
+        while self.request_timestamps and now - self.request_timestamps[0] > self.window_seconds:
             self.request_timestamps.popleft()
         if len(self.request_timestamps) >= self.requests_per_window:
             oldest_timestamp = self.request_timestamps[0]
-            wait_duration = (oldest_timestamp + self.window_size) - now
+            wait_duration = (oldest_timestamp + self.window_seconds) - now
             if wait_duration > 0:
                 self.logger.debug(f"Rate limit reached. Waiting {wait_duration:.3f}s")
                 await asyncio.sleep(wait_duration)
@@ -132,16 +132,18 @@ class EnhancedRateLimiter:
             - "total_requests": Total requests processed
             - "total_wait_time": Cumulative wait time in seconds
             - "avg_wait_time": Average wait time per request
-            - "current_window_usage": Current requests within sliding window
-            - "max_requests_per_window": Configured request limit
+            - "current_calls_in_window": Current requests within sliding window
+            - "requests_per_window": Configured request limit
+            - "window_seconds": Window duration in seconds
 
         """
         now = time.monotonic()
-        self.request_timestamps = deque(ts for ts in self.request_timestamps if now - ts <= self.window_size)
+        self.request_timestamps = deque(ts for ts in self.request_timestamps if now - ts <= self.window_seconds)
         return {
             "total_requests": self.total_requests,
             "total_wait_time": self.total_wait_time,
             "avg_wait_time": self.total_wait_time / max(1, self.total_requests),
-            "current_window_usage": len(self.request_timestamps),
-            "max_requests_per_window": self.requests_per_window,
+            "current_calls_in_window": len(self.request_timestamps),
+            "requests_per_window": self.requests_per_window,
+            "window_seconds": self.window_seconds,
         }

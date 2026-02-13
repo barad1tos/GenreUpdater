@@ -34,7 +34,7 @@ from core.logger import LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
-from services.api.api_base import EnhancedRateLimiter, ScoredRelease
+from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
@@ -391,15 +391,15 @@ class ExternalApiOrchestrator:
         """Initialize rate limiters for each API provider."""
         rate_limits = self.rate_limits_config
         self.rate_limiters = {
-            "discogs": EnhancedRateLimiter(
+            "discogs": ApiRateLimiter(
                 requests_per_window=max(1, rate_limits.discogs_requests_per_minute),
                 window_seconds=60.0,
             ),
-            "musicbrainz": EnhancedRateLimiter(
+            "musicbrainz": ApiRateLimiter(
                 requests_per_window=max(1, int(rate_limits.musicbrainz_requests_per_second)),
                 window_seconds=1.0,
             ),
-            "itunes": EnhancedRateLimiter(
+            "itunes": ApiRateLimiter(
                 requests_per_window=10,
                 window_seconds=1.0,
             ),

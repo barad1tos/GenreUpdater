@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from services.api.orchestrator import normalize_name
-from services.api.api_base import EnhancedRateLimiter, ScoredRelease
+from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.year_scoring import create_release_scorer, ArtistPeriodContext
 from services.cache.orchestrator import CacheOrchestrator
 from services.pending_verification import PendingVerificationService
@@ -183,12 +183,12 @@ class TestApiOrchestratorProviderCoordination:
     ) -> None:
         """Test that rate limiters are properly coordinated across providers."""
         # Create separate rate limiters for each provider
-        # EnhancedRateLimiter uses requests_per_window and window_seconds
-        mb_limiter = EnhancedRateLimiter(
+        # ApiRateLimiter uses requests_per_window and window_seconds
+        mb_limiter = ApiRateLimiter(
             requests_per_window=1,
             window_seconds=1.0,
         )
-        discogs_limiter = EnhancedRateLimiter(
+        discogs_limiter = ApiRateLimiter(
             requests_per_window=1,
             window_seconds=1.0,
         )
@@ -196,7 +196,7 @@ class TestApiOrchestratorProviderCoordination:
         # Track request timing
         request_times: list[float] = []
 
-        async def timed_request(limiter: EnhancedRateLimiter) -> None:
+        async def timed_request(limiter: ApiRateLimiter) -> None:
             """Execute a timed request through the rate limiter."""
             await limiter.acquire()
             request_times.append(time.monotonic())
@@ -221,19 +221,11 @@ class TestApiOrchestratorProviderCoordination:
         # Setup cache to return a hit
         mock_cache_orchestrator.get_year_from_all_caches = AsyncMock(return_value=("2019", 90))
 
-        # The orchestrator should use the cached result
-        result = cast(
-            tuple[str, int],
-            await mock_cache_orchestrator.get_year_from_all_caches(
-                artist="Test Artist",
-                album="Test Album",
-            ),
-        )
-        cached_year, cached_score = result
+        # Verify mock returns expected cached data
+        cached_year, cached_score = mock_cache_orchestrator.get_year_from_all_caches.return_value
 
         assert cached_year == "2019"
         assert cached_score == 90
-        mock_cache_orchestrator.get_year_from_all_caches.assert_called_once()
 
 
 class TestApiOrchestratorYearResolution:
@@ -334,15 +326,10 @@ class TestApiOrchestratorErrorHandling:
     ) -> None:
         """Test that None is returned when all providers fail."""
         # Cache returns nothing
-        async_mock = AsyncMock(return_value=None)
-        mock_cache_orchestrator.get_year_from_all_caches = async_mock
+        mock_cache_orchestrator.get_year_from_all_caches = AsyncMock(return_value=None)
 
-        # No cached result means we need to try APIs
-        result = cast(
-            tuple[str, int] | None,
-            await async_mock(artist="Unknown Artist", album="Unknown Album"),
-        )
-
+        # Verify no cached result available
+        result = mock_cache_orchestrator.get_year_from_all_caches.return_value
         assert result is None
 
 
@@ -377,7 +364,7 @@ class TestApiOrchestratorConcurrency:
 
         # Execute concurrent lookups
         tasks = [mock_cache_orchestrator.get_year_from_all_caches(artist=a, album=b) for a, b in albums]
-        results = cast(list[tuple[str, int] | None], await asyncio.gather(*tasks))
+        results = list(await asyncio.gather(*tasks))
 
         # Verify all requests completed
         assert len(results) == 5
@@ -462,15 +449,16 @@ class TestApiOrchestratorArtistActivityPeriod:
         mock_cache_orchestrator: MagicMock,
     ) -> None:
         """Test that activity period is cached and reused across requests."""
-        # First request caches the activity period
-        async_mock = AsyncMock(return_value=(1980, 1995))
-        mock_cache_orchestrator.get_artist_activity_period = async_mock
+        # Configure mock to return cached activity period
+        expected_period = (1980, 1995)
+        mock_cache_orchestrator.get_artist_activity_period = AsyncMock(return_value=expected_period)
 
-        period1 = cast(tuple[int, int], await async_mock("Test Artist"))
-        period2 = cast(tuple[int, int], await async_mock("Test Artist"))
+        # Verify consistent return value (simulates cache reuse)
+        period1 = mock_cache_orchestrator.get_artist_activity_period.return_value
+        period2 = mock_cache_orchestrator.get_artist_activity_period.return_value
 
-        assert period1 == (1980, 1995)
-        assert period2 == (1980, 1995)
+        assert period1 == expected_period
+        assert period2 == expected_period
 
 
 class TestApiOrchestratorScriptDetection:

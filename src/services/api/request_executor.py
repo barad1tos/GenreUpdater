@@ -20,7 +20,7 @@ from services.cache.hash_service import UnifiedHashService
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
-    from services.api.api_base import EnhancedRateLimiter
+    from services.api.api_base import ApiRateLimiter
 
 
 # Constants
@@ -52,7 +52,7 @@ class ApiRequestExecutor:
         self,
         *,
         cache_service: CacheServiceProtocol,
-        rate_limiters: dict[str, EnhancedRateLimiter],
+        rate_limiters: dict[str, ApiRateLimiter],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         user_agent: str,
@@ -257,7 +257,7 @@ class ApiRequestExecutor:
         url: str,
         headers_override: dict[str, str] | None,
         timeout_override: float | None,
-    ) -> tuple[dict[str, str], EnhancedRateLimiter, aiohttp.ClientTimeout] | None:
+    ) -> tuple[dict[str, str], ApiRateLimiter, aiohttp.ClientTimeout] | None:
         """Prepare request headers, rate limiter, and timeout.
 
         Returns:
@@ -307,7 +307,7 @@ class ApiRequestExecutor:
         *,
         request_headers: dict[str, str],
         request_timeout: aiohttp.ClientTimeout,
-        limiter: EnhancedRateLimiter,
+        limiter: ApiRateLimiter,
         max_retries: int,
         base_delay: float,
     ) -> dict[str, Any] | None:
@@ -345,7 +345,7 @@ class ApiRequestExecutor:
         *,
         request_headers: dict[str, str],
         request_timeout: aiohttp.ClientTimeout,
-        limiter: EnhancedRateLimiter,
+        limiter: ApiRateLimiter,
         attempt: int,
         log_url: str,
         max_retries: int,
@@ -379,7 +379,7 @@ class ApiRequestExecutor:
         *,
         request_headers: dict[str, str],
         request_timeout: aiohttp.ClientTimeout,
-        limiter: EnhancedRateLimiter,
+        limiter: ApiRateLimiter,
         attempt: int,
         log_url: str,
     ) -> dict[str, Any] | None:

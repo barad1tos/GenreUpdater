@@ -19,7 +19,7 @@ from core.models.protocols import AppleScriptClientProtocol
 from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
-from services.apple.rate_limiter import EnhancedRateLimiter
+from services.apple.rate_limiter import AppleScriptRateLimiter
 from services.apple.sanitizer import AppleScriptSanitizer
 from core.apple_script_names import (
     FETCH_TRACK_IDS,
@@ -74,7 +74,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         # Semaphore and rate limiter are initialized in the async initialize method
         self.semaphore: asyncio.Semaphore | None = None
-        self.rate_limiter: EnhancedRateLimiter | None = None
+        self.rate_limiter: AppleScriptRateLimiter | None = None
 
         # Initialize the security sanitizer
         self.sanitizer = AppleScriptSanitizer(self.console_logger)
@@ -145,9 +145,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     requests_per_window = rate_limit_cfg.requests_per_window
                     window_size = rate_limit_cfg.window_size_seconds
 
-                    self.rate_limiter = EnhancedRateLimiter(
+                    self.rate_limiter = AppleScriptRateLimiter(
                         requests_per_window=requests_per_window,
-                        window_size=window_size,
+                        window_seconds=window_size,
                         max_concurrent=concurrent_limit,
                         logger=self.console_logger,
                     )
