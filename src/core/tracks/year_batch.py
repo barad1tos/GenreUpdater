@@ -2,13 +2,15 @@
 
 This module handles batch processing of album year updates,
 including concurrency control and progress tracking.
+
+Track-level update operations are delegated to TrackUpdater,
+and prerelease handling is delegated to PrereleaseHandler.
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from rich.progress import (
@@ -22,23 +24,22 @@ from rich.progress import (
 )
 
 from core.logger import get_shared_console
-from core.models.track_models import ChangeLogEntry
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
-    is_prerelease_status,
 )
 from core.models.validators import is_empty_year
 
+from .prerelease_handler import PrereleaseHandler
+from .track_updater import TrackUpdater
 from .year_determination import YearDeterminator
 from .year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
     import logging
-    from collections.abc import Coroutine
 
     from core.models.protocols import AnalyticsProtocol
-    from core.models.track_models import AppConfig, TrackDict
+    from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
     from core.retry_handler import DatabaseRetryHandler
     from core.tracks.track_processor import TrackProcessor
 
@@ -66,7 +67,7 @@ class YearBatchProcessor:
     - Batch album processing with rate limiting
     - Sequential and concurrent processing modes
     - Progress tracking and reporting
-    - Integration with YearDeterminator for year logic
+    - Orchestration of prerelease handling and track updates
     """
 
     def __init__(
@@ -95,14 +96,29 @@ class YearBatchProcessor:
 
         """
         self.year_determinator = year_determinator
-        self.track_processor = track_processor
-        self.retry_handler = retry_handler
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
         self.analytics = analytics
         self.dry_run = dry_run
         self._dry_run_actions: list[dict[str, Any]] = []
+
+        self._prerelease_handler = PrereleaseHandler(
+            console_logger=console_logger,
+            config=config,
+            pending_verification=year_determinator.pending_verification,
+            prerelease_recheck_days=year_determinator.prerelease_recheck_days,
+        )
+
+        self._track_updater = TrackUpdater(
+            track_processor=track_processor,
+            retry_handler=retry_handler,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            config=config,
+        )
+
+    # Batch strategy
 
     async def process_albums_in_batches(
         self,
@@ -282,13 +298,12 @@ class YearBatchProcessor:
                 ]
 
                 # Use gather with return_exceptions for resilience
-                # One album failure won't crash the entire batch
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Log any exceptions that occurred (skip CancelledError - it's graceful shutdown)
                 for album_entry, result in zip(batch_slice, results, strict=True):
                     if isinstance(result, asyncio.CancelledError):
-                        continue  # Skip canceled tasks - not a failure, just shutdown
+                        continue
                     if isinstance(result, BaseException):
                         album_key, _ = album_entry
                         artist_name, album_name = album_key
@@ -302,6 +317,8 @@ class YearBatchProcessor:
                             type(result).__name__,
                             result,
                         )
+
+    # Album processing pipeline
 
     async def _process_single_album(
         self,
@@ -324,7 +341,7 @@ class YearBatchProcessor:
 
         """
         # Handle prerelease tracks: check mode, filter, and mark for verification if needed
-        should_continue, editable_tracks = await self._handle_prerelease_tracks(artist, album, album_tracks)
+        should_continue, editable_tracks = await self._prerelease_handler.handle_prerelease_tracks(artist, album, album_tracks)
         if not should_continue:
             return
 
@@ -348,32 +365,24 @@ class YearBatchProcessor:
         if await self.year_determinator.check_suspicious_album(artist, album, album_tracks):
             return
 
-        # NOTE: check_prerelease_status is no longer called here because:
-        # 1. We already checked prerelease status above on ORIGINAL tracks
-        # 2. album_tracks now contains only editable tracks (no prerelease)
-        # The old call would always return False, wasting cycles
-
         # Check for future years
         future_years = YearDeterminator.extract_future_years(album_tracks)
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
 
         # Detect user manual changes (year_set_by_mgu is set but differs from current year)
-        # Behavior: log and re-process (override user's change with API data)
         self._detect_user_year_changes(artist, album, album_tracks)
 
         # Check if we should skip this album (force=True bypasses this)
-        # Pre-checks prevent wasted API calls by checking inexpensive conditions first
         should_skip, skip_reason = await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force)
         if should_skip:
             self.console_logger.info("[SKIP] %s - %s: %s", artist, album, skip_reason)
             return
 
-        # Force API query if reissue detection triggered (year=current but no release_year)
+        # Force API query if reissue detection triggered
         force_api = force or skip_reason == "needs_api_verification"
 
-        # Determine the year for this album (handles dominant year, cache, and API)
-        # Note: force=True bypasses dominant year and cache checks, always queries API
+        # Determine the year for this album
         year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force_api)
 
         if not year:
@@ -381,141 +390,7 @@ class YearBatchProcessor:
             return
 
         # Update tracks for this album
-        await self._update_tracks_for_album(artist, album, album_tracks, year, updated_tracks, changes_log)
-
-    async def _handle_prerelease_tracks(
-        self,
-        artist: str,
-        album: str,
-        album_tracks: list[TrackDict],
-    ) -> tuple[bool, list[TrackDict]]:
-        """Handle prerelease track detection and filtering.
-
-        Checks for prerelease tracks and applies the configured handling mode.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            album_tracks: List of all tracks in the album
-
-        Returns:
-            Tuple of (should_continue, editable_tracks):
-            - should_continue: False if processing should stop (skip_all, mark_only, or no editable tracks)
-            - editable_tracks: Filtered list of tracks that can be edited
-
-        """
-        original_track_count = len(album_tracks)
-        prerelease_tracks = [track for track in album_tracks if is_prerelease_status(track.track_status)]
-        has_prerelease = len(prerelease_tracks) > 0
-        editable_tracks = [track for track in album_tracks if can_edit_metadata(track.track_status)]
-
-        if not has_prerelease:
-            return True, editable_tracks
-
-        # Read and validate prerelease handling mode from config
-        prerelease_handling = self._get_prerelease_handling_mode(artist, album)
-
-        if prerelease_handling == "skip_all":
-            self.console_logger.info(
-                "[SKIP] %s - %s: contains prerelease tracks (%d/%d) - skip_all mode",
-                artist,
-                album,
-                len(prerelease_tracks),
-                original_track_count,
-            )
-            return False, []
-
-        if prerelease_handling == "mark_only":
-            self.console_logger.info(
-                "[MARK] %s - %s: %d prerelease + %d editable - mark_only mode",
-                artist,
-                album,
-                len(prerelease_tracks),
-                len(editable_tracks),
-            )
-            await self.year_determinator.pending_verification.mark_for_verification(
-                artist,
-                album,
-                reason="prerelease",
-                metadata={
-                    "track_count": str(original_track_count),
-                    "prerelease_count": str(len(prerelease_tracks)),
-                    "editable_count": str(len(editable_tracks)),
-                    "mode": "mark_only",
-                },
-                recheck_days=self.year_determinator.prerelease_recheck_days,
-            )
-            return False, []
-
-        # process_editable mode: check if we have any editable tracks
-        if not editable_tracks:
-            self.console_logger.debug(
-                "Skipping album '%s - %s': no editable tracks (%d/%d tracks are prerelease)",
-                artist,
-                album,
-                len(prerelease_tracks),
-                original_track_count,
-            )
-            await self.year_determinator.pending_verification.mark_for_verification(
-                artist,
-                album,
-                reason="prerelease",
-                metadata={
-                    "track_count": str(original_track_count),
-                    "prerelease_count": str(len(prerelease_tracks)),
-                    "all_prerelease": "true",
-                },
-                recheck_days=self.year_determinator.prerelease_recheck_days,
-            )
-            return False, []
-
-        # Mixed album: mark for verification but continue processing editable tracks
-        self.console_logger.info(
-            "[MIXED] %s - %s: %d prerelease + %d editable - marking for verification, processing editable",
-            artist,
-            album,
-            len(prerelease_tracks),
-            len(editable_tracks),
-        )
-        await self.year_determinator.pending_verification.mark_for_verification(
-            artist,
-            album,
-            reason="prerelease",
-            metadata={
-                "track_count": str(original_track_count),
-                "prerelease_count": str(len(prerelease_tracks)),
-                "editable_count": str(len(editable_tracks)),
-                "mixed_album": "true",
-            },
-            recheck_days=self.year_determinator.prerelease_recheck_days,
-        )
-        return True, editable_tracks
-
-    def _get_prerelease_handling_mode(self, artist: str, album: str) -> str:
-        """Get validated prerelease handling mode from config.
-
-        Args:
-            artist: Artist name (for warning context)
-            album: Album name (for warning context)
-
-        Returns:
-            Valid prerelease handling mode: 'process_editable', 'skip_all', or 'mark_only'
-
-        """
-        valid_modes = {"process_editable", "skip_all", "mark_only"}
-        mode = self.config.year_retrieval.processing.prerelease_handling
-
-        if mode not in valid_modes:
-            self.console_logger.warning(
-                "Unknown prerelease_handling mode '%s' for %s - %s, defaulting to 'process_editable'. Valid options: %s",
-                mode,
-                artist,
-                album,
-                ", ".join(sorted(valid_modes)),
-            )
-            return "process_editable"
-
-        return mode
+        await self._track_updater.update_tracks_for_album(artist, album, album_tracks, year, updated_tracks, changes_log)
 
     async def _process_dominant_year(
         self,
@@ -556,208 +431,13 @@ class YearBatchProcessor:
                 artist,
                 album,
             )
-            await self._update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
+            await self._track_updater.update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
             return True
 
         return False
 
-    async def _update_tracks_for_album(
-        self,
-        artist: str,
-        album: str,
-        album_tracks: list[TrackDict],
-        year: str,
-        updated_tracks: list[TrackDict],
-        changes_log: list[ChangeLogEntry],
-    ) -> None:
-        """Update tracks for a specific album and record changes.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            album_tracks: List of tracks in the album
-            year: Year to set
-            updated_tracks: List to append updated tracks to
-            changes_log: List to append change entries to
-
-        """
-        track_ids, tracks_needing_update = self._collect_tracks_for_update(album_tracks, year)
-
-        if not track_ids:
-            self.console_logger.info(
-                "All tracks for '%s - %s' already have year %s, skipping update",
-                artist,
-                album,
-                year,
-            )
-            return
-
-        successful, _ = await self.update_album_tracks_bulk_async(
-            tracks=tracks_needing_update,
-            year=year,
-            artist=artist,
-            album=album,
-        )
-
-        if successful > 0:
-            self._record_successful_updates(tracks_needing_update, year, artist, album, updated_tracks, changes_log)
-
-    def _collect_tracks_for_update(
-        self,
-        album_tracks: list[TrackDict],
-        year: str,
-    ) -> tuple[list[str], list[TrackDict]]:
-        """Collect tracks that need year updates.
-
-        Args:
-            album_tracks: List of tracks in the album
-            year: Target year to set
-
-        Returns:
-            Tuple of (track_ids, tracks_needing_update)
-
-        """
-        seen_ids: set[str] = set()
-        track_ids: list[str] = []
-        tracks_needing_update: list[TrackDict] = []
-
-        for track in album_tracks:
-            track_id = self._get_valid_track_id(track, seen_ids)
-            if not track_id:
-                continue
-
-            seen_ids.add(track_id)
-
-            if not self._can_update_track(track, track_id):
-                continue
-
-            current_year = track.get("year", "")
-            if self._track_needs_year_update(current_year, year):
-                track_ids.append(track_id)
-                tracks_needing_update.append(track)
-                self.console_logger.debug(
-                    "Track %s needs year update from '%s' to '%s'",
-                    track_id,
-                    current_year or "empty",
-                    year,
-                )
-            else:
-                self.console_logger.debug("Track %s already has correct year %s, skipping", track_id, year)
-
-        return track_ids, tracks_needing_update
-
-    @staticmethod
-    def _get_valid_track_id(track: TrackDict, seen_ids: set[str]) -> str | None:
-        """Get a valid track ID if not already seen.
-
-        Args:
-            track: Track to get ID from
-            seen_ids: Set of already seen IDs
-
-        Returns:
-            Track ID string or None if invalid/duplicate
-
-        """
-        track_id_value = track.get("id", "")
-        if not track_id_value:
-            return None
-
-        track_id = str(track_id_value)
-        return None if track_id in seen_ids else track_id
-
-    def _can_update_track(self, track: TrackDict, track_id: str) -> bool:
-        """Check if the track can be updated based on its status.
-
-        Args:
-            track: Track to check
-            track_id: Track ID for logging
-
-        Returns:
-            True if track can be updated
-
-        """
-        track_status = track.track_status if isinstance(track.track_status, str) else None
-
-        if not can_edit_metadata(track_status):
-            self.console_logger.debug(
-                "Skipping read-only track %s (status: %s)",
-                track_id,
-                track_status or "unknown",
-            )
-            return False
-
-        return True
-
-    @staticmethod
-    def _record_successful_updates(
-        tracks: list[TrackDict],
-        year: str,
-        artist: str,
-        album: str,
-        updated_tracks: list[TrackDict],
-        changes_log: list[ChangeLogEntry],
-    ) -> None:
-        """Record successful track updates.
-
-        Args:
-            tracks: Tracks that were updated
-            year: New year value
-            artist: Artist name
-            album: Album name
-            updated_tracks: List to append updated tracks to
-            changes_log: List to append change entries to
-
-        """
-        for track in tracks:
-            updated_tracks.append(track.copy(year=year))
-
-            old_year_value = track.get("year")
-            changes_log.append(
-                ChangeLogEntry(
-                    timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-                    change_type="year_update",
-                    track_id=str(track.get("id", "")),
-                    artist=artist,
-                    album_name=album,
-                    track_name=str(track.get("name", "")),
-                    year_before_mgu=str(old_year_value) if old_year_value is not None else "",
-                    year_set_by_mgu=year,
-                )
-            )
-
-            # Preserve original year in year_before_mgu (only if not already set)
-            if not track.year_before_mgu:
-                track.year_before_mgu = str(old_year_value) if old_year_value else ""
-
-            # Keep the in-memory snapshot aligned
-            track.year = year
-            track.year_set_by_mgu = year
-
-    @staticmethod
-    def _track_needs_year_update(current_year: str | int | None, target_year: str) -> bool:
-        """Check if a track needs its year updated.
-
-        Args:
-            current_year: Current year value (may be None, empty, or string/int)
-            target_year: Target year to set
-
-        Returns:
-            True if track needs update, False otherwise
-
-        """
-        if is_empty_year(current_year):
-            return True
-        return str(current_year) != target_year
-
     def _handle_no_year_found(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
-        """Handle case when no year could be determined for the album.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            album_tracks: List of tracks in the album
-
-        """
+        """Handle case when no year could be determined for the album."""
         if available_tracks := filter_available_tracks(album_tracks):
             self.console_logger.warning(
                 "Album '%s - %s' has %d available tracks (of %d total) but no year could be determined. "
@@ -779,12 +459,6 @@ class YearBatchProcessor:
 
         If year_set_by_mgu is set (we previously updated) but current year differs,
         the user manually changed the year. Log this for visibility.
-        Behavior: log and continue processing (override with API data).
-
-        Args:
-            artist: Artist name
-            album: Album name
-            album_tracks: List of tracks in the album
 
         """
         for track in album_tracks:
@@ -798,6 +472,8 @@ class YearBatchProcessor:
                     track.year,
                 )
                 return  # Only log once per album
+
+    # Utilities
 
     @staticmethod
     def group_tracks_by_album(
@@ -834,73 +510,7 @@ class YearBatchProcessor:
         """Get a list of dry-run actions that would have been performed."""
         return self._dry_run_actions
 
-    # =========================================================================
-    # Track Update Methods
-    # =========================================================================
-
-    async def _update_track_with_retry(
-        self,
-        track_id: str,
-        new_year: str,
-        *,
-        original_artist: str | None = None,
-        original_album: str | None = None,
-        original_track: str | None = None,
-    ) -> bool:
-        """Update a track's year with retry logic via DatabaseRetryHandler.
-
-        Uses the injected retry_handler for automatic exponential backoff
-        and transient error detection.
-
-        Args:
-            track_id: Track ID to update
-            new_year: Year to set
-            original_artist: Artist name for contextual logging
-            original_album: Album name for contextual logging
-            original_track: Track name for contextual logging
-
-        Returns:
-            True if successful, False otherwise
-
-        """
-
-        async def _do_update() -> bool:
-            update_success = await self.track_processor.update_track_async(
-                track_id=track_id,
-                new_year=new_year,
-                original_artist=original_artist,
-                original_album=original_album,
-                original_track=original_track,
-            )
-            if not update_success:
-                # False result without exception - treat as permanent failure
-                self.console_logger.debug(
-                    "Update returned False for track %s (no-change or unsupported)",
-                    track_id,
-                )
-                return False
-            return True
-
-        try:
-            retry_result = await self.retry_handler.execute_with_retry(
-                _do_update,
-                f"track_update:{track_id}",
-            )
-            # Type narrowing — ty can't infer TypeVar from callable return type
-            if not isinstance(retry_result, bool):
-                msg = f"execute_with_retry returned {type(retry_result).__name__}, expected bool (track_id={track_id})"
-                raise TypeError(msg)
-            return retry_result
-        except (OSError, ValueError, RuntimeError):
-            # All retries exhausted
-            self.error_logger.exception(
-                "Failed to update year for track %s (artist=%s, album=%s, year=%s) after all retry attempts",
-                track_id,
-                original_artist or "unknown",
-                original_album or "unknown",
-                new_year,
-            )
-            return False
+    # Backward compatibility delegation
 
     async def update_album_tracks_bulk_async(
         self,
@@ -909,112 +519,10 @@ class YearBatchProcessor:
         artist: str,
         album: str,
     ) -> tuple[int, int]:
-        """Update year for multiple tracks in bulk.
-
-        Args:
-            tracks: List of tracks to update
-            year: Year to set
-            artist: Artist name for contextual logging
-            album: Album name for contextual logging
-
-        Returns:
-            Tuple of (successful_count, failed_count)
-
-        """
-        # Extract and validate track IDs
-        track_ids = [str(track.get("id", "")) for track in tracks if track.get("id")]
-        valid_track_ids = self._validate_track_ids(track_ids, artist=artist, album=album)
-        if not valid_track_ids:
-            self.console_logger.warning(
-                "No valid track IDs to update for %s - %s (input: %d tracks, all IDs empty or invalid)",
-                artist,
-                album,
-                len(tracks),
-            )
-            return 0, len(tracks)
-
-        # Build mapping from track_id to track name for logging
-        track_names: dict[str, str] = {str(track.get("id", "")): str(track.get("name", "")) for track in tracks if track.get("id")}
-
-        # Process in batches
-        batch_size = self.config.apple_script_concurrency
-        successful = 0
-        failed = 0
-
-        for i in range(0, len(valid_track_ids), batch_size):
-            batch = valid_track_ids[i : i + batch_size]
-
-            # Create update tasks with retry logic
-            tasks: list[Coroutine[Any, Any, bool]] = []
-            for track_id in batch:
-                task = self._update_track_with_retry(
-                    track_id=track_id,
-                    new_year=year,
-                    original_artist=artist,
-                    original_album=album,
-                    original_track=track_names.get(track_id),
-                )
-                tasks.append(task)
-
-            # Execute batch
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Count results
-            for index, result in enumerate(results):
-                if isinstance(result, Exception):
-                    failed += 1
-                    track_id_in_batch = batch[index] if index < len(batch) else "unknown"
-                    self.error_logger.error(
-                        "Failed to update track %s (artist=%s, album=%s, year=%s): %s",
-                        track_id_in_batch,
-                        artist,
-                        album,
-                        year,
-                        result,
-                    )
-                elif result:
-                    successful += 1
-                else:
-                    failed += 1
-
-        # Log summary
-        self.console_logger.info(
-            "Year update results: %d successful, %d failed",
-            successful,
-            failed,
+        """Update year for multiple tracks. Delegates to TrackUpdater."""
+        return await self._track_updater.update_album_tracks_bulk_async(
+            tracks=tracks,
+            year=year,
+            artist=artist,
+            album=album,
         )
-
-        return successful, failed
-
-    def _validate_track_ids(
-        self,
-        track_ids: list[str],
-        *,
-        artist: str,
-        album: str,
-    ) -> list[str]:
-        """Validate track IDs before bulk update.
-
-        Args:
-            track_ids: List of track IDs to validate
-            artist: Artist name for contextual logging
-            album: Album name for contextual logging
-
-        Returns:
-            List of valid track IDs
-
-        """
-        if not track_ids:
-            return []
-
-        valid_ids = [track_id for track_id in track_ids if track_id and str(track_id).strip()]
-
-        if len(valid_ids) < len(track_ids):
-            self.console_logger.warning(
-                "Filtered out %d invalid track IDs for %s - %s (empty or whitespace)",
-                len(track_ids) - len(valid_ids),
-                artist,
-                album,
-            )
-
-        return valid_ids

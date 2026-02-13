@@ -52,7 +52,7 @@ class TestPrereleaseHandlingProcessEditable:
         updated_tracks: list[Any] = []
         changes_log: list[Any] = []
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, updated_tracks, changes_log)
 
             # Should have called update for editable tracks
@@ -75,7 +75,7 @@ class TestPrereleaseHandlingProcessEditable:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
         mock_year_determinator.pending_verification.mark_for_verification.assert_called_once()
@@ -95,7 +95,7 @@ class TestPrereleaseHandlingProcessEditable:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
             # Should process (default = process_editable)
@@ -120,7 +120,7 @@ class TestPrereleaseHandlingSkipAll:
             create_test_track(track_id="track-c", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
             # Should NOT have called update - entire album skipped
@@ -139,7 +139,7 @@ class TestPrereleaseHandlingSkipAll:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
         # skip_all should not mark for verification
@@ -159,7 +159,7 @@ class TestPrereleaseHandlingSkipAll:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
             # Should process since no prerelease
@@ -182,7 +182,7 @@ class TestPrereleaseHandlingMarkOnly:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
             # Should NOT have called update
@@ -207,7 +207,7 @@ class TestPrereleaseHandlingMarkOnly:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
             # Should process since no prerelease
@@ -233,7 +233,7 @@ class TestAllPrereleaseAlbum:
                 create_test_track(track_id="track-b", track_status="Prerelease"),
             ]
 
-            with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+            with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
                 await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
                 # Should NOT have called update - no editable tracks
@@ -276,7 +276,7 @@ class TestInvalidPrereleaseHandlingConfig:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock) as mock_update:
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             with caplog.at_level(logging.WARNING):
                 await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 
@@ -300,7 +300,7 @@ class TestInvalidPrereleaseHandlingConfig:
             create_test_track(track_id="track-b", track_status="Purchased"),
         ]
 
-        with patch.object(processor, "_update_tracks_for_album", new_callable=AsyncMock):
+        with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
             with caplog.at_level(logging.WARNING):
                 await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
 

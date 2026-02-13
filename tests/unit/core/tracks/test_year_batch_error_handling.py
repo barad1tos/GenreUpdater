@@ -413,7 +413,7 @@ class TestTrackIdValidation:
     def test_empty_track_id_filtered_out(self) -> None:
         """Empty string IDs are filtered from the list."""
         processor = create_year_batch_processor()
-        result = processor._validate_track_ids(
+        result = processor._track_updater._validate_track_ids(
             ["valid", "", "also_valid"],
             artist="Artist",
             album="Album",
@@ -423,7 +423,7 @@ class TestTrackIdValidation:
     def test_whitespace_track_id_filtered_out(self) -> None:
         """Whitespace-only IDs are filtered from the list."""
         processor = create_year_batch_processor()
-        result = processor._validate_track_ids(
+        result = processor._track_updater._validate_track_ids(
             ["valid", "   ", "also_valid"],
             artist="Artist",
             album="Album",
@@ -437,7 +437,7 @@ class TestTrackIdValidation:
         """All invalid IDs produce empty list and warning logged."""
         processor = create_year_batch_processor()
         with caplog.at_level(logging.WARNING):
-            result = processor._validate_track_ids(
+            result = processor._track_updater._validate_track_ids(
                 ["", "  ", ""],
                 artist="Artist",
                 album="Album",
@@ -448,13 +448,13 @@ class TestTrackIdValidation:
     def test_empty_list_returns_empty(self) -> None:
         """Empty input list returns empty without logging."""
         processor = create_year_batch_processor()
-        result = processor._validate_track_ids([], artist="Artist", album="Album")
+        result = processor._track_updater._validate_track_ids([], artist="Artist", album="Album")
         assert result == []
 
     def test_all_valid_ids_returned_unchanged(self) -> None:
         """Valid IDs pass through without modification."""
         processor = create_year_batch_processor()
-        result = processor._validate_track_ids(
+        result = processor._track_updater._validate_track_ids(
             ["1", "2", "3"],
             artist="Artist",
             album="Album",
@@ -475,7 +475,7 @@ class TestBulkUpdateMixedResults:
     async def test_mixed_success_and_failure_counts(self) -> None:
         """Mix of True/False returns counted correctly."""
         processor = create_year_batch_processor()
-        processor._update_track_with_retry = AsyncMock(
+        processor._track_updater._update_track_with_retry = AsyncMock(
             side_effect=[True, False, True],
         )
 
@@ -501,7 +501,7 @@ class TestBulkUpdateMixedResults:
     ) -> None:
         """Exception from a track update is counted as a failure."""
         processor = create_year_batch_processor()
-        processor._update_track_with_retry = AsyncMock(
+        processor._track_updater._update_track_with_retry = AsyncMock(
             side_effect=RuntimeError("unexpected error"),
         )
 
@@ -521,7 +521,7 @@ class TestBulkUpdateMixedResults:
     async def test_all_succeed_returns_full_count(self) -> None:
         """All successful updates reflected in counts."""
         processor = create_year_batch_processor()
-        processor._update_track_with_retry = AsyncMock(return_value=True)
+        processor._track_updater._update_track_with_retry = AsyncMock(return_value=True)
 
         tracks = [
             create_test_track(name="T1"),
@@ -573,7 +573,7 @@ class TestRetryExhaustion:
         )
         processor = create_year_batch_processor(retry_handler=retry_handler)
 
-        result = await processor._update_track_with_retry(
+        result = await processor._track_updater._update_track_with_retry(
             track_id="456",
             new_year="2021",
         )
@@ -592,7 +592,7 @@ class TestRetryExhaustion:
         processor = create_year_batch_processor(retry_handler=retry_handler)
 
         with caplog.at_level(logging.ERROR):
-            result = await processor._update_track_with_retry(
+            result = await processor._track_updater._update_track_with_retry(
                 track_id="123",
                 new_year="2020",
                 original_artist="Artist",
@@ -610,7 +610,7 @@ class TestRetryExhaustion:
         )
         processor = create_year_batch_processor(retry_handler=retry_handler)
 
-        result = await processor._update_track_with_retry(
+        result = await processor._track_updater._update_track_with_retry(
             track_id="789",
             new_year="2022",
         )
