@@ -712,7 +712,7 @@ class CompactFormatter(logging.Formatter):
                 error_msg = f"CRITICAL LOGGING ERROR: {critical_error}"
                 print(error_msg, file=sys.stderr)
                 # Also try to log using a different mechanism if available
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(OSError, AttributeError):
                     syslog.syslog(syslog.LOG_CRIT, error_msg)
                 return f"CRITICAL FORMATTING ERROR: {error_msg}"
             return f"FORMATTING ERROR: {basic_msg}"

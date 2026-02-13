@@ -136,7 +136,7 @@ class IncrementalFilterService(BaseProcessor):
 
             return status_changed_tracks
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             self.console_logger.warning("Failed to check status changes: %s", e)
             return []
 

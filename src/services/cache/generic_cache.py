@@ -114,7 +114,7 @@ class GenericCacheService:
                 except asyncio.CancelledError:
                     self.logger.debug("Cleanup task cancelled")
                     raise
-                except Exception as e:
+                except (OSError, ValueError, RuntimeError) as e:
                     self.logger.exception("Error in cleanup task: %s", e)
 
         self._cleanup_task = asyncio.create_task(cleanup_loop())
