@@ -230,7 +230,10 @@ class PendingVerificationService:
                 # Fallback to date-only format
                 timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d").replace(tzinfo=UTC)
                 self.error_logger.warning(
-                    f"Pending file timestamp had date-only format for '{artist} - {album}': {timestamp_str}. Parsed as date only."
+                    "Pending file timestamp had date-only format for '%s - %s': %s. Parsed as date only.",
+                    artist,
+                    album,
+                    timestamp_str,
                 )
                 return timestamp
             except ValueError:
@@ -327,10 +330,10 @@ class PendingVerificationService:
         self._ensure_pending_file_directory()
 
         if not os.path.exists(self.pending_file_path):
-            self.console_logger.info(f"Pending verification file not found, will create at: {self.pending_file_path}")
+            self.console_logger.info("Pending verification file not found, will create at: %s", self.pending_file_path)
             return {}
 
-        self.console_logger.debug(f"Reading pending verification file: {self.pending_file_path}")
+        self.console_logger.debug("Reading pending verification file: %s", self.pending_file_path)
         return self._read_csv_data()
 
     async def _load_pending_albums(self) -> None:
@@ -344,7 +347,7 @@ class PendingVerificationService:
             self.pending_albums = await loop.run_in_executor(None, self._blocking_load)
 
         if self.pending_albums:
-            self.console_logger.info(f"Loaded {len(self.pending_albums)} pending albums for verification")
+            self.console_logger.info("Loaded %d pending albums for verification", len(self.pending_albums))
         else:
             self.console_logger.info("No pending albums loaded (file not found or empty).")
 
@@ -398,9 +401,9 @@ class PendingVerificationService:
 
         try:
             await loop.run_in_executor(None, self._blocking_save, entries)
-            self.console_logger.info(f"Saved {len(entries)} pending albums for verification")
+            self.console_logger.info("Saved %d pending albums for verification", len(entries))
         except (OSError, csv.Error) as e:
-            self.error_logger.exception(f"Error saving pending verification file: {e}")
+            self.error_logger.exception("Error saving pending verification file: %s", e)
 
     async def mark_for_verification(
         self,
@@ -464,7 +467,11 @@ class PendingVerificationService:
 
         if reason_enum == VerificationReason.PRERELEASE:
             self.console_logger.info(
-                f"Marked prerelease album '{artist} - {album}' for future verification in {effective_interval} days (attempt #{new_attempt_count})",
+                "Marked prerelease album '%s - %s' for future verification in %d days (attempt #%d)",
+                artist,
+                album,
+                effective_interval,
+                new_attempt_count,
             )
         else:
             self.console_logger.info(
@@ -547,7 +554,9 @@ class PendingVerificationService:
             if datetime.now(UTC) >= verification_time:
                 # Verification period has elapsed
                 self.console_logger.info(
-                    f"Verification period elapsed for '{entry.artist} - {entry.album}'",
+                    "Verification period elapsed for '%s - %s'",
+                    entry.artist,
+                    entry.album,
                 )
                 return True
 
@@ -575,12 +584,16 @@ class PendingVerificationService:
                 entry = self.pending_albums[key_hash]
                 del self.pending_albums[key_hash]
                 self.console_logger.info(
-                    f"Removed '{entry.artist} - {entry.album}' from pending verification",
+                    "Removed '%s - %s' from pending verification",
+                    entry.artist,
+                    entry.album,
                 )
             # No need to save if the item wasn't found
             else:
                 self.console_logger.debug(
-                    f"Attempted to remove '{artist} - {album}' from pending verification, but it was not found.",
+                    "Attempted to remove '%s - %s' from pending verification, but it was not found.",
+                    artist,
+                    album,
                 )
                 return  # Exit without saving if no removal occurred
 
@@ -648,7 +661,9 @@ class PendingVerificationService:
                 )
                 if now >= verification_time:
                     self.console_logger.info(
-                        f"Album '{entry.artist} - {entry.album}' needs verification",
+                        "Album '%s - %s' needs verification",
+                        entry.artist,
+                        entry.album,
                     )
                     verified_keys.add(key_hash)
                 # self.console_logger.debug(

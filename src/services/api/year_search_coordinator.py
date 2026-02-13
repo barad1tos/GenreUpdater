@@ -146,7 +146,7 @@ class YearSearchCoordinator:
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
         if debug.api:
-            self.console_logger.info(f"{script_type.value} detected - trying script-optimized search")
+            self.console_logger.info("%s detected - trying script-optimized search", script_type.value)
 
         api_lists = self._get_script_api_priorities(script_type)
 
@@ -157,7 +157,7 @@ class YearSearchCoordinator:
 
         # Try fallback APIs if primary failed
         if debug.api:
-            self.console_logger.info(f"Primary APIs failed for {script_type.value} - trying fallback")
+            self.console_logger.info("Primary APIs failed for %s - trying fallback", script_type.value)
         return await self._try_api_list(api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True)
 
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
@@ -232,25 +232,28 @@ class YearSearchCoordinator:
             api_client = self._get_api_client(api_name)
             if not api_client:
                 if debug.api and not is_fallback:
-                    self.console_logger.debug(f"{api_name} client not available, skipping")
+                    self.console_logger.debug("%s client not available, skipping", api_name)
                 return None
 
             if debug.api:
-                self.console_logger.info(f"Trying {api_name} for {script_type.value} text")
+                self.console_logger.info("Trying %s for %s text", api_name, script_type.value)
             results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
 
             if results:
                 if debug.api:
                     result_type = "Fallback" if is_fallback else "Primary"
                     self.console_logger.info(
-                        f"{result_type} {api_name} found %d results for {script_type.value}",
+                        "%s %s found %d results for %s",
+                        result_type,
+                        api_name,
                         len(results),
+                        script_type.value,
                     )
                 return results
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
             if debug.api:
-                self.console_logger.warning(f"{api_name} failed for {script_type.value}: %s", e)
+                self.console_logger.warning("%s failed for %s: %s", api_name, script_type.value, e)
 
         return None
 

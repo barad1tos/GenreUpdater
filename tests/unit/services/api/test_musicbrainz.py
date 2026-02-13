@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from services.api.musicbrainz import MusicBrainzClient
@@ -353,3 +354,132 @@ class TestRetrieveAndScoreReleasesErrorHandling:
             result = await client.get_scored_releases("artist", "album", None)
 
         assert result == []
+
+
+class TestGetArtistInfoExceptionHandler:
+    """Tests for get_artist_info exception logging (line 314)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_get_artist_info_logs_exception_on_api_error(self) -> None:
+        mock_api_request = AsyncMock(side_effect=OSError("connection failed"))
+        error_logger = MockLogger()
+        client = MusicBrainzClient(
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=error_logger,  # type: ignore[arg-type]
+            make_api_request_func=mock_api_request,
+            score_release_func=MagicMock(return_value=0.85),
+            analytics=_mock_analytics(),
+        )
+
+        result = await client.get_artist_info("test artist")
+
+        assert result is None
+        assert any("Failed to get artist info" in msg for msg in error_logger.exception_messages)
+
+
+class TestFieldedReleaseGroupSearchSuccessLog:
+    """Tests for _fielded_release_group_search success debug log (line 453)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fielded_search_logs_success_on_results(self) -> None:
+        console_logger = MockLogger()
+        mock_api_request = AsyncMock(
+            return_value={
+                "count": 2,
+                "release-groups": [{"id": "rg1"}, {"id": "rg2"}],
+            }
+        )
+        client = MusicBrainzClient(
+            console_logger=console_logger,  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api_request,
+            score_release_func=MagicMock(return_value=0.85),
+            analytics=_mock_analytics(),
+        )
+
+        result = await client._fielded_release_group_search(
+            "https://musicbrainz.org/ws/2/release-group/",
+            "metallica",
+            "master of puppets",
+            attempt_num=1,
+        )
+
+        assert len(result) == 2
+        assert any("Attempt 1 successful. Found 2 release groups" in msg for msg in console_logger.debug_messages)
+
+
+class TestSearchReleaseGroupsSuccessLog:
+    """Tests for _search_release_groups success debug log after filtering (line 482)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_search_release_groups_logs_filtered_count(self) -> None:
+        console_logger = MockLogger()
+        mock_api_request = AsyncMock(
+            return_value={
+                "count": 1,
+                "release-groups": [
+                    {"id": "rg1", "title": "Album", "artist-credit": [{"artist": {"name": "Metallica"}}]},
+                ],
+            }
+        )
+        client = MusicBrainzClient(
+            console_logger=console_logger,  # type: ignore[arg-type]
+            error_logger=MockLogger(),  # type: ignore[arg-type]
+            make_api_request_func=mock_api_request,
+            score_release_func=MagicMock(return_value=0.85),
+            analytics=_mock_analytics(),
+        )
+
+        result = await client._search_release_groups("metallica album", "metallica", attempt_num=2)
+
+        assert len(result) == 1
+        assert any("Attempt 2 successful. Found 1 matching groups after filtering" in msg for msg in console_logger.debug_messages)
+
+
+class TestFetchReleasesForGroupsExceptionHandling:
+    """Tests for _fetch_releases_for_groups exception in results (line 552)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_releases_logs_warning_on_gather_exception(self) -> None:
+        error_logger = MockLogger()
+        call_count = 0
+
+        async def mock_api_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            """Mock API request function designed to simulate a network timeout error.
+
+            This function increments the call count each time it is called and
+            raises an `OSError` to simulate a network timeout during an API request.
+
+            Args:
+                *_args: Positional arguments passed to the mock API request.
+                **_kwargs: Keyword arguments passed to the mock API request.
+
+            Raises:
+                OSError: Always raised to simulate a network timeout.
+
+            Returns:
+                dict[str, Any]: This function never successfully returns, as it
+                always raises an exception.
+            """
+            nonlocal call_count
+            call_count += 1
+            raise OSError("network timeout")
+
+        client = MusicBrainzClient(
+            console_logger=MockLogger(),  # type: ignore[arg-type]
+            error_logger=error_logger,  # type: ignore[arg-type]
+            make_api_request_func=mock_api_request,
+            score_release_func=MagicMock(return_value=0.85),
+            analytics=_mock_analytics(),
+        )
+
+        release_groups: list[dict[str, Any]] = [{"id": "rg-abc-123", "title": "Test Album"}]
+        results = await client._fetch_releases_for_groups(release_groups)
+
+        assert len(results) == 1
+        assert results[0][0] is None
+        assert any("Failed to fetch releases for MB RG ID rg-abc-123" in msg for msg in error_logger.warning_messages)

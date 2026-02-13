@@ -152,7 +152,7 @@ class Analytics:
         # Shared console for coordinated Rich output
         self._console = get_shared_console()
 
-        self.console_logger.debug(f"Analytics #{self.instance_id} initialized")
+        self.console_logger.debug("Analytics #%s initialized", self.instance_id)
 
     # --- Public decorator helpers ---
     def track(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -231,7 +231,7 @@ class Analytics:
         except RuntimeError as e:
             if "cannot be called from a running event loop" in str(e):
                 func_name = _get_func_name(func)
-                self.console_logger.warning(f"Cannot track {func_name} with asyncio.run() from within event loop; executing without tracking")
+                self.console_logger.warning("Cannot track %s with asyncio.run() from within event loop; executing without tracking", func_name)
                 # Execute function directly without tracking to avoid blocking
                 return func(*args, **kwargs)
             raise
@@ -279,7 +279,7 @@ class Analytics:
             success = True
             return result
         except Exception as exc:
-            self.error_logger.exception(f"{func_name}: {exc}")
+            self.error_logger.exception("%s: %s", func_name, exc)
             raise
         finally:
             func_end = time.time()
@@ -318,7 +318,7 @@ class Analytics:
         if 0 < self.max_events <= len(self.events):
             prune = max(5, int(self.max_events * 0.1))
             self.events = self.events[prune:]
-            self.console_logger.debug(f"Pruned {prune} old events")
+            self.console_logger.debug("Pruned %s old events", prune)
 
         # Timestamps
         if self.compact_time:
@@ -466,16 +466,22 @@ class Analytics:
             return
         stats = self.get_stats()
         self.console_logger.info(
-            f"Analytics Summary: {stats['total_calls']} calls | {stats['success_rate']:.1f}% success | avg {stats['avg_duration']:.3f}s",
+            "Analytics Summary: %s calls | %.1f%% success | avg %.3fs",
+            stats["total_calls"],
+            stats["success_rate"],
+            stats["avg_duration"],
         )
 
         dc = stats["duration_counts"]
         total = sum(dc.values()) or 1
         self.console_logger.info(
-            f"Performance: "
-            f"{self._FAST} {dc['fast'] / total * 100:.0f}% | "
-            f"{self._MEDIUM} {dc['medium'] / total * 100:.0f}% | "
-            f"{self._SLOW} {dc['slow'] / total * 100:.0f}%",
+            "Performance: %s %.0f%% | %s %.0f%% | %s %.0f%%",
+            self._FAST,
+            dc["fast"] / total * 100,
+            self._MEDIUM,
+            dc["medium"] / total * 100,
+            self._SLOW,
+            dc["slow"] / total * 100,
         )
 
     # --- Maintenance helpers ---
@@ -519,7 +525,7 @@ class Analytics:
             to_add = other.events[-num_to_add:] if num_to_add > 0 else []
             num_dropped = len(other.events) - num_to_add
             if num_dropped > 0:
-                self.console_logger.warning(f"Dropped {num_dropped} events during merge due to max_events={self.max_events} limit")
+                self.console_logger.warning("Dropped %s events during merge due to max_events=%s limit", num_dropped, self.max_events)
         else:
             to_add = other.events
         self.events.extend(to_add)

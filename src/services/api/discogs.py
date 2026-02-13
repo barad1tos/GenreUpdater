@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from typing import Any, TypedDict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
@@ -171,7 +171,7 @@ class DiscogsClient(BaseApiClient):
             return None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
-            self.error_logger.exception(f"[discogs] Error fetching release details for ID {release_id}: {e}")
+            self.error_logger.exception("[discogs] Error fetching release details for ID %s: %s", release_id, e)
             return None
 
     @track_instance_method("discogs_master_release")
@@ -222,7 +222,7 @@ class DiscogsClient(BaseApiClient):
             return None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
-            self.error_logger.exception(f"[discogs] Error fetching master release {master_id}: {e}")
+            self.error_logger.exception("[discogs] Error fetching master release %s: %s", master_id, e)
             return None
 
     @staticmethod
@@ -359,7 +359,7 @@ class DiscogsClient(BaseApiClient):
         cached_data = await self.cache_service.get_async(cache_key)
         if cached_data is not None:
             if isinstance(cached_data, list):
-                self.console_logger.debug(f"Using cached Discogs results for cache key: {cache_key}")
+                self.console_logger.debug("Using cached Discogs results for cache key: %s", cache_key)
                 return cached_data
             self.console_logger.warning("Cached Discogs data has unexpected type. Ignoring cache.")
         return None
@@ -393,13 +393,13 @@ class DiscogsClient(BaseApiClient):
         """
         search_url = f"{DISCOGS_BASE_URL}/database/search"
         log_url = f"{search_url}?{urllib.parse.urlencode(params, safe=':/')}"
-        self.console_logger.debug(f"[discogs] {strategy_name} URL: {log_url}")
+        self.console_logger.debug("[discogs] %s URL: %s", strategy_name, log_url)
 
         data = await self._make_api_request("discogs", search_url, params=params)
 
         # Check for an error message
         if isinstance(data, dict) and "message" in data:
-            self.error_logger.warning(f"[discogs] API message: {data.get('message')}")
+            self.error_logger.warning("[discogs] API message: %s", data.get("message"))
             return None
 
         # Check for results
@@ -410,7 +410,7 @@ class DiscogsClient(BaseApiClient):
         if not results:
             return None
 
-        self.console_logger.debug(f"[discogs] {strategy_name}: found {len(results)} results")
+        self.console_logger.debug("[discogs] %s: found %s results", strategy_name, len(results))
         return data
 
     async def _perform_primary_search(
@@ -448,7 +448,7 @@ class DiscogsClient(BaseApiClient):
     ) -> dict[str, Any] | None:
         """Perform fallback searches with broader queries.
 
-        Fallback 1: Generic query with artist + album concatenation
+        Fallback 1: Generic query with artist and album concatenation
         Fallback 2: Album-only search (will need post-filtering by artist)
 
         Args:
@@ -489,7 +489,7 @@ class DiscogsClient(BaseApiClient):
 
         Uses multiple search strategies similar to MusicBrainz:
         1. Primary: Fielded search with artist= and release_title= parameters
-        2. Fallback 1: Generic query with artist + album concatenation
+        2. Fallback 1: Generic query with artist and album concatenation
         3. Fallback 2: Album-only search with artist post-filtering
 
         Args:
@@ -503,8 +503,11 @@ class DiscogsClient(BaseApiClient):
 
         """
         self.console_logger.debug(
-            f"[discogs] Start search | artist_orig='{artist_orig or artist_norm}' "
-            f"artist_norm='{artist_norm}', album_orig='{album_orig or album_norm}', album_norm='{album_norm}'",
+            "[discogs] Start search | artist_orig='%s' artist_norm='%s', album_orig='%s', album_norm='%s'",
+            artist_orig or artist_norm,
+            artist_norm,
+            album_orig or album_norm,
+            album_norm,
         )
 
         # Try primary fielded search first
@@ -515,11 +518,13 @@ class DiscogsClient(BaseApiClient):
             result = await self._perform_fallback_searches(artist_norm, album_norm, artist_orig, album_orig)
 
         if result is None:
-            self.console_logger.warning(f"[discogs] All search strategies failed for: '{artist_orig or artist_norm}' - '{album_orig or album_norm}'")
+            self.console_logger.warning(
+                "[discogs] All search strategies failed for: '%s' - '%s'", artist_orig or artist_norm, album_orig or album_norm
+            )
             return None
 
         results_count = len(result.get("results", []))
-        self.console_logger.debug(f"[discogs] Found {results_count} potential matches")
+        self.console_logger.debug("[discogs] Found %s potential matches", results_count)
         return result
 
     def _should_fetch_details(self, year_str: str, detail_fetch_count: int, detail_fetch_limit: int) -> bool:
@@ -589,7 +594,7 @@ class DiscogsClient(BaseApiClient):
 
         # Extract year from detail data
         if detail_data and (extracted_year := self._extract_year_from_detail_data(detail_data)):
-            self.console_logger.debug(f"[discogs] Filled missing year via detail fetch: {extracted_year}")
+            self.console_logger.debug("[discogs] Filled missing year via detail fetch: %s", extracted_year)
             year_str = extracted_year
 
         return year_str, detail_fetch_count
@@ -662,7 +667,7 @@ class DiscogsClient(BaseApiClient):
 
         if score > 0:
             release_info["score"] = score
-            self.console_logger.info(f"Scored Discogs Release: '{release_info['title']}' ({release_info['year']}) Score: {score:.2f}")
+            self.console_logger.info("Scored Discogs Release: '%s' (%s) Score: %.2f", release_info["title"], release_info["year"], score)
             return release_info
 
         return None
@@ -698,7 +703,7 @@ class DiscogsClient(BaseApiClient):
 
         # Check artist match
         if not self._is_artist_match(item, artist_norm):
-            self.console_logger.debug(f"[discogs] Skipping '{item.get('title')}' - artist mismatch")
+            self.console_logger.debug("[discogs] Skipping '%s' - artist mismatch", item.get("title"))
             return None, updated_detail_fetch_count
 
         # Skip if no valid year
@@ -828,7 +833,7 @@ class DiscogsClient(BaseApiClient):
             await self.cache_service.set_async(cache_key, scored_releases, ttl=cache_ttl_seconds)
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
-            self.error_logger.exception(f"Error fetching from Discogs for '{artist_norm} - {album_norm}': {e}")
+            self.error_logger.exception("Error fetching from Discogs for '%s - %s': %s", artist_norm, album_norm, e)
             return []
 
         return sorted(scored_releases, key=lambda x: x["score"], reverse=True)

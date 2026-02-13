@@ -458,7 +458,7 @@ class DependencyContainer:
             self._error_logger.warning("Coroutine was cancelled")
             raise
         except Exception as e:
-            self._error_logger.exception(f"Error in async operation: {e}")
+            self._error_logger.exception("Error in async operation: %s", e)
             msg = f"Failed to execute coroutine: {e}"
             raise RuntimeError(msg) from e
 

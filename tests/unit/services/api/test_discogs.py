@@ -8,9 +8,9 @@ from urllib.parse import urlparse
 
 import pytest
 
-from services.api.discogs import DiscogsClient
-from tests.factories import create_test_app_config
-from tests.mocks.csv_mock import MockLogger
+from services.api.discogs import DiscogsClient, DiscogsRelease
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestDiscogsClientAllure:
@@ -365,3 +365,119 @@ class TestDiscogsClientAllure:
         # Call 3: Album-only
         assert "release_title" in calls[2][1]["params"]
         assert "artist" not in calls[2][1]["params"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_release_details_exception_logs_error(self) -> None:
+        mock_api_request = AsyncMock(side_effect=OSError("connection reset"))
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+
+        result = await client._fetch_discogs_release_details(99999)
+
+        assert result is None
+        assert isinstance(client.error_logger, MockLogger)
+        assert any("Error fetching release details for ID 99999" in msg for msg in client.error_logger.exception_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_master_release_year_exception_logs_error(self) -> None:
+        mock_api_request = AsyncMock(side_effect=RuntimeError("unexpected failure"))
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock()
+        client = TestDiscogsClientAllure.create_discogs_client(
+            mock_api_request=mock_api_request,
+            mock_cache_service=mock_cache_service,
+        )
+
+        result = await client._fetch_master_release_year(12345)
+
+        assert result is None
+        assert isinstance(client.error_logger, MockLogger)
+        assert any("Error fetching master release 12345" in msg for msg in client.error_logger.exception_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_execute_search_api_message_logs_warning(self) -> None:
+        mock_api_request = AsyncMock(return_value={"message": "You must authenticate"})
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+
+        result = await client._execute_search(
+            {"artist": "Test", "release_title": "Album", "type": "release"},
+            "Test strategy",
+        )
+
+        assert result is None
+        assert isinstance(client.error_logger, MockLogger)
+        assert any("API message: You must authenticate" in msg for msg in client.error_logger.warning_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_missing_year_details_fills_year_from_detail(self) -> None:
+        detail_response = {"year": 2005, "released": "2005-03-15"}
+        mock_api_request = AsyncMock(return_value=detail_response)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+
+        item: DiscogsRelease = {"id": 555, "year": "", "title": "Artist - Album"}
+        year_str, detail_count = await client._fetch_missing_year_details(item, 0, 10)
+
+        assert year_str == "2005"
+        assert detail_count == 1
+        assert isinstance(client.console_logger, MockLogger)
+        assert any("Filled missing year via detail fetch: 2005" in msg for msg in client.console_logger.debug_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_process_search_result_artist_mismatch_skips(self) -> None:
+        mock_api_request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+
+        item: DiscogsRelease = {
+            "id": 100,
+            "title": "Completely Different Artist - Some Album",
+            "year": 2020,
+            "type": "release",
+            "formats": [],
+            "genre": [],
+            "style": [],
+            "label": [],
+            "resource_url": "",
+            "uri": "",
+            "master_id": None,
+            "master_url": None,
+        }
+
+        scored, _detail_count = await client._process_single_discogs_item(
+            item,
+            "target artist",
+            "some album",
+            artist_region=None,
+            reissue_keywords=[],
+            detail_fetch_count=0,
+            detail_fetch_limit=10,
+        )
+
+        assert scored is None
+        assert isinstance(client.console_logger, MockLogger)
+        assert any("Skipping" in msg and "artist mismatch" in msg for msg in client.console_logger.debug_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_year_top_level_exception_logs_error(self) -> None:
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock(side_effect=AttributeError("boom"))
+        mock_response = TestDiscogsClientAllure.create_mock_discogs_response()
+        mock_response["results"][0]["master_id"] = None
+        mock_response["results"][0]["master_url"] = None
+        mock_api_request = AsyncMock(return_value=mock_response)
+        client = TestDiscogsClientAllure.create_discogs_client(
+            mock_api_request=mock_api_request,
+            mock_cache_service=mock_cache_service,
+        )
+
+        result = await client.get_scored_releases("test artist", "test album", None)
+
+        assert result == []
+        assert isinstance(client.error_logger, MockLogger)
+        assert any("Error fetching from Discogs for 'test artist - test album'" in msg for msg in client.error_logger.exception_messages)

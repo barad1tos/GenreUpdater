@@ -22,11 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CODEOWNERS file for automatic reviewers
 - Pre-commit hooks configuration (ruff, mypy)
 - Test coverage enforcement (--cov-fail-under=70)
+- Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
 
 ### Changed
 
 - Upgraded GitHub Actions to latest versions (checkout v6, setup-uv v7, upload-artifact v5, codeql v4)
 - README Python badge updated to 3.13+
+- Converted 50 f-string logging calls to lazy `%` formatting for deferred evaluation (#216)
 
 ### Fixed
 
