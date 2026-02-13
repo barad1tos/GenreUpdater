@@ -26,8 +26,8 @@ from services.apple.applescript_executor import (
 
 # AppleScriptExecutionError
 
-class TestAppleScriptExecutionError:
 
+class TestAppleScriptExecutionError:
     def test_is_os_error(self) -> None:
         err = AppleScriptExecutionError("fail", "test_script")
         assert isinstance(err, OSError)
@@ -58,6 +58,7 @@ class TestAppleScriptExecutionError:
 
 # AppleScriptExecutor — pure methods only
 
+
 @pytest.fixture
 def executor(mock_console_logger: logging.Logger, mock_error_logger: logging.Logger) -> AppleScriptExecutor:
     """Create executor with mock loggers, no semaphore."""
@@ -70,25 +71,24 @@ def executor(mock_console_logger: logging.Logger, mock_error_logger: logging.Log
 
 
 class TestUpdateSemaphore:
-
     def test_updates_semaphore(self, executor: AppleScriptExecutor) -> None:
         import asyncio
+
         sem = asyncio.Semaphore(2)
         executor.update_semaphore(sem)
         assert executor.semaphore is sem
 
 
 class TestUpdateRateLimiter:
-
     def test_updates_rate_limiter(self, executor: AppleScriptExecutor) -> None:
         from unittest.mock import MagicMock
+
         limiter = MagicMock()
         executor.update_rate_limiter(limiter)
         assert executor.rate_limiter is limiter
 
 
 class TestLogScriptSuccess:
-
     def test_update_property_logs_debug(self, executor: AppleScriptExecutor) -> None:
         label = f"{UPDATE_PROPERTY} year=2020"
         executor.log_script_success(label, "OK", 0.5)

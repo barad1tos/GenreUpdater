@@ -11,7 +11,6 @@ from services.cache.json_utils import dumps_json, loads_json
 
 
 class TestRoundTrip:
-
     @pytest.mark.parametrize(
         "data",
         [
@@ -34,7 +33,6 @@ class TestRoundTrip:
 
 
 class TestDumpsJson:
-
     def test_returns_bytes(self) -> None:
         assert isinstance(dumps_json({"a": 1}), bytes)
 
