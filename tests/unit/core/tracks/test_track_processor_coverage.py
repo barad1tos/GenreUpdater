@@ -157,8 +157,9 @@ class TestApplyArtistRenames:
     async def test_skips_when_no_renamer(self, processor: TrackProcessor, sample_track: TrackDict) -> None:
         """Test does nothing when artist_renamer is None."""
         processor.artist_renamer = None
+        original_artist = sample_track.artist
         await processor._apply_artist_renames([sample_track])
-        # Should not raise
+        assert sample_track.artist == original_artist
 
     @pytest.mark.asyncio
     async def test_handles_renamer_exception(self, processor: TrackProcessor, sample_track: TrackDict) -> None:

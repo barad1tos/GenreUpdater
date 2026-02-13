@@ -509,6 +509,9 @@ class TestSaveHtmlReport:
             config=config,
         )
 
+        report_file = tmp_path / "analytics" / "analytics_incremental.html"
+        assert report_file.exists(), "save_html_report should create report file with default loggers"
+
     def test_handles_save_error(
         self,
         tmp_path: Path,

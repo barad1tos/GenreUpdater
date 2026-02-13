@@ -1161,8 +1161,8 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                # Should not raise
-                await executor._process_response(mock_response, "discogs", "url", 0, "log_url", 0.5)
+                result = await executor._process_response(mock_response, "discogs", "url", 0, "log_url", 0.5)
+                assert result == {"results": []}
 
 
 class TestReadResponseText:

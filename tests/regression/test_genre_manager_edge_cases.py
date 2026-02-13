@@ -283,8 +283,8 @@ class TestTrackStatusHandling:
             if status and status not in known_statuses:
                 unknown_statuses[status] = unknown_statuses.get(status, 0) + 1
 
-        # Log unknown statuses but don't fail - just informational
-        # Unknown statuses are acceptable as long as track is editable
+        if unknown_statuses:
+            pytest.skip(f"Found {len(unknown_statuses)} unknown track statuses (informational): {unknown_statuses}")
 
 
 @pytest.mark.regression
@@ -435,6 +435,9 @@ class TestGenreConsistencyAcrossAlbums:
             # If very diverse (>3 different genres), flag for review
             if len(album_genres) > 3:
                 inconsistent_artists.append((artist, album_genres))
+
+        if inconsistent_artists:
+            pytest.skip(f"Found {len(inconsistent_artists)} artists with >3 genres across albums (informational): {inconsistent_artists[:5]}")
 
 
 @pytest.mark.regression

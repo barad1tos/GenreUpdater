@@ -439,7 +439,7 @@ class TestProcessSingleAlbum:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
         await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
-        # Processing happened (may or may not update depending on other factors)
+        assert mock_external_api.get_album_year.called
 
 
 class TestGroupTracksByAlbum:
@@ -645,7 +645,7 @@ class TestProcessBatchesSequentially:
             updated_tracks=updated_tracks,
             changes_log=changes_log,
         )
-        # Should complete without error
+        # Smoke test: sequential batch processing completes without error
 
 
 class TestDetermineAlbumYear:
@@ -912,7 +912,7 @@ class TestProcessBatchesConcurrently:
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
             )
-            # Should complete without error
+            assert not updated_tracks
 
 
 class TestProcessAlbumEntry:
@@ -1343,7 +1343,8 @@ class TestProcessSingleAlbumIntegration:
         # Make check_prerelease_status return True (now in YearDeterminator)
         with unittest.mock.patch.object(year_retriever._year_determinator, "check_prerelease_status", AsyncMock(return_value=True)):
             await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks_with_subscription, updated_tracks, changes_log)
-            # Should skip - no updates
+            assert not updated_tracks
+            assert not changes_log
 
     @pytest.mark.asyncio
     async def test_handles_future_years(

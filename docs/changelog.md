@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for 4 previously untested modules (#219): comprehensive coverage for `year_utils.py` (100%) and `track_base.py`, smoke tests for `json_utils.py` (93%) and `applescript_executor.py` (pure methods only)
 
 ### Fixed
+- Added meaningful assertions to 16 assertion-free tests (#219): `test_analytics_core` (report dir + GC mock), `test_html_reports` (default loggers file check), `test_pipeline_snapshot` (early-return + skip guards), `test_track_processor_coverage` (skip-when-no-renamer), `test_request_executor` (response parsing), `test_year_retriever_coverage` (API call + prerelease skip), `test_track_sync` (date_added + save_csv mocks); converted 3 regression tests to `pytest.skip` informational pattern
 - Removed dead test infrastructure (#219): empty monitoring test dir, unused `unique_artists`/`unique_albums` fixtures, placeholder test bodies
 - Narrowed 16 overly broad exception handlers (#214): replaced `except Exception` with specific types in 8 cache/persistence/pipeline locations, replaced `contextlib.suppress(Exception)` with specific types in logger and encryption, added missing `IndexError` catch in MusicBrainz response parsing; kept justified safety nets in API orchestrator verification wrappers and artist context setup; added 5 error-path tests and fixed 1 vacuous test for full patch coverage
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting

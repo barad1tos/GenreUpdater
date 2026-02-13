@@ -532,8 +532,8 @@ class TestGenerateReports:
 
         analytics.generate_reports()
 
-        # Check that report directory was created (actual files depend on implementation)
-        # At minimum, the method should not raise an error
+        report_dir = tmp_path / "analytics"
+        assert report_dir.exists(), "generate_reports should create report directory"
 
     def test_generate_reports_disabled_analytics(self, disabled_analytics: Analytics) -> None:
         """Test generate_reports does nothing when analytics disabled."""
@@ -587,12 +587,12 @@ class TestGcCollection:
             """Test helper function."""
 
         # Call enough times to trigger GC threshold
-        with patch("gc.collect") as _mock_gc:
-            for _ in range(Analytics.GC_COLLECTION_THRESHOLD + 1):
-                simple_func()
+        for _ in range(Analytics.GC_COLLECTION_THRESHOLD + 1):
+            simple_func()
 
-            # GC may have been called (depends on implementation)
-            # The patch ensures gc.collect doesn't run during test
+        with patch("gc.collect") as mock_gc:
+            analytics.generate_reports()
+            mock_gc.assert_called()
 
 
 class TestNullLogger:

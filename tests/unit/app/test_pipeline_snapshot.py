@@ -125,14 +125,15 @@ class TestUpdateTracks:
     def test_returns_early_when_no_index(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
         """Should return early when index is empty."""
         manager.update_tracks(sample_tracks)
-        # No assertion needed - just verify no error
+        assert not manager._tracks_index
 
     def test_skips_tracks_without_id(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
         """Should skip tracks without id."""
         manager.set_snapshot(sample_tracks)
+        original_index = dict(manager._tracks_index)
         track_no_id = TrackDict(id="", name="No ID", artist="Artist", album="Album", genre="Rock", year="2020")
         manager.update_tracks([track_no_id])
-        # No error should occur
+        assert manager._tracks_index == original_index
 
     def test_skips_tracks_not_in_index(self, manager: PipelineSnapshotManager, sample_tracks: list[TrackDict]) -> None:
         """Should skip tracks not in index."""
