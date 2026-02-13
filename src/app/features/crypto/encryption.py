@@ -151,7 +151,7 @@ class CryptographyManager:
                 # Try to determine if the key is base64-encoded or a passphrase
                 # Improved heuristic: attempt to decode AND validate with Fernet
                 if len(key) == FERNET_KEY_LENGTH:
-                    with contextlib.suppress(binascii.Error, Exception):
+                    with contextlib.suppress(binascii.Error, ValueError):
                         # Try to decode as base64 and validate with Fernet
                         decoded = base64.urlsafe_b64decode(key.encode())
                         if len(decoded) == 32:  # Fernet requires exactly 32 bytes

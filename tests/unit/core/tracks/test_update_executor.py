@@ -399,7 +399,7 @@ class TestNotifyTrackCacheInvalidation:
     @pytest.mark.asyncio
     async def test_handles_cache_exception(self, executor: TrackUpdateExecutor, mock_cache_service: AsyncMock) -> None:
         """Test handles cache exception gracefully."""
-        mock_cache_service.invalidate_for_track.side_effect = Exception("Cache error")
+        mock_cache_service.invalidate_for_track.side_effect = OSError("Cache error")
         # Should not raise
         await executor._notify_track_cache_invalidation("123", "Artist", "Album", "Track")
 

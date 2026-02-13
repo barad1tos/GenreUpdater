@@ -131,7 +131,7 @@ class PipelineSnapshotManager:
                 len(self._tracks_snapshot),
             )
             return True
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             self._console_logger.warning("Failed to persist snapshot: %s", exc)
             return False
 

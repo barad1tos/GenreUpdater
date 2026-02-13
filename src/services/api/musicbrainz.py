@@ -733,7 +733,7 @@ class MusicBrainzClient(BaseApiClient):
             # Process and score the releases
             scored_releases = self._process_and_score_releases(release_results, artist_norm, album_norm, artist_region)
 
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError, IndexError) as e:
             self.error_logger.exception(f"Error fetching from MusicBrainz for '{artist_norm} - {album_norm}': {e}")
             return []
 

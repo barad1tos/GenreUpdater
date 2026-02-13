@@ -8,11 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Narrowed 16 overly broad exception handlers (#214): replaced `except Exception` with specific types in 8 cache/persistence/pipeline locations, replaced `contextlib.suppress(Exception)` with specific types in logger and encryption, added missing `IndexError` catch in MusicBrainz response parsing; kept justified safety nets in API orchestrator verification wrappers and artist context setup; added 5 error-path tests and fixed 1 vacuous test for full patch coverage
 - Flaky `test_get_activity_period_classic_band` — skip gracefully when MusicBrainz returns `(None, None)` due to rate limiting
 - Ruff format: missing blank line in `track_models.py` after Sourcery walrus operator refactor
 - Sourcery warnings in `test_year_update.py`: extracted duplicate assertion helper, removed default-value arguments, added sourcery skip for test factory import
 - Type mismatches in `test_scoring_comprehensive.py`: annotated `ArtistPeriodContext` dicts to match `set_artist_period_context` signature
 - Missing `logger` kwarg in `test_custom_logger` after rate limiter rename — test was asserting `limiter.logger is custom_logger` without passing the logger
+- Type mismatch in `test_incremental_filter.py`: replaced `dict[str, Any]` with `create_test_app_config()` to match `IncrementalFilterService(config: AppConfig)` signature
 
 ### Changed
 - **Consolidate duplicate types (#212)**: removed dead `ScriptType` enum, `DiscogsRelease`, `DiscogsSearchResult` from `track_models.py`; renamed `EnhancedRateLimiter` → `ApiRateLimiter` (API) and `AppleScriptRateLimiter` (Apple); standardized `get_stats()` keys and `window_size` → `window_seconds` across both rate limiters; fixed Pyright type errors in integration tests

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.musicbrainz import MusicBrainzClient
@@ -332,3 +332,24 @@ class TestMusicBrainzArtistMatching:
         assert client._artist_matches_any_credit(artist_credits, "metallica") is True
         # Non-matching name with empty aliases returns False
         assert client._artist_matches_any_credit(artist_credits, "iron maiden") is False
+
+
+class TestRetrieveAndScoreReleasesErrorHandling:
+    """Tests for retrieve_and_score_releases exception handling."""
+
+    @pytest.mark.asyncio
+    async def test_index_error_in_scoring_returns_empty(self) -> None:
+        """Should return empty list when scoring raises IndexError."""
+        mock_api_request = AsyncMock(return_value={"release-groups": [{"id": "rg1"}]})
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(
+            mock_api_request=mock_api_request,
+        )
+
+        with (
+            patch.object(client, "_perform_primary_search", new_callable=AsyncMock, return_value=[{"id": "rg1"}]),
+            patch.object(client, "_fetch_releases_for_groups", new_callable=AsyncMock, return_value=[{}]),
+            patch.object(client, "_process_and_score_releases", side_effect=IndexError("list index out of range")),
+        ):
+            result = await client.get_scored_releases("artist", "album", None)
+
+        assert result == []

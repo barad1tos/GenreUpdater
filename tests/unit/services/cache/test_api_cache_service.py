@@ -372,6 +372,39 @@ class TestApiCacheService:
         cast(MagicMock, service.logger.exception).assert_called()
 
     @pytest.mark.asyncio
+    async def test_load_skips_invalid_entry(self) -> None:
+        """Should skip entries with missing required keys."""
+        cache_data = {
+            "valid_key": {
+                "artist": "Artist",
+                "album": "Album",
+                "year": "2023",
+                "source": "musicbrainz",
+                "timestamp": 1700000000.0,
+                "metadata": {},
+            },
+            "invalid_key": {
+                "album": "Album Only",
+                "year": "2023",
+            },
+        }
+        mock_file = MagicMock()
+        mock_file.__enter__.return_value = mock_file
+
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "open", return_value=mock_file),
+            patch("json.load", return_value=cache_data),
+        ):
+            service = TestApiCacheService.create_service()
+            await service.initialize()
+
+        assert len(service.api_cache) == 1
+        assert "valid_key" in service.api_cache
+        warning_calls = cast(MagicMock, service.logger.warning).call_args_list
+        assert any("invalid_key" in str(call) for call in warning_calls)
+
+    @pytest.mark.asyncio
     async def test_skip_save_when_empty(self) -> None:
         """Test skipping save when cache is empty."""
         service = TestApiCacheService.create_service()

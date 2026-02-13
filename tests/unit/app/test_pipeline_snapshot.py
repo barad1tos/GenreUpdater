@@ -238,7 +238,7 @@ class TestPersistToDisk:
     ) -> None:
         """Should return False on exception."""
         manager.set_snapshot(sample_tracks)
-        mock_track_processor.cache_manager.update_snapshot = AsyncMock(side_effect=RuntimeError("Disk error"))
+        mock_track_processor.cache_manager.update_snapshot = AsyncMock(side_effect=OSError("Disk error"))
         result = await manager.persist_to_disk()
         assert result is False
 

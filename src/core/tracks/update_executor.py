@@ -446,7 +446,7 @@ class TrackUpdateExecutor:
 
         try:
             await self.cache_service.invalidate_for_track(payload)
-        except Exception as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             self.error_logger.warning("Failed to invalidate cache for track %s: %s", track_id, exc)
 
     async def _try_batch_update(

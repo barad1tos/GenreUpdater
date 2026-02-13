@@ -348,3 +348,38 @@ class TestProcessSingleBatch:
         # new_failures should be 0 since parse succeeded (not a parse failure)
         assert new_failures == 0
         assert should_continue is True
+
+
+class TestCacheAndPersistResults:
+    """Tests for _cache_and_persist_results snapshot error handling."""
+
+    @pytest.mark.asyncio
+    async def test_snapshot_persist_error_is_logged(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        """Should log warning when snapshot persistence raises OSError."""
+        failing_persister = AsyncMock(side_effect=OSError("Disk full"))
+        fetcher = BatchTrackFetcher(
+            ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
+            console_logger=loggers[0],
+            error_logger=loggers[1],
+            config=config,
+            track_validator=lambda x: x,
+            artist_processor=AsyncMock(),
+            snapshot_loader=AsyncMock(return_value=None),
+            snapshot_persister=failing_persister,
+            can_use_snapshot=lambda _x: True,
+        )
+
+        track = MagicMock()
+        track.id = "1"
+        tracks_arg = cast(Any, [track])
+        await fetcher._cache_and_persist_results(tracks_arg)
+
+        cast(MagicMock, loggers[1]).warning.assert_called_once()
+        assert "Disk full" in str(cast(MagicMock, loggers[1]).warning.call_args)

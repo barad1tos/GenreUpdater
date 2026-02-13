@@ -362,13 +362,13 @@ class ApiCacheService:
 
                         cache_entries[key] = cached_result
 
-                    except Exception as e:
+                    except (KeyError, ValueError, TypeError) as e:
                         self.logger.warning("Skipping invalid API cache entry %s: %s", key, e)
 
                 self.logger.info("Loaded %d API cache entries from %s", len(cache_entries), self.api_cache_file)
                 return cache_entries
 
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 self.logger.exception("Error loading API cache file %s: %s", self.api_cache_file, e)
                 return {}
 

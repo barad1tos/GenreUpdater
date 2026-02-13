@@ -386,5 +386,5 @@ class BatchTrackFetcher:
         try:
             track_ids = [track.id for track in tracks]
             await self._snapshot_persister(tracks, track_ids)
-        except Exception as error:
+        except (OSError, TypeError, ValueError) as error:
             self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", error)
