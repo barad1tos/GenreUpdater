@@ -182,9 +182,7 @@ class TestFullApplicationPipelineE2E:
         # Verify pipeline executed without errors
         # Note: In test_mode + dry_run, AppleScript may not be called
 
-        # In dry-run mode, should not make actual updates to AppleScript
-        # The actual update calls depend on implementation logic
-        _update_calls = mock_deps.ap_client.update_track_async.call_count
+        # Smoke test: dry-run pipeline completes without error
 
     @pytest.mark.asyncio
     async def test_full_pipeline_incremental(self) -> None:
@@ -301,6 +299,4 @@ class TestFullApplicationPipelineE2E:
         # Verify pipeline completed despite errors
         # Note: In test_mode + dry_run, AppleScript may not be called
 
-        # Check error logging (if error logger tracks messages)
-        error_logger = mock_deps.error_logger
-        _error_count = len(getattr(error_logger, "error_messages", []))
+        # Smoke test: pipeline completes despite API errors
