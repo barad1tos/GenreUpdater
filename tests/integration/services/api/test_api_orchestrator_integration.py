@@ -283,42 +283,6 @@ class TestApiOrchestratorErrorHandling:
     """Integration tests for error handling across providers."""
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_config")
-    async def test_graceful_handling_of_provider_timeout(
-        self,
-    ) -> None:
-        """Test graceful handling when a provider times out."""
-        with patch("aiohttp.ClientSession") as mock_session:
-            # Simulate timeout
-            mock_response = AsyncMock()
-            mock_response.status = 504  # Gateway timeout
-            mock_response.json = AsyncMock(side_effect=asyncio.TimeoutError)
-
-            mock_session.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
-
-            # The system should handle timeout gracefully without crashing
-            # This tests the error handling path
-
-    @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_config")
-    async def test_graceful_handling_of_rate_limit_response(
-        self,
-    ) -> None:
-        """Test handling of 429 Too Many Requests response."""
-        # Create executor with mock session
-        mock_session = MagicMock()
-
-        # Simulate 429 response
-        mock_response = AsyncMock()
-        mock_response.status = 429
-        mock_response.headers = {"Retry-After": "1"}
-
-        mock_session.get = AsyncMock(return_value=mock_response)
-
-        # The executor should handle rate limiting appropriately
-        # Testing the response handling logic
-
-    @pytest.mark.asyncio
     @pytest.mark.usefixtures("mock_config", "mock_pending_verification")
     async def test_all_providers_fail_returns_none(
         self,

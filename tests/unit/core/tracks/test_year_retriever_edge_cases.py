@@ -242,30 +242,6 @@ class TestYearRetrieverEdgeCases:
         # This is expected - the low-level method just checks if years differ
         assert needs_update is True
 
-    def test_bsides_album_year_handling(self) -> None:
-        """Document B-Sides album year handling fix.
-
-        NOTE: B-Sides detection is now implemented in _apply_year_fallback() which:
-        - Detects 'b-sides', 'b-side' patterns
-        - Marks for verification and SKIPS the update
-
-        See TestYearFallbackLogic.test_fallback_blocks_bsides_album for tests of the fix.
-        """
-
-    def test_reissue_vs_original_year(self) -> None:
-        """Document reissue vs original year handling fix.
-
-        NOTE: Reissue detection is now implemented in _apply_year_fallback() which:
-        - Detects 'remastered', 'anniversary', 'deluxe', 'expanded' patterns
-        - Uses MARK_AND_UPDATE strategy (update but mark for verification)
-
-        For dramatic year changes (>5 years like 2005→2012), the fallback also:
-        - Blocks the update and preserves existing year
-        - Marks for verification
-
-        See TestYearFallbackLogic for tests of the fix.
-        """
-
 
 class TestTrackNeedsYearUpdate:
     """Tests for _track_needs_year_update edge cases."""

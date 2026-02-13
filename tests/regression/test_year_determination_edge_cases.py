@@ -125,6 +125,12 @@ class TestReissueDetection:
             except (ValueError, TypeError):
                 continue
 
+        if needs_verification:
+            pytest.skip(
+                f"Found {len(needs_verification)} albums with recent year but no release_year:\n"
+                + "\n".join(f"  {a[0]} - {a[1]}: {a[2]}" for a in needs_verification[:10])
+            )
+
 
 @pytest.mark.regression
 class TestPrerealeaseHandling:

@@ -979,6 +979,7 @@ class TestUpdateTrackWithCachedFieldsForSync:
         tracks_cache: dict[str, ParsedTrackFields] = {"": {"date_added": "2024-01-01", "last_modified": "", "track_status": "", "year": ""}}
 
         update_track_with_cached_fields_for_sync(track, tracks_cache)
+        assert track.date_added is None
 
 
 class TestConvertTrackToCsvDict:
@@ -1278,8 +1279,9 @@ class TestSyncTrackListWithCurrent:
         tracks = [_create_test_track("18", artist="Sync Artist", album="Sync Album")]
         csv_path = str(tmp_path / "sync_test.csv")
 
-        with patch("metrics.track_sync.save_csv"):
+        with patch("metrics.track_sync.save_csv") as mock_save:
             await sync_track_list_with_current(tracks, csv_path, mock_cache_service, console_logger, error_logger)
+            mock_save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_removes_deleted_tracks(
@@ -1299,5 +1301,6 @@ class TestSyncTrackListWithCurrent:
         )
         tracks = [_create_test_track("19", artist="New Artist")]
 
-        with patch("metrics.track_sync.save_csv"):
+        with patch("metrics.track_sync.save_csv") as mock_save:
             await sync_track_list_with_current(tracks, str(csv_file), mock_cache_service, console_logger, error_logger)
+            mock_save.assert_called_once()
