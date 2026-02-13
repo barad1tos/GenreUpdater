@@ -42,7 +42,7 @@ class ScoredRelease(TypedDict):
     is_reissue: NotRequired[bool]  # Optional: True if detected as reissue/remaster
 
 
-class EnhancedRateLimiter:
+class ApiRateLimiter:
     """Advanced rate limiter using a moving window approach for API calls.
 
     This rate limiter tracks API calls within a sliding time window to ensure
@@ -151,6 +151,7 @@ class EnhancedRateLimiter:
             "available_capacity": max(0, self.requests_per_window - len(current_calls)),
             "window_utilization": (len(current_calls) / self.requests_per_window if self.requests_per_window > 0 else 0),
             "total_requests": self.total_requests,
+            "total_wait_time": self.total_wait_time,
             "avg_wait_time": self.total_wait_time / max(1, self.total_requests),
         }
 

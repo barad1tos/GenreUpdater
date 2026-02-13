@@ -8,12 +8,12 @@ Public API:
     - AppleScriptSanitizer: Security validator for AppleScript code
     - AppleScriptSanitizationError: Exception for security violations
     - AppleScriptExecutionError: Exception for execution failures (transient)
-    - EnhancedRateLimiter: Rate limiting for AppleScript execution
+    - AppleScriptRateLimiter: Rate limiting for AppleScript execution
 """
 
 from services.apple.applescript_client import AppleScriptClient
 from services.apple.applescript_executor import AppleScriptExecutionError
-from services.apple.rate_limiter import EnhancedRateLimiter
+from services.apple.rate_limiter import AppleScriptRateLimiter
 from services.apple.sanitizer import (
     MAX_SCRIPT_SIZE,
     AppleScriptSanitizationError,
@@ -24,7 +24,7 @@ __all__ = [
     "MAX_SCRIPT_SIZE",
     "AppleScriptClient",
     "AppleScriptExecutionError",
+    "AppleScriptRateLimiter",
     "AppleScriptSanitizationError",
     "AppleScriptSanitizer",
-    "EnhancedRateLimiter",
 ]

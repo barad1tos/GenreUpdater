@@ -18,7 +18,7 @@ from services.api.request_executor import (
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
-    from services.api.api_base import EnhancedRateLimiter
+    from services.api.api_base import ApiRateLimiter
 
 # Test API token (not a real credential)
 TEST_API_TOKEN = "test_token"  # noqa: S105
@@ -44,10 +44,10 @@ def mock_rate_limiter() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "EnhancedRateLimiter"]:
+def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "ApiRateLimiter"]:
     """Create dict of mock rate limiters for all APIs."""
     return cast(
-        dict[str, "EnhancedRateLimiter"],
+        dict[str, "ApiRateLimiter"],
         {
             "discogs": mock_rate_limiter,
             "musicbrainz": mock_rate_limiter,
@@ -59,7 +59,7 @@ def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "EnhancedRateL
 @pytest.fixture
 def executor(
     mock_cache_service: AsyncMock,
-    mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
+    mock_rate_limiters: dict[str, "ApiRateLimiter"],
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> ApiRequestExecutor:
@@ -93,7 +93,7 @@ class TestInitialization:
     def test_init_with_all_params(
         self,
         mock_cache_service: AsyncMock,
-        mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
+        mock_rate_limiters: dict[str, "ApiRateLimiter"],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -341,7 +341,7 @@ class TestPrepareRequest:
     def test_prepare_request_discogs_without_token(
         self,
         mock_cache_service: AsyncMock,
-        mock_rate_limiters: dict[str, "EnhancedRateLimiter"],
+        mock_rate_limiters: dict[str, "ApiRateLimiter"],
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         mock_session: MagicMock,

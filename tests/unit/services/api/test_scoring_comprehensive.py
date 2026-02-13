@@ -45,7 +45,7 @@ class TestArtistPeriodContext:
 
 
 class TestScoringConfig:
-    """Test the ScoringConfig TypedDict."""
+    """Test the ScoringConfig Pydantic BaseModel."""
 
     def test_default_configuration(self) -> None:
         """Test default scoring configuration from ReleaseScorer."""

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     import logging
 
     from core.retry_handler import DatabaseRetryHandler
-    from services.apple.rate_limiter import EnhancedRateLimiter
+    from services.apple.rate_limiter import AppleScriptRateLimiter
 
 
 # Constants for script execution
@@ -64,7 +64,7 @@ class AppleScriptExecutor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         retry_handler: DatabaseRetryHandler | None = None,
-        rate_limiter: EnhancedRateLimiter | None = None,
+        rate_limiter: AppleScriptRateLimiter | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -91,7 +91,7 @@ class AppleScriptExecutor:
         """
         self.semaphore = semaphore
 
-    def update_rate_limiter(self, rate_limiter: EnhancedRateLimiter) -> None:
+    def update_rate_limiter(self, rate_limiter: AppleScriptRateLimiter) -> None:
         """Update the rate limiter after async initialization.
 
         When a rate limiter is set, it takes precedence over the semaphore

@@ -54,15 +54,6 @@ class PreferredApi(StrEnum):
     ITUNES = "itunes"
 
 
-class ScriptType(StrEnum):
-    """Script type enumeration for API prioritization."""
-
-    CYRILLIC = "cyrillic"
-    LATIN = "latin"
-    MIXED = "mixed"
-    UNKNOWN = "unknown"
-
-
 class ChangeDisplayMode(StrEnum):
     """Change display mode enumeration."""
 
@@ -720,24 +711,3 @@ class DiscogsArtist(BaseModel):
     id: int
     name: str
     resource_url: str | None = None
-
-
-class DiscogsRelease(BaseModel):
-    """Discogs release information."""
-
-    id: int
-    title: str
-    year: int | None = None
-    country: str | None = None
-    format: list[str] = Field(default_factory=list)
-    genre: list[str] = Field(default_factory=list)
-    style: list[str] = Field(default_factory=list)
-    master_id: int | None = None
-    master_url: str | None = None
-
-
-class DiscogsSearchResult(BaseModel):
-    """Discogs search result."""
-
-    results: list[DiscogsRelease] = Field(default_factory=list)
-    pagination: dict[str, Any] = Field(default_factory=dict)
