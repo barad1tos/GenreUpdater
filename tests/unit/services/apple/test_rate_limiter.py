@@ -33,6 +33,7 @@ class TestAppleScriptRateLimiterInit:
         limiter = AppleScriptRateLimiter(
             requests_per_window=10,
             window_seconds=1.0,
+            logger=custom_logger,
         )
         assert limiter.logger is custom_logger
 
