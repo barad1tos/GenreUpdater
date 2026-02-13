@@ -120,20 +120,6 @@ def console_logger() -> logging.Logger:
     return logger
 
 
-@pytest.fixture(scope="session")
-def unique_artists(artists_with_tracks: dict[str, list[TrackDict]]) -> list[str]:
-    """List of unique artist names."""
-    return list(artists_with_tracks.keys())
-
-
-@pytest.fixture(scope="session")
-def unique_albums(
-    albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-) -> list[tuple[str, str]]:
-    """List of unique (artist, album) tuples."""
-    return list(albums_with_tracks.keys())
-
-
 def pytest_collection_modifyitems(
     items: list[pytest.Item],
 ) -> None:
