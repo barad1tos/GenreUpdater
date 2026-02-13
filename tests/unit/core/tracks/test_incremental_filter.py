@@ -11,6 +11,7 @@ from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -98,7 +99,7 @@ class TestIncrementalFilterService:
         console_logger = _create_mock_logger()
         error_logger = _create_mock_logger()
         analytics = cast(AnalyticsProtocol, cast(object, MagicMock(spec=AnalyticsProtocol)))
-        config: dict[str, Any] = {"logs_base_dir": "/tmp/test_logs", "csv_output_file": "csv/track_list.csv"}
+        config = create_test_app_config()
 
         return IncrementalFilterService(
             console_logger=console_logger,
