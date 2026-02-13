@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CODEOWNERS file for automatic reviewers
 - Pre-commit hooks configuration (ruff, mypy)
 - Test coverage enforcement (--cov-fail-under=70)
+- Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
 
 ### Changed
 

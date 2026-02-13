@@ -454,6 +454,40 @@ class TestMergeWith:
         # Events from analytics2 should be added
         assert len(analytics1.events) >= events_before
 
+    @pytest.mark.unit
+    def test_merge_warns_when_events_dropped(self, loggers: LoggerContainer) -> None:
+        small_cap_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 5,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": False,
+            },
+        )
+        analytics1 = Analytics(small_cap_config, loggers)
+        analytics2 = Analytics(small_cap_config, loggers)
+
+        # Fill analytics1 to capacity
+        for i in range(5):
+            analytics1.events.append(
+                {"Function": f"f{i}", "Event Type": "e", "Start Time": "0", "End Time": "0", "Duration (s)": 0.1, "Success": True}
+            )
+
+        # Add events to analytics2 that will be dropped on merge
+        for i in range(3):
+            analytics2.events.append(
+                {"Function": f"g{i}", "Event Type": "e", "Start Time": "0", "End Time": "0", "Duration (s)": 0.1, "Success": True}
+            )
+
+        analytics1.merge_with(analytics2)
+
+        # cap = max(0, 5 - 5) = 0, so all 3 events are dropped
+        cast(MagicMock, loggers.console).warning.assert_any_call(
+            "Dropped %s events during merge due to max_events=%s limit",
+            3,
+            5,
+        )
+
     def test_merge_with_combines_counts(self, config: AppConfig, loggers: LoggerContainer) -> None:
         """Test that counts are combined correctly."""
         analytics1 = Analytics(config, loggers)

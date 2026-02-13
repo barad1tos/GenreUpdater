@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -152,11 +152,7 @@ class TestApplyPreferredOrder:
 
     def test_no_change_when_not_in_list(self, coordinator: YearSearchCoordinator) -> None:
         """Test no change when preferred API not in list."""
-        api_list = ["discogs", "itunes"]
-
-        result = coordinator._apply_preferred_order(api_list)
-
-        assert result == ["discogs", "itunes"]
+        self._assert_preferred_order_unchanged(coordinator, ["discogs", "itunes"])
 
     def test_no_preferred_api(
         self,
@@ -169,7 +165,7 @@ class TestApplyPreferredOrder:
         mock_release_scorer: MagicMock,
     ) -> None:
         """Test when no preferred API is set."""
-        coordinator = YearSearchCoordinator(
+        test_coordinator = YearSearchCoordinator(
             console_logger=console_logger,
             error_logger=error_logger,
             config=default_config,
@@ -179,11 +175,16 @@ class TestApplyPreferredOrder:
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
         )
-        api_list = ["discogs", "musicbrainz"]
+        self._assert_preferred_order_unchanged(test_coordinator, ["discogs", "musicbrainz"])
 
-        result = coordinator._apply_preferred_order(api_list)
-
-        assert result == ["discogs", "musicbrainz"]
+    @staticmethod
+    def _assert_preferred_order_unchanged(
+        test_coordinator: YearSearchCoordinator,
+        api_list: list[str],
+    ) -> None:
+        """Assert that preferred order returns the list unchanged."""
+        result = test_coordinator._apply_preferred_order(api_list)
+        assert result == api_list
 
 
 class TestGetApiClient:
@@ -483,3 +484,120 @@ class TestScriptOptimizedSearch:
 
         # Should have results from script-optimized search
         assert len(results) >= 1
+
+
+class TestDebugApiLogging:
+    """Tests for debug.api-guarded log lines in YearSearchCoordinator."""
+
+    @pytest.fixture
+    def debug_coordinator(
+        self,
+        default_config,
+        mock_musicbrainz_client,
+        mock_discogs_client,
+        mock_applemusic_client,
+        mock_release_scorer,
+    ) -> tuple[YearSearchCoordinator, MagicMock, MagicMock]:
+        """Create a YearSearchCoordinator with mocked loggers for debug tests."""
+        mock_console = MagicMock(spec=logging.Logger)
+        mock_error = MagicMock(spec=logging.Logger)
+        coordinator = YearSearchCoordinator(
+            console_logger=mock_console,
+            error_logger=mock_error,
+            config=default_config,
+            preferred_api="musicbrainz",
+            musicbrainz_client=mock_musicbrainz_client,
+            discogs_client=mock_discogs_client,
+            applemusic_client=mock_applemusic_client,
+            release_scorer=mock_release_scorer,
+        )
+        return coordinator, mock_console, mock_error
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_script_optimized_search_logs_script_detected(
+        self,
+        mock_discogs_client,
+        debug_coordinator,
+    ) -> None:
+        coordinator, mock_console, _ = debug_coordinator
+        mock_discogs_client.get_scored_releases.return_value = [{"title": "A", "year": "2020", "score": 90}]
+
+        with patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = True
+            await coordinator._try_script_optimized_search(ScriptType.CYRILLIC, "artist", "album", None)
+
+        mock_console.info.assert_any_call("%s detected - trying script-optimized search", "cyrillic")
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_script_optimized_search_logs_primary_failed_fallback(
+        self,
+        mock_musicbrainz_client,
+        mock_discogs_client,
+        mock_applemusic_client,
+        debug_coordinator,
+    ) -> None:
+        coordinator, mock_console, _ = debug_coordinator
+        # All APIs return empty to trigger fallback log
+        mock_musicbrainz_client.get_scored_releases.return_value = []
+        mock_discogs_client.get_scored_releases.return_value = []
+        mock_applemusic_client.get_scored_releases.return_value = []
+
+        with patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = True
+            await coordinator._try_script_optimized_search(ScriptType.CYRILLIC, "artist", "album", None)
+
+        mock_console.info.assert_any_call("Primary APIs failed for %s - trying fallback", "cyrillic")
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_try_single_api_logs_client_not_available(
+        self,
+        debug_coordinator,
+    ) -> None:
+        coordinator, mock_console, _ = debug_coordinator
+
+        with patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = True
+            result = await coordinator._try_single_api("unknown_api", "artist", "album", None, ScriptType.LATIN, False)
+
+        assert result is None
+        mock_console.debug.assert_any_call("%s client not available, skipping", "unknown_api")
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_try_single_api_logs_trying_api(
+        self,
+        mock_musicbrainz_client,
+        debug_coordinator,
+    ) -> None:
+        coordinator, mock_console, _ = debug_coordinator
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "A", "year": "2020", "score": 85}]
+
+        with patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = True
+            await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
+
+        mock_console.info.assert_any_call("Trying %s for %s text", "musicbrainz", "latin")
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_try_single_api_logs_warning_on_exception(
+        self,
+        mock_musicbrainz_client,
+        debug_coordinator,
+    ) -> None:
+        coordinator, mock_console, _ = debug_coordinator
+        mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("api boom")
+
+        with patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = True
+            result = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.CHINESE, False)
+
+        assert result is None
+        # The warning is called with the exception object; verify the format string and first two positional args
+        warning_calls = [c for c in mock_console.warning.call_args_list if len(c[0]) >= 3 and c[0][0] == "%s failed for %s: %s"]
+        assert len(warning_calls) == 1
+        assert warning_calls[0][0][1] == "musicbrainz"
+        assert warning_calls[0][0][2] == "chinese"
