@@ -62,7 +62,7 @@ def create_year_batch_processor() -> YearBatchProcessor:
 
 @pytest.mark.unit
 class TestRecordSuccessfulUpdatesOldYear:
-    """Tests for _record_successful_updates year_before_mgu population."""
+    """Tests for record_successful_updates year_before_mgu population."""
 
     def test_sets_year_before_mgu_when_not_set(self) -> None:
         """Should set year_before_mgu from current year when not already set."""
@@ -201,7 +201,7 @@ class TestRecordSuccessfulUpdatesOldYear:
 
 @pytest.mark.unit
 class TestRecordSuccessfulUpdatesMultipleTracks:
-    """Tests for _record_successful_updates with multiple tracks."""
+    """Tests for record_successful_updates with multiple tracks."""
 
     def test_processes_all_tracks(self) -> None:
         """Should process all tracks in the list."""

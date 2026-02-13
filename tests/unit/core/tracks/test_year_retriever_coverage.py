@@ -956,7 +956,7 @@ class TestProcessAlbumEntry:
 
 
 class TestUpdateTracksForAlbum:
-    """Tests for _update_tracks_for_album method (now in YearBatchProcessor)."""
+    """Tests for update_tracks_for_album method (now in TrackUpdater)."""
 
     @pytest.mark.asyncio
     async def test_skips_when_all_tracks_have_year(
@@ -1790,7 +1790,7 @@ class TestShouldSkipAlbumNoValidYears:
 
 
 class TestUpdateTracksForAlbumChangeEntryFallback:
-    """Tests for _update_tracks_for_album change entry (now in YearBatchProcessor).
+    """Tests for update_tracks_for_album change entry (now in TrackUpdater).
 
     Note: _create_change_entry was inlined during refactoring.
     Tests now verify the inline ChangeLogEntry creation behavior.
