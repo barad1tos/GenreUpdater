@@ -271,7 +271,7 @@ graph LR
 
 ## Directory Structure
 
-```bash
+```text
 src/
 ├── app/                        # Presentation layer
 │   ├── cli.py                  # CLI argument parsing
