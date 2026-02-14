@@ -542,7 +542,7 @@ class LibrarySnapshotService:
         canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    # -------------------------- Internal helpers -------------------------- #
+    # Internal helpers
 
     @staticmethod
     def _prepare_snapshot_payload(tracks: Sequence[TrackDict]) -> list[dict[str, Any]]:

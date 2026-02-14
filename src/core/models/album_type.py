@@ -71,9 +71,7 @@ class AlbumTypeInfo:
     strategy: YearHandlingStrategy
 
 
-# ============================================================================
-# DEFAULT PATTERNS (used when config is not provided)
-# ============================================================================
+# Default Patterns
 
 # Patterns that indicate special albums (B-Sides, Demo collections, etc.)
 # These albums often have compilation years that differ from original tracks
@@ -158,9 +156,7 @@ _DEFAULT_REISSUE_PATTERNS: Final[frozenset[str]] = frozenset(
 )
 
 
-# ============================================================================
-# CONFIGURABLE PATTERNS CLASS
-# ============================================================================
+# Configurable Patterns Class
 
 
 @dataclass
@@ -391,9 +387,7 @@ def reset_patterns() -> None:
     _configured_patterns = None
 
 
-# ============================================================================
-# BACKWARDS-COMPATIBLE PATTERN ACCESSORS
-# ============================================================================
+# Backwards-Compatible Pattern Accessors
 
 
 def get_special_patterns() -> frozenset[str]:

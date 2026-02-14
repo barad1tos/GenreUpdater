@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Missing `logger` kwarg in `test_custom_logger` after rate limiter rename — test was asserting `limiter.logger is custom_logger` without passing the logger
 - Type mismatch in `test_incremental_filter.py`: replaced `dict[str, Any]` with `create_test_app_config()` to match `IncrementalFilterService(config: AppConfig)` signature
 
+### Style
+- Removed ~44 lines of ASCII art separators (`# ===`, `# ---`) across 9 files per CLAUDE.md formatting rules
+- Migrated 5 `print()` calls to `console_logger.info()` in `full_sync.py` (post-init phase where logger is available)
+
 ### Changed
 - **Decompose `year_batch.py` god class (#218)**: extracted `PrereleaseHandler` (prerelease detection/handling) and `TrackUpdater` (track-level year updates with retry) into focused modules; `YearBatchProcessor` reduced from 1,021 to ~530 LOC while preserving public API; updated test docstrings to reflect new module locations
 - **Consolidate duplicate types (#212)**: removed dead `ScriptType` enum, `DiscogsRelease`, `DiscogsSearchResult` from `track_models.py`; renamed `EnhancedRateLimiter` → `ApiRateLimiter` (API) and `AppleScriptRateLimiter` (Apple); standardized `get_stats()` keys and `window_size` → `window_seconds` across both rate limiters; fixed Pyright type errors in integration tests

@@ -532,7 +532,7 @@ class TrackProcessor:
             skip_snapshot_check=skip_snapshot_check,
         )
 
-    # ==================== Update Operations (delegated to TrackUpdateExecutor) ====================
+    # Update Operations (delegated to TrackUpdateExecutor)
 
     async def update_track_async(
         self,

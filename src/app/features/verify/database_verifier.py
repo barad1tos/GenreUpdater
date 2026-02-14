@@ -65,9 +65,7 @@ class DatabaseVerifier:
         self._dry_run_actions: list[dict[str, Any]] = []
         self._verify_start_time: float = 0.0
 
-    # -------------------------------------------------------------------------
     # Compact Logging Methods (db_verify_logger + console with IDE-like highlighting)
-    # -------------------------------------------------------------------------
 
     def _log_verify_start(self, track_count: int) -> None:
         """Log verification start with IDE-like highlighting."""
@@ -112,9 +110,7 @@ class DatabaseVerifier:
                 LogFormat.duration(duration),
             )
 
-    # -------------------------------------------------------------------------
     # Auto-Verify Check (for startup integration)
-    # -------------------------------------------------------------------------
 
     async def should_auto_verify(self) -> bool:
         """Check if automatic database verification should run.

@@ -155,9 +155,7 @@ class YearRetriever:
             dry_run=self.dry_run,
         )
 
-    # =========================================================================
     # Public API - Main Entry Points
-    # =========================================================================
 
     async def process_album_years(
         self,
@@ -273,9 +271,7 @@ class YearRetriever:
         """
         return await self._update_album_years_logic(tracks, force=force)
 
-    # =========================================================================
     # State Accessors
-    # =========================================================================
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Get a list of dry-run actions that would have been performed."""
@@ -294,9 +290,7 @@ class YearRetriever:
         """
         self._last_updated_tracks = tracks
 
-    # =========================================================================
     # Internal Methods
-    # =========================================================================
 
     async def _update_album_years_logic(
         self,
@@ -326,9 +320,7 @@ class YearRetriever:
 
         return updated_tracks, changes_log
 
-    # =========================================================================
     # Backward Compatibility - Delegated Static Methods
-    # =========================================================================
 
     @staticmethod
     def _group_tracks_by_album(

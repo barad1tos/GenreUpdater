@@ -8,14 +8,11 @@ from __future__ import annotations
 
 import contextlib
 
-# ---------------------------------------------------------------------------
 # Golden Rule of Logging
-# ---------------------------------------------------------------------------
-# All runtime and debugging information **must** go through a configured
+# All runtime and debugging information must go through a configured
 # ``logging.Logger`` instance.  Using ``print()`` for operational output leads
 # to inconsistent formatting and missing log levels.  ``print()`` should only be
 # used for the final end-user result that is not considered part of the logs.
-# ---------------------------------------------------------------------------
 import logging
 import os
 import queue
@@ -641,7 +638,7 @@ class CompactFormatter(logging.Formatter):
         # Store original level name for abbreviation lookup
         original_levelname = record.levelname
 
-        # --- Apply Path Shortening to Specific Attributes ---
+        # Apply Path Shortening to Specific Attributes
         # Apply shorten_path to the original pathname and filename attributes
         # and store them in new attributes on the record object.
         # Ensure the record has the necessary attributes before trying to shorten
@@ -669,7 +666,7 @@ class CompactFormatter(logging.Formatter):
 
         # You could add other attributes here if they might contain paths, e.g., record.module
 
-        # --- Abbreviate Level Name ---
+        # Abbreviate Level Name
         # Abbreviate level name for display in the formatted message
         # This modifies the record's levelname attribute temporarily for formatting
         record.levelname = LEVEL_ABBREV.get(
@@ -677,7 +674,7 @@ class CompactFormatter(logging.Formatter):
             original_levelname[:1],
         )  # Fallback to first letter
 
-        # --- Perform Standard Formatting ---
+        # Perform Standard Formatting
         # Let the parent class handle the core formatting using the (potentially modified) record attributes
         try:
             # The format string defined in __init__ or passed as fmt will now use
@@ -706,12 +703,12 @@ class CompactFormatter(logging.Formatter):
                 return f"CRITICAL FORMATTING ERROR: {error_msg}"
             return f"FORMATTING ERROR: {basic_msg}"
 
-        # --- Restore Original Level Name ---
+        # Restore Original Level Name
         # Restore original levelname on the record object after formatting is done,
         # This is important if the record object is reused or inspected elsewhere by other handlers/formatters
         record.levelname = original_levelname
 
-        # --- Remove Custom Attributes ---
+        # Remove Custom Attributes
         # Clean up the custom attributes we added to the record
         # This prevents them from potentially interfering with other handlers/formatters
         if hasattr(record, "short_pathname"):

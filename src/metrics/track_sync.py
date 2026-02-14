@@ -142,7 +142,7 @@ def load_track_list(csv_path: str) -> dict[str, TrackDict]:
     return track_map
 
 
-# -------------------- Track List Synchronization Helpers --------------------
+# Track List Synchronization Helpers
 
 
 def get_processed_albums_from_csv(
