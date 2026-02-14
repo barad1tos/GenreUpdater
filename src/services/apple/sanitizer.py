@@ -90,7 +90,7 @@ class AppleScriptSanitizer:
             value: The string value to sanitize
 
         Returns:
-            str: The sanitized string safe for AppleScript execution
+            The sanitized string safe for AppleScript execution
 
         Raises:
             ValueError: If the input value is None or not a string

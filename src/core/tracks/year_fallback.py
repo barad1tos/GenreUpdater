@@ -368,8 +368,8 @@ class YearFallbackHandler:
             album: Album name
 
         Returns:
-            None: Continue to next rule (not a fresh album or no conflict)
-            release_year: Return release_year when fresh album detected with stale API
+            Continue to next rule (not a fresh album or no conflict), or
+            release_year when fresh album detected with stale API.
 
         """
         if not release_year:

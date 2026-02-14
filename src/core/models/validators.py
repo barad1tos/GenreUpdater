@@ -319,7 +319,7 @@ class SecurityValidator:
             field_name: Optional field name for logging
 
         Returns:
-            str: The sanitized string
+            The sanitized string
 
         Raises:
             SecurityValidationError: If validation fails
@@ -380,7 +380,7 @@ class SecurityValidator:
             allowed_base_paths: Optional list of allowed base paths
 
         Returns:
-            str: The validated and normalized file path
+            The validated and normalized file path
 
         Raises:
             SecurityValidationError: If validation fails
@@ -432,7 +432,7 @@ class SecurityValidator:
             file_path: The file path to normalize
 
         Returns:
-            str: The normalized absolute path
+            The normalized absolute path
 
         """
         return str(Path(file_path).resolve())

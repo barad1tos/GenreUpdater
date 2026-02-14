@@ -106,12 +106,12 @@ class DependencyContainer:
 
     @property
     def dry_run(self) -> bool:
-        """Get the dry run status."""
+        """Whether the application runs in dry-run mode."""
         return self._dry_run
 
     @property
     def app_config(self) -> AppConfig:
-        """Get the typed application configuration."""
+        """Validated application configuration; raises if not yet loaded."""
         if self._app_config is None:
             msg = "AppConfig not loaded — call initialize() first"
             raise RuntimeError(msg)
@@ -119,12 +119,12 @@ class DependencyContainer:
 
     @property
     def config_path(self) -> Path:
-        """Get the resolved configuration file path."""
+        """Resolved path to the configuration file."""
         return Path(self._config_path)
 
     @property
     def analytics(self) -> Analytics:
-        """Get the analytics service."""
+        """Initialized analytics tracker; raises if not yet initialized."""
         if self._analytics is None:
             msg = "Analytics service not initialized"
             raise RuntimeError(msg)
@@ -132,7 +132,7 @@ class DependencyContainer:
 
     @property
     def ap_client(self) -> AppleScriptClientProtocol:
-        """Get the AppleScript client."""
+        """Initialized AppleScript client; raises if not yet initialized."""
         if self._ap_client is None:
             msg = "AppleScript client not initialized"
             raise RuntimeError(msg)
@@ -140,7 +140,7 @@ class DependencyContainer:
 
     @property
     def cache_service(self) -> CacheOrchestrator:
-        """Get the cache service."""
+        """Initialized cache orchestrator; raises if not yet initialized."""
         if self._cache_service is None:
             msg = "Cache service not initialized"
             raise RuntimeError(msg)
@@ -148,7 +148,7 @@ class DependencyContainer:
 
     @property
     def library_snapshot_service(self) -> LibrarySnapshotService:
-        """Get the library snapshot service."""
+        """Initialized snapshot service; raises if not yet initialized."""
         if self._library_snapshot_service is None:
             msg = "Library snapshot service not initialized"
             raise RuntimeError(msg)
@@ -156,7 +156,7 @@ class DependencyContainer:
 
     @property
     def pending_verification_service(self) -> PendingVerificationService:
-        """Get the pending verification service."""
+        """Initialized verification service; raises if not yet initialized."""
         if self._pending_verification_service is None:
             msg = "Pending verification service not initialized"
             raise RuntimeError(msg)
@@ -164,7 +164,7 @@ class DependencyContainer:
 
     @property
     def external_api_service(self) -> ExternalApiOrchestrator:
-        """Get the external API orchestrator."""
+        """Initialized API orchestrator; raises if not yet initialized."""
         if self._api_orchestrator is None:
             msg = "External API orchestrator not initialized"
             raise RuntimeError(msg)
@@ -172,7 +172,7 @@ class DependencyContainer:
 
     @property
     def retry_handler(self) -> DatabaseRetryHandler:
-        """Get the retry handler."""
+        """Initialized retry handler; raises if not yet initialized."""
         if self._retry_handler is None:
             msg = "Retry handler not initialized"
             raise RuntimeError(msg)
@@ -180,22 +180,22 @@ class DependencyContainer:
 
     @property
     def console_logger(self) -> logging.Logger:
-        """Get the console logger."""
+        """Logger for user-facing console output."""
         return self._console_logger
 
     @property
     def error_logger(self) -> logging.Logger:
-        """Get the error logger."""
+        """Logger for error diagnostics."""
         return self._error_logger
 
     @property
     def analytics_logger(self) -> logging.Logger:
-        """Get the analytics logger."""
+        """Logger for analytics event recording."""
         return self._analytics_logger
 
     @property
     def db_verify_logger(self) -> logging.Logger:
-        """Get the database verification logger."""
+        """Logger for database verification operations."""
         return self._db_verify_logger
 
     async def _initialize_service(
@@ -213,13 +213,12 @@ class DependencyContainer:
         keyword arguments, and logs any failure with useful context.
 
         Args:
-            service (object): The service instance to initialize.
-            service_name (str): Human-readable name for logging purposes.
-            force (bool, optional): If *True* and the target ``initializes``
+            service: The service instance to initialize.
+            service_name: Human-readable name for logging purposes.
+            force: If *True* and the target ``initialize``
                 signature accepts a ``force`` flag, it will be passed through.
-                Defaults to ``False``.
             **kwargs: Additional keyword arguments forwarded to the underlying
-                ``initializing`` implementation.
+                ``initialize`` implementation.
 
         """
         initialize_method = getattr(service, "initialize", None)
@@ -375,18 +374,18 @@ class DependencyContainer:
     # MusicUpdater factory removed - now created by orchestrator
 
     def get_analytics(self) -> Analytics:
-        """Get the Analytics instance."""
+        """Return the initialized analytics tracker; raises if not yet initialized."""
         if self._analytics is None:
             msg = "Analytics not initialized"
             raise RuntimeError(msg)
         return self._analytics
 
     def get_error_logger(self) -> logging.Logger:
-        """Get the error logger."""
+        """Return the error diagnostics logger."""
         return self._error_logger
 
     def get_console_logger(self) -> logging.Logger:
-        """Get the console logger."""
+        """Return the user-facing console logger."""
         return self._console_logger
 
     async def close(self) -> None:
@@ -539,7 +538,7 @@ class DependencyContainer:
 
         Raises:
             FileNotFoundError: If the config file doesn't exist.
-            yaml.YAMLError: If there's an error parsing the YAML.
+            YAMLError: If the YAML config contains syntax errors.
             ValueError: If API authentication configuration is incomplete.
             RuntimeError: For any other errors during loading.
 

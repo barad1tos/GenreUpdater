@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from core.models.track_models import ApiAuthConfig, AppConfig
 
 # Type definitions for configuration
-ConfigValue = dict[str, Any] | list[Any] | str | int | float | bool | None
+ConfigValue = dict[str, Any] | list[Any] | str | int | float | bool | None  # Any: YAML supports arbitrary nesting
 
 # Set up logger early so it's available for import errors
 logger = logging.getLogger("config")
@@ -279,7 +279,7 @@ def format_pydantic_errors(error: ValidationError) -> str:
         error: Pydantic ValidationError instance.
 
     Returns:
-        str: Formatted error message string.
+        Formatted error message string.
 
     """
     error_messages: list[str] = []

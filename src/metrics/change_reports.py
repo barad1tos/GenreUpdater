@@ -1,24 +1,7 @@
-"""Reports Module.
+"""CSV/HTML report generation and track data management for music library operations.
 
-Handles CSV/HTML report generation and track data management for music library operations.
-Provides both file operations and formatted console output with support for caching.
-
-Main features:
-- Track list management with persistent storage and synchronization
-- Consolidated reporting for genres, years, and track/album naming
-- Interactive console output with color formatting
-- CSV data handling with validation
-- Unified interface for actual and simulated operations
-- HTML analytics with performance metrics
-
-Key functions:
-- save_to_csv: Save track metadata to CSV files
-- save_unified_changes_report: Generate formatted change reports
-- load_track_list: Load and validate track data
-- sync_track_list_with_current: Sync data between runs
-- save_html_report: Generate HTML analytics
-
-Note: Uses CacheServiceProtocol for album year caching.
+Handles change reports (genres, years, naming), track list persistence with synchronization,
+and HTML analytics with performance metrics. Uses CacheServiceProtocol for album year caching.
 """
 
 from __future__ import annotations
