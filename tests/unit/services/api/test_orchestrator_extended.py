@@ -306,6 +306,23 @@ class TestComputeFutureYearStats:
         assert future_count >= 0
         assert max_future >= current_year + 2 or max_future == 0
 
+    @pytest.mark.asyncio
+    async def test_skips_tracks_with_unparseable_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Should skip tracks with non-integer year values without crashing."""
+        current_year = dt.now(tz=UTC).year
+        tracks = [
+            {"year": "not_a_number"},
+            {"year": str(current_year + 2)},
+            {"year": "N/A"},
+            {"year": str(current_year)},
+        ]
+
+        future_count, max_future, _ratio_triggered, _significant = orchestrator._compute_future_year_stats(tracks, current_year)
+
+        # Only the valid future year track should be counted
+        assert future_count == 1
+        assert max_future == current_year + 2
+
 
 class TestIsPrereleaseAlbum:
     """Tests for _is_prerelease_album method."""

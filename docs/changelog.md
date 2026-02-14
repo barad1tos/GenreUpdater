@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 4 edge-case tests for new `except` branches: unparseable year in re-recording check, dominant year parse failure, future-year stats with non-integer years, reissue detection with invalid release year
 - Tests for 4 previously untested modules (#219): comprehensive coverage for `year_utils.py` (100%) and `track_base.py`, smoke tests for `json_utils.py` (93%) and `applescript_executor.py` (pure methods only)
 
 ### Removed
