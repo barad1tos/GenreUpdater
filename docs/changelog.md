@@ -8,12 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 4 edge-case tests for new `except` branches: unparseable year in re-recording check, dominant year parse failure, future-year stats with non-integer years, reissue detection with invalid release year
+- Missing-year branch coverage for `_compute_future_year_stats` (track without `year` key)
 - Tests for 4 previously untested modules (#219): comprehensive coverage for `year_utils.py` (100%) and `track_base.py`, smoke tests for `json_utils.py` (93%) and `applescript_executor.py` (pure methods only)
 
 ### Removed
 - Dead code cleanup (#220): `pipeline_helpers.py` module, unused `__init__.py` re-exports (3 packages), singleton ClassVars from DependencyContainer, `clear_dry_run_actions()` method
 
 ### Fixed
+- Replaced 4 `contextlib.suppress` blocks with explicit `try/except` + warning logs in year processing and API modules — parse failures now leave audit trail instead of silently altering control flow
 - Added meaningful assertions to 16 assertion-free unit/regression tests (#219): `test_analytics_core` (report dir + GC mock), `test_html_reports` (default loggers file check), `test_pipeline_snapshot` (early-return + skip guards), `test_track_processor_coverage` (skip-when-no-renamer), `test_request_executor` (response parsing), `test_year_retriever_coverage` (API call + prerelease skip), `test_track_sync` (date_added + save_csv mocks); converted 3 regression tests to `pytest.skip` informational pattern
 - Removed 2 empty test stubs from integration tests (#219): `test_graceful_handling_of_provider_timeout` and `test_graceful_handling_of_rate_limit_response` (mock setup only, never invoked code under test); cleaned dead variables from 2 e2e pipeline smoke tests
 - Removed dead test infrastructure (#219): empty monitoring test dir, unused `unique_artists`/`unique_albums` fixtures, placeholder test bodies
@@ -24,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type mismatches in `test_scoring_comprehensive.py`: annotated `ArtistPeriodContext` dicts to match `set_artist_period_context` signature
 - Missing `logger` kwarg in `test_custom_logger` after rate limiter rename — test was asserting `limiter.logger is custom_logger` without passing the logger
 - Type mismatch in `test_incremental_filter.py`: replaced `dict[str, Any]` with `create_test_app_config()` to match `IncrementalFilterService(config: AppConfig)` signature
+
+### Style
+- Removed ~44 lines of ASCII art separators (`# ===`, `# ---`) across 9 files per CLAUDE.md formatting rules
+
+### Refactored
+- Migrated 5 `print()` calls to `console_logger.info()` in `full_sync.py` (post-init phase where logger is available)
 
 ### Changed
 - **Decompose `year_batch.py` god class (#218)**: extracted `PrereleaseHandler` (prerelease detection/handling) and `TrackUpdater` (track-level year updates with retry) into focused modules; `YearBatchProcessor` reduced from 1,021 to ~530 LOC while preserving public API; updated test docstrings to reflect new module locations

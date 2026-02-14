@@ -249,13 +249,13 @@ graph LR
 
     subgraph Analytics["Tracking"]
         AN[analytics]
-        MO[monitoring]
+        TS[track_sync]
     end
 
     subgraph Reports["Generation"]
         HR[html_reports]
         CR[change_reports]
-        ER[error_reports]
+        CU[csv_utils]
     end
 
     subgraph Output["To File System"]
@@ -263,11 +263,10 @@ graph LR
         CSV[reports/*.csv]
     end
 
-    Data --> AN & MO
+    Data --> AN & TS
     AN --> HR & CR
-    MO --> ER
     HR --> HTML
-    CR & ER --> CSV
+    CR --> CU --> CSV
 ```
 
 ## Directory Structure
@@ -360,23 +359,23 @@ All YAML config sections have corresponding Pydantic v2 models in
 every config section at load time, catching typos and type mismatches
 before they reach runtime:
 
-| Config Section              | Pydantic Model                |
-|-----------------------------|-------------------------------|
-| `processing`                | `ProcessingConfig`            |
-| `logic`                     | `LogicConfig`                 |
-| `scoring`                   | `ScoringConfig`               |
-| `caching`                   | `CachingConfig`               |
-| `caching.library_snapshot`  | `LibrarySnapshotConfig`       |
-| `year_retrieval`            | `YearRetrievalConfig`         |
-| `analytics`                 | `AnalyticsConfig`             |
-| `database_verification`     | `DatabaseVerificationConfig`  |
-| `development`               | `DevelopmentConfig`           |
-| `applescript_timeouts`      | `AppleScriptTimeoutsConfig`   |
-| `apple_script_rate_limit`   | `AppleScriptRateLimitConfig`  |
-| `album_type_detection`      | `AlbumTypeDetectionConfig`    |
-| `batch_processing`          | `BatchProcessingConfig`       |
-| `experimental`              | `ExperimentalConfig`          |
-| `applescript_retry`         | `AppleScriptRetryConfig`      |
+| Config Section             | Pydantic Model               |
+|----------------------------|------------------------------|
+| `processing`               | `ProcessingConfig`           |
+| `logic`                    | `LogicConfig`                |
+| `scoring`                  | `ScoringConfig`              |
+| `caching`                  | `CachingConfig`              |
+| `caching.library_snapshot` | `LibrarySnapshotConfig`      |
+| `year_retrieval`           | `YearRetrievalConfig`        |
+| `analytics`                | `AnalyticsConfig`            |
+| `database_verification`    | `DatabaseVerificationConfig` |
+| `development`              | `DevelopmentConfig`          |
+| `applescript_timeouts`     | `AppleScriptTimeoutsConfig`  |
+| `apple_script_rate_limit`  | `AppleScriptRateLimitConfig` |
+| `album_type_detection`     | `AlbumTypeDetectionConfig`   |
+| `batch_processing`         | `BatchProcessingConfig`      |
+| `experimental`             | `ExperimentalConfig`         |
+| `applescript_retry`        | `AppleScriptRetryConfig`     |
 
 #### Dual-Access Pattern (Migration)
 

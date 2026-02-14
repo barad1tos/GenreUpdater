@@ -774,13 +774,22 @@ class ExternalApiOrchestrator:
         """Calculate future-year related statistics."""
         future_year_count = 0
         max_year = 0
+        unparseable_year_count = 0
         for track in tracks:
-            with contextlib.suppress(ValueError, TypeError):
-                if year := track.get("year"):
+            if year := track.get("year"):
+                try:
                     year_int = int(year)
-                    if year_int > current_year:
-                        future_year_count += 1
-                        max_year = max(max_year, year_int)
+                except (ValueError, TypeError):
+                    unparseable_year_count += 1
+                    continue
+                if year_int > current_year:
+                    future_year_count += 1
+                    max_year = max(max_year, year_int)
+        if unparseable_year_count:
+            self.console_logger.debug(
+                "Skipped %d tracks with unparseable year values during future-year analysis",
+                unparseable_year_count,
+            )
 
         total_tracks = len(tracks)
         ratio_triggered = future_year_count > 0 and future_year_count >= total_tracks * 0.5 if total_tracks else False

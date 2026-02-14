@@ -80,7 +80,7 @@ class Analytics:
     _SLOW = ">"
     _DURATION_FIELD = "Duration (s)"  # Field name for duration in analytics events
 
-    # --- Init ---
+    # Init
     def __init__(
         self,
         config: AppConfig,
@@ -130,12 +130,12 @@ class Analytics:
 
         self.console_logger.debug("Analytics #%s initialized", self.instance_id)
 
-    # --- Public decorator helpers ---
+    # Public decorator helpers
     def track(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Preferred decorator API - tracks sync/async functions."""
         return self._decorator(event_type)
 
-    # --- Internal decorator factory ---
+    # Internal decorator factory
     def _decorator(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator_function(func: Callable[..., Any]) -> Callable[..., Any]:
             """Apply performance tracking to the decorated function."""
@@ -157,7 +157,7 @@ class Analytics:
 
         return decorator_function
 
-    # --- Public API for wrapped calls ---
+    # Public API for wrapped calls
     async def execute_async_wrapped_call(
         self,
         func: Callable[..., Any],
@@ -237,7 +237,7 @@ class Analytics:
             return await self.execute_async_wrapped_call(func, event_type, *args, **kwargs)
         return self.execute_sync_wrapped_call(func, event_type, *args, **kwargs)
 
-    # --- Core wrapper executor ---
+    # Core wrapper executor
     async def _wrapped_call(
         self,
         func: Callable[..., Any],
@@ -266,7 +266,7 @@ class Analytics:
             timing_info = TimingInfo(func_start, func_end, duration, overhead)
             self._record_function_call(call_info, timing_info)
 
-    # --- Event recording & memory management ---
+    # Event recording and memory management
     def _get_duration_symbol(self, duration: float) -> str:
         """Get the appropriate symbol for a given duration.
 
@@ -346,7 +346,7 @@ class Analytics:
         else:
             self.console_logger.warning(msg)
 
-    # --- Batch mode context manager ---
+    # Batch mode context manager
     @asynccontextmanager
     async def batch_mode(
         self,
@@ -398,7 +398,7 @@ class Analytics:
             self._batch_call_count = 0
             self._batch_total_duration = 0.0
 
-    # --- Stats & summaries ---
+    # Stats and summaries
     def get_stats(self, function_filter: str | list[str] | None = None) -> dict[str, Any]:
         """Get statistics for analytics data."""
         if function_filter:
@@ -460,7 +460,7 @@ class Analytics:
             duration_counts["slow"] / total * 100,
         )
 
-    # --- Maintenance helpers ---
+    # Maintenance helpers
     def clear_old_events(self, days: int = 7) -> int:
         """Clear old events from the analytics log.
 
@@ -524,7 +524,7 @@ class Analytics:
         other.success_counts.clear()
         other.decorator_overhead.clear()
 
-    # --- Reports ---
+    # Reports
     def generate_reports(self, force_mode: bool = False) -> None:
         """Generate analytics reports.
 
@@ -561,7 +561,7 @@ class Analytics:
         if len(self.events) > self.GC_COLLECTION_THRESHOLD and self.enable_gc_collect:
             gc.collect()
 
-    # --- Utilities ---
+    # Utilities
     @staticmethod
     def _null_logger() -> logging.Logger:
         logger = logging.getLogger("null")

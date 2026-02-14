@@ -2,7 +2,7 @@
 
 import logging
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -529,6 +529,30 @@ class TestProcessItunesResult:
         assert result is not None
         assert result["catalog_number"] is None
         assert result["barcode"] is None
+
+
+class TestReissueDetectionEdgeCases:
+    """Tests for reissue detection with edge-case year values."""
+
+    @pytest.mark.asyncio
+    async def test_unparseable_release_year_skips_reissue_penalty(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+        sample_itunes_result: dict[str, Any],
+    ) -> None:
+        """Unparseable release year should not crash, just skip reissue penalty."""
+        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
+        mock_score_func.return_value = 75.0
+
+        # Mock _parse_release_year to return a non-integer string
+        with patch.object(client, "_parse_release_year", return_value="N/A"):
+            result = await client.get_scored_releases("pink floyd", "dark side")
+
+        # Should still produce a result (is_reissue stays False, key not added)
+        assert len(result) == 1
+        assert "is_reissue" not in result[0]
 
 
 class TestParseReleaseYear:

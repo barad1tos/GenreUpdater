@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -460,6 +460,31 @@ class TestShouldSkipAlbumConsistentYear:
         _should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
         assert reason != "year_consistent"
+
+
+@pytest.mark.unit
+class TestPreCheckUnparseableYear:
+    """Tests for pre-check 3: unparseable dominant year forces API verification."""
+
+    @pytest.mark.asyncio
+    async def test_unparseable_dominant_year_forces_api_verification(self) -> None:
+        """Should force API verification when dominant year is not a valid integer."""
+        consistency_checker = _create_mock_consistency_checker()
+        consistency_checker.get_dominant_year.return_value = "not_a_year"
+        determinator = _create_year_determinator(consistency_checker=consistency_checker)
+
+        tracks = [create_test_track(year="2020")]
+
+        # Mock _has_consistent_year to return True so we reach the int(dominant) path
+        # and mock _get_dominant_year to return unparseable value
+        with (
+            patch.object(determinator, "_has_consistent_year", return_value=True),
+            patch.object(determinator, "_get_dominant_year", return_value="not_a_year"),
+        ):
+            should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        assert should_skip is False
+        assert reason == "invalid_year_format"
 
 
 @pytest.mark.unit

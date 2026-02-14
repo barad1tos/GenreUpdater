@@ -662,3 +662,19 @@ class TestReRecordingDetection:
         pending_verification.mark_for_verification.assert_called_once()
         call_kwargs = pending_verification.mark_for_verification.call_args[1]
         assert "anniversary" in call_kwargs["metadata"]["detected_pattern"]
+
+    @pytest.mark.asyncio
+    async def test_rerecording_unparseable_year_returns_empty(
+        self,
+        fallback_handler: YearFallbackHandler,
+    ) -> None:
+        """Re-recording with unparseable proposed year → skip update (return "")."""
+        result = await fallback_handler._handle_special_album_type(
+            proposed_year="not_a_year",
+            existing_year="2015",
+            artist="Rotting Christ",
+            album="Aealo (Re-Recorded)",
+        )
+
+        # Unparseable year should skip the update
+        assert result == ""

@@ -18,7 +18,7 @@ Built for large libraries (30,000+ tracks) with async processing, multi-tier cac
 
 - **Fixes messy genres** — determines the dominant genre from the earliest added album per artist
 - **Fills in missing years** — queries MusicBrainz, Discogs, and Last.fm with confidence scoring
-- **Cleans up metadata** — strips "Remastered", "Deluxe Edition", and other promotional text
+- **Cleans up metadata** — strips "Remastered," "Deluxe Edition," and other promotional text
 - **Previews before changing** — `--dry-run` mode shows exactly what would change
 - **Processes incrementally** — only touches tracks modified since the last run
 
@@ -218,10 +218,9 @@ GenreUpdater/
 │   ├── app/              # CLI, orchestration, feature modules
 │   │   └── features/     # Command implementations
 │   ├── core/             # Business logic
-│   │   ├── errors/       # Custom exceptions
 │   │   ├── models/       # Pydantic models, protocols, validators
 │   │   ├── tracks/       # Track processing, genre/year logic
-│   │   └── utils/        # Date/time, iCloud cleanup
+│   │   └── utils/        # Date/time utilities
 │   ├── services/         # External integrations
 │   │   ├── api/          # MusicBrainz, Discogs, Last.fm clients
 │   │   ├── apple/        # AppleScript client

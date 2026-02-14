@@ -87,7 +87,7 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         self.logger.info("%s initialized successfully", LogFormat.entity("CacheOrchestrator"))
 
-    # =========================== ALBUM CACHE API ===========================
+    # Album Cache API
 
     async def get_album_year(self, artist: str, album: str) -> str | None:
         """Get album release year from cache.
@@ -112,7 +112,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """
         await self.album_service.store_album_year(artist, album, year, confidence)
 
-    # =========================== GENERIC CACHE API ===========================
+    # Generic Cache API
 
     async def get_async(  # type: ignore[override]
         self,
@@ -172,7 +172,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """
         return self.generic_service.get(key_data)
 
-    # =========================== UNIFIED CACHE OPERATIONS ===========================
+    # Unified Cache Operations
 
     async def invalidate_for_track(self, track: TrackDict) -> None:
         """Invalidate all cache entries related to a track.
@@ -246,7 +246,7 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         self.logger.info("All cache entries invalidated")
 
-    # =========================== BACKWARD COMPATIBILITY ===========================
+    # Backward Compatibility
 
     @property
     def cache(self) -> dict[str, Any]:
@@ -263,7 +263,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """API cache for backward compatibility."""
         return {k: v.model_dump() for k, v in self.api_service.api_cache.items()}
 
-    # =========================== MISSING PROTOCOL METHODS ===========================
+    # Missing Protocol Methods
 
     async def load_cache(self) -> None:
         """Load persistent cache data from disk."""
