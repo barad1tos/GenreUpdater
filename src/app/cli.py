@@ -288,5 +288,4 @@ Examples:
         return self.parser.parse_args(args)
 
     def print_help(self) -> None:
-        """Print help message."""
         self.parser.print_help()

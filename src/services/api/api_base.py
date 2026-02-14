@@ -86,7 +86,7 @@ class ApiRateLimiter:
         """Acquire permission to make an API call, waiting if necessary.
 
         Returns:
-            float: The amount of time (in seconds) that was spent waiting
+            The amount of time (in seconds) that was spent waiting
 
         """
         async with self.lock:
@@ -103,7 +103,7 @@ class ApiRateLimiter:
         """Wait if necessary to comply with rate limits.
 
         Returns:
-            float: Time waited in seconds
+            Time waited in seconds
 
         """
         now = time.monotonic()

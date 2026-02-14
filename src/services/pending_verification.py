@@ -88,14 +88,6 @@ class PendingVerificationService:
 
     Uses hash-based keys for album data. File operations are asynchronous.
     Initializes asynchronously.
-
-    Attributes:
-        pending_file_path (str): Path to the CSV file storing pending verifications
-        console_logger: Logger for console output
-        verification_interval_days (int): Days to wait before re-checking an album
-        pending_albums: Cache of pending albums using hash keys (PendingAlbumEntry).
-        _lock: asyncio.Lock for synchronizing access to pending_albums cache
-
     """
 
     def __init__(
@@ -201,7 +193,7 @@ class PendingVerificationService:
             fieldnames: List of CSV header field names
 
         Returns:
-            bool: True if headers are valid, False otherwise
+            True if headers are valid, False otherwise
 
         """
         if not fieldnames:

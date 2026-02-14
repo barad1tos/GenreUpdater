@@ -1,17 +1,7 @@
-"""Analytics Module.
+"""Performance tracking and analysis via decorators.
 
-Provides performance tracking and analysis for Python applications.
-Uses decorators to measure execution time, success rates, and patterns.
-
-Features
---------
-- Function performance tracking (sync and async)
-- Success and failure monitoring
-- Duration categorization (fast / medium / slow)
-- HTML report generation (via utils.reports.save_html_report)
-- Memory-safe event storage with pruning
-- Aggregated statistics and filtering
-- Merging data from multiple Analytics instances
+Measures execution time, success rates, and duration patterns for sync/async functions.
+Supports memory-safe event storage, HTML report generation, and multi-instance merging.
 """
 
 from __future__ import annotations
@@ -46,7 +36,6 @@ class TimingInfo:
     """Container for timing-related data."""
 
     def __init__(self, start: float, end: float, duration: float, overhead: float) -> None:
-        """Initialize timing info."""
         self.start = start
         self.end = end
         self.duration = duration
@@ -57,7 +46,6 @@ class CallInfo:
     """Container for function call metadata."""
 
     def __init__(self, func_name: str, event_type: str, success: bool) -> None:
-        """Initialize call info."""
         self.func_name = func_name
         self.event_type = event_type
         self.success = success
@@ -72,25 +60,13 @@ class LoggerContainer:
         error_logger: logging.Logger,
         analytics_logger: logging.Logger,
     ) -> None:
-        """Initialize logger container."""
         self.console = console_logger
         self.error = error_logger
         self.analytics = analytics_logger
 
 
 class Analytics:
-    """Tracks function performance, success rates, and execution patterns.
-
-    Attributes
-    ----------
-    instance_id      : unique identifier for this Analytics instance
-    events           : list of tracked call events
-    call_counts      : dict[func, int] - total calls
-    success_counts   : dict[func, int] - successful calls
-    decorator_overhead: dict[func, float] - seconds of wrapper overhead
-    max_events       : in-memory cap for events (pruned oldest when exceeded)
-
-    """
+    """Tracks function performance, success rates, and execution patterns."""
 
     # Class-level counter for unique IDs
     _instances = 0
@@ -162,19 +138,19 @@ class Analytics:
     # --- Internal decorator factory ---
     def _decorator(self, event_type: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator_function(func: Callable[..., Any]) -> Callable[..., Any]:
-            """Create decorator for given function."""
+            """Apply performance tracking to the decorated function."""
             is_async = inspect.iscoroutinefunction(func)
 
             if is_async:
 
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    """Wrap async functions with tracking."""
+                    """Delegate to the async tracking pipeline."""
                     return await self.execute_async_wrapped_call(func, event_type, *args, **kwargs)
 
                 return wraps(func)(async_wrapper)
 
             def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-                """Wrap sync functions with tracking."""
+                """Delegate to the sync tracking pipeline."""
                 return self.execute_sync_wrapped_call(func, event_type, *args, **kwargs)
 
             return wraps(func)(sync_wrapper)
@@ -298,7 +274,7 @@ class Analytics:
             duration: The duration in seconds
 
         Returns:
-            str: Symbol representing the duration category (fast/medium/slow)
+            Symbol representing the duration category (fast/medium/slow)
 
         """
         if duration <= self.short_max:
@@ -472,16 +448,16 @@ class Analytics:
             stats["avg_duration"],
         )
 
-        dc = stats["duration_counts"]
-        total = sum(dc.values()) or 1
+        duration_counts = stats["duration_counts"]
+        total = sum(duration_counts.values()) or 1
         self.console_logger.info(
             "Performance: %s %.0f%% | %s %.0f%% | %s %.0f%%",
             self._FAST,
-            dc["fast"] / total * 100,
+            duration_counts["fast"] / total * 100,
             self._MEDIUM,
-            dc["medium"] / total * 100,
+            duration_counts["medium"] / total * 100,
             self._SLOW,
-            dc["slow"] / total * 100,
+            duration_counts["slow"] / total * 100,
         )
 
     # --- Maintenance helpers ---

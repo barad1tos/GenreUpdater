@@ -1,18 +1,7 @@
-# utils/logger.py
-"""Enhanced Logger Module using QueueHandler for non-blocking file IO, with RichHandler for improved console output.
+"""Non-blocking logging with QueueHandler, Rich console output, and run tracking.
 
-Provides a comprehensive logging system with detailed tracking and visual formatting. Features:
-
-1.  **Run Tracking:** Adds headers/footers with timestamps and duration for script executions (`RunHandler`).
-2.  **Log Rotation by Runs:** Keeps only the most recent N runs in log files (`RunHandler.trim_log_to_max_runs`).
-3.  **Rich Console Output:** Uses `rich.logging.RichHandler` for color coding, formatting, and improved readability in the terminal.
-4.  **Path Aliases:** Shortens file paths in log messages to readable aliases like `$SCRIPTS`, `$LOGS`, `$MUSIC_LIB`, `~` (`shorten_path`).
-5.  **Multiple Loggers:** Configures distinct loggers for console output, main application/error logging, and analytics (`get_loggers`).
-6.  **Non-Blocking File Logging:** Employs `QueueHandler` and `QueueListener` to prevent file I/O from blocking the main application thread.
-7.  **Visual Indicators:** Uses emojis (噫, 潤) and separators for improved readability in log files and console.
-8.  **Compact Formatting:** Provides a `CompactFormatter` (primarily for files) and configures `RichHandler` for a compact console view.
-9.  **HTML Report Path:** Includes a helper function (`get_html_report_path`) to determine paths for analytics reports.
-10. **Configuration Driven:** Relies on a configuration dictionary for paths, log levels, and other settings.
+Configures multiple loggers (console, error, analytics), provides path shortening aliases,
+log rotation by runs, and compact formatting for both file and terminal output.
 """
 
 from __future__ import annotations

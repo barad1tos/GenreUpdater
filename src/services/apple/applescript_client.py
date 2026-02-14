@@ -44,14 +44,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
     """A client to run AppleScript commands asynchronously using the osascript command.
 
     Semaphore initialization is done in the async initialize method.
-
-    Attributes:
-        config (AppConfig): Typed application configuration.
-        apple_scripts_dir (str): Directory containing AppleScript files.
-        console_logger (logging.Logger): Logger for console output.
-        error_logger (logging.Logger): Logger for error output.
-        semaphore (Optional[asyncio.Semaphore]): Semaphore to limit concurrent AppleScript executions (initialized asynchronously).
-
     """
 
     def __init__(
