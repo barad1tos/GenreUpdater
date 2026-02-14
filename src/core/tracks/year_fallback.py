@@ -6,7 +6,6 @@ year values based on confidence levels and existing data.
 
 from __future__ import annotations
 
-import contextlib
 from collections import Counter
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -16,8 +15,8 @@ from core.models.album_type import (
     YearHandlingStrategy,
     detect_album_type,
 )
-from core.models.validators import is_empty_year
 from core.models.cache_types import VerificationReason
+from core.models.validators import is_empty_year
 
 if TYPE_CHECKING:
     import logging
@@ -43,10 +42,10 @@ class YearFallbackHandler:
 
     Decision Tree:
     1. IF is_definitive=True → APPLY proposed year (high confidence from API)
-    2. IF proposed_year < absurd_threshold AND no existing year → MARK + SKIP
+    2. IF proposed_year < absurd_threshold AND no existing year → MARK and SKIP
     3. IF existing year is EMPTY → APPLY proposed year (nothing to preserve)
-    4. IF is_special_album_type → MARK + PROPAGATE existing year to all tracks
-    5. IF |proposed - existing| > THRESHOLD → MARK + PROPAGATE existing year to all tracks
+    4. IF is_special_album_type → MARK and PROPAGATE existing year to all tracks
+    5. IF |proposed - existing| > THRESHOLD → MARK and PROPAGATE existing year to all tracks
     6. ELSE → APPLY proposed year
 
     Key principle: When we trust existing year over proposed year, we PROPAGATE
@@ -130,7 +129,7 @@ class YearFallbackHandler:
             )
             return proposed_year
 
-        # Get existing year from tracks (needed for subsequent rules)
+        # Get existing year from tracks (needed for later rules)
         existing_year = self.get_existing_year_from_tracks(album_tracks)
 
         # Early exit: No change needed if existing year equals proposed year
@@ -450,18 +449,27 @@ class YearFallbackHandler:
         # The API likely returned the ORIGINAL album's year, not the re-recording's year
         if album_info.detected_pattern in ("re-record", "re-recorded"):
             current_year = datetime.now(UTC).year
-            with contextlib.suppress(ValueError, TypeError):
+            try:
                 proposed_int = int(proposed_year)
-                # If API year is 10+ years old, it's probably the original album's year
-                if current_year - proposed_int >= 10:
-                    self.console_logger.warning(
-                        "[FALLBACK] Re-recording detected but API year %s is 10+ years old - skipping update for %s - %s (pattern: %s)",
-                        proposed_year,
-                        artist,
-                        album,
-                        album_info.detected_pattern,
-                    )
-                    return ""  # Signal to propagate existing_year (skip API year)
+            except (ValueError, TypeError):
+                self.console_logger.warning(
+                    "[FALLBACK] Cannot parse proposed year '%s' for re-recording check - skipping update for %s - %s (pattern: %s)",
+                    proposed_year,
+                    artist,
+                    album,
+                    album_info.detected_pattern,
+                )
+                return ""
+            # If API year is 10+ years old, it's probably the original album's year
+            if current_year - proposed_int >= 10:
+                self.console_logger.warning(
+                    "[FALLBACK] Re-recording detected but API year %s is 10+ years old - skipping update for %s - %s (pattern: %s)",
+                    proposed_year,
+                    artist,
+                    album,
+                    album_info.detected_pattern,
+                )
+                return ""  # Signal to propagate existing_year (skip API year)
         self.console_logger.info(
             "[FALLBACK] Updating year for %s - %s (reissue detected: %s)",
             artist,
@@ -697,7 +705,7 @@ class YearFallbackHandler:
             2. High confidence API (>=70%) → trust API, apply year
             3. Issue #93: Check if existing year is in API results → if NOT → apply API year
             4. Check plausibility → if existing is impossible → apply API year
-            5. Low confidence + dramatic + plausible → preserve existing, mark for verification
+            5. Low confidence + dramatic and plausible → preserve existing, mark for verification
 
         """
         # Rule 0.1: Fresh album detection - delegate to helper method

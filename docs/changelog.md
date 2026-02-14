@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dead code cleanup (#220): `pipeline_helpers.py` module, unused `__init__.py` re-exports (3 packages), singleton ClassVars from DependencyContainer, `clear_dry_run_actions()` method
 
 ### Fixed
+- Replaced 4 `contextlib.suppress` blocks with explicit `try/except` + warning logs in year processing and API modules — parse failures now leave audit trail instead of silently altering control flow
 - Added meaningful assertions to 16 assertion-free unit/regression tests (#219): `test_analytics_core` (report dir + GC mock), `test_html_reports` (default loggers file check), `test_pipeline_snapshot` (early-return + skip guards), `test_track_processor_coverage` (skip-when-no-renamer), `test_request_executor` (response parsing), `test_year_retriever_coverage` (API call + prerelease skip), `test_track_sync` (date_added + save_csv mocks); converted 3 regression tests to `pytest.skip` informational pattern
 - Removed 2 empty test stubs from integration tests (#219): `test_graceful_handling_of_provider_timeout` and `test_graceful_handling_of_rate_limit_response` (mock setup only, never invoked code under test); cleaned dead variables from 2 e2e pipeline smoke tests
 - Removed dead test infrastructure (#219): empty monitoring test dir, unused `unique_artists`/`unique_albums` fixtures, placeholder test bodies

@@ -319,10 +319,17 @@ class AppleMusicClient:
             # Reissue detection BEFORE scoring: iTunes returns catalog/reissue dates, not original
             # Mark recent years as potential reissues to apply reissue_penalty (-30) during scoring
             is_reissue = False
-            with contextlib.suppress(ValueError, TypeError):
+            try:
                 current_year = datetime.now(UTC).year
                 if int(release_year) >= current_year - 1:
                     is_reissue = True
+            except (ValueError, TypeError):
+                self.console_logger.warning(
+                    "[itunes] Cannot parse release year '%s' for reissue detection - skipping reissue penalty for %s - %s",
+                    release_year,
+                    artist_name,
+                    collection_name,
+                )
             # Score the release using the injected scoring function
             # IMPORTANT: is_reissue must be in the release dict for penalty to apply
             try:
