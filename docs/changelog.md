@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Style
 - Removed ~44 lines of ASCII art separators (`# ===`, `# ---`) across 9 files per CLAUDE.md formatting rules
+
+### Refactored
 - Migrated 5 `print()` calls to `console_logger.info()` in `full_sync.py` (post-init phase where logger is available)
 
 ### Changed

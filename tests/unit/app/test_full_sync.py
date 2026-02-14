@@ -775,12 +775,11 @@ class TestMain:
         assert "Full Media Library Resync" in captured.out
 
     @pytest.mark.asyncio
-    async def test_prints_completion_message(
+    async def test_logs_completion_message(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Should print completion message."""
+        """Should log completion message via console_logger."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text("logs_base_dir: /tmp")
 
@@ -793,16 +792,18 @@ class TestMain:
         mock_updater = MagicMock()
         mock_updater.track_processor = MagicMock()
 
+        mock_console_logger = MagicMock()
+
         with (
             patch("app.full_sync.project_root", tmp_path),
             patch("app.full_sync.load_config", return_value={"logs_base_dir": "/tmp"}),
-            patch("app.full_sync.get_loggers", return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock(), None)),
+            patch("app.full_sync.get_loggers", return_value=(mock_console_logger, MagicMock(), MagicMock(), MagicMock(), None)),
             patch("app.full_sync.DependencyContainer", return_value=mock_deps),
             patch("app.full_sync.MusicUpdater", return_value=mock_updater),
             patch("app.full_sync.run_full_resync", new_callable=AsyncMock),
         ):
             await main()
 
-        captured = capsys.readouterr()
-        assert "Full resync completed" in captured.out
-        assert "track_list.csv is now synchronized" in captured.out
+        logged_messages = [str(call.args[0]) for call in mock_console_logger.info.call_args_list]
+        assert any("Full resync completed" in msg for msg in logged_messages)
+        assert any("track_list.csv is now synchronized" in msg for msg in logged_messages)

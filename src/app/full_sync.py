@@ -147,7 +147,7 @@ async def main() -> None:
     deps = None
     try:
         # Initialize dependency container with proper config path and loggers
-        print("Initializing services...")
+        console_logger.info("Initializing services...")
         deps = DependencyContainer(
             config_path=str(config_path),
             console_logger=console_logger,
@@ -157,17 +157,17 @@ async def main() -> None:
         )
         await deps.initialize()
 
-        print("Services initialized")
+        console_logger.info("Services initialized")
 
         # Create MusicUpdater instance to get track processor
         music_updater = MusicUpdater(deps)
 
         # Run the full resync
-        print("Starting full media library resync...")
+        console_logger.info("Starting full media library resync...")
         await run_full_resync(console_logger, error_logger, deps.app_config, deps.cache_service, music_updater.track_processor)
 
-        print("✅ Full resync completed!")
-        print("track_list.csv is now synchronized with Music.app")
+        console_logger.info("Full resync completed")
+        console_logger.info("track_list.csv is now synchronized with Music.app")
 
     except KeyboardInterrupt:
         print("\nResync cancelled by user")
