@@ -315,11 +315,13 @@ class TestComputeFutureYearStats:
             {"year": str(current_year + 2)},
             {"year": "N/A"},
             {"year": str(current_year)},
+            {"name": "track_without_year_key"},
         ]
 
         future_count, max_future, _ratio_triggered, _significant = orchestrator._compute_future_year_stats(tracks, current_year)
 
-        # Only the valid future year track should be counted
+        # Only the valid future year track should be counted;
+        # unparseable and missing-year tracks are skipped
         assert future_count == 1
         assert max_future == current_year + 2
 
