@@ -33,7 +33,11 @@ FORCE_SCAN_INTERVAL_DAYS: int = 7
 
 
 def _utc_now_naive() -> datetime:
-    """Return naive UTC datetime for consistent comparisons."""
+    """Return naive UTC datetime for consistent comparisons.
+
+    Intentionally naive: all snapshot timestamps use naive UTC so that
+    comparisons with library mtime (also stripped to naive UTC) are consistent.
+    """
     return datetime.now(UTC).replace(tzinfo=None)
 
 

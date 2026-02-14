@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.apple import (
+from services.apple.applescript_client import AppleScriptClient
+from services.apple.sanitizer import (
     MAX_SCRIPT_SIZE,
-    AppleScriptClient,
     AppleScriptSanitizationError,
     AppleScriptSanitizer,
 )

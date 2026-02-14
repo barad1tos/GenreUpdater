@@ -13,7 +13,7 @@ import asyncio
 import inspect
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 import yaml
 
@@ -25,7 +25,7 @@ from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
 
 from .api.orchestrator import ExternalApiOrchestrator, create_external_api_orchestrator
-from .apple import AppleScriptClient
+from .apple.applescript_client import AppleScriptClient
 from .cache.orchestrator import CacheOrchestrator
 from .cache.snapshot import LibrarySnapshotService
 from .pending_verification import PendingVerificationService
@@ -57,13 +57,7 @@ class DependencyContainer:
     """Dependency injection container for the application.
 
     This class manages the lifecycle and dependencies of all services in the application.
-    It follows the singleton pattern to ensure only one instance exists.
     """
-
-    # Class-level instance tracking
-    _instance: ClassVar[DependencyContainer | None] = None
-    _initialized: ClassVar[bool] = False
-    _lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     def __init__(
         self,

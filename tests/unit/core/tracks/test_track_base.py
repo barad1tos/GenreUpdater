@@ -80,17 +80,3 @@ class TestGetDryRunActions:
 
     def test_empty_when_no_actions(self, processor: BaseProcessor) -> None:
         assert processor.get_dry_run_actions() == []
-
-
-class TestClearDryRunActions:
-    def test_clears_all_recorded_actions(self, processor: BaseProcessor) -> None:
-        processor._record_dry_run_action("a", {})
-        processor._record_dry_run_action("b", {})
-        assert len(processor.get_dry_run_actions()) == 2
-
-        processor.clear_dry_run_actions()
-        assert processor.get_dry_run_actions() == []
-
-    def test_clear_on_empty_is_noop(self, processor: BaseProcessor) -> None:
-        processor.clear_dry_run_actions()
-        assert processor.get_dry_run_actions() == []

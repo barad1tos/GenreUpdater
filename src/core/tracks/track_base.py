@@ -56,10 +56,6 @@ class BaseProcessor:
         """
         return self._dry_run_actions.copy()
 
-    def clear_dry_run_actions(self) -> None:
-        """Clear the list of recorded dry-run actions."""
-        self._dry_run_actions.clear()
-
     def _record_dry_run_action(self, action_type: str, details: dict[str, Any]) -> None:
         """Record a dry-run action for later reporting.
 
