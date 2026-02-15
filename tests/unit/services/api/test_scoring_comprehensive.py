@@ -777,3 +777,25 @@ class TestScoringBranchCoverage:
         # Should not crash; invalid RG date is silently ignored
         score = scorer.score_original_release(release, "a", "x", artist_region=None, source="musicbrainz")
         assert isinstance(score, int)
+
+
+class _FailingSplitForScoring(str):
+    """String subclass whose split() raises TypeError for testing defensive except."""
+
+    def split(self, *_args: object, **_kwargs: object) -> list[str]:
+        raise TypeError("simulated split failure")
+
+
+class TestExtractRgFirstYearDebugLog:
+    """Cover the except (IndexError, ValueError, TypeError) branch in _extract_rg_first_year."""
+
+    def test_logs_debug_on_type_error_and_returns_none(self) -> None:
+        """TypeError during year extraction triggers console_logger.debug and returns None."""
+        mock_logger = MagicMock()
+        scorer = ReleaseScorer(console_logger=mock_logger)
+
+        result = scorer._extract_rg_first_year(_FailingSplitForScoring("2020-01-01"))
+
+        assert result is None
+        mock_logger.debug.assert_called_once()
+        assert "Failed to extract RG first year" in mock_logger.debug.call_args[0][0]

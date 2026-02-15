@@ -481,3 +481,42 @@ class TestDiscogsClientAllure:
         assert result == []
         assert isinstance(client.error_logger, MockLogger)
         assert any("Error fetching from Discogs for 'test artist - test album'" in msg for msg in client.error_logger.exception_messages)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_fetch_master_year_non_str_non_int_cache_falls_through(self) -> None:
+        """Test that non-str/non-int cached value falls through to API call."""
+        mock_cache_service = MagicMock()
+        # Cache returns a dict (not str or int) -- should bypass cache and call API
+        mock_cache_service.get_async = AsyncMock(return_value={"unexpected": "data"})
+        mock_cache_service.set_async = AsyncMock()
+
+        master_response = {"year": 1999}
+        mock_api_request = AsyncMock(return_value=master_response)
+        client = TestDiscogsClientAllure.create_discogs_client(
+            mock_api_request=mock_api_request,
+            mock_cache_service=mock_cache_service,
+        )
+
+        result = await client._fetch_master_release_year(77777)
+
+        # Should fall through to API and return the year from API response
+        assert result == 1999
+        mock_api_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_get_cached_discogs_releases_non_list_logs_warning(self) -> None:
+        """Test that non-list cached data logs warning and returns None."""
+        mock_cache_service = MagicMock()
+        # Cache returns a string instead of a list -- unexpected type
+        mock_cache_service.get_async = AsyncMock(return_value="not_a_list")
+        mock_cache_service.set_async = AsyncMock()
+
+        client = TestDiscogsClientAllure.create_discogs_client(mock_cache_service=mock_cache_service)
+
+        result = await client._get_cached_discogs_releases("some_cache_key")
+
+        assert result is None
+        assert isinstance(client.console_logger, MockLogger)
+        assert any("unexpected type" in msg for msg in client.console_logger.warning_messages)

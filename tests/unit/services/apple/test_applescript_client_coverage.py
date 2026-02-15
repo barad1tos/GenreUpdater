@@ -433,6 +433,24 @@ class TestParseTrackOutput:
 
         self._assert_parse_tracks(raw_output, expected_count=1, first_id="456")
 
+    def test_insufficient_fields_logs_warning_with_details(self) -> None:
+        """Test that insufficient fields triggers _logger.warning with field count details."""
+        field_sep = "\x1e"
+        line_sep = "\x1d"
+        # Line with only 5 fields (less than MIN_TRACK_OUTPUT_FIELDS=10)
+        raw_output = f"id1{field_sep}name{field_sep}artist{field_sep}aa{field_sep}album{line_sep}"
+
+        with patch("services.apple.applescript_client._logger") as mock_logger:
+            result = AppleScriptClient._parse_track_output(raw_output)
+
+        assert result == []
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args[0]
+        assert "Skipping line with insufficient fields" in call_args[0]
+        # Verify field count arguments: actual count and minimum required
+        assert call_args[1] == 5
+        assert call_args[2] == 10
+
     @staticmethod
     def _assert_parse_tracks(
         raw_output: str,

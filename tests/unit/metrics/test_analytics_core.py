@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time  # used by TestLogEventTimestampUTC
+from datetime import UTC, datetime, timedelta  # used by TestClearOldEventsUTCAware
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
@@ -656,3 +658,136 @@ class TestGetFuncName:
         wrapped = analytics.track("test_event")(MyClass().my_method)
         wrapped()
         assert "my_method" in analytics.call_counts
+
+
+class TestLogEventTimestampUTC:
+    """Tests that log_event (via _record_function_call) produces UTC-aware timestamps."""
+
+    def test_compact_time_timestamps_use_utc(self, loggers: LoggerContainer) -> None:
+        """Verify compact_time=True branch formats timestamps via UTC-aware fromtimestamp."""
+        compact_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 1000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": True,
+            },
+        )
+        analytics = Analytics(compact_config, loggers)
+
+        now = time.time()
+        call_info = CallInfo(func_name="test_func", event_type="test", success=True)
+        timing_info = TimingInfo(start=now, end=now + 0.5, duration=0.5, overhead=0.0)
+        analytics._record_function_call(call_info, timing_info)
+
+        assert len(analytics.events) == 1
+        event = analytics.events[0]
+        # compact_time uses "%H:%M:%S" format
+        expected_start = datetime.fromtimestamp(now, tz=UTC).strftime("%H:%M:%S")
+        assert event["Start Time"] == expected_start
+
+    def test_full_time_timestamps_use_utc(self, loggers: LoggerContainer) -> None:
+        """Verify compact_time=False branch formats timestamps via UTC-aware fromtimestamp."""
+        full_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 1000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": False,
+            },
+        )
+        analytics = Analytics(full_config, loggers)
+
+        now = time.time()
+        call_info = CallInfo(func_name="test_func", event_type="test", success=True)
+        timing_info = TimingInfo(start=now, end=now + 1.0, duration=1.0, overhead=0.0)
+        analytics._record_function_call(call_info, timing_info)
+
+        assert len(analytics.events) == 1
+        event = analytics.events[0]
+        # full format uses "%Y-%m-%d %H:%M:%S"
+        expected_start = datetime.fromtimestamp(now, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
+        assert event["Start Time"] == expected_start
+
+
+class TestClearOldEventsUTCAware:
+    """Tests that clear_old_events performs UTC-aware datetime comparison."""
+
+    def test_clear_old_events_removes_old_in_full_time_mode(self, loggers: LoggerContainer) -> None:
+        """Verify clear_old_events date-based pruning works with UTC-aware timestamps."""
+        full_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 1000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": False,
+            },
+        )
+        analytics = Analytics(full_config, loggers)
+
+        time_format = "%Y-%m-%d %H:%M:%S"
+        # Create an old event (30 days ago) and a recent event (1 hour ago)
+        old_time = (datetime.now(UTC) - timedelta(days=30)).strftime(time_format)
+        recent_time = (datetime.now(UTC) - timedelta(hours=1)).strftime(time_format)
+
+        analytics.events = [
+            {
+                "Function": "old_func",
+                "Event Type": "test",
+                "Start Time": old_time,
+                "End Time": old_time,
+                "Duration (s)": 0.1,
+                "Success": True,
+            },
+            {
+                "Function": "recent_func",
+                "Event Type": "test",
+                "Start Time": recent_time,
+                "End Time": recent_time,
+                "Duration (s)": 0.2,
+                "Success": True,
+            },
+        ]
+
+        removed = analytics.clear_old_events(days=7)
+        assert removed == 1
+        assert len(analytics.events) == 1
+        assert analytics.events[0]["Function"] == "recent_func"
+
+    def test_clear_old_events_keeps_all_recent(self, loggers: LoggerContainer) -> None:
+        """Verify clear_old_events keeps all events within the retention window."""
+        full_config = create_test_app_config(
+            analytics={
+                "enabled": True,
+                "max_events": 1000,
+                "duration_thresholds": {"short_max": 2, "medium_max": 5, "long_max": 10},
+                "compact_time": False,
+            },
+        )
+        analytics = Analytics(full_config, loggers)
+
+        time_format = "%Y-%m-%d %H:%M:%S"
+        recent_time = (datetime.now(UTC) - timedelta(hours=2)).strftime(time_format)
+
+        analytics.events = [
+            {
+                "Function": "func_a",
+                "Event Type": "test",
+                "Start Time": recent_time,
+                "End Time": recent_time,
+                "Duration (s)": 0.1,
+                "Success": True,
+            },
+            {
+                "Function": "func_b",
+                "Event Type": "test",
+                "Start Time": recent_time,
+                "End Time": recent_time,
+                "Duration (s)": 0.2,
+                "Success": True,
+            },
+        ]
+
+        removed = analytics.clear_old_events(days=7)
+        assert removed == 0
+        assert len(analytics.events) == 2
