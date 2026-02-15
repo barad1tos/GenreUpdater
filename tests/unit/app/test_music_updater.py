@@ -363,3 +363,40 @@ class TestMusicUpdaterAllure:
         assert call_kwargs.get("library_mtime") is None
 
         assert result == [test_track]
+
+    @pytest.mark.asyncio
+    async def test_fetch_tracks_file_not_found_on_library_mtime(self) -> None:
+        """FileNotFoundError from get_library_mtime is caught, logged, and execution continues."""
+        deps = self.create_mock_dependencies()
+
+        # Enable snapshot service but make get_library_mtime raise FileNotFoundError
+        deps.library_snapshot_service.is_enabled = MagicMock(return_value=True)
+        deps.library_snapshot_service.get_library_mtime = AsyncMock(
+            side_effect=FileNotFoundError("Music Library.musiclibrary not found"),
+        )
+
+        updater = MusicUpdater(deps)
+        test_track = DummyTrackData.create(track_id="1", artist="Artist", album="Album")
+
+        with (
+            patch.object(updater, "_try_smart_delta_fetch", new_callable=AsyncMock) as mock_delta,
+            patch.object(updater.snapshot_manager, "set_snapshot") as mock_set_snapshot,
+        ):
+            mock_delta.return_value = [test_track]
+
+            result = await updater._fetch_tracks_for_pipeline_mode()
+
+        # get_library_mtime was called and raised FileNotFoundError
+        deps.library_snapshot_service.get_library_mtime.assert_called_once()
+
+        # Debug log should have been emitted
+        debug_messages = deps.console_logger.debug_messages
+        assert any("Library file not found" in msg for msg in debug_messages)
+
+        # Execution continued: set_snapshot was called with library_mtime=None (not set)
+        mock_set_snapshot.assert_called_once()
+        call_kwargs = mock_set_snapshot.call_args.kwargs
+        assert call_kwargs.get("library_mtime") is None
+
+        # Tracks were still returned
+        assert result == [test_track]

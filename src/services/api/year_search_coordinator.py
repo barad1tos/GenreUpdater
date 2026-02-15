@@ -299,17 +299,22 @@ class YearSearchCoordinator:
     ) -> list[ScoredRelease]:
         """Execute standard concurrent API search across all providers."""
         api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"])
-        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = [
-            self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
-            for api_name in api_order
-            if (api_client := self._get_api_client(api_name))
-        ]
+
+        # Build tasks and track which api_names survived the filter
+        active_api_names: list[str] = []
+        api_tasks: list[Coroutine[Any, Any, list[ScoredRelease]]] = []
+        for api_name in api_order:
+            if api_client := self._get_api_client(api_name):
+                active_api_names.append(api_name)
+                api_tasks.append(
+                    self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region),
+                )
 
         # Execute all API calls concurrently
         results = list(await asyncio.gather(*api_tasks, return_exceptions=True))
 
-        # Process results
-        return self._process_api_task_results(results, api_order, log_artist, log_album)
+        # Process results (active_api_names matches results 1:1)
+        return self._process_api_task_results(results, active_api_names, log_artist, log_album)
 
     async def _try_alternative_search(
         self,

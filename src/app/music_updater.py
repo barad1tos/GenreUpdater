@@ -5,7 +5,6 @@ This is a streamlined version that uses the new modular components.
 
 from __future__ import annotations
 
-import contextlib
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -665,8 +664,10 @@ class MusicUpdater:
         pre_fetch_library_mtime: datetime | None = None
         snapshot_service = self.deps.library_snapshot_service
         if snapshot_service and snapshot_service.is_enabled():
-            with contextlib.suppress(FileNotFoundError):
+            try:
                 pre_fetch_library_mtime = await snapshot_service.get_library_mtime()
+            except FileNotFoundError as exc:
+                self.console_logger.debug("Library file not found when reading mtime for snapshot: %s", exc)
         # Fetch all tracks if not in test mode
         if not self.dry_run_test_artists:
             # Try Smart Delta first

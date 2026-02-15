@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+
+# argparse._SubParsersAction has no stable public type alias
+type _SubParsersAction = argparse._SubParsersAction  # generic param omitted: basedpyright lacks stubs for subscript
 
 
-def _add_clean_artist_command(subparsers: Any) -> None:
+def _add_clean_artist_command(subparsers: _SubParsersAction) -> None:
     """Add a clean artist command."""
     parser = subparsers.add_parser(
         "clean_artist",
@@ -21,7 +23,7 @@ def _add_clean_artist_command(subparsers: Any) -> None:
     )
 
 
-def _add_update_years_command(subparsers: Any) -> None:
+def _add_update_years_command(subparsers: _SubParsersAction) -> None:
     """Add update years command."""
     parser = subparsers.add_parser(
         "update_years",
@@ -35,7 +37,7 @@ def _add_update_years_command(subparsers: Any) -> None:
     )
 
 
-def _add_update_genres_command(subparsers: Any) -> None:
+def _add_update_genres_command(subparsers: _SubParsersAction) -> None:
     """Add update genres command."""
     parser = subparsers.add_parser(
         "update_genres",
@@ -49,7 +51,7 @@ def _add_update_genres_command(subparsers: Any) -> None:
     )
 
 
-def _add_revert_years_command(subparsers: Any) -> None:
+def _add_revert_years_command(subparsers: _SubParsersAction) -> None:
     """Add revert years command."""
     parser = subparsers.add_parser(
         "revert_years",
@@ -76,7 +78,7 @@ def _add_revert_years_command(subparsers: Any) -> None:
     )
 
 
-def _add_restore_release_years_command(subparsers: Any) -> None:
+def _add_restore_release_years_command(subparsers: _SubParsersAction) -> None:
     """Add restore release years command."""
     parser = subparsers.add_parser(
         "restore_release_years",
@@ -217,7 +219,7 @@ Examples:
         return parser
 
     @staticmethod
-    def _add_verify_database_command(subparsers: Any) -> None:
+    def _add_verify_database_command(subparsers: _SubParsersAction) -> None:
         """Add verify database command."""
         subparsers.add_parser(
             "verify_database",
@@ -227,7 +229,7 @@ Examples:
         )
 
     @staticmethod
-    def _add_verify_pending_command(subparsers: Any) -> None:
+    def _add_verify_pending_command(subparsers: _SubParsersAction) -> None:
         """Add verify pending command."""
         subparsers.add_parser(
             "verify_pending",
@@ -237,7 +239,7 @@ Examples:
         )
 
     @staticmethod
-    def _add_batch_command(subparsers: Any) -> None:
+    def _add_batch_command(subparsers: _SubParsersAction) -> None:
         """Add batch processing command."""
         parser = subparsers.add_parser(
             "batch",
@@ -257,7 +259,7 @@ Examples:
         )
 
     @staticmethod
-    def _add_rotate_keys_command(subparsers: Any) -> None:
+    def _add_rotate_keys_command(subparsers: _SubParsersAction) -> None:
         """Add rotate encryption keys command."""
         parser = subparsers.add_parser(
             "rotate_keys",
@@ -288,4 +290,5 @@ Examples:
         return self.parser.parse_args(args)
 
     def print_help(self) -> None:
+        """Display CLI usage information."""
         self.parser.print_help()

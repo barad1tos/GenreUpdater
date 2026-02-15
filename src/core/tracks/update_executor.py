@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.models.track_status import can_edit_metadata
-from core.models.track_models import TrackDict
-from core.models.validators import SecurityValidationError, SecurityValidator
 from core.analytics_decorator import track_instance_method
 from core.apple_script_names import BATCH_UPDATE_TRACKS, UPDATE_PROPERTY
+from core.models.track_models import TrackDict
+from core.models.track_status import can_edit_metadata
+from core.models.validators import SecurityValidationError, SecurityValidator
 
 if TYPE_CHECKING:
     import logging
@@ -553,7 +553,7 @@ class TrackUpdateExecutor:
                     primary_artist = self._resolve_updated_artist(updates, original_artist)
                     await self._notify_track_cache_invalidation(track_id, primary_artist, album, track, original_artist)
                 return batch_success
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError) as e:
                 self.console_logger.warning("Batch update failed for track %s, falling back to individual updates: %s", track_id, str(e))
                 # Fall through to individual updates
 

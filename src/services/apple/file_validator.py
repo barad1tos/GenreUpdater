@@ -60,10 +60,8 @@ class AppleScriptFileValidator:
             scripts_directory = Path(self.apple_scripts_directory).resolve()
 
             # Ensure the path is within the allowed directory (safe from path traversal)
-            try:
-                resolved_path.relative_to(scripts_directory)
-            except ValueError:
-                self.error_logger.exception("Script path is outside allowed directory: %s", script_path)
+            if not resolved_path.is_relative_to(scripts_directory):
+                self.error_logger.error("Script path is outside allowed directory: %s", script_path)
                 return False
 
             # Check for suspicious patterns
@@ -99,13 +97,11 @@ class AppleScriptFileValidator:
         # Resolve the path and check for symlinks in parent directories
         try:
             resolved_path = script_file.resolve(strict=True)
-            # Verify resolved path is within allowed directory (use relative_to for accurate check)
+            # Verify resolved path is within allowed directory
             if self.apple_scripts_directory:
                 allowed_dir = Path(self.apple_scripts_directory).resolve()
-                try:
-                    resolved_path.relative_to(allowed_dir)
-                except ValueError:
-                    self.error_logger.exception(
+                if not resolved_path.is_relative_to(allowed_dir):
+                    self.error_logger.error(
                         "Resolved path escapes allowed directory: %s -> %s",
                         script_path,
                         resolved_path,
@@ -125,7 +121,7 @@ class AppleScriptFileValidator:
                     directory_contents = [f.name for f in Path(self.apple_scripts_directory).iterdir()]
                     self.console_logger.debug("Directory contents: %s", directory_contents)
             except OSError as e:
-                self.console_logger.exception("Could not list directory contents: %s", e)
+                self.console_logger.debug("Could not list directory contents: %s", e)
             return False
 
         # Check if the file is readable by actually trying to open it

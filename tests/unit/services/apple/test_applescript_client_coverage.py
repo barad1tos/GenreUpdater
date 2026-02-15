@@ -391,7 +391,7 @@ class TestParseTrackOutput:
         assert result[0]["track_status"] == "subscription"
         assert result[0]["year"] == "2020"
         assert result[0]["release_year"] == "2020"
-        # Note: field[10] (empty placeholder) is intentionally not exposed by parser
+        # Note: parser intentionally not exposes field[10] (empty placeholder)
         # year_set_by_mgu is a tracking field managed by year_batch.py, not from AppleScript
 
     def test_parses_multiple_tracks(self) -> None:
@@ -433,6 +433,24 @@ class TestParseTrackOutput:
 
         self._assert_parse_tracks(raw_output, expected_count=1, first_id="456")
 
+    def test_insufficient_fields_logs_warning_with_details(self) -> None:
+        """Test that insufficient fields triggers _logger.warning with field count details."""
+        field_sep = "\x1e"
+        line_sep = "\x1d"
+        # Line with only 5 fields (less than MIN_TRACK_OUTPUT_FIELDS=10)
+        raw_output = f"id1{field_sep}name{field_sep}artist{field_sep}aa{field_sep}album{line_sep}"
+
+        with patch("services.apple.applescript_client._logger") as mock_logger:
+            result = AppleScriptClient._parse_track_output(raw_output)
+
+        assert result == []
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args[0]
+        assert "Skipping line with insufficient fields" in call_args[0]
+        # Verify field count arguments: actual count and minimum required
+        assert call_args[1] == 5
+        assert call_args[2] == 10
+
     @staticmethod
     def _assert_parse_tracks(
         raw_output: str,
@@ -444,3 +462,78 @@ class TestParseTrackOutput:
         assert len(result) == expected_count
         assert result[0]["id"] == first_id
         return result
+
+
+class TestFetchAllTrackIds:
+    """Tests for fetch_all_track_ids method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_parsed_comma_separated_ids(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids parses comma-separated IDs from script."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            # spinner is an async context manager — set up __aenter__/__aexit__
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "100,200,300"
+            result = await client.fetch_all_track_ids()
+
+        assert result == ["100", "200", "300"]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_no_output(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids returns empty list when script returns nothing."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = ""
+            result = await client.fetch_all_track_ids()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_error_output(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids returns empty list when script returns ERROR:."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "ERROR:timeout after 600s"
+            result = await client.fetch_all_track_ids()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_uses_explicit_timeout(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids forwards explicit timeout to run_script."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "1,2"
+            result = await client.fetch_all_track_ids(timeout=42.0)
+
+        assert result == ["1", "2"]
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["timeout"] == 42.0

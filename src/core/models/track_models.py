@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import warnings
 from enum import StrEnum
-from typing import Any, Literal, TypedDict, TypeVar
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-# Type checking improvements for better IDE support and type safety
-T = TypeVar("T")
 
 # Type alias for TrackDict field values - covers all possible field types
 TrackFieldValue = str | int | None

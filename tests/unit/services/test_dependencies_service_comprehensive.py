@@ -279,8 +279,8 @@ class TestDependencyContainer:
         """Test container close with errors."""
         # Set up mock services that fail
         mock_cache = AsyncMock()
-        mock_cache.save_all_to_disk = AsyncMock(side_effect=Exception("Save failed"))
-        mock_cache.shutdown = AsyncMock(side_effect=Exception("Shutdown failed"))
+        mock_cache.save_all_to_disk = AsyncMock(side_effect=OSError("Save failed"))
+        mock_cache.shutdown = AsyncMock(side_effect=RuntimeError("Shutdown failed"))
 
         mock_api = AsyncMock()
         mock_api.close = AsyncMock(side_effect=OSError("Close failed"))

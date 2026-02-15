@@ -38,6 +38,15 @@ if TYPE_CHECKING:
 RESULT_PREVIEW_LENGTH: int = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LENGTH: int = 200  # characters shown when previewing long outputs/stderr
 
+# Default timeout fallbacks (seconds) when config value is None
+DEFAULT_SCRIPT_TIMEOUT_SECONDS: float = 3600.0
+DEFAULT_FETCH_IDS_TIMEOUT_SECONDS: float = 600.0
+
+# Minimum expected field count from AppleScript track output
+MIN_TRACK_OUTPUT_FIELDS: int = 10
+
+_logger = logging.getLogger(__name__)
+
 
 # noinspection PyUnboundLocalVariable
 class AppleScriptClient(AppleScriptClientProtocol):
@@ -264,7 +273,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         # Convert timeout to float, using configured default if not specified
         if timeout is None:
             timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
-        timeout_float = float(timeout) if timeout is not None else 3600.0
+        timeout_float = float(timeout) if timeout is not None else DEFAULT_SCRIPT_TIMEOUT_SECONDS
 
         # Build contextual information
         context_parts: list[str] = []
@@ -331,7 +340,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         if timeout is None:
             timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
 
-        timeout_float = float(timeout) if timeout is not None else 3600.0
+        timeout_float = float(timeout) if timeout is not None else DEFAULT_SCRIPT_TIMEOUT_SECONDS
 
         all_tracks: list[dict[str, str]] = []
         total_batches = (len(track_ids) + batch_size - 1) // batch_size
@@ -381,7 +390,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         if timeout is None:
             timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
 
-        timeout_float = float(timeout) if timeout is not None else 600.0
+        timeout_float = float(timeout) if timeout is not None else DEFAULT_FETCH_IDS_TIMEOUT_SECONDS
 
         async with spinner("Fetching all track IDs from Music.app..."):
             raw_output = await self.run_script(
@@ -430,7 +439,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
             # track_status, year, release_year, "" (empty placeholder, ignored)
             # Note: year_set_by_mgu is a tracking field managed by year_batch.py,
             # NOT from AppleScript. The last field is always empty.
-            if len(fields) >= 10:
+            if len(fields) >= MIN_TRACK_OUTPUT_FIELDS:
                 track = {
                     "id": fields[0],
                     "name": fields[1],
@@ -446,9 +455,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 }
                 tracks.append(track)
             else:
-                logging.warning(
-                    "Skipping line with insufficient fields (%d < 10): %s",
+                _logger.warning(
+                    "Skipping line with insufficient fields (%d < %d): %s",
                     len(fields),
+                    MIN_TRACK_OUTPUT_FIELDS,
                     line[:100] if len(line) > 100 else line,
                 )
 

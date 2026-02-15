@@ -114,15 +114,12 @@ class CacheOrchestrator(CacheServiceProtocol):
 
     # Generic Cache API
 
-    async def get_async(  # type: ignore[override]
+    async def get_async(  # type: ignore[override]  # Protocol uses @overload with Literal["ALL"]; concrete impl uses a single unified signature
         self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
     ) -> list[TrackDict] | CacheableValue:
         """Asynchronous get with optional compute function.
-
-        Note: MyPy complains about signature incompatibility due to Protocol + TYPE_CHECKING imports.
-        Code works correctly - this is a known MyPy limitation.
 
         Args:
             key_data: Cache key or "ALL" for all entries

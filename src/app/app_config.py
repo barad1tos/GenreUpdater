@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from core.core_config import load_config as load_yaml_config
 
 if TYPE_CHECKING:
@@ -79,7 +81,7 @@ class Config:
             load_path = Path(os.path.expandvars(self.config_path)).expanduser()
             try:
                 app_config = load_yaml_config(str(load_path))
-            except Exception as e:
+            except (OSError, ValueError, yaml.YAMLError, RuntimeError) as e:
                 msg = f"Failed to load configuration from '{load_path}': {e}"
                 raise RuntimeError(msg) from e
             self._app_config = app_config

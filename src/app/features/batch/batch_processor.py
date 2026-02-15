@@ -133,9 +133,7 @@ class BatchProcessor:
         failed = len(results["failed"])
         skipped = len(results["skipped"])
 
-        self.console_logger.info("\n%s", "=" * 50)
-        self.console_logger.info("BATCH PROCESSING SUMMARY")
-        self.console_logger.info("=" * 50)
+        self.console_logger.info("Batch processing summary")
         self.console_logger.info("Total artists: %d", total)
         self.console_logger.info("✅ Successful: %d", successful)
 

@@ -185,7 +185,7 @@ async def main() -> None:
         if listener:
             try:
                 listener.stop()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 print(f"Exception during listener.stop(): {e}")
                 traceback.print_exc()
 

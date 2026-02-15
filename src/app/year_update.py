@@ -425,7 +425,6 @@ class YearUpdateService:
         Returns:
             List of change log entries.
         """
-        self._console_logger.info("=== BEFORE Step 4/4: Updating album years ===")
         self._console_logger.info("Step 4/4: Updating album years")
         changes_log: list[ChangeLogEntry] = []
 
@@ -441,10 +440,10 @@ class YearUpdateService:
 
             self._snapshot_manager.update_tracks(updated_tracks)
             changes_log = year_changes
-            self._console_logger.info("=== AFTER Step 4 completed successfully with %d changes ===", len(changes_log))
+            self._console_logger.info("Step 4 completed successfully with %d changes", len(changes_log))
         except (OSError, ValueError, RuntimeError) as e:
             self._error_logger.exception(
-                "=== ERROR in Step 4 (year retrieval): %s ===",
+                "Step 4 year retrieval failed: %s",
                 type(e).__name__,
             )
             # Add error marker to ensure data consistency

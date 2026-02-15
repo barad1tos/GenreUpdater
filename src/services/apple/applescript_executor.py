@@ -26,6 +26,14 @@ if TYPE_CHECKING:
 RESULT_PREVIEW_LENGTH = 50  # characters shown when previewing small script results
 LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
 
+# Process cleanup timeouts (seconds)
+PROCESS_EXIT_WAIT_SECONDS: float = 0.5  # time to wait for process to exit naturally
+PROCESS_KILL_WAIT_SECONDS: float = 5.0  # time to wait after killing process
+
+# errno codes used to classify transient errors for retry handler
+ERRNO_CONNECTION_REFUSED: int = 61  # macOS: ECONNREFUSED (non-zero return code)
+ERRNO_CONNECTION_TIMED_OUT: int = 110  # ETIMEDOUT (script timeout)
+
 
 class AppleScriptExecutionError(OSError):
     """Exception raised when AppleScript execution fails.
@@ -172,14 +180,14 @@ class AppleScriptExecutor:
         """
         try:
             # Wait briefly for process to exit naturally
-            async with asyncio.timeout(0.5):
+            async with asyncio.timeout(PROCESS_EXIT_WAIT_SECONDS):
                 await proc.wait()
             self.console_logger.debug("Process for %s exited naturally and cleaned up", label)
         except TimeoutError:
             # If still running, kill and wait for cleanup
             try:
                 proc.kill()
-                async with asyncio.timeout(5):
+                async with asyncio.timeout(PROCESS_KILL_WAIT_SECONDS):
                     await proc.wait()
                 self.console_logger.debug("Process for %s killed and cleaned up", label)
             except (TimeoutError, ProcessLookupError) as e:
@@ -242,64 +250,58 @@ class AppleScriptExecutor:
             AppleScriptExecutionError: On execution failure (may be transient)
             asyncio.CancelledError: If operation was canceled
         """
+        start_time = time.time()
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
         try:
-            start_time = time.time()
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            async with asyncio.timeout(timeout_seconds):
+                stdout, stderr = await proc.communicate()
+            elapsed = time.time() - start_time
 
-            try:
-                async with asyncio.timeout(timeout_seconds):
-                    stdout, stderr = await proc.communicate()
-                elapsed = time.time() - start_time
+            # Process stderr if present
+            if stderr:
+                stderr_text = stderr.decode().strip()
+                self.console_logger.warning("◁ %s stderr: %s", label, stderr_text[:LOG_PREVIEW_LENGTH])
 
-                # Process stderr if present
-                if stderr:
-                    stderr_text = stderr.decode().strip()
-                    self.console_logger.warning("◁ %s stderr: %s", label, stderr_text[:LOG_PREVIEW_LENGTH])
+            # Handle process completion
+            if proc.returncode == 0:
+                # Don't strip() here as it removes special separator characters
+                script_result: str = stdout.decode()
+                self.log_script_success(label, script_result, elapsed)
+                return script_result
 
-                # Handle process completion
-                if proc.returncode == 0:
-                    # Don't strip() here as it removes special separator characters
-                    script_result: str = stdout.decode()
-                    self.log_script_success(label, script_result, elapsed)
-                    return script_result
+            # Non-zero return code - raise for potential retry
+            error_msg = stderr.decode().strip() if stderr else f"return code {proc.returncode}"
+            self.error_logger.error("◁ %s failed with return code %s: %s", label, proc.returncode, error_msg)
+            # Signal transient error for retry handler
+            raise AppleScriptExecutionError(error_msg, label, errno_code=ERRNO_CONNECTION_REFUSED)
 
-                # Non-zero return code - raise for potential retry
-                error_msg = stderr.decode().strip() if stderr else f"return code {proc.returncode}"
-                self.error_logger.error("◁ %s failed with return code %s: %s", label, proc.returncode, error_msg)
-                # Use errno 61 (connection refused on macOS) to signal transient error
-                raise AppleScriptExecutionError(error_msg, label, errno_code=61)
+        except TimeoutError as e:
+            self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout_seconds)
+            # Timeout is transient
+            timeout_msg = f"timeout after {timeout_seconds}s"
+            raise AppleScriptExecutionError(timeout_msg, label, errno_code=ERRNO_CONNECTION_TIMED_OUT) from e
 
-            except TimeoutError as e:
-                self.error_logger.exception("⊗ %s timeout: %ss exceeded", label, timeout_seconds)
-                # Timeout is transient - use errno 110 (connection timed out)
-                timeout_msg = f"timeout after {timeout_seconds}s"
-                raise AppleScriptExecutionError(timeout_msg, label, errno_code=110) from e
-
-            except (subprocess.SubprocessError, OSError) as e:
-                self.error_logger.exception("⊗ %s error during execution: %s", label, e)
-                # Re-raise OSError directly for retry handler's is_transient_error
-                raise
-
-            except asyncio.CancelledError:
-                self.console_logger.info("⊗ %s cancelled", label)
-                raise
-
-            except (UnicodeDecodeError, MemoryError, RuntimeError) as e:
-                self.error_logger.exception("⊗ %s unexpected error during communicate/wait: %s", label, e)
-                # These are not transient - raise without errno
-                raise AppleScriptExecutionError(str(e), label) from e
-
-            finally:
-                await self.cleanup_process(proc, label)
-
-        except OSError as e:
-            self.error_logger.exception("⊗ %s subprocess error: %s", label, e)
-            # Re-raise for retry handler
+        except (subprocess.SubprocessError, OSError) as e:
+            self.error_logger.exception("⊗ %s error during execution: %s", label, e)
+            # Re-raise OSError directly for retry handler's is_transient_error
             raise
+
+        except asyncio.CancelledError:
+            self.console_logger.info("⊗ %s cancelled", label)
+            raise
+
+        except (UnicodeDecodeError, MemoryError, RuntimeError) as e:
+            self.error_logger.exception("⊗ %s unexpected error during communicate/wait: %s", label, e)
+            # These are not transient - raise without errno
+            raise AppleScriptExecutionError(str(e), label) from e
+
+        finally:
+            await self.cleanup_process(proc, label)
 
     async def run_osascript(
         self,

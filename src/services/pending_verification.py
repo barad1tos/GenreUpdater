@@ -37,11 +37,10 @@ import asyncio
 import csv
 import json
 import os
-import sys
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, get_full_log_path
 from core.models.cache_types import PendingAlbumEntry, VerificationReason
@@ -55,27 +54,6 @@ if TYPE_CHECKING:
 
 # Suffix for the file that tracks the last auto-verification timestamp
 PENDING_LAST_VERIFY_SUFFIX: str = "_last_verify.txt"
-
-
-class Logger(Protocol):
-    """Protocol defining the interface for loggers used in the application.
-
-    This Protocol specifies the required methods that any logger implementation
-    must provide to be compatible with the PendingVerificationService.
-    Implementations should handle different log levels appropriately.
-    """
-
-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log an informational message."""
-
-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log a warning message."""
-
-    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log an error message."""
-
-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log a debug message."""
 
 
 # Type alias for error callback used in blocking I/O operations
@@ -127,8 +105,8 @@ class PendingVerificationService:
         # asyncio.Lock for thread-safe access to pending_albums cache
         self._lock = asyncio.Lock()
 
-        # Error callback for blocking operations (used instead of print)
-        self._error_callback: ErrorCallback = lambda msg: print(msg, file=sys.stderr)
+        # Error callback for blocking operations (bridges sync code to logger)
+        self._error_callback: ErrorCallback = self.error_logger.warning
 
     @staticmethod
     def _normalize_recheck_days(value: Any) -> int | None:
@@ -830,8 +808,8 @@ class PendingVerificationService:
         if auto_verify_days <= 0:
             return False
 
-        last_verify_file = self.pending_file_path.replace(".csv", PENDING_LAST_VERIFY_SUFFIX)
-        last_verify_path = Path(last_verify_file)
+        pending_path = Path(self.pending_file_path)
+        last_verify_path = pending_path.with_name(pending_path.stem + PENDING_LAST_VERIFY_SUFFIX)
 
         if not last_verify_path.exists():
             self.console_logger.debug("No previous pending verification found, auto-verify needed")
@@ -878,8 +856,8 @@ class PendingVerificationService:
 
     async def update_verification_timestamp(self) -> None:
         """Update the last pending verification timestamp file."""
-        last_verify_file = self.pending_file_path.replace(".csv", PENDING_LAST_VERIFY_SUFFIX)
-        last_verify_path = Path(last_verify_file)
+        pending_path = Path(self.pending_file_path)
+        last_verify_path = pending_path.with_name(pending_path.stem + PENDING_LAST_VERIFY_SUFFIX)
 
         try:
             loop = asyncio.get_running_loop()

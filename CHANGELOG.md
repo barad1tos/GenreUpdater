@@ -23,15 +23,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-commit hooks configuration (ruff, mypy)
 - Test coverage enforcement (--cov-fail-under=70)
 - Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
+- Tests for 39 uncovered patch lines: except-branches, UTC timezone, isinstance guards, file_validator (#241)
+- Tests for remaining Codecov patch gaps: fingerprint except-handler, cache shutdown OSError, fetch_all_track_ids, _log_apple_scripts_dir OSError (#241)
 
 ### Changed
 
+- Narrowed 22 broad `except Exception` blocks to specific exception types across 12 files
+- Replaced `contextlib.suppress` with explicit try/except + DEBUG logging (3 files)
+- Replaced `Any` types with concrete types and Protocols (cli, discogs, rate_limiter, year_repair)
+- Extracted magic numbers as named constants (applescript_client, executor, snapshot)
+- Removed unused TypeDicts, TypeVar, and Protocol definitions (orchestrator, track_models, pending_verification)
 - Upgraded GitHub Actions to latest versions (checkout v6, setup-uv v7, upload-artifact v5, codeql v4)
 - README Python badge updated to 3.13+
 - Converted 50 f-string logging calls to lazy `%` formatting for deferred evaluation (#216)
+- Migrated `print()` calls to structured logger in full_sync post-initialization
 
 ### Fixed
 
+- `zip` misalignment in year_search_coordinator: filtered API tasks vs unfiltered api_order
+- Naive `datetime.fromtimestamp()` calls missing timezone in analytics.py
+- `logging.warning()` using root logger instead of module-level `_logger` in applescript_client
+- `exception()` used without active exception in file_validator (caused misleading tracebacks)
+- `str.replace(".csv", ...)` replaced with `Path.with_name()` in pending_verification
+- Dead `allow_music_app` branch in sanitizer (no reserved words contained "music")
+- ASCII art log separators replaced with structured single-line messages
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
 

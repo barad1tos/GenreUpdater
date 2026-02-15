@@ -11,7 +11,6 @@ across different API providers while preserving the sophisticated scoring logic.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import re
 from datetime import UTC
@@ -625,10 +624,12 @@ class ReleaseScorer:
 
         Note: Score component logging is handled by caller based on source.
         """
-        with contextlib.suppress(IndexError, ValueError, TypeError):
+        try:
             rg_year_str = rg_first_date_str.split("-", maxsplit=1)[0]
             if len(rg_year_str) == self.YEAR_LENGTH and rg_year_str.isdigit():
                 return int(rg_year_str)
+        except (IndexError, ValueError, TypeError) as exc:
+            self.console_logger.debug("Failed to extract RG first year from '%s': %s", rg_first_date_str, exc)
         return None
 
     def _score_release_type(self, release: dict[str, Any], score_components: list[str]) -> int:

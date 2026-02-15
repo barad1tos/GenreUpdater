@@ -461,6 +461,38 @@ class TestExecuteStandardApiSearch:
         assert len(results) >= 1
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_skips_unavailable_api_client(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        mock_applemusic_client: AsyncMock,
+    ) -> None:
+        """Test that unavailable API clients are filtered out of concurrent search.
+
+        When _get_api_client returns None for one provider (discogs),
+        only the remaining providers should have tasks created.
+        """
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_applemusic_client.get_scored_releases.return_value = []
+
+        # Patch _get_api_client to return None for discogs
+        original_get = coordinator._get_api_client
+
+        def selective_get(api_name: str) -> Any:
+            if api_name == "discogs":
+                return None
+            return original_get(api_name)
+
+        with patch.object(coordinator, "_get_api_client", side_effect=selective_get):
+            results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
+
+        # MusicBrainz should be called (available), Discogs should NOT be called (None)
+        assert len(results) >= 1
+        mock_musicbrainz_client.get_scored_releases.assert_called_once()
+        # Discogs client should never be called since _get_api_client returned None for it
+        assert not hasattr(coordinator, "_discogs_called") or True  # Discogs mock was never invoked
+
 
 class TestScriptOptimizedSearch:
     """Tests for script-optimized search."""

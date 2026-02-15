@@ -1,5 +1,7 @@
 """Tests for AppleMusicClient - iTunes Search API client."""
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1024,3 +1026,62 @@ class TestExtractYearFromResult:
         year = client._extract_year_from_result(result, "metallica")
 
         assert year == 2000
+
+
+class _FailingSplitString(str):
+    """String subclass whose split() raises ValueError for testing defensive except."""
+
+    def strip(self, *_args: object, **_kwargs: object) -> _FailingSplitString:
+        return self
+
+    def split(self, *_args: object, **_kwargs: object) -> list[str]:
+        raise ValueError("simulated split failure")
+
+
+class TestExtractYearDebugLog:
+    """Cover the except (IndexError, ValueError) debug-log branch in _extract_year_from_result."""
+
+    def test_logs_debug_on_value_error(self, client: AppleMusicClient) -> None:
+        """ValueError during year parsing triggers _logger.debug and returns None."""
+        result = {
+            "artistName": "Metallica",
+            "releaseDate": _FailingSplitString("2020-01-01"),
+        }
+
+        with patch("services.api.applemusic._logger") as mock_logger:
+            year = client._extract_year_from_result(result, "metallica")
+
+        assert year is None
+        mock_logger.debug.assert_called_once()
+        assert "Failed to parse year from release_date" in mock_logger.debug.call_args[0][0]
+
+
+class TestProcessApiResultsUnexpectedError:
+    """Cover the except (AttributeError, IndexError, RuntimeError) branch in _process_api_results."""
+
+    def test_attribute_error_in_process_itunes_result_is_logged(
+        self,
+        client: AppleMusicClient,
+    ) -> None:
+        """AttributeError from _process_itunes_result is caught and logged via error_logger.exception."""
+        mock_error_logger = MagicMock(spec=logging.Logger)
+        client.error_logger = mock_error_logger
+
+        fake_result = {"artistName": "Artist", "collectionName": "Album", "releaseDate": "2020-01-01"}
+
+        with patch.object(
+            client,
+            "_process_itunes_result",
+            side_effect=AttributeError("simulated attribute error"),
+        ):
+            scored = client._process_api_results(
+                results=[fake_result],
+                artist_norm="artist",
+                album_norm="album",
+                search_term="artist album",
+            )
+
+        assert scored == []
+        mock_error_logger.exception.assert_called_once()
+        log_msg = mock_error_logger.exception.call_args[0][0]
+        assert "Unexpected error" in log_msg

@@ -3,6 +3,7 @@
 import base64
 import logging
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -15,6 +16,7 @@ from app.features.crypto.encryption import (
 from app.features.crypto.exceptions import (
     DecryptionError,
     EncryptionError,
+    InvalidKeyError,
     InvalidTokenError,
     KeyGenerationError,
 )
@@ -320,3 +322,137 @@ class TestEdgeCases:
         decrypted = crypto_manager_with_key.decrypt_token(encrypted)
 
         assert decrypted == SAMPLE_SPECIAL_CHARS
+
+
+class TestExceptHandlerCoverage:
+    """Tests that exercise specific except handler branches introduced by narrowed exception types."""
+
+    def test_generate_key_from_passphrase_value_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger ValueError in _generate_key_from_passphrase via PBKDF2HMAC.derive failure."""
+        with patch(
+            "app.features.crypto.encryption.PBKDF2HMAC",
+        ) as mock_kdf_cls:
+            mock_kdf_cls.return_value.derive.side_effect = ValueError("bad derivation input")
+            with pytest.raises(KeyGenerationError, match="Key generation failed"):
+                crypto_manager._generate_key_from_passphrase("some_passphrase")
+
+    def test_generate_key_from_passphrase_type_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger TypeError in _generate_key_from_passphrase via PBKDF2HMAC.derive failure."""
+        with patch(
+            "app.features.crypto.encryption.PBKDF2HMAC",
+        ) as mock_kdf_cls:
+            mock_kdf_cls.return_value.derive.side_effect = TypeError("unexpected type")
+            with pytest.raises(KeyGenerationError, match="Key generation failed"):
+                crypto_manager._generate_key_from_passphrase("some_passphrase")
+
+    def test_generate_key_from_passphrase_os_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger OSError in _generate_key_from_passphrase."""
+        with patch(
+            "app.features.crypto.encryption.PBKDF2HMAC",
+        ) as mock_kdf_cls:
+            mock_kdf_cls.return_value.derive.side_effect = OSError("system failure")
+            with pytest.raises(KeyGenerationError, match="Key generation failed"):
+                crypto_manager._generate_key_from_passphrase("some_passphrase")
+
+    def test_load_or_create_key_os_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger OSError in _load_or_create_key (e.g. permission denied reading key file)."""
+        with (
+            patch.object(
+                crypto_manager,
+                "_load_existing_or_generate_new_key",
+                side_effect=OSError("permission denied"),
+            ),
+            pytest.raises(KeyGenerationError, match="Key management failed"),
+        ):
+            crypto_manager._load_or_create_key()
+
+    def test_load_or_create_key_type_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger TypeError in _load_or_create_key."""
+        with (
+            patch.object(
+                crypto_manager,
+                "_load_existing_or_generate_new_key",
+                side_effect=TypeError("unexpected type"),
+            ),
+            pytest.raises(KeyGenerationError, match="Key management failed"),
+        ):
+            crypto_manager._load_or_create_key()
+
+    def test_load_existing_key_validation_value_error(
+        self,
+        logger: logging.Logger,
+        tmp_path: Path,
+    ) -> None:
+        """Trigger ValueError in _load_existing_or_generate_new_key key validation."""
+        key_file = tmp_path / "test.key"
+        # Write a valid base64 string that is NOT a valid Fernet key (wrong length)
+        bad_key = base64.urlsafe_b64encode(b"short").decode()
+        key_file.write_text(bad_key)
+
+        manager = CryptographyManager(logger, str(key_file))
+        with pytest.raises(ValueError, match="Invalid encryption key format"):
+            manager._load_existing_or_generate_new_key(None)
+
+    def test_load_existing_key_validation_binascii_error(
+        self,
+        logger: logging.Logger,
+        tmp_path: Path,
+    ) -> None:
+        """Trigger binascii.Error in _load_existing_or_generate_new_key key validation."""
+        key_file = tmp_path / "test.key"
+        # Write bytes that are not valid base64 at all
+        key_file.write_bytes(b"\xff\xfe\xfd\x00\x01\x02invalid-not-base64!!!")
+
+        manager = CryptographyManager(logger, str(key_file))
+        with pytest.raises(ValueError, match="Invalid encryption key format"):
+            manager._load_existing_or_generate_new_key(None)
+
+    def test_get_fernet_value_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger ValueError in _get_fernet when Fernet instantiation fails."""
+        # Set a corrupted encryption key that will make Fernet() raise
+        crypto_manager._encryption_key = b"not-a-valid-fernet-key"
+        with pytest.raises(InvalidKeyError, match="Fernet initialization failed"):
+            crypto_manager._get_fernet()
+
+    def test_get_fernet_type_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger TypeError in _get_fernet."""
+        # Mock _load_or_create_key to return an int, causing Fernet(int) -> TypeError
+        with (
+            patch.object(
+                crypto_manager,
+                "_load_or_create_key",
+                return_value=12345,
+            ),
+            pytest.raises(InvalidKeyError, match="Fernet initialization failed"),
+        ):
+            crypto_manager._get_fernet()
+
+    def test_encrypt_token_type_error(self, crypto_manager: CryptographyManager) -> None:
+        """Trigger TypeError in encrypt_token when fernet.encrypt raises."""
+        valid_key = Fernet.generate_key().decode()
+        with patch(
+            "app.features.crypto.encryption.Fernet",
+        ) as mock_fernet_cls:
+            mock_instance = mock_fernet_cls.return_value
+            mock_instance.encrypt.side_effect = TypeError("expected bytes-like object")
+            with pytest.raises(EncryptionError, match="Token encryption failed"):
+                crypto_manager.encrypt_token("test_token", key=valid_key)
+
+    def test_decrypt_token_base64_binascii_error(self, crypto_manager_with_key: CryptographyManager) -> None:
+        """Trigger binascii.Error in decrypt_token base64 decode."""
+        # A string that fails base64 decode
+        with pytest.raises(InvalidTokenError, match="not valid base64"):
+            crypto_manager_with_key.decrypt_token("!!!invalid-base64-data!!!")
+
+    def test_decrypt_token_unicode_decode_error(self, crypto_manager_with_key: CryptographyManager) -> None:
+        """Trigger UnicodeDecodeError in decrypt_token via fernet.decrypt result."""
+        # Get a valid Fernet instance, then mock decrypt to return non-UTF-8 bytes
+        encrypted = crypto_manager_with_key.encrypt_token("test")
+        with patch.object(
+            crypto_manager_with_key,
+            "_get_fernet",
+        ) as mock_get:
+            mock_fernet = mock_get.return_value
+            mock_fernet.decrypt.return_value = b"\xff\xfe\xfd"  # Invalid UTF-8
+            with pytest.raises(DecryptionError, match="Token decryption failed"):
+                crypto_manager_with_key.decrypt_token(encrypted)
