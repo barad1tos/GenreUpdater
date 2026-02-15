@@ -177,9 +177,10 @@ class TestDependencyContainerShutdown:
         mock_cache_service = MagicMock()
 
         async def cache_save() -> None:
-            pass
+            """No-op mock for cache save."""
 
         async def cache_shutdown_fails() -> None:
+            """Mock cache shutdown that raises OSError."""
             raise OSError("connection reset")
 
         mock_cache_service.save_all_to_disk = cache_save
