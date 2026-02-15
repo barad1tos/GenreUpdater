@@ -299,11 +299,11 @@ class Analytics:
         # Timestamps
         if self.compact_time:
             fmt = "%H:%M:%S"
-            start_str = datetime.fromtimestamp(timing_info.start).strftime(fmt)
-            end_str = datetime.fromtimestamp(timing_info.end).strftime(fmt)
+            start_str = datetime.fromtimestamp(timing_info.start, tz=UTC).strftime(fmt)
+            end_str = datetime.fromtimestamp(timing_info.end, tz=UTC).strftime(fmt)
         else:
-            start_str = datetime.fromtimestamp(timing_info.start).strftime(self.time_format)
-            end_str = datetime.fromtimestamp(timing_info.end).strftime(self.time_format)
+            start_str = datetime.fromtimestamp(timing_info.start, tz=UTC).strftime(self.time_format)
+            end_str = datetime.fromtimestamp(timing_info.end, tz=UTC).strftime(self.time_format)
 
         # Store event
         self.events.append(
@@ -486,7 +486,7 @@ class Analytics:
 
         cutoff = datetime.now(UTC) - timedelta(days=days)
         original = len(self.events)
-        self.events = [e for e in self.events if datetime.strptime(e["Start Time"], self.time_format) >= cutoff]
+        self.events = [e for e in self.events if datetime.strptime(e["Start Time"], self.time_format).replace(tzinfo=UTC) >= cutoff]
         return original - len(self.events)
 
     def merge_with(self, other: Analytics) -> None:

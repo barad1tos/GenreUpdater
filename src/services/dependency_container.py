@@ -248,7 +248,7 @@ class DependencyContainer:
             elapsed = time.monotonic() - start
             self._console_logger.debug(" %s initialized in %.2fs", LogFormat.entity(service_name), elapsed)
 
-        except Exception as e:
+        except (TypeError, ValueError, AttributeError, RuntimeError, OSError) as e:
             elapsed = time.monotonic() - start
             self._error_logger.exception(" Failed to initialize %s after %.2fs: %s", LogFormat.entity(service_name), elapsed, e)
             raise
@@ -412,12 +412,12 @@ class DependencyContainer:
             try:
                 await self._cache_service.save_all_to_disk()
                 self._console_logger.debug("Cache saved successfully")
-            except Exception as e:
+            except (OSError, TypeError, ValueError, RuntimeError) as e:
                 self._console_logger.warning("Failed to save cache: %s", e)
             finally:
                 try:
                     await self._cache_service.shutdown()
-                except Exception as e:
+                except (OSError, RuntimeError, asyncio.CancelledError) as e:
                     self._console_logger.warning("Failed to shutdown cache services: %s", e)
 
         self._console_logger.debug("%s closed.", LogFormat.entity("DependencyContainer"))
@@ -450,7 +450,7 @@ class DependencyContainer:
         except asyncio.CancelledError:
             self._error_logger.warning("Coroutine was cancelled")
             raise
-        except Exception as e:
+        except (OSError, ValueError, TypeError, AttributeError, RuntimeError) as e:
             self._error_logger.exception("Error in async operation: %s", e)
             msg = f"Failed to execute coroutine: {e}"
             raise RuntimeError(msg) from e
@@ -521,7 +521,7 @@ class DependencyContainer:
             short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Permission denied for AppleScripts directory: %s. Error: %s", short_path, exc)
             return
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             short_path = shorten_path(scripts_dir_str, self.app_config, self._error_logger)
             self._console_logger.exception("Error checking AppleScripts directory: %s. Error: %s", short_path, exc)
             return

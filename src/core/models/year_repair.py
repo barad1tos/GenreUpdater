@@ -9,14 +9,43 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.logger import get_full_log_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from typing import Protocol
 
-    from core.models.track_models import AppConfig
+    from core.models.track_models import AppConfig, TrackDict
+
+    class YearRevertProcessorProtocol(Protocol):
+        """Protocol for track processor operations needed by year revert logic."""
+
+        async def fetch_tracks_async(
+            self,
+            artist: str | None = None,
+            force_refresh: bool = False,
+            dry_run_test_tracks: list[TrackDict] | None = None,
+            ignore_test_filter: bool = False,
+        ) -> list[TrackDict]:
+            """Fetch tracks from the music library."""
+            ...
+
+        async def update_track_async(
+            self,
+            track_id: str,
+            new_track_name: str | None = None,
+            new_album_name: str | None = None,
+            new_genre: str | None = None,
+            new_year: str | None = None,
+            track_status: str | None = None,
+            original_artist: str | None = None,
+            original_album: str | None = None,
+            original_track: str | None = None,
+        ) -> bool:
+            """Update a track's metadata in the music library."""
+            ...
 
 
 @dataclass
@@ -135,20 +164,20 @@ def _read_backup_csv(
     return targets
 
 
-def _normalize_text(value: Any) -> str:
+def _normalize_text(value: object) -> str:
     """Normalize raw track metadata values to stripped strings."""
 
     return str(value or "").strip()
 
 
 def _build_track_lookups(
-    current_tracks: Iterable[dict[str, Any]],
-) -> tuple[dict[str, Any], dict[tuple[str, str], Any], dict[str, Any]]:
+    current_tracks: Iterable[TrackDict],
+) -> tuple[dict[str, TrackDict], dict[tuple[str, str], TrackDict], dict[str, TrackDict]]:
     """Create lookup dictionaries for current tracks."""
 
-    by_id: dict[str, Any] = {}
-    by_album_track: dict[tuple[str, str], Any] = {}
-    by_name: dict[str, Any] = {}
+    by_id: dict[str, TrackDict] = {}
+    by_album_track: dict[tuple[str, str], TrackDict] = {}
+    by_name: dict[str, TrackDict] = {}
 
     for track in current_tracks:
         if track_id := _normalize_text(track.get("id")):
@@ -167,10 +196,10 @@ def _build_track_lookups(
 def _find_track_for_target(
     target: RevertTarget,
     *,
-    by_id: dict[str, Any],
-    by_album_track: dict[tuple[str, str], Any],
-    by_name: dict[str, Any],
-) -> Any | None:
+    by_id: dict[str, TrackDict],
+    by_album_track: dict[tuple[str, str], TrackDict],
+    by_name: dict[str, TrackDict],
+) -> TrackDict | None:
     """Locate the best matching track for a revert target."""
 
     if target.track_id and target.track_id in by_id:
@@ -187,7 +216,7 @@ def _find_track_for_target(
     return by_name.get(target.track_name.lower())
 
 
-def _build_year_change_entry(track: dict[str, Any], reverted_year: str) -> dict[str, str]:
+def _build_year_change_entry(track: TrackDict, reverted_year: str) -> dict[str, str]:
     """Create a change log entry after a successful revert."""
 
     return {
@@ -203,9 +232,9 @@ def _build_year_change_entry(track: dict[str, Any], reverted_year: str) -> dict[
 
 
 async def _revert_track_year(
-    track_processor: Any,
+    track_processor: YearRevertProcessorProtocol,
     *,
-    track: dict[str, Any],
+    track: TrackDict,
     track_id: str,
     reverted_year: str,
 ) -> bool:
@@ -241,7 +270,7 @@ def build_revert_targets(
 
 async def apply_year_reverts(
     *,
-    track_processor: Any,
+    track_processor: YearRevertProcessorProtocol,
     artist: str,
     targets: Iterable[RevertTarget],
 ) -> tuple[int, int, list[dict[str, str]]]:

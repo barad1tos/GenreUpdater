@@ -10,7 +10,7 @@ import asyncio
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict
 
 from core.logger import LogFormat, get_full_log_path
 
@@ -19,6 +19,15 @@ from metrics.change_reports import load_track_list, save_to_csv
 
 # Constants
 LAST_VERIFY_SUFFIX = "_last_verify.txt"
+
+
+class DryRunAction(TypedDict):
+    """Describes a single dry-run action recorded during verification."""
+
+    action: str
+    count: int
+    track_ids: list[str]
+
 
 if TYPE_CHECKING:
     from core.models.types import TrackDict
@@ -62,7 +71,7 @@ class DatabaseVerifier:
         self.analytics = analytics
         self.config = config
         self.dry_run = dry_run
-        self._dry_run_actions: list[dict[str, Any]] = []
+        self._dry_run_actions: list[DryRunAction] = []
         self._verify_start_time: float = 0.0
 
     # Compact Logging Methods (db_verify_logger + console with IDE-like highlighting)
@@ -433,11 +442,11 @@ class DatabaseVerifier:
             )
         else:
             self._dry_run_actions.append(
-                {
-                    "action": "remove_invalid_tracks",
-                    "count": len(invalid_tracks),
-                    "track_ids": invalid_tracks,
-                }
+                DryRunAction(
+                    action="remove_invalid_tracks",
+                    count=len(invalid_tracks),
+                    track_ids=invalid_tracks,
+                )
             )
 
     async def _update_verification_timestamp(self, csv_path: str) -> None:
@@ -523,7 +532,7 @@ class DatabaseVerifier:
 
         return len(invalid_tracks)
 
-    def get_dry_run_actions(self) -> list[dict[str, Any]]:
+    def get_dry_run_actions(self) -> list[DryRunAction]:
         """Get the list of dry-run actions recorded.
 
         Returns:

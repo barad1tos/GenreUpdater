@@ -16,7 +16,7 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 
 from __future__ import annotations
 
-import contextlib
+import logging
 import traceback
 from datetime import UTC, datetime
 from typing import Any, TYPE_CHECKING
@@ -26,13 +26,14 @@ from core.models.normalization import normalize_for_matching
 if TYPE_CHECKING:
     from services.api.api_base import ScoredRelease
     from collections.abc import Callable, Coroutine
-    import logging
 
 # iTunes Search API base URL
 ITUNES_BASE_URL: str = "https://itunes.apple.com"
 
 # Constants for data validation
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")
+
+_logger = logging.getLogger(__name__)
 
 
 class AppleMusicClient:
@@ -245,7 +246,7 @@ class AppleMusicClient:
                     type(e).__name__,
                 )
                 skipped_count += 1
-            except Exception as e:
+            except (AttributeError, IndexError, RuntimeError) as e:
                 self.error_logger.exception(
                     "[itunes] Unexpected error processing result for '%s': %s (type: %s)\n%s",
                     search_term,
@@ -631,8 +632,10 @@ class AppleMusicClient:
         if not release_date:
             return None
 
-        with contextlib.suppress(IndexError, ValueError):
+        try:
             year_str = release_date.split("-", maxsplit=1)[0]
             if year_str.isdigit() and len(year_str) == VALID_YEAR_LENGTH:
                 return int(year_str)
+        except (IndexError, ValueError) as exc:
+            _logger.debug("Failed to parse year from release_date '%s': %s", release_date, exc)
         return None

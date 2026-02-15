@@ -325,7 +325,7 @@ class ApiCacheService:
 
                 self.logger.info("API cache saved to %s (%d entries)", self.api_cache_file, len(cache_data))
 
-            except Exception as e:
+            except (OSError, TypeError, ValueError) as e:
                 self.logger.exception("Failed to save API cache: %s", e)
                 raise
 

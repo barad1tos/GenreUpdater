@@ -10,7 +10,18 @@ import asyncio
 import logging
 import time
 from collections import deque
-from typing import Any
+from typing import TypedDict
+
+
+class RateLimiterStats(TypedDict):
+    """Statistics from the AppleScript rate limiter."""
+
+    total_requests: int
+    total_wait_time: float
+    avg_wait_time: float
+    current_calls_in_window: int
+    requests_per_window: int
+    window_seconds: float
 
 
 class AppleScriptRateLimiter:
@@ -124,7 +135,7 @@ class AppleScriptRateLimiter:
         self.request_timestamps.append(time.monotonic())
         return 0.0
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> RateLimiterStats:
         """Get current rate limiter statistics.
 
         Returns:

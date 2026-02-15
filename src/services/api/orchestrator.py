@@ -24,7 +24,7 @@ import re
 import ssl
 from datetime import UTC
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import certifi
@@ -115,29 +115,6 @@ KEEPALIVE_TIMEOUT_SECONDS: int = 30
 DNS_CACHE_TTL_SECONDS: int = 300
 
 SECURE_RANDOM: random.SystemRandom = random.SystemRandom()
-
-
-# Type definitions for structured data
-class HTTPHeaders(TypedDict):
-    """HTTP headers for API requests."""
-
-    User_Agent: str  # Note: TypedDict uses underscore for hyphenated keys
-    Accept: str
-    Accept_Encoding: str
-
-
-class JSONResponse(TypedDict, total=False):
-    """Generic JSON API response structure."""
-
-    resultCount: int
-    results: list[dict[str, Any]]
-
-
-class ScoreThresholds(TypedDict):
-    """Score threshold indicators for year determination."""
-
-    high_score_met: bool
-    very_high_score: bool
 
 
 class ExternalApiOrchestrator:
@@ -529,7 +506,7 @@ class ExternalApiOrchestrator:
                 self.request_executor.set_session(self.session)
                 self._initialize_api_clients()
                 self._initialize_year_search_coordinator()
-            except Exception:
+            except (TypeError, ValueError, AttributeError, RuntimeError):
                 # Clean up session on initialization failure to prevent resource leak
                 if self.session and not self.session.closed:
                     await self.session.close()

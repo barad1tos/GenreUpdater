@@ -567,12 +567,11 @@ class ApiRequestExecutor:
     ) -> None:
         """Log API response for debugging."""
         self.console_logger.debug(
-            "====== %s RAW RESPONSE (Status: %d) ======",
+            "%s raw response (status=%d): %s",
             api_name.upper(),
             status,
+            text_snippet,
         )
-        self.console_logger.debug(text_snippet)
-        self.console_logger.debug("====== END %s RAW RESPONSE ======", api_name.upper())
 
     def _handle_runtime_error(
         self,

@@ -125,13 +125,17 @@ class AppleScriptSanitizer:
 
         Args:
             script_code: The AppleScript code to validate
-            allow_music_app: Whether to allow Music.app operations (default: True)
+            allow_music_app: Kept for backward compatibility. No reserved words contain
+                "music", so this parameter was never effective.
 
         Raises:
             AppleScriptSanitizationError: If dangerous patterns are detected
             ValueError: If script_code is invalid
 
         """
+        # allow_music_app kept for backward compatibility (no reserved words contain "music")
+        _ = allow_music_app
+
         if not script_code:
             msg = "Script code must be a non-empty string"
             raise ValueError(msg)
@@ -152,10 +156,6 @@ class AppleScriptSanitizer:
             # Use word boundaries to prevent false positives (e.g., "delete" in "undelete")
             pattern = re.compile(rf"\b{re.escape(reserved_word.lower())}\b")
             if pattern.search(normalized_code):
-                # Allow Music.app specific operations if permitted
-                if allow_music_app and "music" in reserved_word.lower():
-                    continue
-
                 error_msg = f"Restricted AppleScript command detected: '{reserved_word}'"
                 self.logger.error("Security violation: %s", error_msg)
                 raise AppleScriptSanitizationError(error_msg, reserved_word)

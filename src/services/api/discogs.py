@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable, Callable
 
+    from core.models.protocols import CacheServiceProtocol
     from core.models.track_models import AppConfig, YearRetrievalConfig
     from metrics import Analytics
 
@@ -115,7 +116,7 @@ class DiscogsClient(BaseApiClient):
         make_api_request_func: Callable[..., Awaitable[dict[str, Any] | None]],
         *,
         score_release_func: Callable[..., float],
-        cache_service: Any,  # Type as Any for now since CacheServiceProtocol is in utils
+        cache_service: CacheServiceProtocol,
         scoring_config: YearRetrievalConfig,
         config: AppConfig,
         cache_ttl_days: int = 30,
@@ -195,8 +196,9 @@ class DiscogsClient(BaseApiClient):
             if cached_year == "NO_YEAR":
                 self.console_logger.debug("[discogs] Master year cache hit (no year) for ID %s", master_id)
                 return None
-            self.console_logger.debug("[discogs] Master year cache hit for ID %s: %s", master_id, cached_year)
-            return int(cached_year)
+            if isinstance(cached_year, (str, int)):
+                self.console_logger.debug("[discogs] Master year cache hit for ID %s: %s", master_id, cached_year)
+                return int(cached_year)
 
         try:
             master_url = f"{DISCOGS_BASE_URL}/masters/{master_id}"
@@ -360,7 +362,8 @@ class DiscogsClient(BaseApiClient):
         if cached_data is not None:
             if isinstance(cached_data, list):
                 self.console_logger.debug("Using cached Discogs results for cache key: %s", cache_key)
-                return cached_data
+                # Protocol overload types str-key results as TrackDict; Discogs stores ScoredRelease
+                return cast(list[ScoredRelease], cast(object, cached_data))
             self.console_logger.warning("Cached Discogs data has unexpected type. Ignoring cache.")
         return None
 

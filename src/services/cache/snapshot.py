@@ -31,6 +31,13 @@ JSON_SUFFIX: str = ".json"
 GZIP_SUFFIX: str = ".json.gz"
 FORCE_SCAN_INTERVAL_DAYS: int = 7
 
+# Minimum expected field count from fetch_tracks.applescript output
+MIN_FETCH_TRACKS_FIELDS: int = 11
+
+# Smart Delta force-scan batch settings
+DELTA_BATCH_SIZE: int = 200  # tracks per batch for update detection
+DELTA_BATCH_TIMEOUT_SECONDS: int = 120  # timeout per batch (generous for 200 IDs)
+
 
 def _utc_now_naive() -> datetime:
     """Return naive UTC datetime for consistent comparisons.
@@ -276,7 +283,7 @@ class LibrarySnapshotService:
             # Expected fields from AppleScript (fetch_tracks.applescript):
             # id, name, artist, album_artist, album, genre, date_added,
             # modification_date, track_status, year, release_year, ""
-            if len(fields) >= 11:
+            if len(fields) >= MIN_FETCH_TRACKS_FIELDS:
                 track = {
                     "id": fields[0],
                     "name": fields[1],
@@ -293,8 +300,9 @@ class LibrarySnapshotService:
                 tracks.append(track)
             else:
                 self.logger.warning(
-                    "Skipping line with insufficient fields (%d < 11): %s",
+                    "Skipping line with insufficient fields (%d < %d): %s",
                     len(fields),
+                    MIN_FETCH_TRACKS_FIELDS,
                     line[:100] if len(line) > 100 else line,
                 )
 
@@ -407,10 +415,8 @@ class LibrarySnapshotService:
             return []
 
         # Fetch common tracks in batches using fetch_tracks_by_ids.applescript
-        batch_size = 200
-        timeout_per_batch = 120  # 2 minutes per 200 IDs is generous
         current_map: dict[str, TrackDict] = {}
-        total_batches = (len(common_ids) + batch_size - 1) // batch_size
+        total_batches = (len(common_ids) + DELTA_BATCH_SIZE - 1) // DELTA_BATCH_SIZE
 
         self.logger.info(
             "Force mode: fetching %d common tracks in %d batches...",
@@ -419,15 +425,15 @@ class LibrarySnapshotService:
         )
 
         async with spinner(f"Force mode: fetching {len(common_ids)} tracks for update detection..."):
-            for batch_index in range(0, len(common_ids), batch_size):
-                batch = common_ids[batch_index : batch_index + batch_size]
-                batch_num = batch_index // batch_size + 1
+            for batch_index in range(0, len(common_ids), DELTA_BATCH_SIZE):
+                batch = common_ids[batch_index : batch_index + DELTA_BATCH_SIZE]
+                batch_num = batch_index // DELTA_BATCH_SIZE + 1
                 ids_param = ",".join(batch)
 
                 result = await applescript_client.run_script(
                     FETCH_TRACKS_BY_IDS,
                     arguments=[ids_param],
-                    timeout=timeout_per_batch,
+                    timeout=DELTA_BATCH_TIMEOUT_SECONDS,
                 )
 
                 if not result:

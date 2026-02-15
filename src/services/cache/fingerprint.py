@@ -122,7 +122,9 @@ class FingerprintGenerator:
         """
         try:
             return self._create_fingerprint_hash(track_data)
-        except Exception as e:
+        except FingerprintGenerationError:
+            raise
+        except (KeyError, TypeError, ValueError) as e:
             error_msg = f"Failed to generate fingerprint: {e}"
             self.logger.exception(error_msg)
             raise FingerprintGenerationError(error_msg, track_data) from e
