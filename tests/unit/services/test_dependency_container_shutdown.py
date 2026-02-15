@@ -170,3 +170,22 @@ class TestDependencyContainerShutdown:
 
         # Shutdown should still be called after save failure
         assert "cache_shutdown" in close_order, "Cache shutdown should be called even if save fails"
+
+    @pytest.mark.asyncio
+    async def test_close_handles_cache_shutdown_failure(self, container: DependencyContainer) -> None:
+        """Cache shutdown OSError is caught without propagating."""
+        mock_cache_service = MagicMock()
+
+        async def cache_save() -> None:
+            pass
+
+        async def cache_shutdown_fails() -> None:
+            raise OSError("connection reset")
+
+        mock_cache_service.save_all_to_disk = cache_save
+        mock_cache_service.shutdown = cache_shutdown_fails
+
+        container._cache_service = mock_cache_service
+
+        # Should not raise — the except (OSError, RuntimeError, asyncio.CancelledError) catches it
+        await container.close()

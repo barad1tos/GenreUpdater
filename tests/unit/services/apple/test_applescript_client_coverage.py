@@ -462,3 +462,78 @@ class TestParseTrackOutput:
         assert len(result) == expected_count
         assert result[0]["id"] == first_id
         return result
+
+
+class TestFetchAllTrackIds:
+    """Tests for fetch_all_track_ids method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_parsed_comma_separated_ids(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids parses comma-separated IDs from script."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            # spinner is an async context manager — set up __aenter__/__aexit__
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "100,200,300"
+            result = await client.fetch_all_track_ids()
+
+        assert result == ["100", "200", "300"]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_no_output(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids returns empty list when script returns nothing."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = ""
+            result = await client.fetch_all_track_ids()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_error_output(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids returns empty list when script returns ERROR:."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "ERROR:timeout after 600s"
+            result = await client.fetch_all_track_ids()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_uses_explicit_timeout(self, client: AppleScriptClient) -> None:
+        """Test fetch_all_track_ids forwards explicit timeout to run_script."""
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "1,2"
+            result = await client.fetch_all_track_ids(timeout=42.0)
+
+        assert result == ["1", "2"]
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["timeout"] == 42.0

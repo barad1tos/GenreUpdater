@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -9,6 +10,24 @@ from services.cache.fingerprint import (
     FingerprintGenerationError,
     FingerprintGenerator,
 )
+
+# --- Patch coverage: except (KeyError, TypeError, ValueError) in generate_track_fingerprint ---
+
+
+class TestGenerateFingerprintWrapsNonFingerprintErrors:
+    """Cover the except (KeyError, TypeError, ValueError) handler in generate_track_fingerprint."""
+
+    def test_type_error_in_hash_wrapped_as_fingerprint_error(
+        self,
+        generator: FingerprintGenerator,
+        valid_track_data: dict[str, Any],
+    ) -> None:
+        """TypeError from _create_fingerprint_hash is wrapped in FingerprintGenerationError."""
+        with (
+            patch.object(generator, "_create_fingerprint_hash", side_effect=TypeError("bad type")),
+            pytest.raises(FingerprintGenerationError, match="Failed to generate fingerprint"),
+        ):
+            generator.generate_track_fingerprint(valid_track_data)
 
 
 @pytest.fixture
