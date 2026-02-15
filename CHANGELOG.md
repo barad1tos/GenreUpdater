@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test coverage enforcement (--cov-fail-under=70)
 - Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
 - Tests for 39 uncovered patch lines: except-branches, UTC timezone, isinstance guards, file_validator (#241)
-- Tests for remaining Codecov patch gaps: fingerprint except-handler, cache shutdown OSError, fetch_all_track_ids (#241)
+- Tests for remaining Codecov patch gaps: fingerprint except-handler, cache shutdown OSError, fetch_all_track_ids, _log_apple_scripts_dir OSError (#241)
 
 ### Changed
 
