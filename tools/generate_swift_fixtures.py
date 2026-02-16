@@ -796,6 +796,41 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
             "queryAlbum": "Album",
             "artistRegion": None,
         },
+        # Boundary: year diff of 1 between release and RG first year
+        {
+            "id": "score_year_diff_one",
+            "description": "1-year RG diff tests grace period boundary",
+            "release": {
+                "title": _THRILLER,
+                "artist": _MICHAEL_JACKSON,
+                "year": "1983",
+                "album_type": "Album",
+                "status": "Official",
+                "country": "US",
+                "source": "musicbrainz",
+                "releasegroup_first_date": "1982-11-30",
+            },
+            "queryArtist": _MICHAEL_JACKSON,
+            "queryAlbum": _THRILLER,
+            "artistRegion": "US",
+        },
+        # Boundary: CJK-Latin cross-script detection
+        {
+            "id": "score_cross_script_cjk_latin",
+            "description": "CJK artist name vs Latin query tests cross-script path",
+            "release": {
+                "title": _ZUTOMAYO_ALBUM,
+                "artist": _ZUTOMAYO,
+                "year": "2021",
+                "album_type": "Album",
+                "status": "Official",
+                "country": "JP",
+                "source": "musicbrainz",
+            },
+            "queryArtist": "Zutomayo",
+            "queryAlbum": _ZUTOMAYO_ALBUM,
+            "artistRegion": "JP",
+        },
     ]
 
     # Multi-candidate ranking sets
@@ -1433,6 +1468,48 @@ def generate_fallback_fixtures() -> list[dict[str, Any]]:
                 "bestScore": 70,
                 "isDefinitive": False,
                 "existingYear": None,
+                "albumType": "normal",
+                "verificationAttempts": 0,
+            },
+            "expected": {"decision": "useAPIYear"},
+        },
+        # Boundary: verification attempts just below threshold (3)
+        {
+            "id": "fallback_verification_below_threshold",
+            "description": "Verification attempts one below threshold should still escalate",
+            "context": {
+                "bestYear": 2020,
+                "bestScore": 40,
+                "isDefinitive": False,
+                "existingYear": None,
+                "albumType": "normal",
+                "verificationAttempts": 2,
+            },
+            "expected": {"decision": "escalateToVerification"},
+        },
+        # Boundary: score below trustAPIScoreThreshold (70)
+        {
+            "id": "fallback_score_at_confidence_threshold",
+            "description": "Score below confidence threshold with no existing year",
+            "context": {
+                "bestYear": 2020,
+                "bestScore": 50,
+                "isDefinitive": False,
+                "existingYear": None,
+                "albumType": "normal",
+                "verificationAttempts": 0,
+            },
+            "expected": {"decision": "escalateToVerification"},
+        },
+        # Boundary: definitive overrides even when existing year is close
+        {
+            "id": "fallback_definitive_with_existing_close",
+            "description": "Definitive API result overrides even close existing year",
+            "context": {
+                "bestYear": 2020,
+                "bestScore": 90,
+                "isDefinitive": True,
+                "existingYear": 2019,
                 "albumType": "normal",
                 "verificationAttempts": 0,
             },
