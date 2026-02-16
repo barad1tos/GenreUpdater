@@ -3,8 +3,14 @@ name: CodeQL Security Analysis
 on:
   push:
     branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'main.py'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'main.py'
   schedule:
     - cron: '0 3 * * 1'  # Weekly on Monday at 03:00 UTC
 

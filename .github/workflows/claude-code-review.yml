@@ -4,12 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
     branches: [main, dev]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'main.py'
+      - 'pyproject.toml'
 
 jobs:
   claude-review:
@@ -23,8 +22,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
+          persist-credentials: false
           fetch-depth: 1
 
       - name: Run Claude Code Review
@@ -37,4 +37,3 @@ jobs:
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
