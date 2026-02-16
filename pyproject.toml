@@ -229,6 +229,9 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "S603", # subprocess calls use hardcoded trusted paths from constants
     "INP001", # docs/ is a namespace package for mkdocs gen-files plugin
 ]
+"tools/*.py" = [
+    "INP001", # tools/ is a standalone scripts directory, not a package
+]
 
 [tool.pydoclint]
 style = "google"

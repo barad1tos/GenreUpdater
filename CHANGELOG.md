@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
 - Tests for 39 uncovered patch lines: except-branches, UTC timezone, isinstance guards, file_validator (#241)
 - Tests for remaining Codecov patch gaps: fingerprint except-handler, cache shutdown OSError, fetch_all_track_ids, _log_apple_scripts_dir OSError (#241)
+- Swift fixture generator (`tools/generate_swift_fixtures.py`) — 91 test cases across 6 fixture files for Swift port parity testing
+- 5 boundary test cases to Swift fixture generator: verification threshold, confidence threshold, definitive-with-existing, year-diff-one, CJK-Latin cross-script (total: 96 cases)
 
 ### Changed
 
