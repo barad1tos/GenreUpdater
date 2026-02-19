@@ -17,11 +17,33 @@ __all__ = [
     "compute_track_delta",
     "has_identity_changed",
     "has_track_changed",
+    "split_applescript_rows",
 ]
 
 # AppleScript output delimiters (ASCII Record/Unit Separators)
 FIELD_SEPARATOR = "\x1e"  # ASCII 30 - separates fields within a record
 LINE_SEPARATOR = "\x1d"  # ASCII 29 - separates records (tracks)
+
+
+def split_applescript_rows(raw: str, field_separator: str) -> list[str]:
+    """Split raw AppleScript output into individual track rows.
+
+    Python's ``str.splitlines()`` treats ``\\x1e`` (our field separator) as a
+    line boundary, breaking single-track responses into per-field rows.  This
+    helper centralises the split-vs-splitlines decision so both parsers
+    (``parse_tracks`` and ``parse_osascript_output``) stay in sync.
+
+    Args:
+        raw: Stripped raw AppleScript output.
+        field_separator: Detected field separator (FIELD_SEPARATOR or ``\\t``).
+
+    Returns:
+        List of raw track row strings.
+
+    """
+    if field_separator == FIELD_SEPARATOR:
+        return raw.split(LINE_SEPARATOR)
+    return raw.splitlines()
 
 
 @dataclass(slots=True)

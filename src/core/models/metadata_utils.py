@@ -25,7 +25,7 @@ from typing import Any, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, split_applescript_rows
 from core.tracks.year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
@@ -182,12 +182,8 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
     )
 
     tracks: list[TrackDict] = []
-    # Always split by LINE_SEPARATOR when in ASCII separator mode.
-    # Python's splitlines() treats \x1e (our field separator) as a line
-    # boundary, breaking single-track responses into per-field rows.
-    # split(LINE_SEPARATOR) is safe when separator is absent — returns [whole_string].
     stripped = raw_data.strip()
-    rows = stripped.split(LINE_SEPARATOR) if field_separator == FIELD_SEPARATOR else stripped.splitlines()
+    rows = split_applescript_rows(stripped, field_separator)
 
     for row in rows:
         if not row:  # Skip empty rows
