@@ -307,7 +307,7 @@ async def test_empty_artist_skipped(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_processor_failure_returns_false(tmp_path: Path) -> None:
-    """ """
+    """When processor returns False, track should not be in updated list."""
     config_path = tmp_path / "config.yaml"
     config_path.write_text('OldArtist: "NewArtist"\n', encoding="utf-8")
 
