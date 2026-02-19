@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from core.apple_script_names import FETCH_TRACKS
 from core.models.types import TrackDict
+from core.tracks.track_delta import FIELD_SEPARATOR, split_applescript_rows
 from metrics.csv_utils import TRACK_FIELDNAMES, save_csv
 
 if TYPE_CHECKING:
@@ -415,17 +416,19 @@ def parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     Validates field count to detect AppleScript output format changes and logs
     warnings for lines with incorrect field counts to aid debugging.
 
+    Args:
+        raw_output: Raw AppleScript output with ASCII or TSV separators.
+
     Returns:
         Dict mapping track_id to ParsedTrackFields with date_added,
         last_modified, track_status, and year.
     """
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
-    line_separator = chr(29) if chr(29) in raw_output else None
-    field_separator = chr(30) if chr(30) in raw_output else "\t"
+    field_separator = FIELD_SEPARATOR if FIELD_SEPARATOR in raw_output else "\t"
     # Use strip('\n\r') instead of strip() to preserve trailing tabs (empty fields)
     stripped_output = raw_output.strip("\n\r")
-    tracks_data = stripped_output.split(line_separator) if line_separator else stripped_output.splitlines()
+    tracks_data = split_applescript_rows(stripped_output, field_separator)
 
     for line_num, track_line in enumerate(tracks_data, start=1):
         if not track_line.strip():

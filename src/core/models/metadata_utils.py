@@ -25,7 +25,7 @@ from typing import Any, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, split_applescript_rows
 from core.tracks.year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
@@ -166,7 +166,6 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
 
     """
     field_separator = FIELD_SEPARATOR if FIELD_SEPARATOR in raw_data else "\t"
-    line_separator = LINE_SEPARATOR if LINE_SEPARATOR in raw_data else None
 
     if not raw_data:
         error_logger.error("No data fetched from AppleScript.")
@@ -179,11 +178,12 @@ def parse_tracks(raw_data: str, error_logger: logging.Logger) -> list[TrackDict]
     error_logger.debug(
         "parse_tracks: Using field separator %r, line separator %r",
         field_separator,
-        line_separator or "newline",
+        LINE_SEPARATOR if field_separator == FIELD_SEPARATOR else "newline",
     )
 
     tracks: list[TrackDict] = []
-    rows = raw_data.strip().split(line_separator) if line_separator else raw_data.strip().splitlines()
+    stripped = raw_data.strip()
+    rows = split_applescript_rows(stripped, field_separator)
 
     for row in rows:
         if not row:  # Skip empty rows
@@ -573,9 +573,8 @@ def _compile_suffix_patterns(album_suffixes_raw: list[str]) -> list[tuple[str, r
         List of (original_suffix, compiled_pattern) tuples for matching.
 
     """
-    deduped_suffixes: list[str] = list(dict.fromkeys(album_suffixes_raw))
     # Lambda preserves str type (key=len makes ty infer Sized)
-    suffixes = sorted(deduped_suffixes, key=lambda s: len(s), reverse=True)
+    suffixes = sorted(dict.fromkeys(album_suffixes_raw), key=lambda s: len(s), reverse=True)
 
     compiled: list[tuple[str, re.Pattern[str]]] = []
     for suffix in suffixes:

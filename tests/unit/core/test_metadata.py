@@ -15,6 +15,7 @@ from core.models.metadata_utils import (
     clean_names,
     determine_dominant_genre_for_artist,
     group_tracks_by_artist,
+    parse_tracks,
 )
 from core.models.track_models import AppConfig, TrackDict
 from tests.factories import create_test_app_config
@@ -587,3 +588,82 @@ class TestCleanNamesSuffixRemoval:
         )
 
         assert album == "Sleep"
+
+
+class TestParseTracksSingleTrack:
+    """Tests for parse_tracks handling of single-track AppleScript output."""
+
+    @staticmethod
+    def test_single_track_without_line_separator() -> None:
+        """Single-track output has no LINE_SEPARATOR — must not use splitlines().
+
+        Python's splitlines() treats \\x1e (our FIELD_SEPARATOR) as a line
+        boundary, breaking a single-track response into per-field rows.
+        """
+        field_sep = "\x1e"
+        # 12 fields: id, name, artist, album_artist, album, genre, date_added,
+        #   modification_date, track_status, year, release_year, ""
+        raw = field_sep.join(
+            [
+                "120116",
+                "Isle of Bliss",
+                "Hanging Garden",
+                "Hanging Garden",
+                "Isle of Bliss",
+                "Death Metal/Black Metal",
+                "2026-01-23 22:12:27",
+                "2026-01-23 22:12:27",
+                "subscription",
+                "",
+                "",
+                "",
+            ]
+        )
+        tracks = parse_tracks(raw, logging.getLogger("test"))
+        assert len(tracks) == 1
+        assert tracks[0].id == "120116"
+        assert tracks[0].name == "Isle of Bliss"
+        assert tracks[0].artist == "Hanging Garden"
+
+    @staticmethod
+    def test_multi_track_with_line_separator() -> None:
+        """Multi-track output with LINE_SEPARATOR parses correctly."""
+        field_sep = "\x1e"
+        line_sep = "\x1d"
+        track1 = field_sep.join(
+            [
+                "1",
+                "Track A",
+                "Artist A",
+                "Artist A",
+                "Album A",
+                "Rock",
+                "2020-01-01 00:00:00",
+                "2020-01-01 00:00:00",
+                "subscription",
+                "",
+                "",
+                "",
+            ]
+        )
+        track2 = field_sep.join(
+            [
+                "2",
+                "Track B",
+                "Artist B",
+                "Artist B",
+                "Album B",
+                "Pop",
+                "2021-01-01 00:00:00",
+                "2021-01-01 00:00:00",
+                "subscription",
+                "",
+                "",
+                "",
+            ]
+        )
+        raw = line_sep.join([track1, track2])
+        tracks = parse_tracks(raw, logging.getLogger("test"))
+        assert len(tracks) == 2
+        assert tracks[0].id == "1"
+        assert tracks[1].id == "2"
