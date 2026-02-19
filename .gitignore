@@ -1,5 +1,5 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -87,3 +87,4 @@ site/
 .claude_settings.json
 .security-key
 logs/security/
+tests/e2e/__pycache__

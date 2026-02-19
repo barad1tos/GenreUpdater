@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -249,7 +250,7 @@ class TestCacheOrchestrator:
         """Test that cache property returns generic service cache."""
         orchestrator = self.create_orchestrator()
         # Configure mock's cache attribute to return expected value
-        orchestrator.generic_service.cache = {"key": ("value", 0.0)}
+        orchestrator.generic_service.cache = OrderedDict({"key": ("value", 0.0)})
 
         # Access through property - the cache property delegates to generic_service.cache
         assert "key" in orchestrator.cache

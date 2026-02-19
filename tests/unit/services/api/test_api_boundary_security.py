@@ -9,6 +9,7 @@ the clients can construct requests without crashing, not that the encoding is co
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +17,11 @@ import pytest
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
+from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import MockCacheService
+
+if TYPE_CHECKING:
+    from core.models.protocols import CacheServiceProtocol
 
 
 @pytest.mark.unit
@@ -74,7 +80,7 @@ class TestMusicBrainzInputBoundary:
         assert isinstance(releases, list)
 
     async def test_extremely_long_artist_name_handled(self) -> None:
-        """Very long input (10000 chars) doesn't crash the client."""
+        """Very long input (10,000 chars) doesn't crash the client."""
         client = self._create_mock_client()
 
         extremely_long_artist = "A" * 10000
@@ -175,11 +181,10 @@ class TestDiscogsInputBoundary:
 
         score_release_func = MagicMock(return_value=0.0)
 
-        cache_service = MagicMock()
-        cache_service.get_async = AsyncMock(return_value=None)
-        cache_service.set_async = AsyncMock()
+        cache_service: CacheServiceProtocol = MockCacheService()
 
         discogs_auth = "fake_value_for_testing"
+        test_config = create_test_app_config()
         return DiscogsClient(
             token=discogs_auth,
             console_logger=console_logger,
@@ -188,8 +193,8 @@ class TestDiscogsInputBoundary:
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
             cache_service=cache_service,
-            scoring_config={"reissue_detection": {"reissue_keywords": []}},
-            config={"cleaning": {"remaster_keywords": []}},
+            scoring_config=test_config.year_retrieval,
+            config=test_config,
         )
 
     async def test_control_chars_in_search_query_handled(self) -> None:
@@ -262,7 +267,7 @@ class TestDiscogsInputBoundary:
         assert isinstance(releases, list)
 
     async def test_special_url_chars_handled(self) -> None:
-        """Special URL characters are handled by aiohttp."""
+        """Aiohttp handles special URL characters."""
         client = self._create_mock_client()
 
         artist_with_special = "Artist & The Band / Group"

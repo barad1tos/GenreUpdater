@@ -91,48 +91,48 @@ class TestUpdateRateLimiter:
 
 
 class TestLogScriptSuccess:
-    def test_update_property_logs_debug(self, executor: AppleScriptExecutor) -> None:
+    def test_update_property_logs_debug(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = f"{UPDATE_PROPERTY} year=2020"
         executor.log_script_success(label, "OK", 0.5)
-        executor.console_logger.debug.assert_called_once()
+        mock_console_logger.debug.assert_called_once()
 
-    def test_track_data_logs_track_count(self, executor: AppleScriptExecutor) -> None:
+    def test_track_data_logs_track_count(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = FETCH_TRACKS
         # 2 line separators = 2 tracks
         result = f"data1{LINE_SEPARATOR}data2{LINE_SEPARATOR}"
         executor.log_script_success(label, result, 1.0)
-        executor.console_logger.info.assert_called_once()
-        call_args = executor.console_logger.info.call_args
+        mock_console_logger.info.assert_called_once()
+        call_args = mock_console_logger.info.call_args
         assert "2 tracks" in (call_args[0][0] % call_args[0][1:])
 
-    def test_fetch_ids_logs_id_count(self, executor: AppleScriptExecutor) -> None:
+    def test_fetch_ids_logs_id_count(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = FETCH_TRACK_IDS
         result = "1,2,3,4,5"  # 5 IDs
         executor.log_script_success(label, result, 0.3)
-        executor.console_logger.info.assert_called_once()
-        call_args = executor.console_logger.info.call_args
+        mock_console_logger.info.assert_called_once()
+        call_args = mock_console_logger.info.call_args
         assert "5 IDs" in (call_args[0][0] % call_args[0][1:])
 
-    def test_separator_result_logs_record_count(self, executor: AppleScriptExecutor) -> None:
+    def test_separator_result_logs_record_count(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = "custom_script"
         result = f"a{FIELD_SEPARATOR}b{FIELD_SEPARATOR}c"
         executor.log_script_success(label, result, 0.2)
-        executor.console_logger.info.assert_called_once()
+        mock_console_logger.info.assert_called_once()
 
-    def test_short_result_logs_full_preview(self, executor: AppleScriptExecutor) -> None:
+    def test_short_result_logs_full_preview(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = "simple_script"
         executor.log_script_success(label, "short result", 0.1)
-        executor.console_logger.info.assert_called_once()
+        mock_console_logger.info.assert_called_once()
 
-    def test_no_change_result_logs_debug(self, executor: AppleScriptExecutor) -> None:
+    def test_no_change_result_logs_debug(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = "check_script"
         executor.log_script_success(label, "No Change", 0.1)
-        executor.console_logger.debug.assert_called()
+        mock_console_logger.debug.assert_called()
 
-    def test_empty_fetch_ids_shows_zero(self, executor: AppleScriptExecutor) -> None:
+    def test_empty_fetch_ids_shows_zero(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         label = FETCH_TRACK_IDS
         executor.log_script_success(label, "   ", 0.1)
-        call_args = executor.console_logger.info.call_args
+        call_args = mock_console_logger.info.call_args
         assert "0 IDs" in (call_args[0][0] % call_args[0][1:])
 
 
@@ -192,14 +192,14 @@ class TestExecuteSubprocessSuccess:
         assert result == "hello world"
 
     @pytest.mark.asyncio
-    async def test_logs_success(self, executor: AppleScriptExecutor) -> None:
+    async def test_logs_success(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """Successful execution calls log_script_success."""
         mock_proc = _make_mock_process(returncode=0, stdout=b"ok")
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
             await executor._execute_subprocess(["osascript"], "simple_script", 30.0)
 
-        executor.console_logger.info.assert_called()
+        mock_console_logger.info.assert_called()
 
     @pytest.mark.asyncio
     async def test_calls_cleanup_on_success(self, executor: AppleScriptExecutor) -> None:
@@ -217,7 +217,7 @@ class TestExecuteSubprocessStderr:
     """Test stderr handling in _execute_subprocess."""
 
     @pytest.mark.asyncio
-    async def test_stderr_logged_as_warning(self, executor: AppleScriptExecutor) -> None:
+    async def test_stderr_logged_as_warning(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """Stderr output is logged as a warning."""
         mock_proc = _make_mock_process(returncode=0, stdout=b"ok", stderr=b"some warning")
 
@@ -225,8 +225,8 @@ class TestExecuteSubprocessStderr:
             result = await executor._execute_subprocess(["osascript"], "test_label", 30.0)
 
         assert result == "ok"
-        executor.console_logger.warning.assert_called()
-        warning_args = executor.console_logger.warning.call_args[0]
+        mock_console_logger.warning.assert_called()
+        warning_args = mock_console_logger.warning.call_args[0]
         assert "stderr" in warning_args[0]
         assert "some warning" in str(warning_args)
 
@@ -263,7 +263,7 @@ class TestExecuteSubprocessNonZeroReturn:
         assert "return code 2" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_non_zero_logs_error(self, executor: AppleScriptExecutor) -> None:
+    async def test_non_zero_logs_error(self, executor: AppleScriptExecutor, mock_error_logger: MagicMock) -> None:
         """Non-zero return code logs to error_logger."""
         mock_proc = _make_mock_process(returncode=1, stderr=b"err")
 
@@ -273,7 +273,7 @@ class TestExecuteSubprocessNonZeroReturn:
         ):
             await executor._execute_subprocess(["osascript"], "script", 30.0)
 
-        executor.error_logger.error.assert_called()
+        mock_error_logger.error.assert_called()
 
 
 class TestExecuteSubprocessTimeout:
@@ -296,7 +296,7 @@ class TestExecuteSubprocessTimeout:
         assert "timeout" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
-    async def test_timeout_logs_exception(self, executor: AppleScriptExecutor) -> None:
+    async def test_timeout_logs_exception(self, executor: AppleScriptExecutor, mock_error_logger: MagicMock) -> None:
         """TimeoutError is logged via error_logger.exception."""
         mock_proc = _make_mock_process()
         mock_proc.communicate = AsyncMock(side_effect=TimeoutError())
@@ -307,7 +307,7 @@ class TestExecuteSubprocessTimeout:
         ):
             await executor._execute_subprocess(["osascript"], "script", 10.0)
 
-        executor.error_logger.exception.assert_called()
+        mock_error_logger.exception.assert_called()
 
 
 class TestExecuteSubprocessOSError:
@@ -340,7 +340,7 @@ class TestExecuteSubprocessOSError:
             await executor._execute_subprocess(["osascript"], "script", 30.0)
 
     @pytest.mark.asyncio
-    async def test_os_error_logs_exception(self, executor: AppleScriptExecutor) -> None:
+    async def test_os_error_logs_exception(self, executor: AppleScriptExecutor, mock_error_logger: MagicMock) -> None:
         """OSError is logged via error_logger.exception."""
         mock_proc = _make_mock_process()
         mock_proc.communicate = AsyncMock(side_effect=OSError("disk error"))
@@ -351,7 +351,7 @@ class TestExecuteSubprocessOSError:
         ):
             await executor._execute_subprocess(["osascript"], "script", 30.0)
 
-        executor.error_logger.exception.assert_called()
+        mock_error_logger.exception.assert_called()
 
 
 class TestExecuteSubprocessCancelled:
@@ -370,7 +370,7 @@ class TestExecuteSubprocessCancelled:
             await executor._execute_subprocess(["osascript"], "script", 30.0)
 
     @pytest.mark.asyncio
-    async def test_cancelled_logs_info(self, executor: AppleScriptExecutor) -> None:
+    async def test_cancelled_logs_info(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """CancelledError is logged at info level."""
         mock_proc = _make_mock_process()
         mock_proc.communicate = AsyncMock(side_effect=asyncio.CancelledError())
@@ -381,8 +381,8 @@ class TestExecuteSubprocessCancelled:
         ):
             await executor._execute_subprocess(["osascript"], "cancelled_script", 30.0)
 
-        executor.console_logger.info.assert_called()
-        info_args = executor.console_logger.info.call_args[0]
+        mock_console_logger.info.assert_called()
+        info_args = mock_console_logger.info.call_args[0]
         assert "cancelled" in info_args[0].lower()
 
 
@@ -435,7 +435,7 @@ class TestExecuteSubprocessUnexpectedErrors:
         assert "event loop closed" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_unexpected_error_logs_exception(self, executor: AppleScriptExecutor) -> None:
+    async def test_unexpected_error_logs_exception(self, executor: AppleScriptExecutor, mock_error_logger: MagicMock) -> None:
         """Unexpected errors are logged via error_logger.exception."""
         mock_proc = _make_mock_process()
         mock_proc.communicate = AsyncMock(side_effect=RuntimeError("boom"))
@@ -446,7 +446,7 @@ class TestExecuteSubprocessUnexpectedErrors:
         ):
             await executor._execute_subprocess(["osascript"], "script", 30.0)
 
-        executor.error_logger.exception.assert_called()
+        mock_error_logger.exception.assert_called()
 
 
 class TestExecuteSubprocessFinallyCleanup:
@@ -487,7 +487,7 @@ class TestCleanupProcess:
     """Test cleanup_process method branches."""
 
     @pytest.mark.asyncio
-    async def test_natural_exit(self, executor: AppleScriptExecutor) -> None:
+    async def test_natural_exit(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """Process exits naturally within PROCESS_EXIT_WAIT_SECONDS."""
         mock_proc = AsyncMock()
         mock_proc.wait = AsyncMock()
@@ -497,10 +497,10 @@ class TestCleanupProcess:
 
         mock_proc.wait.assert_called()
         mock_proc.kill.assert_not_called()
-        executor.console_logger.debug.assert_called()
+        mock_console_logger.debug.assert_called()
 
     @pytest.mark.asyncio
-    async def test_timeout_triggers_kill(self, executor: AppleScriptExecutor) -> None:
+    async def test_timeout_triggers_kill(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """When wait times out, process is killed and waited on again."""
         mock_proc = AsyncMock()
         # First wait() raises TimeoutError, second wait() (after kill) succeeds
@@ -511,10 +511,10 @@ class TestCleanupProcess:
 
         mock_proc.kill.assert_called_once()
         assert mock_proc.wait.call_count == 2
-        executor.console_logger.debug.assert_called()
+        mock_console_logger.debug.assert_called()
 
     @pytest.mark.asyncio
-    async def test_process_lookup_error_during_kill(self, executor: AppleScriptExecutor) -> None:
+    async def test_process_lookup_error_during_kill(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """ProcessLookupError during kill logs a warning."""
         mock_proc = AsyncMock()
         mock_proc.wait = AsyncMock(side_effect=TimeoutError())
@@ -522,12 +522,12 @@ class TestCleanupProcess:
 
         await executor.cleanup_process(mock_proc, "dead_process")
 
-        executor.console_logger.warning.assert_called()
-        warning_args = executor.console_logger.warning.call_args[0]
+        mock_console_logger.warning.assert_called()
+        warning_args = mock_console_logger.warning.call_args[0]
         assert "dead_process" in str(warning_args)
 
     @pytest.mark.asyncio
-    async def test_timeout_after_kill_logs_warning(self, executor: AppleScriptExecutor) -> None:
+    async def test_timeout_after_kill_logs_warning(self, executor: AppleScriptExecutor, mock_console_logger: MagicMock) -> None:
         """TimeoutError after kill also logs a warning."""
         mock_proc = AsyncMock()
         # First wait times out, kill succeeds, second wait also times out
@@ -537,4 +537,4 @@ class TestCleanupProcess:
         await executor.cleanup_process(mock_proc, "zombie_process")
 
         mock_proc.kill.assert_called_once()
-        executor.console_logger.warning.assert_called()
+        mock_console_logger.warning.assert_called()
