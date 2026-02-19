@@ -415,17 +415,22 @@ def parse_osascript_output(raw_output: str) -> dict[str, ParsedTrackFields]:
     Validates field count to detect AppleScript output format changes and logs
     warnings for lines with incorrect field counts to aid debugging.
 
+    Args:
+        raw_output: Raw AppleScript output with ASCII or TSV separators.
+
     Returns:
         Dict mapping track_id to ParsedTrackFields with date_added,
         last_modified, track_status, and year.
     """
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
-    line_separator = chr(29) if chr(29) in raw_output else None
     field_separator = chr(30) if chr(30) in raw_output else "\t"
     # Use strip('\n\r') instead of strip() to preserve trailing tabs (empty fields)
     stripped_output = raw_output.strip("\n\r")
-    tracks_data = stripped_output.split(line_separator) if line_separator else stripped_output.splitlines()
+    # Always split by chr(29) when in ASCII separator mode.
+    # Python's splitlines() treats chr(30) (our field separator) as a line
+    # boundary, breaking single-track responses into per-field rows.
+    tracks_data = stripped_output.split(chr(29)) if field_separator == chr(30) else stripped_output.splitlines()
 
     for line_num, track_line in enumerate(tracks_data, start=1):
         if not track_line.strip():
