@@ -1,5 +1,5 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -52,6 +52,7 @@ coverage.xml
 # Environments
 .env
 .venv
+*.nosync
 env/
 venv/
 ENV/
@@ -86,3 +87,4 @@ site/
 .claude_settings.json
 .security-key
 logs/security/
+tests/e2e/__pycache__

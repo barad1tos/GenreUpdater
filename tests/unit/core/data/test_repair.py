@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
+
 from core.models import year_repair as repair_utils
+from core.models.track_models import TrackDict
 from tests.factories import MINIMAL_CONFIG_DATA, create_test_app_config
 
 if TYPE_CHECKING:
@@ -141,22 +143,35 @@ async def test_apply_year_reverts_matches_by_id_and_album_name() -> None:
             self.updated: list[tuple[str, str]] = []
 
         @staticmethod
-        async def fetch_tracks_async(artist: str, **_kwargs: Any) -> list[dict[str, str]]:
+        async def fetch_tracks_async(
+            artist: str | None = None,
+            force_refresh: bool = False,
+            dry_run_test_tracks: list[TrackDict] | None = None,
+            ignore_test_filter: bool = False,
+        ) -> list[TrackDict]:
             """Fetch mock tracks for testing."""
-            # Return two tracks: one with matching id, one matched by (album, name)
+            _ = (force_refresh, dry_run_test_tracks, ignore_test_filter)
+            artist_name = artist or ""
             return [
-                {"id": "1", "name": "Rising", "artist": artist, "album": "Hydra", "track_status": "subscription", "year": "2007"},
-                {"id": "2", "name": "Zero", "artist": artist, "album": "Generation Doom", "track_status": "subscription", "year": "2007"},
+                TrackDict(id="1", name="Rising", artist=artist_name, album="Hydra", track_status="subscription", year="2007"),
+                TrackDict(id="2", name="Zero", artist=artist_name, album="Generation Doom", track_status="subscription", year="2007"),
             ]
 
         async def update_track_async(
             self,
-            *,
             track_id: str,
-            new_year: str | None = None,  # API param: the new value to set
-            **_kwargs: Any,
+            new_track_name: str | None = None,
+            new_album_name: str | None = None,
+            new_genre: str | None = None,
+            new_year: str | None = None,
+            track_status: str | None = None,
+            original_artist: str | None = None,
+            original_album: str | None = None,
+            original_track: str | None = None,
         ) -> bool:
             """Update track year in mock storage."""
+            _ = (new_track_name, new_album_name, new_genre)
+            _ = (track_status, original_artist, original_album, original_track)
             if new_year:
                 self.updated.append((track_id, new_year))
             return True

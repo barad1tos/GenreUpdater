@@ -20,12 +20,16 @@ def scripts_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def validator(scripts_dir: Path) -> AppleScriptFileValidator:
+def validator(
+    scripts_dir: Path,
+    mock_error_logger: MagicMock,
+    mock_console_logger: MagicMock,
+) -> AppleScriptFileValidator:
     """Create a validator with mock loggers."""
     return AppleScriptFileValidator(
         apple_scripts_directory=str(scripts_dir),
-        error_logger=MagicMock(spec=logging.Logger),
-        console_logger=MagicMock(spec=logging.Logger),
+        error_logger=mock_error_logger,
+        console_logger=mock_console_logger,
     )
 
 
@@ -35,17 +39,19 @@ class TestValidateScriptPathOutsideDirectory:
     def test_path_outside_allowed_directory_returns_false(
         self,
         validator: AppleScriptFileValidator,
+        mock_error_logger: MagicMock,
     ) -> None:
         """Test that a path outside the allowed directory returns False and logs error."""
         result = validator.validate_script_path("/etc/passwd")
 
         assert result is False
-        validator.error_logger.error.assert_called_once()
-        assert "outside allowed directory" in validator.error_logger.error.call_args[0][0]
+        mock_error_logger.error.assert_called_once()
+        assert "outside allowed directory" in mock_error_logger.error.call_args[0][0]
 
     def test_sibling_directory_path_returns_false(
         self,
         validator: AppleScriptFileValidator,
+        mock_error_logger: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Test that a sibling directory path returns False."""
@@ -57,7 +63,7 @@ class TestValidateScriptPathOutsideDirectory:
         result = validator.validate_script_path(str(script))
 
         assert result is False
-        validator.error_logger.error.assert_called_once()
+        mock_error_logger.error.assert_called_once()
 
 
 class TestValidateScriptFileAccessResolvedPathEscape:
@@ -97,6 +103,7 @@ class TestValidateScriptFileAccessResolvedPathEscape:
     def test_symlink_to_outside_returns_false(
         self,
         validator: AppleScriptFileValidator,
+        mock_error_logger: MagicMock,
         scripts_dir: Path,
         tmp_path: Path,
     ) -> None:
@@ -110,8 +117,8 @@ class TestValidateScriptFileAccessResolvedPathEscape:
         result = validator.validate_script_file_access(str(symlink))
 
         assert result is False
-        validator.error_logger.error.assert_called_once()
-        assert "Symlinks not allowed" in validator.error_logger.error.call_args[0][0]
+        mock_error_logger.error.assert_called_once()
+        assert "Symlinks not allowed" in mock_error_logger.error.call_args[0][0]
 
 
 class TestValidateScriptFileAccessDirectoryListingOSError:
@@ -120,6 +127,7 @@ class TestValidateScriptFileAccessDirectoryListingOSError:
     def test_oserror_on_directory_listing_logs_debug(
         self,
         validator: AppleScriptFileValidator,
+        mock_console_logger: MagicMock,
         scripts_dir: Path,
     ) -> None:
         """Test OSError during directory listing logs debug message.
@@ -138,5 +146,5 @@ class TestValidateScriptFileAccessDirectoryListingOSError:
             result = validator.validate_script_file_access(str(real_file))
 
         assert result is False
-        debug_calls = validator.console_logger.debug.call_args_list
+        debug_calls = mock_console_logger.debug.call_args_list
         assert any("Could not list directory contents" in str(call) for call in debug_calls)

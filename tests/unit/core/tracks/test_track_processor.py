@@ -194,7 +194,7 @@ class _MockCacheService:
         if key_str in self.storage:
             del self.storage[key_str]
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Clear all cache entries."""
         self.storage.clear()
         self.album_cache.clear()

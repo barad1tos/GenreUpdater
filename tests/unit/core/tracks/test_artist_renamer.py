@@ -24,6 +24,7 @@ def _create_track(
     year: str | None = "2024",
     last_modified: str | None = "2024-01-01 12:00:00",
     track_status: str | None = "subscription",
+    album_artist: str | None = None,
 ) -> TrackDict:
     """Create a TrackDict for testing."""
     return TrackDict(
@@ -36,6 +37,7 @@ def _create_track(
         year=year,
         last_modified=last_modified,
         track_status=track_status,
+        album_artist=album_artist,
     )
 
 
@@ -77,8 +79,7 @@ async def test_rename_tracks_updates_artist(tmp_path: Path) -> None:
     console_logger = MagicMock()
     error_logger = MagicMock()
 
-    track = _create_track(artist="DK Energetyk")
-    track.__dict__["album_artist"] = "DK Energetyk"
+    track = _create_track(artist="DK Energetyk", album_artist="DK Energetyk")
 
     renamer = ArtistRenamer(
         processor,
@@ -92,7 +93,7 @@ async def test_rename_tracks_updates_artist(tmp_path: Path) -> None:
     assert len(updated_tracks) == 1
     assert track.artist == "ДК Енергетик"
     assert track.original_artist == "DK Energetyk"
-    assert track.__dict__["album_artist"] == "ДК Енергетик"
+    assert track.album_artist == "ДК Енергетик"
 
     assert len(processor.calls) == 1
     call = processor.calls[0]
@@ -312,7 +313,11 @@ async def test_processor_failure_returns_false(tmp_path: Path) -> None:
 
     # Processor that returns False
     class FailingProcessor:
-        async def update_artist_async(self, *_args: Any, **_kwargs: Any) -> bool:
+        """Stub processor that always returns False."""
+
+        @staticmethod
+        async def update_artist_async(*_args: Any, **_kwargs: Any) -> bool:
+            """Always return False."""
             return False
 
     processor: Any = FailingProcessor()
@@ -340,7 +345,10 @@ async def test_processor_exception_logged(tmp_path: Path) -> None:
 
     # Processor that raises exception
     class ExceptionProcessor:
+        """Stub processor that raises on every call."""
+
         async def update_artist_async(self, *_args: Any, **_kwargs: Any) -> bool:
+            """Always raise exception."""
             raise RuntimeError("Processor failed")
 
     processor: Any = ExceptionProcessor()
@@ -397,7 +405,7 @@ async def test_album_artist_updated_when_matching(tmp_path: Path) -> None:
     error_logger = MagicMock()
 
     track = _create_track(artist="OldArtist")
-    track.__dict__["album_artist"] = "OldArtist"
+    track.album_artist = "OldArtist"
 
     renamer = ArtistRenamer(
         processor,
@@ -409,7 +417,7 @@ async def test_album_artist_updated_when_matching(tmp_path: Path) -> None:
     result = await renamer.rename_tracks([track])
     assert len(result) == 1
     assert track.artist == "NewArtist"
-    assert track.__dict__["album_artist"] == "NewArtist"
+    assert track.album_artist == "NewArtist"
 
 
 @pytest.mark.asyncio
@@ -423,7 +431,7 @@ async def test_album_artist_not_updated_when_different(tmp_path: Path) -> None:
     error_logger = MagicMock()
 
     track = _create_track(artist="OldArtist")
-    track.__dict__["album_artist"] = "DifferentAlbumArtist"
+    track.album_artist = "DifferentAlbumArtist"
 
     renamer = ArtistRenamer(
         processor,
@@ -436,4 +444,4 @@ async def test_album_artist_not_updated_when_different(tmp_path: Path) -> None:
     assert len(result) == 1
     assert track.artist == "NewArtist"
     # Album artist should remain unchanged
-    assert track.__dict__["album_artist"] == "DifferentAlbumArtist"
+    assert track.album_artist == "DifferentAlbumArtist"

@@ -37,13 +37,13 @@ if str(PROJECT_ROOT) not in sys.path:
 @pytest.fixture
 def mock_console_logger() -> MagicMock:
     """Mock console logger for testing."""
-    return MagicMock(spec=logging.Logger)
+    return MagicMock()
 
 
 @pytest.fixture
 def mock_error_logger() -> MagicMock:
     """Mock error logger for testing."""
-    return MagicMock(spec=logging.Logger)
+    return MagicMock()
 
 
 @pytest.fixture

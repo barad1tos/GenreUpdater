@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.track_cleaning import TrackCleaningService, _normalize_whitespace
 from core.models.track_models import ChangeLogEntry, TrackDict
+from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 
+if TYPE_CHECKING:
+    from core.models.track_models import AppConfig
 
-# ========================= Normalize Whitespace Tests =========================
+# Normalize whitespace tests
 
 
 class TestNormalizeWhitespace:
@@ -55,15 +58,15 @@ def mock_track_processor() -> MagicMock:
 
 
 @pytest.fixture
-def mock_config() -> dict[str, Any]:
+def mock_config() -> AppConfig:
     """Create mock config."""
-    return {"logs_base_dir": "/tmp/logs"}
+    return create_test_app_config()
 
 
 @pytest.fixture
 def service(
     mock_track_processor: MagicMock,
-    mock_config: dict[str, Any],
+    mock_config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> TrackCleaningService:
@@ -89,7 +92,7 @@ def sample_track() -> TrackDict:
     )
 
 
-# ========================= Init Tests =========================
+# Init tests
 
 
 class TestTrackCleaningServiceInit:
@@ -99,7 +102,7 @@ class TestTrackCleaningServiceInit:
         """Should store track processor."""
         assert service._track_processor is mock_track_processor
 
-    def test_stores_config(self, service: TrackCleaningService, mock_config: dict[str, Any]) -> None:
+    def test_stores_config(self, service: TrackCleaningService, mock_config: AppConfig) -> None:
         """Should store config."""
         assert service._config is mock_config
 
@@ -112,7 +115,7 @@ class TestTrackCleaningServiceInit:
         assert service._error_logger is error_logger
 
 
-# ========================= Extract and Clean Metadata Tests =========================
+#  Extract and Clean Metadata Tests
 
 
 class TestExtractAndCleanMetadata:
@@ -159,7 +162,7 @@ class TestExtractAndCleanMetadata:
         assert call_kwargs["album_name"] == "Album Name"
 
 
-# ========================= Create Change Log Entry Tests =========================
+# Create Change Log Entry Tests
 
 
 class TestCreateChangeLogEntry:

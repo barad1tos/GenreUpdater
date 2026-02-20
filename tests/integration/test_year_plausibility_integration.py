@@ -9,30 +9,18 @@ Tests use mocked external dependencies but real internal logic.
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator, Mapping
+from collections.abc import Mapping
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
-from core.models.album_type import reset_patterns
 from core.models.track_models import TrackDict
 from core.tracks.year_fallback import YearFallbackHandler
 from tests.mocks.protocol_mocks import (
     MockExternalApiService,
     MockPendingVerificationService,
 )
-
-
-@pytest.fixture(autouse=True)
-def _clean_album_type_patterns() -> Generator[None]:
-    """Reset album type patterns before each test.
-
-    Prevents xdist global state pollution from tests that call
-    configure_patterns() with custom patterns on the same worker.
-    """
-    reset_patterns()
-    yield
-    reset_patterns()
 
 
 class MockLogger(logging.Logger):

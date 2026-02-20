@@ -308,17 +308,17 @@ class TestDevelopmentConfigTestArtists:
 
     def test_parses_comma_separated_string(self) -> None:
         """Should parse comma-separated string to list."""
-        config = DevelopmentConfig(test_artists="Amon Amarth, Children of Bodom")
+        config = DevelopmentConfig.model_validate({"test_artists": "Amon Amarth, Children of Bodom"})
         assert config.test_artists == ["Amon Amarth", "Children of Bodom"]
 
     def test_parses_string_with_extra_whitespace(self) -> None:
         """Should strip whitespace from items."""
-        config = DevelopmentConfig(test_artists="  Artist1  ,  Artist2  ")
+        config = DevelopmentConfig.model_validate({"test_artists": "  Artist1  ,  Artist2  "})
         assert config.test_artists == ["Artist1", "Artist2"]
 
     def test_filters_empty_strings(self) -> None:
         """Should filter out empty strings from comma-separated input."""
-        config = DevelopmentConfig(test_artists="Artist1,,Artist2,")
+        config = DevelopmentConfig.model_validate({"test_artists": "Artist1,,Artist2,"})
         assert config.test_artists == ["Artist1", "Artist2"]
 
     def test_accepts_list_input(self) -> None:
@@ -328,7 +328,7 @@ class TestDevelopmentConfigTestArtists:
 
     def test_accepts_tuple_input(self) -> None:
         """Should accept tuple and convert to list."""
-        config = DevelopmentConfig(test_artists=("Artist1", "Artist2"))
+        config = DevelopmentConfig.model_validate({"test_artists": ("Artist1", "Artist2")})
         assert config.test_artists == ["Artist1", "Artist2"]
 
     def test_raises_for_dict_input(self) -> None:

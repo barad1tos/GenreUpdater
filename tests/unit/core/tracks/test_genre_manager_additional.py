@@ -14,11 +14,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
 from core.models.track_models import TrackDict
 from core.tracks.genre_manager import GenreManager
+from tests.factories import create_test_app_config
 
 
 def _create_mock_logger() -> MagicMock:
@@ -57,21 +59,18 @@ class TestGenreManagerCoreFunctionality:
 
     @staticmethod
     def create_genre_manager(
-        config: dict[str, Any] | None = None,
         dry_run: bool = False,
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
         mock_track_processor = AsyncMock()
         mock_track_processor.update_track_async = AsyncMock(return_value=True)
 
-        test_config = config or {"force_update": False, "processing": {"batch_size": 100}}
-
         return GenreManager(
             track_processor=mock_track_processor,
             console_logger=_create_mock_logger(),
             error_logger=_create_mock_logger(),
             analytics=MagicMock(),
-            config=test_config,
+            config=create_test_app_config(),
             dry_run=dry_run,
         )
 
