@@ -20,18 +20,6 @@ def scripts_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def mock_error_logger() -> MagicMock:
-    """Create a mock error logger for direct assertion access."""
-    return MagicMock()
-
-
-@pytest.fixture
-def mock_console_logger() -> MagicMock:
-    """Create a mock console logger for direct assertion access."""
-    return MagicMock()
-
-
-@pytest.fixture
 def validator(
     scripts_dir: Path,
     mock_error_logger: MagicMock,

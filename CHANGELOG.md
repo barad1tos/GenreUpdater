@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Hardened type safety across test suite (17 files): typed MockCacheService, async protocol conformance, explicit annotations, `_ = param` discard pattern, factory-based config creation
+- Hardened type safety across test suite (17 files): typed MockCacheService, async protocol conformance, explicit annotations, `_ = param` discard pattern, factory-based config creation, centralized logger fixtures
 - Narrowed 22 broad `except Exception` blocks to specific exception types across 12 files
 - Replaced `contextlib.suppress` with explicit try/except + DEBUG logging (3 files)
 - Replaced `Any` types with concrete types and Protocols (cli, discogs, rate_limiter, year_repair)
