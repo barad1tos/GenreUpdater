@@ -45,7 +45,7 @@ dev = [
     "pytest-examples>=0.0.14",
     "pydoclint>=0.8.3",
     # Linting & formatting
-    "ruff==0.15.1",
+    "ruff==0.15.2",
     "ty==0.0.18",
     "basedpyright==1.38.1", # IDE support - ty is used for pre-commit
     "sourcery==1.43.0; sys_platform == 'darwin'", # macOS only
