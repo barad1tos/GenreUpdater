@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-DAEMON_DIR="$HOME/Library/Application Support/GenreUpdater/app"
+SUPPORT_DIR="$HOME/Library/Application Support/GenreUpdater"
+DAEMON_DIR="$SUPPORT_DIR/app"
 
 echo "=== Manual Daemon Update ==="
 
