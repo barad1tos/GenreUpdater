@@ -47,6 +47,9 @@ fi
 # Create fixtures dir if needed
 mkdir -p "$(dirname "$FIXTURE_PATH")"
 
+# Clean up temp file on any exit (success, error, or signal)
+trap 'rm -f "$FIXTURE_PATH.tmp"' EXIT
+
 # Copy snapshot to fixtures (decompress if needed)
 log "Copying snapshot to fixtures..."
 if [[ "$SNAPSHOT" == *.gz ]]; then
