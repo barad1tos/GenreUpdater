@@ -2,7 +2,7 @@
 # sync-fixtures.sh - Push library snapshot to repo for regression tests
 #
 # Called by run-daemon.sh after successful pipeline run
-# Syncs library_snapshot.json → tests/fixtures/
+# Syncs library_snapshot.json(.gz) → tests/fixtures/ (always as plain JSON)
 
 set -euo pipefail
 
@@ -15,10 +15,17 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [sync-fixtures] $*"
 }
 
-# Check if snapshot exists
-SNAPSHOT="$LOGS_DIR/cache/library_snapshot.json"
-if [[ ! -f "$SNAPSHOT" ]]; then
-    log "Snapshot not found: $SNAPSHOT"
+# Resolve snapshot path (mirrors Python's _snapshot_path logic)
+# Try compressed first (default config), then plain JSON
+SNAPSHOT_GZ="$LOGS_DIR/cache/library_snapshot.json.gz"
+SNAPSHOT_JSON="$LOGS_DIR/cache/library_snapshot.json"
+
+if [[ -f "$SNAPSHOT_GZ" ]]; then
+    SNAPSHOT="$SNAPSHOT_GZ"
+elif [[ -f "$SNAPSHOT_JSON" ]]; then
+    SNAPSHOT="$SNAPSHOT_JSON"
+else
+    log "Snapshot not found (checked .json.gz and .json)"
     exit 0
 fi
 
@@ -40,17 +47,27 @@ fi
 # Create fixtures dir if needed
 mkdir -p "$(dirname "$FIXTURE_PATH")"
 
+# Clean up temp file on any exit (success, error, or signal)
+trap 'rm -f "$FIXTURE_PATH.tmp"' EXIT
+
+# Copy snapshot to fixtures (decompress if needed)
+log "Copying snapshot to fixtures..."
+if [[ "$SNAPSHOT" == *.gz ]]; then
+    gunzip -c "$SNAPSHOT" > "$FIXTURE_PATH.tmp"
+else
+    cp "$SNAPSHOT" "$FIXTURE_PATH.tmp"
+fi
+
 # Check if snapshot changed
 if [[ -f "$FIXTURE_PATH" ]]; then
-    if diff -q "$SNAPSHOT" "$FIXTURE_PATH" >/dev/null 2>&1; then
+    if diff -q "$FIXTURE_PATH.tmp" "$FIXTURE_PATH" >/dev/null 2>&1; then
+        rm "$FIXTURE_PATH.tmp"
         log "Snapshot unchanged, skipping"
         exit 0
     fi
 fi
 
-# Copy and commit
-log "Copying snapshot to fixtures..."
-cp "$SNAPSHOT" "$FIXTURE_PATH"
+mv "$FIXTURE_PATH.tmp" "$FIXTURE_PATH"
 
 # Ensure trailing newline (fixes end-of-file-fixer pre-commit hook)
 [[ -n "$(tail -c1 "$FIXTURE_PATH")" ]] && echo >> "$FIXTURE_PATH"
