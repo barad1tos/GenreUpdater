@@ -62,7 +62,7 @@ The daemon is a **thin infrastructure wrapper**. All business logic is in Python
 
 ```bash
 # Just run the installer - it handles everything
-cd "~/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0"
+cd "~/Developer/Own/scripts/python/Genres Autoupdater v2.0"
 ./launchctl/bin/install.sh
 ```
 
