@@ -10,7 +10,7 @@ LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_NAME="com.music.genreautoupdater"
 
 DAEMON_DIR="$SUPPORT_DIR/app"
-DEV_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0"
+DEV_DIR="$HOME/Developer/Own/scripts/python/Genres Autoupdater v2.0"
 
 echo "=== Genre Updater Daemon Installer ==="
 echo ""

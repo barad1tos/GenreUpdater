@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-DAEMON_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0-daemon"
+SUPPORT_DIR="$HOME/Library/Application Support/GenreUpdater"
+DAEMON_DIR="$SUPPORT_DIR/app"
 
 echo "=== Manual Daemon Update ==="
 

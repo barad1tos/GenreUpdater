@@ -23,7 +23,7 @@ LOGS_DIR="$SUPPORT_DIR/logs"
 BIN_DIR="$SUPPORT_DIR/bin"
 
 DAEMON_DIR="$SUPPORT_DIR/app"
-CONFIG_SOURCE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/3. Git/Own/scripts/python/Genres Autoupdater v2.0/my-config.yaml"
+CONFIG_SOURCE="$HOME/Developer/Own/scripts/python/Genres Autoupdater v2.0/my-config.yaml"
 
 LOCK_FILE="$STATE_DIR/run.lock"
 DAEMON_LOG="$LOGS_DIR/daemon.log"
