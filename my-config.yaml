@@ -38,7 +38,9 @@ retry_delay_seconds: 1 # Base delay between retries
 # In-memory cache settings (used by CacheService for temporary data like fetched tracks)
 cache_ttl_seconds: 1800 # Default lifetime for in-memory cache items (30 min)
 # Incremental update settings
-incremental_interval_minutes: 1 # Interval for incremental updates (1 minute)
+# Slightly below the launchctl ThrottleInterval (900s = 15min) to avoid
+# sub-second drift causing the Python gate to reject a launchctl tick.
+incremental_interval_minutes: 14 # Interval for incremental updates (14 minutes)
 # -----------------------------------------------------------------------
 # 3. FEATURE TOGGLES AND SETTINGS
 # -----------------------------------------------------------------------
@@ -135,9 +137,12 @@ logging:
   csv_output_file: csv/track_list.csv
   changes_report_file: csv/changes_report.csv
   dry_run_report_file: reports/dry_run_report.html
-  last_incremental_run_file: last_incremental_run.log
+  # State files must live on local APFS (not iCloud Drive) to avoid EDEADLK
+  # from iCloud file provider locking during active write. Absolute paths
+  # override logs_base_dir thanks to pathlib's join-reset-on-absolute behavior.
+  last_incremental_run_file: /Users/cloud/Library/Application Support/GenreUpdater/state/last_incremental_run.log
   pending_verification_file: csv/pending_year_verification.csv
-  last_db_verify_log: main/last_db_verify.log
+  last_db_verify_log: /Users/cloud/Library/Application Support/GenreUpdater/state/last_db_verify.log
 
   # Log levels configuration
   levels:
