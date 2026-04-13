@@ -7,16 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+from dotenv import load_dotenv
 
 from core.core_config import load_config as load_yaml_config
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
-
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None  # type: ignore[assignment]
 
 # User config takes precedence over template (my-config.yaml is gitignored)
 DEFAULT_CONFIG_FILES: list[str] = ["my-config.yaml", "config.yaml"]
@@ -27,19 +23,17 @@ class Config:
 
     Handles config file discovery (env var, defaults) and delegates
     YAML loading + Pydantic validation to ``core.core_config.load_config``.
+
+    Args:
+        config_path: Path to the configuration file (use default if None)
+
+    Raises:
+        FileNotFoundError: If no configuration file is found.
     """
 
     def __init__(self, config_path: str | None = None) -> None:
-        """Initialize configuration.
-
-        Args:
-            config_path: Path to the configuration file (use default if None)
-
-        """
         if config_path is None:
-            # Load .env file if not already loaded
-            if load_dotenv is not None:
-                load_dotenv()
+            load_dotenv()
 
             # Try environment variable first, then try each default config file
             config_path = os.getenv("CONFIG_PATH")
@@ -56,8 +50,8 @@ class Config:
                 )
                 raise FileNotFoundError(msg)
 
-        # config_path is guaranteed to be not None at this point
-        self.config_path = config_path
+        # config_path is guaranteed to be str at this point
+        self.config_path: str = config_path
         self._resolved_path: str | None = None
         self._app_config: AppConfig | None = None
 
@@ -76,18 +70,21 @@ class Config:
         Returns:
             Validated AppConfig Pydantic model.
 
+        Raises:
+            RuntimeError: If the configuration file cannot be loaded or parsed.
         """
-        if self._app_config is None:
-            load_path = Path(os.path.expandvars(self.config_path)).expanduser()
-            try:
-                app_config = load_yaml_config(str(load_path))
-            except (OSError, ValueError, yaml.YAMLError, RuntimeError) as e:
-                msg = f"Failed to load configuration from '{load_path}': {e}"
-                raise RuntimeError(msg) from e
-            self._app_config = app_config
-            self._resolved_path = self._resolve_config_path()
+        if self._app_config is not None:
+            return self._app_config
 
-        return self._app_config
+        load_path = Path(os.path.expandvars(self.config_path)).expanduser()
+        try:
+            app_config = load_yaml_config(str(load_path))
+        except (OSError, ValueError, yaml.YAMLError, RuntimeError) as e:
+            msg = f"Failed to load configuration from '{load_path}': {e}"
+            raise RuntimeError(msg) from e
+        self._app_config = app_config
+        self._resolved_path = self._resolve_config_path()
+        return app_config
 
     @property
     def resolved_path(self) -> str:

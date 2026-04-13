@@ -408,9 +408,9 @@ def main() -> int:
         return 0
 
     # Connect to GitHub
-    repo: Repository | None = None
     if args.dry_run:
         print("\n[DRY RUN MODE - No issues will be created]\n")
+        repo = None
     else:
         github_client = Github(auth=Auth.Token(token))  # type: ignore[arg-type]
         repo = github_client.get_repo(args.repo)

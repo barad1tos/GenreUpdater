@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 
 from core.logger import LogFormat
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
@@ -36,15 +36,14 @@ T = TypeVar("T")
 
 
 class CacheOrchestrator(CacheServiceProtocol):
-    """Orchestrates multiple specialized cache services with unified interface."""
+    """Orchestrates multiple specialized cache services with unified interface.
+
+    Args:
+        config: Typed application configuration
+        logger: Optional logger instance
+    """
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        """Initialize CacheOrchestrator with configuration.
-
-        Args:
-            config: Typed application configuration
-            logger: Optional logger instance
-        """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         # Initialize configuration manager later when needed
@@ -75,7 +74,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         results = await asyncio.gather(*(task for _, task in service_tasks), return_exceptions=True)
 
         failed_services: list[str] = []
-        for (service_name, _), result in zip(service_tasks, results, strict=False):
+        for (service_name, _), result in zip(service_tasks, results, strict=True):
             if isinstance(result, Exception):
                 self.logger.error("Failed to initialize %s: %s", LogFormat.entity(service_name), result, exc_info=result)
                 failed_services.append(service_name)
@@ -114,7 +113,28 @@ class CacheOrchestrator(CacheServiceProtocol):
 
     # Generic Cache API
 
-    async def get_async(  # type: ignore[override]  # Protocol uses @overload with Literal["ALL"]; concrete impl uses a single unified signature
+    @overload
+    async def get_async(
+        self,
+        key_data: Literal["ALL"],
+        compute_func: None = None,
+    ) -> list[TrackDict]: ...
+
+    @overload
+    async def get_async(
+        self,
+        key_data: str,
+        compute_func: None = None,
+    ) -> list[TrackDict] | None: ...
+
+    @overload
+    async def get_async(
+        self,
+        key_data: CacheableKey,
+        compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
+    ) -> CacheableValue: ...
+
+    async def get_async(
         self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
@@ -217,7 +237,7 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         results = await asyncio.gather(*(task for _, task in save_tasks), return_exceptions=True)
 
-        for (service_name, _), result in zip(save_tasks, results, strict=False):
+        for (service_name, _), result in zip(save_tasks, results, strict=True):
             if isinstance(result, Exception):
                 self.logger.error("Failed to save %s to disk: %s", LogFormat.entity(service_name), result, exc_info=result)
 
