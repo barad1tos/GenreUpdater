@@ -36,7 +36,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     # Documentation
-    "mkdocs>=1.6",
+    "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.6",
     "mkdocstrings[python]==1.0.3",
     "mkdocs-gen-files>=0.6.1",
