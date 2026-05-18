@@ -59,7 +59,7 @@ dev = [
     "coverage==7.14.0",
     "pytest-html==4.2.0",
     "pytest-sugar==1.1.1",
-    "hypothesis==6.152.5",
+    "hypothesis==6.152.7",
     # Type stubs & tools
     "types-pyyaml==6.0.12.20260510",
     "cst-lsp==0.1.3",
