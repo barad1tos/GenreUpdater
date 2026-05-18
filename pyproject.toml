@@ -47,7 +47,7 @@ dev = [
     # Linting & formatting
     "ruff==0.15.13",
     "ty==0.0.37",
-    "basedpyright==1.39.3", # IDE support - ty is used for pre-commit
+    "basedpyright==1.39.5", # IDE support - ty is used for pre-commit
     "sourcery==1.43.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.4",
     "pip-audit==2.10.0",
