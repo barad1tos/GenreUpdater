@@ -46,7 +46,7 @@ dev = [
     "pydoclint>=0.8.3",
     # Linting & formatting
     "ruff==0.16.1",
-    "ty==0.0.63",
+    "ty==0.0.65",
     "basedpyright==1.39.9", # IDE support - ty is used for pre-commit
     "sourcery==1.44.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.4",
