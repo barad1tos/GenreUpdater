@@ -76,7 +76,7 @@ class TestSaveCsv:
         ]
         fieldnames = ["name", "artist"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         assert file_path.exists()
         with file_path.open(encoding="utf-8") as f:
@@ -97,7 +97,7 @@ class TestSaveCsv:
         data = [{"name": "Track1"}]
         fieldnames = ["name"]
 
-        save_csv(data, fieldnames, str(nested_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(nested_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         assert nested_path.exists()
         assert nested_path.parent.is_dir()
@@ -113,7 +113,7 @@ class TestSaveCsv:
         data = [{"name": "Track1", "artist": "Artist1", "extra_field": "should_not_appear"}]
         fieldnames = ["name", "artist"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         with file_path.open(encoding="utf-8") as f:
             content = f.read()
@@ -131,7 +131,7 @@ class TestSaveCsv:
         data = [{"name": "Track1"}]  # Missing 'artist' field
         fieldnames = ["name", "artist"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         with file_path.open(encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -150,7 +150,7 @@ class TestSaveCsv:
         data: list[dict[str, str]] = []
         fieldnames = ["name", "artist"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         assert file_path.exists()
         with file_path.open(encoding="utf-8") as f:
@@ -169,7 +169,7 @@ class TestSaveCsv:
         data = [{"name": "Track1"}]
         fieldnames = ["name"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         # Should have 2 info calls: starting and completion
         assert console_logger.info.call_count == 2
@@ -185,7 +185,7 @@ class TestSaveCsv:
         data = [{"name": "Трек", "artist": "日本語アーティスト"}]
         fieldnames = ["name", "artist"]
 
-        save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+        save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         with file_path.open(encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -207,7 +207,7 @@ class TestSaveCsv:
 
         # Mock Path.replace to raise OSError after temp file is written
         with patch.object(Path, "replace", side_effect=OSError("Simulated error")):
-            save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+            save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         # Temp file should be cleaned up
         assert not temp_path.exists()
@@ -227,6 +227,6 @@ class TestSaveCsv:
 
         # Mock open to raise OSError during write
         with patch("pathlib.Path.open", side_effect=OSError("Disk full")):
-            save_csv(data, fieldnames, str(file_path), console_logger, error_logger, "tracks")
+            save_csv(data, fieldnames, file_path=str(file_path), console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
         error_logger.exception.assert_called()

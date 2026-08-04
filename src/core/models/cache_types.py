@@ -148,11 +148,12 @@ class LibraryDeltaCache:
     def from_dict(cls, data: dict[str, Any]) -> LibraryDeltaCache:
         """Deserialize delta cache."""
         tracked_since_raw = data.get("tracked_since")
-        tracked_since = datetime.fromisoformat(tracked_since_raw) if tracked_since_raw else None
+        tracked_since = datetime.fromisoformat(str(tracked_since_raw or "")) if tracked_since_raw else None
+        raw_field_hashes: dict[str, str] = data.get("field_hashes", {})
         return cls(
             last_run=datetime.fromisoformat(data["last_run"]),
             processed_track_ids=set(map(str, data.get("processed_track_ids", []))),
-            field_hashes=dict(data.get("field_hashes", {})),
+            field_hashes=dict(raw_field_hashes),
             tracked_since=tracked_since,
         )
 

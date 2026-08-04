@@ -86,6 +86,7 @@ class TrackCleaningService:
     def _create_change_log_entry(
         track_id: str,
         artist: str,
+        *,
         original_track_name: str,
         original_album_name: str,
         cleaned_track_name: str,

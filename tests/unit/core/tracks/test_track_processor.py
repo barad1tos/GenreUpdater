@@ -101,6 +101,7 @@ class _MockAppleScriptClient:
         self,
         script_name: str,
         arguments: list[str] | None = None,
+        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,
@@ -273,6 +274,7 @@ class _MockCacheService:
 def _create_track(
     track_id: str = "12345",
     name: str = "Test Track",
+    *,
     artist: str = "Test Artist",
     album: str = "Test Album",
     genre: str | None = "Rock",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 from enum import StrEnum
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, overload
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -544,8 +544,17 @@ class TrackDict(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    @overload
+    def get(self, key: str, default: None = None) -> TrackFieldValue: ...
+
+    @overload
+    def get(self, key: str, default: str | int) -> str | int: ...
+
     def get(self, key: str, default: TrackFieldValue = None) -> TrackFieldValue:
         """Get attribute value with default, mimicking dict.get() behavior.
+
+        A non-None default is always substituted for missing or None values,
+        so the overloads narrow the return type to non-optional in that case.
 
         Args:
             key: The attribute name to retrieve

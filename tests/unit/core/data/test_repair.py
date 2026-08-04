@@ -160,6 +160,7 @@ async def test_apply_year_reverts_matches_by_id_and_album_name() -> None:
         async def update_track_async(
             self,
             track_id: str,
+            *,
             new_track_name: str | None = None,
             new_album_name: str | None = None,
             new_genre: str | None = None,

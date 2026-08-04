@@ -38,6 +38,7 @@ class IncrementalFilterService(BaseProcessor):
 
     def __init__(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
@@ -114,33 +115,26 @@ class IncrementalFilterService(BaseProcessor):
             return []
 
         try:
-            # Load previous track state from CSV
-            csv_path = get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv")
-            existing_tracks = self._track_list_loader(csv_path)
-
+            existing_tracks = self._track_list_loader(get_full_log_path(self.config, "csv_output_file", "csv/track_list.csv"))
             if not existing_tracks:
                 return []
 
             # Compute delta using TrackDict objects directly
             delta = compute_track_delta(tracks, existing_tracks)
-
             if not delta.updated_ids:
                 return []
 
-            # Filter tracks that have updated status
-            status_changed_tracks: list[TrackDict] = []
-            tracks_by_id = {str(t.get("id", "")): t for t in tracks if t.get("id")}
-
-            for track_id in delta.updated_ids:
-                if track_id in tracks_by_id:
-                    track = tracks_by_id[track_id]
-                    status_changed_tracks.append(track)
-
-            return status_changed_tracks
+            return self._collect_updated_tracks(tracks, delta.updated_ids)
 
         except (OSError, ValueError) as e:
             self.console_logger.warning("Failed to check status changes: %s", e)
             return []
+
+    @staticmethod
+    def _collect_updated_tracks(tracks: list[TrackDict], updated_ids: list[str]) -> list[TrackDict]:
+        """Pick the current tracks whose ids appear in the updated-id list."""
+        tracks_by_id = {str(t.get("id", "")): t for t in tracks if t.get("id")}
+        return [tracks_by_id[track_id] for track_id in updated_ids if track_id in tracks_by_id]
 
     def get_dry_run_actions(self) -> list[dict[str, Any]]:
         """Return recorded dry-run actions."""

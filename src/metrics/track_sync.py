@@ -190,7 +190,15 @@ async def build_musicapp_track_map(
 
         # Handle partial sync with cache coordination
         if partial_sync:
-            await handle_partial_sync_cache(track, processed_albums, cache_service, album_key, artist, album, error_logger)
+            await handle_partial_sync_cache(
+                track,
+                processed_albums=processed_albums,
+                cache_service=cache_service,
+                album_key=album_key,
+                artist=artist,
+                album=album,
+                error_logger=error_logger,
+            )
 
         # Create normalized track dictionary
         track_map[track_id] = create_normalized_track_dict(track, track_id, artist, album)
@@ -207,6 +215,7 @@ def normalize_track_year_fields(track: TrackDict) -> None:
 
 async def handle_partial_sync_cache(
     track: TrackDict,
+    *,
     processed_albums: dict[str, str],
     cache_service: CacheServiceProtocol,
     album_key: str,
@@ -218,11 +227,12 @@ async def handle_partial_sync_cache(
     if album_key not in processed_albums:
         return
 
-    track.year_set_by_mgu = processed_albums[album_key]
+    processed_year = processed_albums[album_key]
+    track.year_set_by_mgu = processed_year
     try:
         cached_year = await cache_service.get_album_year_from_cache(artist, album)
-        if not cached_year or cached_year != track.year_set_by_mgu:
-            await cache_service.store_album_year_in_cache(artist, album, track.year_set_by_mgu)
+        if not cached_year or cached_year != processed_year:
+            await cache_service.store_album_year_in_cache(artist, album, processed_year)
     except OSError:
         error_logger.exception(
             "Error syncing year from CSV to cache for %s - %s",
@@ -596,6 +606,7 @@ def convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
 async def sync_track_list_with_current(
     all_tracks: Sequence[TrackDict],
     csv_path: str,
+    *,
     cache_service: CacheServiceProtocol,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
@@ -678,7 +689,7 @@ async def sync_track_list_with_current(
             "Filled missing fields for %d tracks via AppleScript cache",
             missing_fields_count,
         )
-    save_csv(track_dicts, fieldnames, csv_path, console_logger, error_logger, "tracks")
+    save_csv(track_dicts, fieldnames, file_path=csv_path, console_logger=console_logger, error_logger=error_logger, data_type="tracks")
 
 
 def save_track_map_to_csv(
@@ -691,4 +702,4 @@ def save_track_map_to_csv(
     sorted_tracks = sorted(track_map.values(), key=lambda t: t.id)
     track_dicts = [convert_track_to_csv_dict(track) for track in sorted_tracks]
     fieldnames = TRACK_FIELDNAMES
-    save_csv(track_dicts, fieldnames, csv_path, console_logger, error_logger, "tracks")
+    save_csv(track_dicts, fieldnames, file_path=csv_path, console_logger=console_logger, error_logger=error_logger, data_type="tracks")

@@ -45,6 +45,7 @@ class GenreManager(BaseProcessor):
 
     def __init__(
         self,
+        *,
         track_processor: TrackProcessor,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -482,6 +483,7 @@ class GenreManager(BaseProcessor):
         self,
         artist_name: str,
         artist_tracks: list[TrackDict],
+        *,
         last_run: datetime | None,
         force: bool,
         artist_semaphore: asyncio.Semaphore,
@@ -658,6 +660,7 @@ class GenreManager(BaseProcessor):
         self,
         artist_name: str,
         artist_tracks: list[TrackDict],
+        *,
         last_run: datetime | None,
         force: bool,
         artist_semaphore: asyncio.Semaphore,
@@ -679,4 +682,11 @@ class GenreManager(BaseProcessor):
         """
         if applescript_semaphore is None:
             applescript_semaphore = asyncio.Semaphore(self.config.apple_script_concurrency)
-        return await self._process_single_artist_wrapper(artist_name, artist_tracks, last_run, force, artist_semaphore, applescript_semaphore)
+        return await self._process_single_artist_wrapper(
+            artist_name,
+            artist_tracks,
+            last_run=last_run,
+            force=force,
+            artist_semaphore=artist_semaphore,
+            applescript_semaphore=applescript_semaphore,
+        )

@@ -61,6 +61,7 @@ def config() -> AppConfig:
 
 @pytest.fixture
 def executor(
+    *,
     mock_ap_client: AsyncMock,
     mock_cache_service: AsyncMock,
     mock_security_validator: MagicMock,
@@ -82,6 +83,7 @@ def executor(
 
 @pytest.fixture
 def dry_run_executor(
+    *,
     mock_ap_client: AsyncMock,
     mock_cache_service: AsyncMock,
     mock_security_validator: MagicMock,
@@ -177,7 +179,7 @@ class TestUpdateProperty:
     async def test_success_returns_true_true(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test successful update returns (True, True)."""
         mock_ap_client.run_script.return_value = "Success: updated genre"
-        success, changed = await executor._update_property("123", "genre", "Rock")
+        success, changed = await executor._update_property("123", property_name="genre", property_value="Rock")
         assert success is True
         assert changed is True
 
@@ -185,7 +187,7 @@ class TestUpdateProperty:
     async def test_no_change_returns_true_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test no-change result returns (True, False)."""
         mock_ap_client.run_script.return_value = "No Change: genre already set"
-        success, changed = await executor._update_property("123", "genre", "Rock")
+        success, changed = await executor._update_property("123", property_name="genre", property_value="Rock")
         assert success is True
         assert changed is False
 
@@ -193,7 +195,7 @@ class TestUpdateProperty:
     async def test_failure_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test failure result returns (False, False)."""
         mock_ap_client.run_script.return_value = "Error: track not found"
-        success, changed = await executor._update_property("123", "genre", "Rock")
+        success, changed = await executor._update_property("123", property_name="genre", property_value="Rock")
         assert success is False
         assert changed is False
 
@@ -201,7 +203,7 @@ class TestUpdateProperty:
     async def test_none_result_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test None result returns (False, False)."""
         mock_ap_client.run_script.return_value = None
-        success, changed = await executor._update_property("123", "genre", "Rock")
+        success, changed = await executor._update_property("123", property_name="genre", property_value="Rock")
         assert success is False
         assert changed is False
 
@@ -209,7 +211,7 @@ class TestUpdateProperty:
     async def test_exception_returns_false_false(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test exception returns (False, False)."""
         mock_ap_client.run_script.side_effect = OSError("Script failed")
-        success, changed = await executor._update_property("123", "genre", "Rock")
+        success, changed = await executor._update_property("123", property_name="genre", property_value="Rock")
         assert success is False
         assert changed is False
 
@@ -217,7 +219,9 @@ class TestUpdateProperty:
     async def test_passes_context_to_script(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test passes artist/album/track context to script."""
         mock_ap_client.run_script.return_value = "Success"
-        await executor._update_property("123", "genre", "Rock", artist="Beatles", album="Abbey Road", track_name="Come Together")
+        await executor._update_property(
+            "123", property_name="genre", property_value="Rock", artist="Beatles", album="Abbey Road", track_name="Come Together"
+        )
         mock_ap_client.run_script.assert_called_with(
             "update_property.applescript",
             ["123", "genre", "Rock"],
@@ -328,7 +332,7 @@ class TestUpdateSingleProperty:
         """Test logs success message when change made."""
         mock_ap_client.run_script.return_value = "Success: updated"
         with patch.object(executor.console_logger, "info") as mock_log:
-            result = await executor._update_single_property("123", "genre", "Rock")
+            result = await executor._update_single_property("123", property_name="genre", property_value="Rock")
             assert result is True
             mock_log.assert_called()
 
@@ -337,7 +341,7 @@ class TestUpdateSingleProperty:
         """Test logs debug message when no change needed."""
         mock_ap_client.run_script.return_value = "No Change"
         with patch.object(executor.console_logger, "debug") as mock_log:
-            result = await executor._update_single_property("123", "genre", "Rock")
+            result = await executor._update_single_property("123", property_name="genre", property_value="Rock")
             assert result is True
             mock_log.assert_called()
 
@@ -346,7 +350,7 @@ class TestUpdateSingleProperty:
         """Test logs warning message on failure."""
         mock_ap_client.run_script.return_value = "Error"
         with patch.object(executor.console_logger, "warning") as mock_log:
-            result = await executor._update_single_property("123", "genre", "Rock")
+            result = await executor._update_single_property("123", property_name="genre", property_value="Rock")
             assert result is False
             mock_log.assert_called()
 
@@ -358,7 +362,9 @@ class TestPerformPropertyUpdates:
     async def test_updates_all_properties(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test updates all provided properties."""
         mock_ap_client.run_script.return_value = "Success"
-        result = await executor._perform_property_updates("123", "Track", "Album", "Rock", "2020")
+        result = await executor._perform_property_updates(
+            "123", sanitized_track_name="Track", sanitized_album_name="Album", sanitized_genre="Rock", sanitized_year="2020"
+        )
         assert result is True
         assert mock_ap_client.run_script.call_count == 4
 
@@ -366,7 +372,9 @@ class TestPerformPropertyUpdates:
     async def test_skips_none_properties(self, executor: TrackUpdateExecutor, mock_ap_client: AsyncMock) -> None:
         """Test skips None properties."""
         mock_ap_client.run_script.return_value = "Success"
-        result = await executor._perform_property_updates("123", None, None, "Rock", None)
+        result = await executor._perform_property_updates(
+            "123", sanitized_track_name=None, sanitized_album_name=None, sanitized_genre="Rock", sanitized_year=None
+        )
         assert result is True
         assert mock_ap_client.run_script.call_count == 1
 

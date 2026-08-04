@@ -258,10 +258,13 @@ class BatchTrackFetcher:
         """
         args = ["", str(offset), str(batch_size)]  # empty artist, offset, limit
 
-        raw_output = await self.ap_client.run_script(
-            FETCH_TRACKS,
-            args,
-            timeout=300,  # 5 minutes per batch
+        raw_output = (
+            await self.ap_client.run_script(
+                FETCH_TRACKS,
+                args,
+                timeout=300,  # 5 minutes per batch
+            )
+            or ""
         )
 
         if not raw_output:

@@ -75,6 +75,7 @@ class TestYearRetrieverEdgeCases:
 
     @staticmethod
     def create_year_retriever(
+        *,
         track_processor: Any = None,
         cache_service: Any = None,
         external_api: Any = None,

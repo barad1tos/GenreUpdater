@@ -435,6 +435,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_returns_cached_value(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -462,6 +463,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_returns_none_for_cached_negative(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -488,6 +490,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_uses_musicbrainz_first(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -523,6 +526,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_falls_back_to_itunes(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -556,6 +560,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_caches_positive_result(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -589,6 +594,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_caches_negative_result(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,
@@ -625,6 +631,7 @@ class TestGetArtistStartYear:
     @pytest.mark.asyncio
     async def test_handles_invalid_cached_type(
         self,
+        *,
         mock_config: AppConfig,
         mock_console_logger: MagicMock,
         mock_error_logger: MagicMock,

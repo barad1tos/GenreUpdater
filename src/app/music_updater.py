@@ -278,9 +278,9 @@ class MusicUpdater:
         await sync_track_list_with_current(
             all_current_tracks,
             csv_path,
-            self.deps.cache_service,
-            self.console_logger,
-            self.error_logger,
+            cache_service=self.deps.cache_service,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
             partial_sync=True,  # Incremental sync - only process new/changed tracks
         )
 
@@ -290,8 +290,8 @@ class MusicUpdater:
             save_changes_report(
                 changes_log,
                 changes_path,
-                self.console_logger,
-                self.error_logger,
+                console_logger=self.console_logger,
+                error_logger=self.error_logger,
                 compact_mode=self.app_config.reporting.change_display_mode == "compact",
             )
 
@@ -808,9 +808,9 @@ class MusicUpdater:
                 await sync_track_list_with_current(
                     all_current_tracks,
                     csv_path,
-                    self.deps.cache_service,
-                    self.console_logger,
-                    self.error_logger,
+                    cache_service=self.deps.cache_service,
+                    console_logger=self.console_logger,
+                    error_logger=self.error_logger,
                     partial_sync=True,  # Incremental sync - only process new/changed tracks
                 )
 

@@ -89,6 +89,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_exits_early_when_no_tracks_found(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -119,6 +120,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_performs_full_sync_successfully(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -156,6 +158,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_raises_on_os_error(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -187,6 +190,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_raises_on_runtime_error(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -218,6 +222,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_logs_track_count(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -249,6 +254,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_raises_on_value_error(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -280,6 +286,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_logs_error_on_exception(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -315,6 +322,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_logs_music_app_running(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -342,6 +350,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_logs_starting_message(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -367,6 +376,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_logs_csv_path(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -397,6 +407,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_passes_applescript_client(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
@@ -427,6 +438,7 @@ class TestRunFullResync:
     @pytest.mark.asyncio
     async def test_creates_csv_directory(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,

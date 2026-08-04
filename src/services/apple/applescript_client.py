@@ -153,14 +153,15 @@ class AppleScriptClient(AppleScriptClientProtocol):
                     requests_per_window = rate_limit_cfg.requests_per_window
                     window_size = rate_limit_cfg.window_size_seconds
 
-                    self.rate_limiter = AppleScriptRateLimiter(
+                    rate_limiter = AppleScriptRateLimiter(
                         requests_per_window=requests_per_window,
                         window_seconds=window_size,
                         max_concurrent=concurrent_limit,
                         logger=self.console_logger,
                     )
-                    await self.rate_limiter.initialize()
-                    self.executor.update_rate_limiter(self.rate_limiter)
+                    self.rate_limiter = rate_limiter
+                    await rate_limiter.initialize()
+                    self.executor.update_rate_limiter(rate_limiter)
                     self.console_logger.info(
                         "%s initialized (%d scripts, concurrency: %d, rate: %d/%ss)",
                         LogFormat.entity("AppleScriptClient"),
@@ -172,8 +173,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
                 else:
                     # Use semaphore-only concurrency control (legacy behavior)
                     self.console_logger.debug("Creating semaphore with concurrency limit: %d", concurrent_limit)
-                    self.semaphore = asyncio.Semaphore(concurrent_limit)
-                    self.executor.update_semaphore(self.semaphore)
+                    semaphore = asyncio.Semaphore(concurrent_limit)
+                    self.semaphore = semaphore
+                    self.executor.update_semaphore(semaphore)
                     self.console_logger.info(
                         "%s initialized (%d scripts, concurrency: %d)",
                         LogFormat.entity("AppleScriptClient"),
@@ -225,6 +227,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
         self,
         script_name: str,
         arguments: list[str] | None = None,
+        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,

@@ -36,6 +36,7 @@ class MockLogger(logging.Logger):
         level: int,
         msg: object,
         args: tuple[object, ...] | Mapping[str, object],
+        *,
         exc_info: Any = None,
         extra: Mapping[str, object] | None = None,
         stack_info: bool = False,

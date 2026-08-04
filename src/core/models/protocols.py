@@ -100,13 +100,6 @@ class CacheServiceProtocol(Protocol):
     @overload
     async def get_async(
         self,
-        key_data: str,
-        compute_func: None = None,
-    ) -> list[TrackDict] | None: ...
-
-    @overload
-    async def get_async(
-        self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
     ) -> CacheableValue: ...
@@ -115,7 +108,7 @@ class CacheServiceProtocol(Protocol):
         self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
-    ) -> list[TrackDict] | CacheableValue:
+    ) -> CacheableValue:
         """Get a value from cache, optionally computing it if not present.
 
         Args:
@@ -398,6 +391,7 @@ class AppleScriptClientProtocol(Protocol):
         self,
         script_name: str,
         arguments: list[str] | None = None,
+        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,

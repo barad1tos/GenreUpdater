@@ -54,6 +54,7 @@ class TrackUpdateExecutor:
 
     def __init__(
         self,
+        *,
         ap_client: AppleScriptClientProtocol,
         cache_service: CacheServiceProtocol,
         security_validator: SecurityValidator,
@@ -61,7 +62,6 @@ class TrackUpdateExecutor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         analytics: AnalyticsProtocol,
-        *,
         dry_run: bool = False,
     ) -> None:
         self.ap_client = ap_client
@@ -107,6 +107,7 @@ class TrackUpdateExecutor:
     async def _update_property(
         self,
         track_id: str,
+        *,
         property_name: str,
         property_value: str | int,
         artist: str | None = None,
@@ -301,6 +302,7 @@ class TrackUpdateExecutor:
     async def _update_single_property(
         self,
         sanitized_track_id: str,
+        *,
         property_name: str,
         property_value: str,
         original_artist: str | None = None,
@@ -322,7 +324,12 @@ class TrackUpdateExecutor:
 
         """
         success, changed = await self._update_property(
-            sanitized_track_id, property_name, property_value, original_artist, original_album, original_track
+            sanitized_track_id,
+            property_name=property_name,
+            property_value=property_value,
+            artist=original_artist,
+            album=original_album,
+            track_name=original_track,
         )
         if success:
             if changed:
@@ -365,6 +372,7 @@ class TrackUpdateExecutor:
     async def _perform_property_updates(
         self,
         sanitized_track_id: str,
+        *,
         sanitized_track_name: str | None,
         sanitized_album_name: str | None,
         sanitized_genre: str | None,
@@ -559,7 +567,14 @@ class TrackUpdateExecutor:
         all_success = True
         any_success = False
         for property_name, property_value in updates:
-            success = await self._update_single_property(track_id, property_name, property_value, original_artist, album, track)
+            success = await self._update_single_property(
+                track_id,
+                property_name=property_name,
+                property_value=property_value,
+                original_artist=original_artist,
+                original_album=album,
+                original_track=track,
+            )
             any_success = any_success or success
             all_success = all_success and success
 
@@ -573,6 +588,7 @@ class TrackUpdateExecutor:
     async def update_track_async(
         self,
         track_id: str,
+        *,
         new_track_name: str | None = None,
         new_album_name: str | None = None,
         new_genre: str | None = None,
@@ -629,13 +645,13 @@ class TrackUpdateExecutor:
         # Perform actual updates
         return await self._perform_property_updates(
             sanitized_track_id,
-            sanitized_track_name,
-            sanitized_album_name,
-            sanitized_genre,
-            sanitized_year,
-            original_artist,
-            original_album,
-            original_track,
+            sanitized_track_name=sanitized_track_name,
+            sanitized_album_name=sanitized_album_name,
+            sanitized_genre=sanitized_genre,
+            sanitized_year=sanitized_year,
+            original_artist=original_artist,
+            original_album=original_album,
+            original_track=original_track,
         )
 
     def _prepare_artist_update(

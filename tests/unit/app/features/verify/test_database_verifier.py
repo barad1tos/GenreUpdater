@@ -67,6 +67,7 @@ def config(tmp_path: Path) -> AppConfig:
 
 @pytest.fixture
 def verifier(
+    *,
     mock_ap_client: Any,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
@@ -90,6 +91,7 @@ class TestDatabaseVerifierInit:
 
     def test_init_stores_dependencies(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -116,6 +118,7 @@ class TestDatabaseVerifierInit:
 
     def test_init_with_dry_run(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -252,6 +255,7 @@ class TestHandleInvalidTracks:
 
     def test_records_action_in_dry_run(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -295,6 +299,7 @@ class TestShouldAutoVerify:
     @pytest.mark.asyncio
     async def test_returns_false_when_disabled(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -444,6 +449,7 @@ class TestGetTracksToVerify:
 
     def test_filters_by_test_artists_in_dry_run(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -477,6 +483,7 @@ class TestGetTracksToVerify:
 
     def test_returns_all_when_no_test_artists(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -514,6 +521,7 @@ class TestUpdateVerificationTimestamp:
     @pytest.mark.asyncio
     async def test_skips_in_dry_run(
         self,
+        *,
         mock_ap_client: Any,
         console_logger: logging.Logger,
         error_logger: logging.Logger,

@@ -87,6 +87,7 @@ class YearFallbackHandler:
         self,
         proposed_year: str,
         album_tracks: list[TrackDict],
+        *,
         is_definitive: bool,
         confidence_score: int,
         artist: str,
@@ -131,8 +132,8 @@ class YearFallbackHandler:
 
         # Early exit: No change needed if existing year equals proposed year
         # Delegate to helper to keep main function return count under limit
-        if existing_year and existing_year == proposed_year:
-            return await self._handle_matching_year(existing_year, proposed_year, artist, album)
+        if existing_year is not None and existing_year == proposed_year:
+            return await self._handle_matching_year(proposed_year, proposed_year, artist, album)
 
         # Rule 2: Absurd year detection (when no existing year to compare)
         if await self._handle_absurd_year(proposed_year, existing_year, artist, album):
@@ -155,7 +156,8 @@ class YearFallbackHandler:
             return fresh_album_result
 
         # Rule 3: No existing year - nothing to preserve (year passed absurd check and confidence check)
-        if not existing_year:
+        preserved_year = existing_year or ""
+        if not preserved_year:
             self.console_logger.debug(
                 "[FALLBACK] Applying year %s for %s - %s (no existing year to preserve)",
                 proposed_year,
@@ -165,12 +167,21 @@ class YearFallbackHandler:
             return proposed_year
 
         # Delegate remaining rules to helper method
-        return await self._apply_existing_year_rules(proposed_year, existing_year, confidence_score, artist, album, year_scores, release_year)
+        return await self._apply_existing_year_rules(
+            proposed_year,
+            preserved_year,
+            confidence_score=confidence_score,
+            artist=artist,
+            album=album,
+            year_scores=year_scores,
+            release_year=release_year,
+        )
 
     async def _apply_existing_year_rules(
         self,
         proposed_year: str,
         existing_year: str,
+        *,
         confidence_score: int,
         artist: str,
         album: str,
@@ -201,7 +212,15 @@ class YearFallbackHandler:
             return special_result if special_result != "" else existing_year
 
         # Rule 5: Check for dramatic year change (now considers confidence score and suspicious years)
-        if await self._handle_dramatic_year_change(proposed_year, existing_year, confidence_score, artist, album, year_scores, release_year):
+        if await self._handle_dramatic_year_change(
+            proposed_year,
+            existing_year,
+            confidence_score=confidence_score,
+            artist=artist,
+            album=album,
+            year_scores=year_scores,
+            release_year=release_year,
+        ):
             # Propagate existing year to all tracks instead of skipping entirely
             return existing_year
 
@@ -421,7 +440,8 @@ class YearFallbackHandler:
         if album_info.album_type == AlbumType.NORMAL:
             return None  # Continue to next rule
 
-        reason = f"special_album_{album_info.album_type.value}"
+        album_type_name = album_info.album_type.name.lower()
+        reason = f"special_album_{album_type_name}"
         await self.pending_verification.mark_for_verification(
             artist=artist,
             album=album,
@@ -677,6 +697,7 @@ class YearFallbackHandler:
         self,
         proposed_year: str,
         existing_year: str,
+        *,
         confidence_score: int,
         artist: str,
         album: str,
@@ -844,7 +865,7 @@ class YearFallbackHandler:
             Most common year string, or None if no valid years found
 
         """
-        years = [str(track.get("year")) for track in tracks if track.get("year") and not is_empty_year(track.get("year"))]
+        years = [str(year_value) for track in tracks if (year_value := track.get("year", "")) and not is_empty_year(year_value)]
         if not years:
             return None
         counter = Counter(years)

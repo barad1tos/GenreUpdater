@@ -121,6 +121,7 @@ def pending_verification_service(
 
 @pytest.fixture
 async def api_orchestrator(
+    *,
     app_config: AppConfig,
     analytics: Analytics,
     console_logger: logging.Logger,
@@ -405,6 +406,7 @@ class TestApiCleanup:
     @pytest.mark.asyncio
     async def test_close_releases_resources(
         self,
+        *,
         app_config: AppConfig,
         analytics: Analytics,
         console_logger: logging.Logger,
@@ -436,6 +438,7 @@ class TestApiCleanup:
     @pytest.mark.asyncio
     async def test_double_close_safe(
         self,
+        *,
         app_config: AppConfig,
         analytics: Analytics,
         console_logger: logging.Logger,

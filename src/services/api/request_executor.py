@@ -106,6 +106,7 @@ class ApiRequestExecutor:
         self,
         api_name: str,
         url: str,
+        *,
         params: dict[str, str] | None = None,
         headers_override: dict[str, str] | None = None,
         max_retries: int | None = None,
@@ -283,7 +284,7 @@ class ApiRequestExecutor:
             return None
 
         # Setup request headers
-        request_headers = dict(self.session.headers)
+        request_headers: dict[str, str] = {str(name): str(value) for name, value in self.session.headers.items()}
         if api_name == "discogs":
             if not self.discogs_token:
                 self.error_logger.error("Discogs token is missing or could not be loaded")
@@ -376,7 +377,14 @@ class ApiRequestExecutor:
         except RuntimeError as rt:
             return self._handle_runtime_error(rt, api_name, attempt, max_retries, url)
         except (TimeoutError, aiohttp.ClientError) as e:
-            return await self._handle_client_error(e, api_name, attempt, max_retries, base_delay, url)
+            return await self._handle_client_error(
+                e,
+                api_name=api_name,
+                attempt=attempt,
+                max_retries=max_retries,
+                base_delay=base_delay,
+                url=url,
+            )
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             self._handle_unexpected_error(e, api_name, url)
             return None
@@ -450,7 +458,14 @@ class ApiRequestExecutor:
                 elapsed = time.monotonic() - start_time
                 self.api_call_durations[api_name].append(elapsed)
 
-                return await self._process_response(response, api_name, url, attempt, log_url, elapsed)
+                return await self._process_response(
+                    response,
+                    api_name=api_name,
+                    url=url,
+                    attempt=attempt,
+                    log_url=log_url,
+                    elapsed=elapsed,
+                )
 
         finally:
             if acquired:
@@ -478,6 +493,7 @@ class ApiRequestExecutor:
     async def _process_response(
         self,
         response: aiohttp.ClientResponse,
+        *,
         api_name: str,
         url: str,
         attempt: int,
@@ -650,6 +666,7 @@ class ApiRequestExecutor:
     async def _handle_client_error(
         self,
         exception: TimeoutError | aiohttp.ClientError,
+        *,
         api_name: str,
         attempt: int,
         max_retries: int,

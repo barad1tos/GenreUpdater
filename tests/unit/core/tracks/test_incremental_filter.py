@@ -39,6 +39,7 @@ def _create_mock_logger() -> MagicMock:
 def _create_track(
     track_id: str = "12345",
     name: str = "Test Track",
+    *,
     artist: str = "Test Artist",
     album: str = "Test Album",
     genre: str | None = "Rock",

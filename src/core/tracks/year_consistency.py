@@ -253,7 +253,7 @@ class YearConsistencyChecker:
         if len(set(years)) != 1:  # Not all tracks have same year
             return None
 
-        release_years = [str(track.get("release_year")) for track in tracks if track.get("release_year") and str(track.get("release_year")).strip()]
+        release_years = [str(release_year) for track in tracks if (release_year := track.get("release_year", "")) and str(release_year).strip()]
         if len(set(release_years)) > 1:
             self.console_logger.info(
                 "All tracks have same year %s but inconsistent release_years %s - using consistent track year",
@@ -328,7 +328,7 @@ class YearConsistencyChecker:
             Consensus release_year string if found, None otherwise
 
         """
-        release_years = [str(track.get("release_year")) for track in tracks if track.get("release_year")]
+        release_years = [str(release_year) for track in tracks if (release_year := track.get("release_year", ""))]
 
         if not release_years:
             return None

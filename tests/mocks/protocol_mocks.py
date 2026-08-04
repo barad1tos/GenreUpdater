@@ -50,6 +50,7 @@ class MockAppleScriptClient:
         self,
         script_name: str,
         arguments: list[str] | None = None,
+        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,

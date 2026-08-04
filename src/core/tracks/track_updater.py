@@ -52,6 +52,7 @@ class TrackUpdater:
         self,
         artist: str,
         album: str,
+        *,
         album_tracks: list[TrackDict],
         year: str,
         updated_tracks: list[TrackDict],
@@ -87,7 +88,14 @@ class TrackUpdater:
         )
 
         if successful > 0:
-            self.record_successful_updates(tracks_needing_update, year, artist, album, updated_tracks, changes_log)
+            self.record_successful_updates(
+                tracks_needing_update,
+                year=year,
+                artist=artist,
+                album=album,
+                updated_tracks=updated_tracks,
+                changes_log=changes_log,
+            )
 
     def _collect_tracks_for_update(
         self,
@@ -178,6 +186,7 @@ class TrackUpdater:
     @staticmethod
     def record_successful_updates(
         tracks: list[TrackDict],
+        *,
         year: str,
         artist: str,
         album: str,
@@ -232,7 +241,7 @@ class TrackUpdater:
             True if track needs update, False otherwise
 
         """
-        if is_empty_year(current_year):
+        if current_year is None or is_empty_year(current_year):
             return True
         return str(current_year) != target_year
 

@@ -75,6 +75,7 @@ class AppleScriptExecutor:
 
     def __init__(
         self,
+        *,
         semaphore: asyncio.Semaphore | None,
         apple_scripts_directory: str | None,
         console_logger: logging.Logger,

@@ -175,7 +175,7 @@ class FingerprintGenerator:
             raise FingerprintGenerationError(error_msg)
 
         # Validate persistent_id is not empty (critical for fingerprinting)
-        persistent_id = track_data.get("persistent_id")
+        persistent_id: Any = track_data.get("persistent_id")
         if not persistent_id or not str(persistent_id).strip():
             error_msg = "persistent_id cannot be empty"
             raise FingerprintGenerationError(error_msg)

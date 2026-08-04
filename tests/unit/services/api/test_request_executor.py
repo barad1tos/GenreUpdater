@@ -497,12 +497,7 @@ class TestHandleClientError:
         )
 
         result = await executor._handle_client_error(
-            error,
-            "musicbrainz",
-            attempt=3,
-            max_retries=3,
-            base_delay=0.01,
-            url="https://api.example.com",
+            error, api_name="musicbrainz", attempt=3, max_retries=3, base_delay=0.01, url="https://api.example.com"
         )
 
         assert result is None
@@ -517,12 +512,7 @@ class TestHandleClientError:
         error = aiohttp.ClientPayloadError("Payload error")
 
         result = await executor._handle_client_error(
-            error,
-            "musicbrainz",
-            attempt=0,
-            max_retries=3,
-            base_delay=0.01,
-            url="https://api.example.com",
+            error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
         )
 
         assert result is None
@@ -585,11 +575,7 @@ class TestExecuteRequest:
         mock_cache_service.get_async.return_value = cached_data
         executor.set_session(mock_session)
 
-        result = await executor.execute_request(
-            "musicbrainz",
-            "https://api.example.com/search",
-            {"artist": "Test"},
-        )
+        result = await executor.execute_request("musicbrainz", "https://api.example.com/search", params={"artist": "Test"})
 
         assert result == cached_data
 
@@ -1052,7 +1038,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                result = await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
+                result = await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
                 assert result == {"results": []}
 
@@ -1070,7 +1056,7 @@ class TestProcessResponse:
             mock_read.return_value = "Rate limited"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
+                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert exc_info.value.status == HTTP_TOO_MANY_REQUESTS
 
@@ -1088,7 +1074,7 @@ class TestProcessResponse:
             mock_read.return_value = "Internal Server Error"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
+                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert exc_info.value.status == HTTP_SERVER_ERROR
 
@@ -1106,7 +1092,7 @@ class TestProcessResponse:
             mock_read.return_value = "Not Found"
 
             with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
+                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert exc_info.value.status == 404
 
@@ -1122,7 +1108,7 @@ class TestProcessResponse:
         with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "<html>Not JSON</html>"
 
-            result = await executor._process_response(mock_response, "musicbrainz", "url", 0, "log_url", 0.5)
+            result = await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert result is None
 
@@ -1141,7 +1127,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"resultCount": 1, "results": []}
 
-                result = await executor._process_response(mock_response, "itunes", "url", 0, "log_url", 0.5)
+                result = await executor._process_response(mock_response, api_name="itunes", url="url", attempt=0, log_url="log_url", elapsed=0.5)
 
                 assert result == {"resultCount": 1, "results": []}
                 mock_parse.assert_called_once()
@@ -1161,7 +1147,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                result = await executor._process_response(mock_response, "discogs", "url", 0, "log_url", 0.5)
+                result = await executor._process_response(mock_response, api_name="discogs", url="url", attempt=0, log_url="log_url", elapsed=0.5)
                 assert result == {"results": []}
 
 
@@ -1313,12 +1299,7 @@ class TestHandleClientErrorIntegration:
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             result = await executor._handle_client_error(
-                error,
-                "musicbrainz",
-                attempt=0,
-                max_retries=3,
-                base_delay=0.01,
-                url="https://api.example.com",
+                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
             )
 
             assert result is None
@@ -1338,12 +1319,7 @@ class TestHandleClientErrorIntegration:
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             result = await executor._handle_client_error(
-                error,
-                "musicbrainz",
-                attempt=1,
-                max_retries=3,
-                base_delay=0.01,
-                url="https://api.example.com",
+                error, api_name="musicbrainz", attempt=1, max_retries=3, base_delay=0.01, url="https://api.example.com"
             )
 
             assert result is None
@@ -1363,12 +1339,7 @@ class TestHandleClientErrorIntegration:
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             result = await executor._handle_client_error(
-                error,
-                "musicbrainz",
-                attempt=0,
-                max_retries=3,
-                base_delay=0.01,
-                url="https://api.example.com",
+                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
             )
 
             assert result is None
@@ -1389,12 +1360,7 @@ class TestHandleClientErrorIntegration:
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await executor._handle_client_error(
-                error,
-                "musicbrainz",
-                attempt=0,
-                max_retries=3,
-                base_delay=0.01,
-                url="https://api.example.com",
+                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
             )
 
         # Duration 0.0 should be appended for failed requests
@@ -1576,11 +1542,7 @@ class TestExecuteRequestIntegration:
         mock_cache_service.get_async.return_value = cached_data
         executor.set_session(mock_session)
 
-        result = await executor.execute_request(
-            "itunes",
-            "https://itunes.apple.com/search",
-            {"term": "test"},
-        )
+        result = await executor.execute_request("itunes", "https://itunes.apple.com/search", params={"term": "test"})
 
         assert result == cached_data
 

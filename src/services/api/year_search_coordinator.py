@@ -149,14 +149,28 @@ class YearSearchCoordinator:
         api_lists = self._get_script_api_priorities(script_type)
 
         # Try primary APIs first
-        results = await self._try_api_list(api_lists["primary"], artist_norm, album_norm, artist_region, script_type, is_fallback=False)
+        results = await self._try_api_list(
+            api_lists["primary"],
+            artist_norm=artist_norm,
+            album_norm=album_norm,
+            artist_region=artist_region,
+            script_type=script_type,
+            is_fallback=False,
+        )
         if results:
             return results
 
         # Try fallback APIs if primary failed
         if debug.api:
             self.console_logger.info("Primary APIs failed for %s - trying fallback", script_type.value)
-        return await self._try_api_list(api_lists["fallback"], artist_norm, album_norm, artist_region, script_type, is_fallback=True)
+        return await self._try_api_list(
+            api_lists["fallback"],
+            artist_norm=artist_norm,
+            album_norm=album_norm,
+            artist_region=artist_region,
+            script_type=script_type,
+            is_fallback=True,
+        )
 
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
         """Get script-specific API priorities from config."""
@@ -202,6 +216,7 @@ class YearSearchCoordinator:
     async def _try_api_list(
         self,
         api_names: list[str],
+        *,
         artist_norm: str,
         album_norm: str,
         artist_region: str | None,
@@ -211,7 +226,14 @@ class YearSearchCoordinator:
         """Try a list of API names and return the first successful result."""
         normalized_names = [self._normalize_api_name(name) for name in api_names]
         for api_name in normalized_names:
-            results = await self._try_single_api(api_name, artist_norm, album_norm, artist_region, script_type, is_fallback)
+            results = await self._try_single_api(
+                api_name,
+                artist_norm=artist_norm,
+                album_norm=album_norm,
+                artist_region=artist_region,
+                script_type=script_type,
+                is_fallback=is_fallback,
+            )
             if results:
                 return results
         return None
@@ -219,6 +241,7 @@ class YearSearchCoordinator:
     async def _try_single_api(
         self,
         api_name: str,
+        *,
         artist_norm: str,
         album_norm: str,
         artist_region: str | None,

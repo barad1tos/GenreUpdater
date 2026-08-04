@@ -78,6 +78,7 @@ class TestGenreManagerCoreFunctionality:
     def create_dummy_track(
         track_id: str = "12345",
         name: str = "Test Track",
+        *,
         artist: str = "Test Artist",
         album: str = "Test Album",
         genre: str = "Rock",
@@ -99,7 +100,7 @@ class TestGenreManagerCoreFunctionality:
     def test_calculate_dominant_genre_single(self) -> None:
         """Test dominant genre calculation with single track."""
         tracks = [
-            self.create_dummy_track("1", "Song A", "Artist 1", "Album A"),
+            self.create_dummy_track("1", "Song A", artist="Artist 1", album="Album A"),
         ]
         error_logger = _create_mock_logger()
         dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
@@ -109,11 +110,11 @@ class TestGenreManagerCoreFunctionality:
         """Test dominant genre calculation with tie scenario."""
         tracks = [
             # Album A (earlier) - Rock genre
-            self.create_dummy_track("1", "Song A1", "Artist 1", "Album A"),
-            self.create_dummy_track("2", "Song A2", "Artist 1", "Album A"),
+            self.create_dummy_track("1", "Song A1", artist="Artist 1", album="Album A"),
+            self.create_dummy_track("2", "Song A2", artist="Artist 1", album="Album A"),
             # Album B (later) - Pop genre
-            self.create_dummy_track("3", "Song B1", "Artist 1", "Album B", "Pop"),
-            self.create_dummy_track("4", "Song B2", "Artist 1", "Album B", "Pop"),
+            self.create_dummy_track("3", "Song B1", artist="Artist 1", album="Album B", genre="Pop"),
+            self.create_dummy_track("4", "Song B2", artist="Artist 1", album="Album B", genre="Pop"),
         ]
         error_logger = _create_mock_logger()
         dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
@@ -124,11 +125,11 @@ class TestGenreManagerCoreFunctionality:
         """Test dominant genre calculation with threshold logic."""
         tracks = [
             # Album A (very early) - Jazz
-            self.create_dummy_track("1", "Jazz Song", "Artist 1", "Album A", "Jazz"),
+            self.create_dummy_track("1", "Jazz Song", artist="Artist 1", album="Album A", genre="Jazz"),
             # Album B (later) - Rock (multiple tracks)
-            self.create_dummy_track("2", "Rock Song 1", "Artist 1", "Album B"),
-            self.create_dummy_track("3", "Rock Song 2", "Artist 1", "Album B"),
-            self.create_dummy_track("4", "Rock Song 3", "Artist 1", "Album B"),
+            self.create_dummy_track("2", "Rock Song 1", artist="Artist 1", album="Album B"),
+            self.create_dummy_track("3", "Rock Song 2", artist="Artist 1", album="Album B"),
+            self.create_dummy_track("4", "Rock Song 3", artist="Artist 1", album="Album B"),
         ]
         error_logger = _create_mock_logger()
         dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
@@ -146,13 +147,13 @@ class TestGenreManagerCoreFunctionality:
         """Test processing genres for multiple artists."""
         tracks = [
             # Artist 1 - Rock
-            self.create_dummy_track("1", "Song 1", "Artist 1", "Album A"),
-            self.create_dummy_track("2", "Song 2", "Artist 1", "Album A"),
+            self.create_dummy_track("1", "Song 1", artist="Artist 1", album="Album A"),
+            self.create_dummy_track("2", "Song 2", artist="Artist 1", album="Album A"),
             # Artist 2 - Pop
-            self.create_dummy_track("3", "Song 3", "Artist 2", "Album B", "Pop"),
-            self.create_dummy_track("4", "Song 4", "Artist 2", "Album B", "Pop"),
+            self.create_dummy_track("3", "Song 3", artist="Artist 2", album="Album B", genre="Pop"),
+            self.create_dummy_track("4", "Song 4", artist="Artist 2", album="Album B", genre="Pop"),
             # Artist 3 - Jazz
-            self.create_dummy_track("5", "Song 5", "Artist 3", "Album C", "Jazz"),
+            self.create_dummy_track("5", "Song 5", artist="Artist 3", album="Album C", genre="Jazz"),
         ]
         grouped_tracks = group_tracks_by_artist(tracks)
         error_logger = _create_mock_logger()
@@ -225,7 +226,7 @@ class TestGenreManagerCoreFunctionality:
         genre_manager = self.create_genre_manager()
 
         # Track without ID
-        track = self.create_dummy_track("", "Song", "Artist", "Album", "")
+        track = self.create_dummy_track("", "Song", artist="Artist", album="Album", genre="")
         # Explicitly set empty ID
         track.id = ""
         updated_track, change_log = await genre_manager.test_update_track_genre(track=track, new_genre="Rock", force_update=False)
@@ -244,7 +245,7 @@ class TestGenreManagerCoreFunctionality:
         genre_manager = self.create_genre_manager()
 
         # Prerelease track (read-only)
-        track = self.create_dummy_track("123", "Song", "Artist", "Album", "")
+        track = self.create_dummy_track("123", "Song", artist="Artist", album="Album", genre="")
         track.track_status = "prerelease"
         updated_track, change_log = await genre_manager.test_update_track_genre(track=track, new_genre="Rock", force_update=False)
         assert updated_track is None

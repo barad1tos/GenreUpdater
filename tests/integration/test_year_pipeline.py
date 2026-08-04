@@ -34,6 +34,7 @@ class TestYearPipelineIntegration:
 
     @staticmethod
     def create_year_retriever(
+        *,
         mock_track_processor: AsyncMock | None = None,
         mock_cache_service: MagicMock | None = None,
         mock_external_api: AsyncMock | None = None,

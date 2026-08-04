@@ -113,7 +113,7 @@ class ApiCacheService:
             artist = event.metadata.get("artist")
             album = event.metadata.get("album")
 
-            if artist and album:
+            if isinstance(artist, str) and isinstance(album, str) and artist and album:
                 self._schedule_invalidation(artist, album)
 
     def _handle_track_modified(self, event: CacheEvent) -> None:
@@ -129,7 +129,7 @@ class ApiCacheService:
             artist = event.metadata.get("artist")
             album = event.metadata.get("album")
 
-            if artist and album:
+            if isinstance(artist, str) and isinstance(album, str) and artist and album:
                 self._schedule_invalidation(
                     artist,
                     album,
@@ -198,7 +198,14 @@ class ApiCacheService:
         return age_seconds > policy.ttl_seconds
 
     async def set_cached_result(
-        self, artist: str, album: str, source: str, success: bool, data: dict[str, Any] | None = None, metadata: dict[str, Any] | None = None
+        self,
+        artist: str,
+        album: str,
+        *,
+        source: str,
+        success: bool,
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Store API result in cache.
 
@@ -215,7 +222,7 @@ class ApiCacheService:
         # Extract year from data if available (explicit None check to handle falsy values like 0 or empty string)
         year = None
         if data and isinstance(data, dict):
-            year_value = data.get("year")
+            year_value: Any = data.get("year")
             if year_value is not None:
                 year_str = str(year_value).strip()
                 year = year_str or None

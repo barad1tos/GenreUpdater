@@ -123,13 +123,6 @@ class CacheOrchestrator(CacheServiceProtocol):
     @overload
     async def get_async(
         self,
-        key_data: str,
-        compute_func: None = None,
-    ) -> list[TrackDict] | None: ...
-
-    @overload
-    async def get_async(
-        self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
     ) -> CacheableValue: ...
@@ -138,7 +131,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         self,
         key_data: CacheableKey,
         compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
-    ) -> list[TrackDict] | CacheableValue:
+    ) -> CacheableValue:
         """Asynchronous get with optional compute function.
 
         Args:
@@ -350,7 +343,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         data = {"year": year}
         if metadata:
             data |= metadata
-        await self.api_service.set_cached_result(artist, album, source, success, data=data)
+        await self.api_service.set_cached_result(artist, album, source=source, success=success, data=data)
 
     @staticmethod
     def generate_album_key(artist: str, album: str) -> str:

@@ -274,7 +274,8 @@ class CacheEvent:
     def __post_init__(self) -> None:
         """Validate event data."""
         if self.event_type in [CacheEventType.TRACK_ADDED, CacheEventType.TRACK_REMOVED, CacheEventType.TRACK_MODIFIED] and not self.track_id:
-            msg = f"track_id required for {self.event_type.value}"
+            event_name = self.event_type.name.lower()
+            msg = f"track_id required for {event_name}"
             raise ValueError(msg)
         if self.event_type == CacheEventType.FINGERPRINT_CHANGED and not self.fingerprint:
             msg = "fingerprint required for fingerprint_changed event"

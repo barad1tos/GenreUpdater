@@ -209,7 +209,7 @@ class DiscogsClient(BaseApiClient):
 
             if master_data:
                 year = master_data.get("year")
-                if year is not None:
+                if isinstance(year, (int, str)):
                     # Cache for a long time (master years don't change)
                     cache_ttl = self.cache_ttl_days * 86400
                     await self.cache_service.set_async(cache_key, year, ttl=cache_ttl)
@@ -579,7 +579,8 @@ class DiscogsClient(BaseApiClient):
             Tuple of (year_string, updated_detail_fetch_count)
 
         """
-        year_str = str(item.get("year", ""))
+        year_value: Any = item.get("year", "")
+        year_str = str(year_value)
 
         # Early return if no need to fetch details
         if not self._should_fetch_details(year_str, detail_fetch_count, detail_fetch_limit):
