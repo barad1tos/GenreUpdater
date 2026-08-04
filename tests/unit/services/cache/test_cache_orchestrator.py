@@ -383,7 +383,7 @@ class TestCacheOrchestrator:
             call_args = mock_set.call_args
             assert call_args[0][0] == "Artist"
             assert call_args[0][1] == "Album"
-            assert call_args[0][2] == "source"
+            assert call_args.kwargs["source"] == "source"
 
     @pytest.mark.asyncio
     async def test_set_cached_api_result_negative(self) -> None:
@@ -396,4 +396,4 @@ class TestCacheOrchestrator:
             mock_set.assert_called_once()
             # success should be False for negative/None results
             call_args = mock_set.call_args
-            assert call_args[0][3] is False  # success parameter
+            assert call_args.kwargs["success"] is False  # success parameter

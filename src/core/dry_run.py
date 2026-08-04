@@ -59,6 +59,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         self,
         script_name: str,
         arguments: list[str] | None = None,
+        *,
         timeout: float | None = None,
         context_artist: str | None = None,
         context_album: str | None = None,
@@ -102,7 +103,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
             result = await self._real_client.run_script(
                 script_name,
                 arguments,
-                timeout,
+                timeout=timeout,
                 context_artist=context_artist,
                 context_album=context_album,
                 context_track=context_track,

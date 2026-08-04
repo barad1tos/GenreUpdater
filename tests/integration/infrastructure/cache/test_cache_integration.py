@@ -654,7 +654,7 @@ class TestCacheIntegrationScenarios:
 
         # Add some data
         await album_cache.store_album_year("Artist", "Album", "2020", 80)
-        await api_cache.set_cached_result("Artist", "Album", "musicbrainz", True, {"year": "2020"})
+        await api_cache.set_cached_result("Artist", "Album", source="musicbrainz", success=True, data={"year": "2020"})
         generic_cache.set("key", "value")
 
         # Get stats

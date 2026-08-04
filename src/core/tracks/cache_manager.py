@@ -66,6 +66,14 @@ class TrackCacheManager:
         if cached_value is None:
             return None
 
+        if not isinstance(cached_value, list):
+            self.console_logger.warning(
+                "Cached data for %s is not a list (got %s). Ignoring cache.",
+                cache_key,
+                type(cached_value).__name__,
+            )
+            return None
+
         cached_list = cached_value
         validated_tracks: list[TrackDict] = []
 

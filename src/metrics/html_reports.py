@@ -359,6 +359,7 @@ def generate_summary_table_html(
 
 def save_html_report(
     events: list[dict[str, Any]],
+    *,
     call_counts: dict[str, int],
     success_counts: dict[str, int],
     decorator_overhead: dict[str, float],

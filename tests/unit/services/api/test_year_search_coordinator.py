@@ -68,6 +68,7 @@ def default_config() -> AppConfig:
 
 @pytest.fixture
 def coordinator(
+    *,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     default_config: AppConfig,
@@ -94,6 +95,7 @@ class TestInitialization:
 
     def test_init_stores_all_parameters(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         default_config: AppConfig,
@@ -156,6 +158,7 @@ class TestApplyPreferredOrder:
 
     def test_no_preferred_api(
         self,
+        *,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         default_config: AppConfig,
@@ -332,7 +335,9 @@ class TestTrySingleApi:
         """Test returns results on successful API call."""
         mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
-        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
+        results = await coordinator._try_single_api(
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+        )
 
         assert results is not None
         assert len(results) == 1
@@ -340,7 +345,9 @@ class TestTrySingleApi:
     @pytest.mark.asyncio
     async def test_returns_none_on_unknown_api(self, coordinator: YearSearchCoordinator) -> None:
         """Test returns None for unknown API."""
-        results = await coordinator._try_single_api("unknown", "artist", "album", None, ScriptType.LATIN, False)
+        results = await coordinator._try_single_api(
+            "unknown", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+        )
 
         assert results is None
 
@@ -353,7 +360,9 @@ class TestTrySingleApi:
         """Test returns None when API returns empty results."""
         mock_musicbrainz_client.get_scored_releases.return_value = []
 
-        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
+        results = await coordinator._try_single_api(
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+        )
 
         assert results is None
 
@@ -366,7 +375,9 @@ class TestTrySingleApi:
         """Test handles API exception gracefully."""
         mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("API error")
 
-        results = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
+        results = await coordinator._try_single_api(
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+        )
 
         assert results is None
 
@@ -386,12 +397,7 @@ class TestTryApiList:
         mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_api_list(
-            ["musicbrainz", "discogs"],
-            "artist",
-            "album",
-            None,
-            ScriptType.LATIN,
-            False,
+            ["musicbrainz", "discogs"], artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is not None
@@ -409,12 +415,7 @@ class TestTryApiList:
         mock_discogs_client.get_scored_releases.return_value = []
 
         results = await coordinator._try_api_list(
-            ["musicbrainz", "discogs"],
-            "artist",
-            "album",
-            None,
-            ScriptType.LATIN,
-            False,
+            ["musicbrainz", "discogs"], artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is None
@@ -592,7 +593,9 @@ class TestDebugApiLogging:
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
-            result = await coordinator._try_single_api("unknown_api", "artist", "album", None, ScriptType.LATIN, False)
+            result = await coordinator._try_single_api(
+                "unknown_api", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            )
 
         assert result is None
         mock_console.debug.assert_any_call("%s client not available, skipping", "unknown_api")
@@ -609,7 +612,9 @@ class TestDebugApiLogging:
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
-            await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.LATIN, False)
+            await coordinator._try_single_api(
+                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            )
 
         mock_console.info.assert_any_call("Trying %s for %s text", "musicbrainz", "latin")
 
@@ -625,7 +630,9 @@ class TestDebugApiLogging:
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
-            result = await coordinator._try_single_api("musicbrainz", "artist", "album", None, ScriptType.CHINESE, False)
+            result = await coordinator._try_single_api(
+                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.CHINESE, is_fallback=False
+            )
 
         assert result is None
         # The warning is called with the exception object; verify the format string and first two positional args

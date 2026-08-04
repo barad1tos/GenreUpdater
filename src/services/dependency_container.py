@@ -32,7 +32,7 @@ from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
     import logging
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
     from core.logger import SafeQueueListener
     from core.models.protocols import AppleScriptClientProtocol
@@ -226,13 +226,14 @@ class DependencyContainer:
             ValueError: If the underlying initialize call fails due to an invalid argument value.
 
         """
-        initialize_method = getattr(service, "initialize", None)
-        if not callable(initialize_method):
+        initialize_candidate: Callable[..., Any] | None = getattr(service, "initialize", None)
+        if initialize_candidate is None or not callable(initialize_candidate):
             self._error_logger.warning(
                 " %s instance has no initialize method",
                 LogFormat.entity(service_name),
             )
             return
+        initialize_method: Callable[..., Any] = initialize_candidate
 
         self._console_logger.debug(" Initializing %s...", LogFormat.entity(service_name))
         start = time.monotonic()
@@ -306,30 +307,36 @@ class DependencyContainer:
         configure_album_patterns(self.app_config)
 
         # Construct missing service instances
-        if self._analytics is None:
+        analytics = self._analytics
+        if analytics is None:
             loggers = LoggerContainer(
                 self._console_logger,
                 self._error_logger,
                 self._analytics_logger,
             )
-            self._analytics = Analytics(
+            analytics = Analytics(
                 self.app_config,
                 loggers,
             )
-        if self._cache_service is None:
-            self._cache_service = CacheOrchestrator(self.app_config, self._console_logger)
+            self._analytics = analytics
+        cache_service = self._cache_service
+        if cache_service is None:
+            cache_service = CacheOrchestrator(self.app_config, self._console_logger)
+            self._cache_service = cache_service
         if self._library_snapshot_service is None:
             self._library_snapshot_service = LibrarySnapshotService(self.app_config, self._console_logger)
-        if self._pending_verification_service is None:
-            self._pending_verification_service = PendingVerificationService(self.app_config, self._console_logger, self._error_logger)
+        pending_verification = self._pending_verification_service
+        if pending_verification is None:
+            pending_verification = PendingVerificationService(self.app_config, self._console_logger, self._error_logger)
+            self._pending_verification_service = pending_verification
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
-                self.app_config,
-                self._console_logger,
-                self._error_logger,
-                self._analytics,
-                self._cache_service,
-                self._pending_verification_service,
+                config=self.app_config,
+                console_logger=self._console_logger,
+                error_logger=self._error_logger,
+                analytics=analytics,
+                cache_service=cache_service,
+                pending_verification_service=pending_verification,
             )
 
         # Initialize retry handler from typed config
@@ -507,7 +514,7 @@ class DependencyContainer:
 
         # Get the scripts directory safely
         scripts_dir = getattr(client, "apple_scripts_dir", None)
-        if not scripts_dir:
+        if not isinstance(scripts_dir, (str, Path)) or not str(scripts_dir):
             self._console_logger.warning(
                 "AppleScripts directory is not configured in the client",
             )

@@ -127,10 +127,10 @@ def save_to_csv(
     _save_csv(
         track_dicts,
         TRACK_FIELDNAMES,
-        file_path,
-        console_logger,
-        error_logger,
-        "tracks",
+        file_path=file_path,
+        console_logger=console_logger,
+        error_logger=error_logger,
+        data_type="tracks",
     )
 
 
@@ -529,10 +529,10 @@ def save_unified_changes_report(
         _save_csv(
             console_changes,  # Use filtered list - only actual changes
             _get_csv_fieldnames(),
-            file_path,
-            console_logger,
-            error_logger,
-            Misc.CHANGES_REPORT_TYPE,
+            file_path=file_path,
+            console_logger=console_logger,
+            error_logger=error_logger,
+            data_type=Misc.CHANGES_REPORT_TYPE,
         )
 
 
@@ -607,6 +607,7 @@ def _add_timestamp_to_filename(file_path: str | None) -> str | None:
 def save_changes_report(
     changes: Sequence[dict[str, Any] | ChangeLogEntry],
     file_path: str | None,
+    *,
     console_logger: logging.Logger | None = None,
     error_logger: logging.Logger | None = None,
     add_timestamp: bool = False,

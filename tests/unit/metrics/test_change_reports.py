@@ -684,7 +684,7 @@ class TestSaveChangesReport:
                 "new_genre": "Metal",
             },
         ]
-        save_changes_report(changes, str(file_path), console_logger, error_logger)
+        save_changes_report(changes, str(file_path), console_logger=console_logger, error_logger=error_logger)
         assert file_path.exists()
 
     def test_saves_report_with_changelog_entries(
@@ -707,7 +707,7 @@ class TestSaveChangesReport:
                 new_genre="Metal",
             ),
         ]
-        save_changes_report(entries, str(file_path), console_logger, error_logger)
+        save_changes_report(entries, str(file_path), console_logger=console_logger, error_logger=error_logger)
         assert file_path.exists()
 
     def test_adds_timestamp_when_requested(
@@ -726,7 +726,7 @@ class TestSaveChangesReport:
                 "new_genre": "Metal",
             },
         ]
-        save_changes_report(changes, str(base_path), console_logger, error_logger, add_timestamp=True)
+        save_changes_report(changes, str(base_path), console_logger=console_logger, error_logger=error_logger, add_timestamp=True)
         # The original file should not exist, but a timestamped one should
         assert not base_path.exists()
         csv_files = list(tmp_path.glob("report_*.csv"))
@@ -747,7 +747,7 @@ class TestSaveChangesReport:
             },
         ]
         # Should not raise
-        save_changes_report(changes, None, console_logger, error_logger)
+        save_changes_report(changes, None, console_logger=console_logger, error_logger=error_logger)
 
     def test_determines_change_type_if_missing(
         self,
@@ -765,7 +765,7 @@ class TestSaveChangesReport:
                 "old_genre": "Rock",
             },
         ]
-        save_changes_report(changes, str(file_path), console_logger, error_logger)
+        save_changes_report(changes, str(file_path), console_logger=console_logger, error_logger=error_logger)
         # Should have detected as genre change
         assert file_path.exists()
         with file_path.open(encoding="utf-8") as f:
@@ -808,7 +808,7 @@ class TestSaveChangesReport:
             },
         ]
         with patch("metrics.change_reports.save_unified_changes_report") as mock_save:
-            save_changes_report(changes, str(file_path), console_logger, error_logger)
+            save_changes_report(changes, str(file_path), console_logger=console_logger, error_logger=error_logger)
             # Check that compact_mode=True was passed
             call_args = mock_save.call_args
             assert call_args[0][4] is True  # compact_mode is 5th positional arg
@@ -830,7 +830,7 @@ class TestSaveChangesReport:
                 "new_value": "Metal",
             },
         ]
-        save_changes_report(changes, str(file_path), console_logger, error_logger)
+        save_changes_report(changes, str(file_path), console_logger=console_logger, error_logger=error_logger)
         assert file_path.exists()
         with file_path.open(encoding="utf-8") as f:
             reader = csv.DictReader(f)

@@ -312,7 +312,7 @@ class YearDeterminator:
         # BUG FIX: Check ALL tracks have consistent year_set_by_mgu,
         # not just the first track. This prevents skipping albums with
         # inconsistent track states (e.g., partial updates, library syncs).
-        all_match = all(t.year_set_by_mgu == first_mgu and str(t.year) == first_mgu for t in album_tracks)
+        all_match = all(t.year_set_by_mgu == first_mgu and str(t.year or "") == first_mgu for t in album_tracks)
 
         if all_match:
             self.console_logger.debug(
@@ -344,9 +344,9 @@ class YearDeterminator:
         """
         cached_year = await self.cache_service.get_album_year_from_cache(artist, album)
         non_empty_years = [
-            str(track.get("year"))
+            str(year_value)
             for track in album_tracks
-            if track.get("year") and str(track.get("year")).strip() and is_valid_year(track.get("year"))
+            if (year_value := track.get("year", "")) and str(year_value).strip() and is_valid_year(year_value)
         ]
 
         if cached_year:
@@ -506,10 +506,8 @@ class YearDeterminator:
         if len(tracks) < 2:
             return False
 
-        if years := [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]:
-            # All tracks must have year AND all years must be the same
-            return len(years) == len(tracks) and len(set(years)) == 1
-        return False
+        years = [str(track_year or "") for t in tracks if (track_year := t.year) and is_valid_year(track_year)]
+        return len(years) == len(tracks) and len(set(years)) == 1 if years else False
 
     @staticmethod
     def _get_dominant_year(tracks: list[TrackDict]) -> str | None:
@@ -522,7 +520,7 @@ class YearDeterminator:
             Most common year string, or None if no valid years found.
 
         """
-        years = [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]
+        years = [str(track_year or "") for t in tracks if (track_year := t.year) and is_valid_year(track_year)]
         if not years:
             return None
         most_common = Counter(years).most_common(1)
@@ -593,7 +591,7 @@ class YearDeterminator:
         """
         try:
             album_str = album or ""
-            non_empty_years = [str(track.get("year")) for track in album_tracks if track.get("year") and str(track.get("year")).strip()]
+            non_empty_years = [str(year_value) for track in album_tracks if (year_value := track.get("year", "")) and str(year_value).strip()]
             unique_years = set(non_empty_years) if non_empty_years else set()
 
             if len(album_str) <= SUSPICIOUS_ALBUM_MIN_LEN and len(unique_years) >= SUSPICIOUS_MANY_YEARS:

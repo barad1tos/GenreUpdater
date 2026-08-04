@@ -1131,7 +1131,15 @@ class TestHandlePartialSyncCache:
         track = _create_test_track("13", year_set_by_mgu=None)
         processed_albums: dict[str, str] = {}
 
-        await handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
+        await handle_partial_sync_cache(
+            track,
+            processed_albums=processed_albums,
+            cache_service=mock_cache_service,
+            album_key="Artist|Album",
+            artist="Artist",
+            album="Album",
+            error_logger=error_logger,
+        )
 
         assert track.year_set_by_mgu is None
 
@@ -1148,7 +1156,15 @@ class TestHandlePartialSyncCache:
         processed_albums = {"Artist|Album": "2023"}
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
-        await handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
+        await handle_partial_sync_cache(
+            track,
+            processed_albums=processed_albums,
+            cache_service=mock_cache_service,
+            album_key="Artist|Album",
+            artist="Artist",
+            album="Album",
+            error_logger=error_logger,
+        )
 
         assert track.year_set_by_mgu == "2023"
         cast(AsyncMock, mock_cache_service.store_album_year_in_cache).assert_called_once()
@@ -1168,7 +1184,15 @@ class TestHandlePartialSyncCache:
         mock_cache_service.get_album_year_from_cache = AsyncMock(side_effect=OSError("Cache error"))
 
         with caplog.at_level(logging.ERROR):
-            await handle_partial_sync_cache(track, processed_albums, mock_cache_service, "Artist|Album", "Artist", "Album", error_logger)
+            await handle_partial_sync_cache(
+                track,
+                processed_albums=processed_albums,
+                cache_service=mock_cache_service,
+                album_key="Artist|Album",
+                artist="Artist",
+                album="Album",
+                error_logger=error_logger,
+            )
 
         assert track.year_set_by_mgu == "2023"
 
@@ -1280,7 +1304,9 @@ class TestSyncTrackListWithCurrent:
         csv_path = str(tmp_path / "sync_test.csv")
 
         with patch("metrics.track_sync.save_csv") as mock_save:
-            await sync_track_list_with_current(tracks, csv_path, mock_cache_service, console_logger, error_logger)
+            await sync_track_list_with_current(
+                tracks, csv_path, cache_service=mock_cache_service, console_logger=console_logger, error_logger=error_logger
+            )
             mock_save.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1302,5 +1328,7 @@ class TestSyncTrackListWithCurrent:
         tracks = [_create_test_track("19", artist="New Artist")]
 
         with patch("metrics.track_sync.save_csv") as mock_save:
-            await sync_track_list_with_current(tracks, str(csv_file), mock_cache_service, console_logger, error_logger)
+            await sync_track_list_with_current(
+                tracks, str(csv_file), cache_service=mock_cache_service, console_logger=console_logger, error_logger=error_logger
+            )
             mock_save.assert_called_once()

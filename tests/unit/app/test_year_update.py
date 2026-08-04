@@ -42,6 +42,7 @@ def mock_config() -> AppConfig:
 
 @pytest.fixture
 def service(
+    *,
     mock_track_processor: MagicMock,
     mock_year_retriever: MagicMock,
     mock_snapshot_manager: MagicMock,
@@ -112,6 +113,7 @@ class TestYearUpdateServiceInit:
 
     def test_stores_optional_cleaning_service(
         self,
+        *,
         mock_track_processor: MagicMock,
         mock_year_retriever: MagicMock,
         mock_snapshot_manager: MagicMock,
@@ -134,6 +136,7 @@ class TestYearUpdateServiceInit:
 
     def test_stores_optional_artist_renamer(
         self,
+        *,
         mock_track_processor: MagicMock,
         mock_year_retriever: MagicMock,
         mock_snapshot_manager: MagicMock,

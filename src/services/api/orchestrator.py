@@ -87,7 +87,7 @@ def normalize_name(name: str) -> str:
     # Strip trailing compilation markers: "+ 4", "+ 10" (number = # bonus tracks)
     # Pattern: " + " followed by digit(s) at end of string
     # More conservative than ".*" to preserve legitimate titles like "Album + Bonus Tracks"
-    result = re.sub(r"\s*\+\s+\d+.*$", "", result)
+    result = re.sub(r"\s*+\+\s++\d.*$", "", result)
 
     # Strip content after " / " (split albums - keep first part only)
     # "Robot Hive / Exodus" → "Robot Hive"
@@ -168,6 +168,7 @@ class ExternalApiOrchestrator:
 
     def __init__(
         self,
+        *,
         config: AppConfig,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
@@ -308,7 +309,7 @@ class ExternalApiOrchestrator:
 
     def _get_raw_token(self, config_value: str, key: str, env_var: str) -> str:
         """Get raw token from config value or environment variables."""
-        raw_token: str = str(config_value) if config_value else ""
+        raw_token: str = config_value or ""
 
         # Check if it's a placeholder that needs environment resolution
         if not raw_token or raw_token.startswith("${"):
@@ -385,6 +386,7 @@ class ExternalApiOrchestrator:
         def make_api_request_func(
             api_name: str,
             url: str,
+            *,
             params: dict[str, str] | None = None,
             headers_override: dict[str, str] | None = None,
             max_retries: int | None = None,
@@ -395,11 +397,11 @@ class ExternalApiOrchestrator:
             return self._make_api_request(
                 api_name,
                 url,
-                params,
-                headers_override,
-                max_retries,
-                base_delay,
-                timeout_override,
+                params=params,
+                headers_override=headers_override,
+                max_retries=max_retries,
+                base_delay=base_delay,
+                timeout_override=timeout_override,
             )
 
         # Create the scoring function for injection (using initialized scorer)
@@ -623,6 +625,7 @@ class ExternalApiOrchestrator:
         self,
         api_name: str,
         url: str,
+        *,
         params: dict[str, str] | None = None,
         headers_override: dict[str, str] | None = None,
         max_retries: int | None = None,
@@ -785,6 +788,7 @@ class ExternalApiOrchestrator:
         self,
         artist: str,
         album: str,
+        *,
         current_library_year: str,
         prerelease_count: int,
         future_year_count: int,
@@ -867,10 +871,23 @@ class ExternalApiOrchestrator:
             all_releases = await self._fetch_all_api_results(artist_norm, album_norm, artist_region, log_artist, log_album)
 
             if not all_releases:
-                return await self._handle_no_results(artist, album, log_artist, log_album, current_library_year, earliest_track_added_year)
+                return await self._handle_no_results(
+                    artist,
+                    album,
+                    log_artist=log_artist,
+                    log_album=log_album,
+                    current_library_year=current_library_year,
+                    earliest_track_added_year=earliest_track_added_year,
+                )
 
             return await self._process_api_results(
-                all_releases, artist, album, log_artist, log_album, current_library_year, earliest_track_added_year
+                all_releases,
+                artist=artist,
+                album=album,
+                log_artist=log_artist,
+                log_album=log_album,
+                current_library_year=current_library_year,
+                earliest_track_added_year=earliest_track_added_year,
             )
 
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError):
@@ -1019,7 +1036,7 @@ class ExternalApiOrchestrator:
 
         # Remove all parenthetical content from album for API queries
         # "(Deluxe Edition)", "(Bonus Track Version)", "(Remastered)" → removed
-        album_clean = re.sub(r"\s*\([^)]*\)", "", album_clean).strip()
+        album_clean = re.sub(r"\s*+\([^)]*+\)", "", album_clean).strip()
         album_norm = normalize_name(album_clean)
 
         log_artist = artist if artist != artist_norm else artist_norm
@@ -1084,6 +1101,7 @@ class ExternalApiOrchestrator:
         self,
         artist: str,
         album: str,
+        *,
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
@@ -1121,6 +1139,7 @@ class ExternalApiOrchestrator:
     async def _process_api_results(
         self,
         all_releases: list[ScoredRelease],
+        *,
         artist: str,
         album: str,
         log_artist: str,
@@ -1181,8 +1200,10 @@ class ExternalApiOrchestrator:
             attempt_count = await self._get_attempt_count(artist, album)
 
             if attempt_count >= MAX_VERIFICATION_ATTEMPTS:
-                # Escalation: After N attempts, accept best result if available
-                if best_year is not None:
+                # Escalation: After N attempts, accept best result if available.
+                # select_best_year returns "" (never None) when no usable year survives
+                # scoring, so an emptiness check is required to reach the else branch.
+                if best_year:
                     self.console_logger.warning(
                         "Verification limit reached for '%s - %s'. Accepting year %s after %d attempts",
                         log_artist,
@@ -1374,6 +1395,7 @@ class ExternalApiOrchestrator:
 
 # Factory function for easy instantiation
 def create_external_api_orchestrator(
+    *,
     config: AppConfig,
     console_logger: logging.Logger,
     error_logger: logging.Logger,

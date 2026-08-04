@@ -121,7 +121,7 @@ class CryptographyManager:
             # Validate the key format to catch corruption/tampering early
             try:
                 Fernet(key_data)
-            except (ValueError, binascii.Error) as e:
+            except ValueError as e:
                 error_message = f"Invalid encryption key format in {self.key_file_path}: {e}"
                 self.logger.exception(error_message)
                 raise ValueError(error_message) from e
@@ -174,14 +174,18 @@ class CryptographyManager:
                 return Fernet(derived_key)
 
             # Use cached Fernet or create new one
-            if self._fernet is None:
-                if self._encryption_key is None:
-                    self._encryption_key = self._load_or_create_key()
-                self._fernet = Fernet(self._encryption_key)
+            fernet = self._fernet
+            if fernet is None:
+                encryption_key = self._encryption_key
+                if encryption_key is None:
+                    encryption_key = self._load_or_create_key()
+                    self._encryption_key = encryption_key
+                fernet = Fernet(encryption_key)
+                self._fernet = fernet
 
-            return self._fernet
+            return fernet
 
-        except (ValueError, TypeError, binascii.Error, OSError) as e:
+        except (ValueError, TypeError, OSError) as e:
             error_message = f"Fernet initialization failed: {e!s}"
             self.logger.exception(error_message)
             raise InvalidKeyError(error_message, {"original_error": str(e)}) from e
@@ -259,7 +263,7 @@ class CryptographyManager:
 
         except (InvalidKeyError, KeyGenerationError):
             raise  # Re-raise key-specific errors
-        except (TypeError, ValueError, binascii.Error) as e:
+        except (TypeError, ValueError) as e:
             error_message = f"Token encryption failed: {e!s}"
             self.logger.exception(error_message)
             raise EncryptionError(error_message, {"original_error": str(e)}) from e
@@ -290,7 +294,7 @@ class CryptographyManager:
             # Decode the base64-encoded token
             try:
                 encrypted_bytes = base64.urlsafe_b64decode(encrypted_token.encode())
-            except (binascii.Error, ValueError, TypeError) as e:
+            except (ValueError, TypeError) as e:
                 error_message = "Invalid token format - not valid base64"
                 raise InvalidTokenError(error_message) from e
 
@@ -307,7 +311,7 @@ class CryptographyManager:
             raise DecryptionError(error_message) from e
         except (InvalidKeyError, KeyGenerationError, InvalidTokenError):
             raise  # Re-raise specific errors
-        except (TypeError, ValueError, UnicodeDecodeError, binascii.Error) as e:
+        except (TypeError, ValueError) as e:
             error_message = f"Token decryption failed: {e!s}"
             self.logger.exception(error_message)
             raise DecryptionError(error_message, {"original_error": str(e)}) from e

@@ -526,7 +526,7 @@ class MusicBrainzClient(BaseApiClient):
         max_groups_to_process = 3
 
         for rg_info in release_groups[:max_groups_to_process]:
-            rg_id = rg_info.get("id")
+            rg_id = str(rg_info.get("id") or "")
             if not rg_id:
                 continue
 
@@ -797,8 +797,11 @@ class MusicBrainzClient(BaseApiClient):
             return None
 
         for info in label_info:
+            if not isinstance(info, dict):
+                continue
             # Access using dict key since API returns with dash, not underscore
-            if isinstance(info, dict) and (catalog := info.get("catalog-number")):
+            catalog: Any = info.get("catalog-number")
+            if catalog:
                 return str(catalog)
 
         return None

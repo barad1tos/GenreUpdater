@@ -92,6 +92,7 @@ def config() -> AppConfig:
 
 @pytest.fixture
 def year_retriever(
+    *,
     mock_track_processor: AsyncMock,
     mock_cache_service: AsyncMock,
     mock_external_api: AsyncMock,
@@ -422,7 +423,9 @@ class TestProcessSingleAlbum:
         ]
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
-        await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+        await year_retriever._batch_processor._process_single_album(
+            "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+        )
         assert not updated_tracks
 
     @pytest.mark.asyncio
@@ -438,7 +441,9 @@ class TestProcessSingleAlbum:
         mock_external_api.get_album_year.return_value = ("2020", True, 85, {"2020": 85})  # 4-tuple with year_scores
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
-        await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+        await year_retriever._batch_processor._process_single_album(
+            "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+        )
         assert mock_external_api.get_album_year.called
 
 
@@ -1260,7 +1265,9 @@ class TestProcessDominantYear:
         changes_log: list[Any] = []
 
         with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
-            result = await year_retriever._batch_processor._process_dominant_year("Artist", "Album", tracks, "2020", updated_tracks, changes_log)
+            result = await year_retriever._batch_processor._process_dominant_year(
+                "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
+            )
             assert result is True
             mock_update.assert_called_once()
 
@@ -1281,7 +1288,9 @@ class TestProcessDominantYear:
         changes_log: list[Any] = []
 
         with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
-            result = await year_retriever._batch_processor._process_dominant_year("Artist", "Album", tracks, "2020", updated_tracks, changes_log)
+            result = await year_retriever._batch_processor._process_dominant_year(
+                "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
+            )
             assert result is True
             mock_update.assert_called_once()
 
@@ -1298,7 +1307,9 @@ class TestProcessDominantYear:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        result = await year_retriever._batch_processor._process_dominant_year("Artist", "Album", tracks, "2020", updated_tracks, changes_log)
+        result = await year_retriever._batch_processor._process_dominant_year(
+            "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
+        )
         assert result is False
 
 
@@ -1319,7 +1330,9 @@ class TestProcessSingleAlbumIntegration:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        await year_retriever._batch_processor._process_single_album("Artist", "Hi", tracks, updated_tracks, changes_log)
+        await year_retriever._batch_processor._process_single_album(
+            "Artist", "Hi", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+        )
         # Should have called mark_for_verification for suspicious album
         mock_pending_verification.mark_for_verification.assert_called()
 
@@ -1342,7 +1355,9 @@ class TestProcessSingleAlbumIntegration:
 
         # Make check_prerelease_status return True (now in YearDeterminator)
         with unittest.mock.patch.object(year_retriever._year_determinator, "check_prerelease_status", AsyncMock(return_value=True)):
-            await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks_with_subscription, updated_tracks, changes_log)
+            await year_retriever._batch_processor._process_single_album(
+                "Artist", "Album", album_tracks=tracks_with_subscription, updated_tracks=updated_tracks, changes_log=changes_log
+            )
             assert not updated_tracks
             assert not changes_log
 
@@ -1363,7 +1378,9 @@ class TestProcessSingleAlbumIntegration:
         changes_log: list[Any] = []
 
         with unittest.mock.patch.object(year_retriever._year_determinator, "handle_future_years", mock_handle_future):
-            await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+            await year_retriever._batch_processor._process_single_album(
+                "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+            )
             mock_handle_future.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1379,7 +1396,9 @@ class TestProcessSingleAlbumIntegration:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+        await year_retriever._batch_processor._process_single_album(
+            "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+        )
         assert not updated_tracks
 
     @pytest.mark.asyncio
@@ -1407,7 +1426,9 @@ class TestProcessSingleAlbumIntegration:
             unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
             unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update_tracks),
         ):
-            await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+            await year_retriever._batch_processor._process_single_album(
+                "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+            )
             mock_determine_year.assert_called_once()
             mock_update_tracks.assert_called_once()
 
@@ -1431,7 +1452,9 @@ class TestProcessSingleAlbumIntegration:
             unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
             unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update_tracks),
         ):
-            await year_retriever._batch_processor._process_single_album("Artist", "Album", tracks, updated_tracks, changes_log)
+            await year_retriever._batch_processor._process_single_album(
+                "Artist", "Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+            )
             mock_determine_year.assert_called_once()
 
 

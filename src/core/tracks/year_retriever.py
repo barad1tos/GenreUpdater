@@ -89,6 +89,7 @@ class YearRetriever:
 
     def __init__(
         self,
+        *,
         track_processor: TrackProcessor,
         cache_service: CacheServiceProtocol,
         external_api: ExternalApiServiceProtocol,

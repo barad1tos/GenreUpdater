@@ -256,7 +256,7 @@ class LibrarySnapshotService:
             date_added=raw_track.get("date_added"),
             last_modified=raw_track.get("modification_date"),
             track_status=raw_track.get("track_status"),
-            year=year_value if year_value and str(year_value).strip() else None,
+            year=year_value if year_value and str(year_value or "").strip() else None,
             release_year=raw_track.get("release_year"),
             year_set_by_mgu=None,  # Tracking field, not from AppleScript
         )
@@ -578,17 +578,17 @@ class LibrarySnapshotService:
 
     def _write_bytes_atomic(self, target_path: Path, data: bytes) -> None:
         ensure_directory(str(target_path.parent), self.logger)
-        temp_path: Path | None = None
+        temp_file_name = ""
         success = False
         try:
             with tempfile.NamedTemporaryFile("wb", delete=False, dir=target_path.parent) as temp_file:
                 temp_file.write(data)
-                temp_path = Path(temp_file.name)
-            temp_path.replace(target_path)
+            temp_file_name = temp_file.name
+            Path(temp_file_name).replace(target_path)
             success = True
         finally:
-            if not success and temp_path is not None and temp_path.exists():
-                temp_path.unlink(missing_ok=True)
+            if not success and temp_file_name:
+                Path(temp_file_name).unlink(missing_ok=True)
 
     def _ensure_single_cache_format(self) -> None:
         plain = self._base_cache_path.with_suffix(JSON_SUFFIX)

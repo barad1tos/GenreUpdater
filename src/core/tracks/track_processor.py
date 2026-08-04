@@ -372,7 +372,7 @@ class TrackProcessor:
             # Execute AppleScript with appropriate timeout based on operation type
             timeout = self._get_applescript_timeout(original_artist_provided)
 
-            raw_output = await self.ap_client.run_script(FETCH_TRACKS, args, timeout=timeout)
+            raw_output = await self.ap_client.run_script(FETCH_TRACKS, args, timeout=timeout) or ""
 
             if not raw_output:
                 self.error_logger.error("AppleScript returned empty output (artist=%s)", artist or "all")
@@ -535,6 +535,7 @@ class TrackProcessor:
     async def update_track_async(
         self,
         track_id: str,
+        *,
         new_track_name: str | None = None,
         new_album_name: str | None = None,
         new_genre: str | None = None,

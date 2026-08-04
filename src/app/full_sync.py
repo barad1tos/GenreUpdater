@@ -101,9 +101,9 @@ async def run_full_resync(
         await sync_track_list_with_current(
             all_tracks,
             csv_path,
-            cast(CacheServiceProtocol, cache_service),
-            console_logger,
-            error_logger,
+            cache_service=cast(CacheServiceProtocol, cache_service),
+            console_logger=console_logger,
+            error_logger=error_logger,
             partial_sync=False,
             applescript_client=track_processor.ap_client,
         )

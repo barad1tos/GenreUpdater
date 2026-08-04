@@ -116,6 +116,7 @@ class _DummyTrackData:
     def create(
         track_id: str = "1",
         name: str = "Test Track",
+        *,
         artist: str = "Test Artist",
         album: str = "Test Album",
         genre: str = "Rock",
@@ -149,6 +150,7 @@ class TestYearRetrieverAllure:
 
     @staticmethod
     def create_year_retriever(
+        *,
         track_processor: Any = None,
         cache_service: Any = None,
         external_api: Any = None,

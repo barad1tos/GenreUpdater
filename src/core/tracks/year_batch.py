@@ -149,22 +149,22 @@ class YearBatchProcessor:
         if self._should_use_sequential_processing(adaptive_delay, concurrency_limit):
             await self._process_batches_sequentially(
                 album_items,
-                batch_size,
-                delay_between_batches,
-                total_albums,
-                updated_tracks,
-                changes_log,
+                batch_size=batch_size,
+                delay_between_batches=delay_between_batches,
+                total_albums=total_albums,
+                updated_tracks=updated_tracks,
+                changes_log=changes_log,
                 force=force,
             )
             return
 
         await self._process_batches_concurrently(
             album_items,
-            batch_size,
-            total_albums,
-            concurrency_limit,
-            updated_tracks,
-            changes_log,
+            batch_size=batch_size,
+            total_albums=total_albums,
+            concurrency_limit=concurrency_limit,
+            updated_tracks=updated_tracks,
+            changes_log=changes_log,
             force=force,
         )
 
@@ -182,6 +182,7 @@ class YearBatchProcessor:
     async def _process_batches_sequentially(
         self,
         album_items: list[tuple[tuple[str, str], list[TrackDict]]],
+        *,
         batch_size: int,
         delay_between_batches: int,
         total_albums: int,
@@ -200,7 +201,14 @@ class YearBatchProcessor:
                 for album_key, album_tracks in album_items[batch_start:batch_end]:
                     artist_name, album_name = album_key
                     self.console_logger.debug("Processing album '%s - %s'", artist_name, album_name)
-                    await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
+                    await self._process_single_album(
+                        artist_name,
+                        album_name,
+                        album_tracks=album_tracks,
+                        updated_tracks=updated_tracks,
+                        changes_log=changes_log,
+                        force=force,
+                    )
                     progress.update(task_id, advance=1)
 
                 if batch_end < total_albums and delay_between_batches > 0:
@@ -211,6 +219,7 @@ class YearBatchProcessor:
     async def _process_album_entry(
         self,
         album_entry: tuple[tuple[str, str], list[TrackDict]],
+        *,
         semaphore: asyncio.Semaphore,
         progress: Progress,
         task_id: Any,
@@ -240,13 +249,21 @@ class YearBatchProcessor:
         try:
             async with semaphore:
                 self.console_logger.debug("Processing album '%s - %s'", artist_name, album_name)
-                await self._process_single_album(artist_name, album_name, album_tracks, updated_tracks, changes_log, force=force)
+                await self._process_single_album(
+                    artist_name,
+                    album_name,
+                    album_tracks=album_tracks,
+                    updated_tracks=updated_tracks,
+                    changes_log=changes_log,
+                    force=force,
+                )
         finally:
             progress.update(task_id, advance=1)
 
     async def _process_batches_concurrently(
         self,
         album_items: list[tuple[tuple[str, str], list[TrackDict]]],
+        *,
         batch_size: int,
         total_albums: int,
         concurrency_limit: int,
@@ -284,11 +301,11 @@ class YearBatchProcessor:
                 tasks = [
                     self._process_album_entry(
                         album_entry,
-                        semaphore,
-                        progress,
-                        task_id,
-                        updated_tracks,
-                        changes_log,
+                        semaphore=semaphore,
+                        progress=progress,
+                        task_id=task_id,
+                        updated_tracks=updated_tracks,
+                        changes_log=changes_log,
                         force=force,
                     )
                     for album_entry in batch_slice
@@ -321,6 +338,7 @@ class YearBatchProcessor:
         self,
         artist: str,
         album: str,
+        *,
         album_tracks: list[TrackDict],
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
@@ -387,12 +405,20 @@ class YearBatchProcessor:
             return
 
         # Update tracks for this album
-        await self._track_updater.update_tracks_for_album(artist, album, album_tracks, year, updated_tracks, changes_log)
+        await self._track_updater.update_tracks_for_album(
+            artist,
+            album,
+            album_tracks=album_tracks,
+            year=year,
+            updated_tracks=updated_tracks,
+            changes_log=changes_log,
+        )
 
     async def _process_dominant_year(
         self,
         artist: str,
         album: str,
+        *,
         album_tracks: list[TrackDict],
         dominant_year: str,
         updated_tracks: list[TrackDict],
@@ -412,7 +438,7 @@ class YearBatchProcessor:
             True if processing was completed, False if it should continue with regular year determination
 
         """
-        non_empty_years = [str(track.get("year")) for track in album_tracks if track.get("year") and str(track.get("year")).strip()]
+        non_empty_years = [str(year_value) for track in album_tracks if (year_value := track.get("year", "")) and str(year_value).strip()]
         unique_years = set(non_empty_years) if non_empty_years else set()
 
         # Apply dominant year if there are empty tracks OR inconsistent years
@@ -420,7 +446,9 @@ class YearBatchProcessor:
 
         # Add tracks with inconsistent years
         if len(unique_years) > 1:
-            tracks_needing_update.extend([track for track in album_tracks if track.get("year") and str(track.get("year")).strip() != dominant_year])
+            tracks_needing_update.extend(
+                [track for track in album_tracks if (year_value := track.get("year", "")) and str(year_value).strip() != dominant_year]
+            )
 
         # Deduplicate by track ID
         if tracks_needing_update := list({track.get("id"): track for track in tracks_needing_update}.values()):
@@ -436,7 +464,14 @@ class YearBatchProcessor:
                 artist,
                 album,
             )
-            await self._track_updater.update_tracks_for_album(artist, album, tracks_needing_update, dominant_year, updated_tracks, changes_log)
+            await self._track_updater.update_tracks_for_album(
+                artist,
+                album,
+                album_tracks=tracks_needing_update,
+                year=dominant_year,
+                updated_tracks=updated_tracks,
+                changes_log=changes_log,
+            )
             return True
 
         return False

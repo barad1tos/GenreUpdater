@@ -339,6 +339,7 @@ class TestRunUpdateGenres:
     @pytest.mark.asyncio
     async def test_calls_cleaning_service_when_provided(
         self,
+        *,
         mock_track_processor: MagicMock,
         mock_genre_manager: MagicMock,
         mock_config: AppConfig,
@@ -369,6 +370,7 @@ class TestRunUpdateGenres:
     @pytest.mark.asyncio
     async def test_calls_artist_renamer_when_provided(
         self,
+        *,
         mock_track_processor: MagicMock,
         mock_genre_manager: MagicMock,
         mock_config: AppConfig,
@@ -400,6 +402,7 @@ class TestRunUpdateGenres:
     @pytest.mark.asyncio
     async def test_skips_artist_renamer_when_no_mapping(
         self,
+        *,
         mock_track_processor: MagicMock,
         mock_genre_manager: MagicMock,
         mock_config: AppConfig,

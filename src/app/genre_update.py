@@ -29,6 +29,7 @@ class GenreUpdateService:
 
     def __init__(
         self,
+        *,
         track_processor: TrackProcessor,
         genre_manager: GenreManager,
         config: AppConfig,
@@ -71,10 +72,11 @@ class GenreUpdateService:
 
         # Filter by test_artists if in test mode
         if self._test_artists and fetched_tracks:
-            fetched_tracks = [t for t in fetched_tracks if t.get("artist") in self._test_artists]
+            filtered_tracks = [t for t in fetched_tracks if t.get("artist") in self._test_artists]
+            fetched_tracks = filtered_tracks
             self._console_logger.info(
                 "Test mode: filtered to %d tracks for %d test artists",
-                len(fetched_tracks),
+                len(filtered_tracks),
                 len(self._test_artists),
             )
 

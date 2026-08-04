@@ -259,7 +259,7 @@ class YearScoreResolver:
         """
         if not all_releases:
             return []
-        return [str(release.get("title", "")) for release in all_releases if str(release.get("year")) == year]
+        return [str(release.get("title", "")) for release in all_releases if str(release.get("year") or "") == year]
 
     def _title_contains_remaster_keywords(self, titles: list[str]) -> bool:
         """Check if any title contains remaster keywords.
@@ -466,16 +466,17 @@ class YearScoreResolver:
         return self._evaluate_score_conflict(
             best_year,
             best_score,
-            second_year,
-            second_best_score,
-            score_difference,
-            best_year_is_future,
+            second_year=second_year,
+            second_best_score=second_best_score,
+            score_difference=score_difference,
+            best_year_is_future=best_year_is_future,
         )
 
     def _evaluate_score_conflict(
         self,
         best_year: str,
         best_score: int,
+        *,
         second_year: str,
         second_best_score: int,
         score_difference: int,

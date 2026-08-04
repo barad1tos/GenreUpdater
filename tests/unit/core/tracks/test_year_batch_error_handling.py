@@ -219,6 +219,7 @@ class TestSequentialProcessingErrors:
         async def mock_process(
             artist: str,
             album: str,
+            *,
             album_tracks: list[TrackDict],
             updated_tracks: list[TrackDict],
             changes_log: list[ChangeLogEntry],
@@ -258,6 +259,7 @@ class TestSequentialProcessingErrors:
         async def mock_process(
             artist: str,
             album: str,
+            *,
             album_tracks: list[TrackDict],
             updated_tracks: list[TrackDict],
             changes_log: list[ChangeLogEntry],

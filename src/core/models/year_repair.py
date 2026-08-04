@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import Protocol
 
-    from core.models.track_models import AppConfig, TrackDict
+    from core.models.track_models import AppConfig, TrackDict, TrackFieldValue
 
     class YearRevertProcessorProtocol(Protocol):
         """Protocol for track processor operations needed by year revert logic."""
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         async def update_track_async(
             self,
             track_id: str,
+            *,
             new_track_name: str | None = None,
             new_album_name: str | None = None,
             new_genre: str | None = None,
@@ -164,7 +165,7 @@ def _read_backup_csv(
     return targets
 
 
-def _normalize_text(value: object) -> str:
+def _normalize_text(value: TrackFieldValue) -> str:
     """Normalize raw track metadata values to stripped strings."""
 
     return str(value or "").strip()

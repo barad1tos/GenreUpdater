@@ -91,6 +91,7 @@ class ReleaseScorer:
 
     def __init__(
         self,
+        *,
         scoring_config: ScoringConfig | None = None,
         min_valid_year: int = 1900,
         definitive_score_threshold: int = 85,
@@ -624,7 +625,8 @@ class ReleaseScorer:
     def _score_release_type(self, release: dict[str, Any], score_components: list[str]) -> int:
         """Score release type (album, EP, single, etc.)."""
         cfg = self.scoring_config
-        release_type = str(release.get("album_type", release.get("type", ""))).lower()
+        raw_release_type: Any = release.get("album_type", release.get("type", ""))
+        release_type = str(raw_release_type).lower()
 
         if "album" in release_type:
             bonus = cfg.type_album_bonus
@@ -904,6 +906,7 @@ class ReleaseScorer:
 
 # Factory function for easy usage
 def create_release_scorer(
+    *,
     scoring_config: ScoringConfig | None = None,
     min_valid_year: int = 1900,
     definitive_score_threshold: int = 85,

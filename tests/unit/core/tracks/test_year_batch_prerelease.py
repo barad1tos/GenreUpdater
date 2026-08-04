@@ -53,13 +53,15 @@ class TestPrereleaseHandlingProcessEditable:
         changes_log: list[Any] = []
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, updated_tracks, changes_log)
+            await processor._process_single_album(
+                "Test Artist", "Test Album", album_tracks=tracks, updated_tracks=updated_tracks, changes_log=changes_log
+            )
 
             # Should have called update for editable tracks
             mock_update.assert_called_once()
             # Verify only 2 editable tracks were passed (not the prerelease)
             call_args = mock_update.call_args
-            album_tracks_passed = call_args[0][2]
+            album_tracks_passed = call_args.kwargs["album_tracks"]
             assert len(album_tracks_passed) == 2
 
     @pytest.mark.asyncio
@@ -76,7 +78,7 @@ class TestPrereleaseHandlingProcessEditable:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
         mock_year_determinator.pending_verification.mark_for_verification.assert_called_once()
         call_kwargs = mock_year_determinator.pending_verification.mark_for_verification.call_args[1]
@@ -96,7 +98,7 @@ class TestPrereleaseHandlingProcessEditable:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should process (default = process_editable)
             mock_update.assert_called_once()
@@ -121,7 +123,7 @@ class TestPrereleaseHandlingSkipAll:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should NOT have called update - entire album skipped
             mock_update.assert_not_called()
@@ -140,7 +142,7 @@ class TestPrereleaseHandlingSkipAll:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
         # skip_all should not mark for verification
         mock_year_determinator.pending_verification.mark_for_verification.assert_not_called()
@@ -160,7 +162,7 @@ class TestPrereleaseHandlingSkipAll:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should process since no prerelease
             mock_update.assert_called_once()
@@ -183,7 +185,7 @@ class TestPrereleaseHandlingMarkOnly:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should NOT have called update
             mock_update.assert_not_called()
@@ -208,7 +210,7 @@ class TestPrereleaseHandlingMarkOnly:
         ]
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-            await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+            await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should process since no prerelease
             mock_update.assert_called_once()
@@ -234,7 +236,7 @@ class TestAllPrereleaseAlbum:
             ]
 
             with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
-                await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+                await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
                 # Should NOT have called update - no editable tracks
                 mock_update.assert_not_called()
@@ -252,7 +254,7 @@ class TestAllPrereleaseAlbum:
             create_test_track(track_id="track-b", track_status="Prerelease"),
         ]
 
-        await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+        await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
         mock_year_determinator.pending_verification.mark_for_verification.assert_called_once()
         call_kwargs = mock_year_determinator.pending_verification.mark_for_verification.call_args[1]
@@ -278,7 +280,7 @@ class TestInvalidPrereleaseHandlingConfig:
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock) as mock_update:
             with caplog.at_level(logging.WARNING):
-                await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+                await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Should have logged warning about invalid mode
             assert any("Unknown prerelease_handling mode" in record.message for record in caplog.records)
@@ -302,7 +304,7 @@ class TestInvalidPrereleaseHandlingConfig:
 
         with patch.object(processor._track_updater, "update_tracks_for_album", new_callable=AsyncMock):
             with caplog.at_level(logging.WARNING):
-                await processor._process_single_album("Test Artist", "Test Album", tracks, [], [])
+                await processor._process_single_album("Test Artist", "Test Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
 
             # Warning should contain valid options
             warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]

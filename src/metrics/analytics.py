@@ -460,7 +460,7 @@ class Analytics:
             stats["avg_duration"],
         )
 
-        duration_counts = stats["duration_counts"]
+        duration_counts: dict[str, int] = stats["duration_counts"]
         total = sum(duration_counts.values()) or 1
         self.console_logger.info(
             "Performance: %s %.0f%% | %s %.0f%% | %s %.0f%%",
@@ -560,12 +560,12 @@ class Analytics:
 
         save_html_report(
             self.events,
-            self.call_counts,
-            self.success_counts,
-            self.decorator_overhead,
-            self.config,
-            self.console_logger,
-            self.error_logger,
+            call_counts=self.call_counts,
+            success_counts=self.success_counts,
+            decorator_overhead=self.decorator_overhead,
+            config=self.config,
+            console_logger=self.console_logger,
+            error_logger=self.error_logger,
             group_successful_short_calls=True,
             force_mode=force_mode,
         )

@@ -523,7 +523,9 @@ class TestGenreManager:
         with patch("core.tracks.genre_manager.determine_dominant_genre_for_artist") as mock_determine:
             mock_determine.return_value = "Rock"
 
-            updated_tracks, change_logs = await manager.test_process_single_artist_wrapper("Test Artist", tracks, None, False, semaphore)
+            updated_tracks, change_logs = await manager.test_process_single_artist_wrapper(
+                "Test Artist", tracks, last_run=None, force=False, artist_semaphore=semaphore
+            )
 
             assert len(updated_tracks) == 1
             assert len(change_logs) == 1
@@ -540,7 +542,7 @@ class TestGenreManager:
             mock_determine.return_value = "Rock"  # Same genre, no update needed
 
             updated_tracks, change_logs = await manager.test_process_single_artist_wrapper(
-                "Test Artist", tracks, datetime(2024, 1, 1, tzinfo=UTC), False, semaphore
+                "Test Artist", tracks, last_run=datetime(2024, 1, 1, tzinfo=UTC), force=False, artist_semaphore=semaphore
             )
 
             assert len(updated_tracks) == 0

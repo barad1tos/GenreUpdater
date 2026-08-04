@@ -35,6 +35,7 @@ TRACK_FIELDNAMES: list[str] = [
 def save_csv(
     data: Sequence[dict[str, str]],
     fieldnames: Sequence[str],
+    *,
     file_path: str,
     console_logger: logging.Logger,
     error_logger: logging.Logger,

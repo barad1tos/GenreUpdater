@@ -76,6 +76,7 @@ def _create_mock_fallback_handler() -> MagicMock:
 
 
 def _create_year_determinator(
+    *,
     cache_service: MagicMock | None = None,
     external_api: MagicMock | None = None,
     pending_verification: MagicMock | None = None,
