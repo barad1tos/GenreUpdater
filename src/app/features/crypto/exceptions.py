@@ -6,16 +6,15 @@ from typing import Any
 
 
 class CryptographyError(Exception):
-    """Base exception for cryptography operations."""
+    """Base exception for cryptography operations.
+
+    Args:
+        message: Error description
+        details: Additional error context
+
+    """
 
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
-        """Initialize CryptographyError.
-
-        Args:
-            message: Error description
-            details: Additional error context
-
-        """
         super().__init__(message)
         self.message = message
         self.details = details or {}

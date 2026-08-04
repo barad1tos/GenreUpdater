@@ -68,6 +68,16 @@ class YearBatchProcessor:
     - Sequential and concurrent processing modes
     - Progress tracking and reporting
     - Orchestration of prerelease handling and track updates
+
+    Args:
+        year_determinator: Component for determining album years
+        track_processor: Processor for track updates
+        retry_handler: Retry handler for transient error recovery
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        config: Typed application configuration
+        analytics: Service for performance tracking
+        dry_run: Whether to run in dry-run mode
     """
 
     def __init__(
@@ -82,19 +92,6 @@ class YearBatchProcessor:
         analytics: AnalyticsProtocol,
         dry_run: bool = False,
     ) -> None:
-        """Initialize the YearBatchProcessor.
-
-        Args:
-            year_determinator: Component for determining album years
-            track_processor: Processor for track updates
-            retry_handler: Retry handler for transient error recovery
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            config: Typed application configuration
-            analytics: Service for performance tracking
-            dry_run: Whether to run in dry-run mode
-
-        """
         self.year_determinator = year_determinator
         self.console_logger = console_logger
         self.error_logger = error_logger
@@ -402,6 +399,14 @@ class YearBatchProcessor:
         changes_log: list[ChangeLogEntry],
     ) -> bool:
         """Process album using dominant year logic.
+
+        Args:
+            artist: Artist name
+            album: Album name
+            album_tracks: List of tracks in the album
+            dominant_year: Year to apply to empty or inconsistent tracks
+            updated_tracks: List to append updated tracks to
+            changes_log: List to append change entries to
 
         Returns:
             True if processing was completed, False if it should continue with regular year determination

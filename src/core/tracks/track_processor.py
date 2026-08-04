@@ -29,7 +29,19 @@ if TYPE_CHECKING:
 
 
 class TrackProcessor:
-    """Handles track fetching and updating operations."""
+    """Handles track fetching and updating operations.
+
+    Args:
+        ap_client: AppleScript client for Music.app communication
+        cache_service: Cache service for storing track data
+        library_snapshot_service: Optional library snapshot service for cached snapshots
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        config: Typed application configuration
+        analytics: Service for tracking method calls
+        dry_run: Whether to run in dry-run mode
+        security_validator: Optional security validator for input sanitization
+    """
 
     def __init__(
         self,
@@ -44,20 +56,6 @@ class TrackProcessor:
         dry_run: bool = False,
         security_validator: SecurityValidator | None = None,
     ) -> None:
-        """Initialize the TrackProcessor.
-
-        Args:
-            ap_client: AppleScript client for Music.app communication
-            cache_service: Cache service for storing track data
-            library_snapshot_service: Optional library snapshot service for cached snapshots
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            config: Typed application configuration
-            analytics: Service for tracking method calls
-            dry_run: Whether to run in dry-run mode
-            security_validator: Optional security validator for input sanitization
-
-        """
         self.ap_client = ap_client
         self.cache_service = cache_service
         self.snapshot_service = library_snapshot_service

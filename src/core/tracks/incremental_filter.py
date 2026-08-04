@@ -24,7 +24,17 @@ if TYPE_CHECKING:
 
 
 class IncrementalFilterService(BaseProcessor):
-    """Service for filtering tracks in incremental update mode."""
+    """Service for filtering tracks in incremental update mode.
+
+    Args:
+        console_logger: Logger for user-facing messages
+        error_logger: Logger for error details
+        analytics: Analytics tracking service
+        config: Typed application configuration
+        dry_run: If True, record actions without applying changes
+        track_list_loader: Callable that loads tracks from a CSV path.
+            Injected to avoid core/ depending on metrics/.
+    """
 
     def __init__(
         self,
@@ -35,17 +45,6 @@ class IncrementalFilterService(BaseProcessor):
         dry_run: bool = False,
         track_list_loader: Callable[[str], dict[str, TrackDict]] | None = None,
     ) -> None:
-        """Initialize the incremental filter service.
-
-        Args:
-            console_logger: Logger for user-facing messages
-            error_logger: Logger for error details
-            analytics: Analytics tracking service
-            config: Typed application configuration
-            dry_run: If True, record actions without applying changes
-            track_list_loader: Callable that loads tracks from a CSV path.
-                Injected to avoid core/ depending on metrics/.
-        """
         super().__init__(console_logger, error_logger, analytics, config, dry_run)
         self._track_list_loader = track_list_loader
 
@@ -59,6 +58,9 @@ class IncrementalFilterService(BaseProcessor):
         Args:
             tracks: All tracks from the music library.
             last_run_time: Timestamp of the last successful incremental run.
+
+        Returns:
+            Deduplicated tracks that are new, missing genre, or have a changed status.
 
         """
         if last_run_time is None:

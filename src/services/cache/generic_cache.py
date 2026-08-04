@@ -27,15 +27,15 @@ else:  # pragma: no cover - runtime-only aliasing for type hints
 
 
 class GenericCacheService:
-    """Generic in-memory cache service with TTL support and automatic cleanup."""
+    """Generic in-memory cache service with TTL support and automatic cleanup.
+
+    Args:
+        config: Typed application configuration
+        logger: Optional logger instance
+
+    """
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        """Initialize generic cache service.
-
-        Args:
-            config: Typed application configuration
-            logger: Optional logger instance
-        """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         self.cache_config = SmartCacheConfig(config)

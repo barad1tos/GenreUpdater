@@ -35,6 +35,13 @@ class TrackCleaningService:
 
     Removes promotional text, normalizes names, and handles batch cleaning
     operations with proper change logging.
+
+    Args:
+        track_processor: Processor for updating tracks.
+        config: Typed application configuration.
+        console_logger: Logger for console output.
+        error_logger: Logger for error output.
+
     """
 
     def __init__(
@@ -44,14 +51,6 @@ class TrackCleaningService:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Initialize the cleaning service.
-
-        Args:
-            track_processor: Processor for updating tracks.
-            config: Typed application configuration.
-            console_logger: Logger for console output.
-            error_logger: Logger for error output.
-        """
         self._track_processor = track_processor
         self._config = config
         self._console_logger = console_logger

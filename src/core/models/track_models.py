@@ -188,6 +188,12 @@ class DevelopmentConfig(BaseModel):
         - Comma string: "Amon Amarth, Children of Bodom"
         - Tuple: ("Amon Amarth", "Children of Bodom")
 
+        Args:
+            v: Raw test_artists value from config (string, list, or tuple)
+
+        Returns:
+            List of stripped, non-empty artist names
+
         Raises:
             ValueError: If input is not a string, list, or tuple.
             TypeError: If list/tuple contains non-string elements.

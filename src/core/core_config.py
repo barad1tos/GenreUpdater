@@ -32,16 +32,15 @@ REQUIRED_ENV_VARS: list[str] = ["DISCOGS_TOKEN", "CONTACT_EMAIL"]
 
 
 class ConfigurationError(Exception):
-    """Raised when configuration loading or parsing fails."""
+    """Raised when configuration loading or parsing fails.
+
+    Args:
+        message: Error description
+        config_path: Path to the config file that caused the error
+
+    """
 
     def __init__(self, message: str, config_path: str | None = None) -> None:
-        """Initialize the configuration error.
-
-        Args:
-            message: Error description
-            config_path: Path to the config file that caused the error
-
-        """
         super().__init__(message)
         self.config_path = config_path
 
@@ -162,8 +161,6 @@ def _read_and_parse_config(path: pathlib.Path) -> dict[str, Any] | list[Any] | s
 
     Raises:
         ValueError: If config file exceeds maximum size (1MB).
-        YAMLError: If YAML parsing fails.
-        OSError: If file cannot be read.
 
     """
     max_size = 1024 * 1024  # 1MB
@@ -224,7 +221,7 @@ def load_config(config_path: str) -> AppConfig:
         FileNotFoundError: If the config file does not exist.
         ValueError: If the configuration is invalid, the path is insecure, or env vars are missing.
         PermissionError: If the config file cannot be read.
-        YAMLError: If there is an error parsing the YAML file.
+        yaml.YAMLError: If there is an error parsing the YAML file.
         RuntimeError: For unexpected errors during additional validation steps.
 
     """

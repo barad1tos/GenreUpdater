@@ -15,7 +15,17 @@ if TYPE_CHECKING:
 
 
 class GenreUpdateService:
-    """Service for standalone genre update operations."""
+    """Service for standalone genre update operations.
+
+    Args:
+        track_processor: Processor for fetching tracks.
+        genre_manager: Manager for genre updates.
+        config: Typed application configuration.
+        console_logger: Logger for console output.
+        error_logger: Logger for error output.
+        cleaning_service: Optional service for metadata cleaning.
+        artist_renamer: Optional service for artist renaming.
+    """
 
     def __init__(
         self,
@@ -27,17 +37,6 @@ class GenreUpdateService:
         cleaning_service: TrackCleaningService | None = None,
         artist_renamer: ArtistRenamer | None = None,
     ) -> None:
-        """Initialize genre update service.
-
-        Args:
-            track_processor: Processor for fetching tracks.
-            genre_manager: Manager for genre updates.
-            config: Typed application configuration.
-            console_logger: Logger for console output.
-            error_logger: Logger for error output.
-            cleaning_service: Optional service for metadata cleaning.
-            artist_renamer: Optional service for artist renaming.
-        """
         self._track_processor = track_processor
         self._genre_manager = genre_manager
         self._config = config

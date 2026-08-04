@@ -98,6 +98,11 @@ class DatabaseRetryHandler:
 
     Provides exponential backoff with jitter, transient error classification,
     and comprehensive retry context management for reliable database operations.
+
+    Args:
+        logger: Logger instance for retry operation tracking
+        default_policy: Default retry policy for operations
+
     """
 
     def __init__(
@@ -105,13 +110,6 @@ class DatabaseRetryHandler:
         logger: logging.Logger,
         default_policy: RetryPolicy | None = None,
     ) -> None:
-        """Initialize retry handler with logging and default policy.
-
-        Args:
-            logger: Logger instance for retry operation tracking
-            default_policy: Default retry policy for operations
-
-        """
         self.logger: logging.Logger = logger
         self.database_policy: RetryPolicy = default_policy or RetryPolicy(
             max_retries=5,
@@ -230,7 +228,12 @@ class DatabaseRetryHandler:
             policy: Retry policy to use (defaults to database_policy)
 
         Yields:
-            RetryOperationContext: Context for tracking retry progress
+            AsyncGenerator[RetryOperationContext]: Context for tracking retry progress
+
+        Raises:
+            OSError: Re-raised when the operation fails with a non-transient error or retries are exhausted
+            RuntimeError: Re-raised when the operation fails with a non-transient error or retries are exhausted
+            ValueError: Re-raised when the operation fails with a non-transient error or retries are exhausted
 
         Example:
             async with retry_handler.async_retry_operation("db_read") as ctx:
@@ -329,7 +332,10 @@ class DatabaseRetryHandler:
             Result from successful operation execution
 
         Raises:
-            OSError, ValueError, RuntimeError: If all retries exhausted
+            OSError: If the operation fails with a non-transient error or retries are exhausted
+            RuntimeError: If the operation fails with a non-transient error, retries are exhausted, or the loop completes without a result
+            ValueError: If the operation fails with a non-transient error or retries are exhausted
+            last_error: Re-raised as the last transient error after retries are exhausted
 
         """
         retry_policy: RetryPolicy = policy or self.database_policy
@@ -423,7 +429,7 @@ class DatabaseRetryHandler:
             retry_policy: Active retry policy configuration
 
         Raises:
-            TimeoutError: Operation exceeded total timeout
+            timeout_error: Operation exceeded total timeout
 
         """
         timeout_error = TimeoutError(f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s")

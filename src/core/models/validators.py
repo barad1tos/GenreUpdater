@@ -213,7 +213,14 @@ MAX_TRACK_ID_LENGTH = 100
 
 
 class SecurityValidationError(Exception):
-    """Exception raised when security validation fails."""
+    """Exception raised when security validation fails.
+
+    Args:
+        message: Error message describing the validation failure
+        field: The field that failed validation
+        dangerous_pattern: The specific pattern that triggered the error
+
+    """
 
     def __init__(
         self,
@@ -221,14 +228,6 @@ class SecurityValidationError(Exception):
         field: str | None = None,
         dangerous_pattern: str | None = None,
     ) -> None:
-        """Initialize the security validation error.
-
-        Args:
-            message: Error message describing the validation failure
-            field: The field that failed validation
-            dangerous_pattern: The specific pattern that triggered the error
-
-        """
         super().__init__(message)
         self.field = field
         self.dangerous_pattern = dangerous_pattern
@@ -240,15 +239,13 @@ class SecurityValidator:
     This class provides methods to validate and sanitize various types of input
     to prevent security vulnerabilities including injection attacks, path traversal,
     and malicious content.
+
+    Args:
+        logger: Optional logger instance for security event logging
+
     """
 
     def __init__(self, logger: logging.Logger | None = None) -> None:
-        """Initialize the security validator.
-
-        Args:
-            logger: Optional logger instance for security event logging
-
-        """
         self.logger = logger or logging.getLogger(__name__)
         self._sql_patterns = [re.compile(pattern) for pattern in SQL_INJECTION_PATTERNS]
         self._xss_patterns = [re.compile(pattern) for pattern in XSS_PATTERNS]

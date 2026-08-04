@@ -22,6 +22,11 @@ class PipelineSnapshotManager:
 
     Maintains an in-memory cache of tracks for efficient updates during
     the pipeline run, avoiding repeated fetches from Music.app.
+
+    Args:
+        track_processor: Processor for fetching tracks by ID.
+        console_logger: Logger for console output.
+
     """
 
     def __init__(
@@ -29,12 +34,6 @@ class PipelineSnapshotManager:
         track_processor: TrackProcessor,
         console_logger: logging.Logger,
     ) -> None:
-        """Initialize the snapshot manager.
-
-        Args:
-            track_processor: Processor for fetching tracks by ID.
-            console_logger: Logger for console output.
-        """
         self._track_processor = track_processor
         self._console_logger = console_logger
         self._tracks_snapshot: list[TrackDict] | None = None

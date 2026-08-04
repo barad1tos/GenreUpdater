@@ -38,16 +38,14 @@ class SecureConfig:
 
     Centralized in the cryptography module for better organization and
     maintainability of all security-related functionality.
+
+    Args:
+        logger: Logger instance for error reporting and debugging
+        key_file_path: Path to encryption key file for secure storage
+
     """
 
     def __init__(self, logger: logging.Logger, key_file_path: str = "encryption.key") -> None:
-        """Initialize SecureConfig with cryptography manager.
-
-        Args:
-            logger: Logger instance for error reporting and debugging
-            key_file_path: Path to encryption key file for secure storage
-
-        """
         self.logger = logger
         self.key_file_path = key_file_path
         self.crypto_manager = CryptographyManager(logger, key_file_path)
@@ -81,9 +79,6 @@ class SecureConfig:
         Returns:
             Decrypted plain text token
 
-        Raises:
-            SecurityConfigError: If decryption fails due to invalid token or key
-
         """
         try:
             return self.crypto_manager.decrypt_token(token, key)
@@ -105,9 +100,6 @@ class SecureConfig:
 
         Returns:
             Base64-encoded encrypted token suitable for secure storage
-
-        Raises:
-            SecurityConfigError: If encryption fails due to invalid input or key
 
         """
         try:

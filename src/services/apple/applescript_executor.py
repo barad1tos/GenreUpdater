@@ -41,16 +41,15 @@ class AppleScriptExecutionError(OSError):
     This exception is used to signal transient errors that may be retried
     by the DatabaseRetryHandler. It extends OSError to leverage the retry
     handler's transient error detection based on errno codes.
+
+    Args:
+        message: Error description
+        label: Script label for context
+        errno_code: Optional errno code for transient error detection
+
     """
 
     def __init__(self, message: str, label: str, errno_code: int | None = None) -> None:
-        """Initialize the execution error.
-
-        Args:
-            message: Error description
-            label: Script label for context
-            errno_code: Optional errno code for transient error detection
-        """
         super().__init__(errno_code, message)
         self.label = label
 
@@ -63,6 +62,15 @@ class AppleScriptExecutor:
     - Handling timeouts and cancellation
     - Process cleanup
     - Temporary file execution for complex scripts
+
+    Args:
+        semaphore: Semaphore for concurrency control (can be None initially)
+        apple_scripts_directory: Directory for temporary script files
+        console_logger: Logger for debug/info messages
+        error_logger: Logger for error messages
+        retry_handler: Optional retry handler for transient error recovery
+        rate_limiter: Optional rate limiter for enhanced throughput control
+
     """
 
     def __init__(
@@ -74,16 +82,6 @@ class AppleScriptExecutor:
         retry_handler: DatabaseRetryHandler | None = None,
         rate_limiter: AppleScriptRateLimiter | None = None,
     ) -> None:
-        """Initialize the executor.
-
-        Args:
-            semaphore: Semaphore for concurrency control (can be None initially)
-            apple_scripts_directory: Directory for temporary script files
-            console_logger: Logger for debug/info messages
-            error_logger: Logger for error messages
-            retry_handler: Optional retry handler for transient error recovery
-            rate_limiter: Optional rate limiter for enhanced throughput control
-        """
         self.semaphore = semaphore
         self.apple_scripts_directory = apple_scripts_directory
         self.console_logger = console_logger
@@ -248,7 +246,9 @@ class AppleScriptExecutor:
 
         Raises:
             AppleScriptExecutionError: On execution failure (may be transient)
+            OSError: If the subprocess fails with an OS-level error
             asyncio.CancelledError: If operation was canceled
+            subprocess.SubprocessError: If the subprocess fails with a subprocess-level error
         """
         start_time = time.time()
         proc = await asyncio.create_subprocess_exec(

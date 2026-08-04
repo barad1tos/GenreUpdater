@@ -57,6 +57,17 @@ class DependencyContainer:
     """Dependency injection container for the application.
 
     This class manages the lifecycle and dependencies of all services in the application.
+
+    Args:
+        config_path: Path to the configuration file
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        analytics_logger: Logger for analytics events
+        db_verify_logger: Logger for database verification operations
+        logging_listener: Optional queue listener for logging
+        dry_run: Whether to run in dry-run mode (no changes made)
+        skip_api_validation: Whether to skip API auth validation (for non-API commands)
+
     """
 
     def __init__(
@@ -71,19 +82,6 @@ class DependencyContainer:
         dry_run: bool = False,
         skip_api_validation: bool = False,
     ) -> None:
-        """Initialize the dependency container.
-
-        Args:
-            config_path: Path to the configuration file
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            analytics_logger: Logger for analytics events
-            db_verify_logger: Logger for database verification operations
-            logging_listener: Optional queue listener for logging
-            dry_run: Whether to run in dry-run mode (no changes made)
-            skip_api_validation: Whether to skip API auth validation (for non-API commands)
-
-        """
         # Initialize logger properties first
         self._console_logger = console_logger
         self._error_logger = error_logger
@@ -219,6 +217,13 @@ class DependencyContainer:
                 signature accepts a ``force`` flag, it will be passed through.
             **kwargs: Additional keyword arguments forwarded to the underlying
                 ``initialize`` implementation.
+
+        Raises:
+            AttributeError: If the underlying initialize call fails due to a missing attribute.
+            OSError: If the underlying initialize call fails due to an OS-level error.
+            RuntimeError: If the underlying initialize call fails due to a runtime error.
+            TypeError: If the underlying initialize call fails due to an invalid argument type.
+            ValueError: If the underlying initialize call fails due to an invalid argument value.
 
         """
         initialize_method = getattr(service, "initialize", None)
@@ -443,6 +448,7 @@ class DependencyContainer:
 
         Raises:
             RuntimeError: If coroutine execution fails
+            asyncio.CancelledError: If the coroutine is cancelled
 
         """
         try:
@@ -538,9 +544,7 @@ class DependencyContainer:
 
         Raises:
             FileNotFoundError: If the config file doesn't exist.
-            YAMLError: If the YAML config contains syntax errors.
-            ValueError: If API authentication configuration is incomplete.
-            RuntimeError: For any other errors during loading.
+            yaml.YAMLError: If the YAML config contains syntax errors.
 
         """
         try:

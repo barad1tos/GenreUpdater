@@ -32,6 +32,20 @@ class BatchTrackFetcher:
     - Batch-based track fetching to avoid AppleScript timeouts
     - Parse failure tracking and recovery
     - Caching and snapshot persistence of fetched tracks
+
+    Args:
+        ap_client: AppleScript client for Music.app communication
+        cache_service: Cache service for storing fetched tracks
+        console_logger: Logger for info/debug messages
+        error_logger: Logger for error messages
+        config: Typed application configuration
+        track_validator: Callback to validate tracks for security
+        artist_processor: Async callback to process artist renames
+        snapshot_loader: Async callback to load tracks from snapshot
+        snapshot_persister: Async callback to persist tracks to snapshot
+        can_use_snapshot: Callback to check if snapshot can be used
+        dry_run: Whether running in dry-run mode
+        analytics: Optional analytics instance for batch mode logging
     """
 
     def __init__(
@@ -50,22 +64,6 @@ class BatchTrackFetcher:
         dry_run: bool = False,
         analytics: AnalyticsProtocol | None = None,
     ) -> None:
-        """Initialize the batch track fetcher.
-
-        Args:
-            ap_client: AppleScript client for Music.app communication
-            cache_service: Cache service for storing fetched tracks
-            console_logger: Logger for info/debug messages
-            error_logger: Logger for error messages
-            config: Typed application configuration
-            track_validator: Callback to validate tracks for security
-            artist_processor: Async callback to process artist renames
-            snapshot_loader: Async callback to load tracks from snapshot
-            snapshot_persister: Async callback to persist tracks to snapshot
-            can_use_snapshot: Callback to check if snapshot can be used
-            dry_run: Whether running in dry-run mode
-            analytics: Optional analytics instance for batch mode logging
-        """
         self.ap_client = ap_client
         self.cache_service = cache_service
         self.console_logger = console_logger
@@ -205,6 +203,12 @@ class BatchTrackFetcher:
         consecutive_failures: int,
     ) -> tuple[list[TrackDict], int, int, bool] | None:
         """Process a single batch and return results.
+
+        Args:
+            batch_number: Current batch number for logging
+            offset: Starting offset for this batch
+            batch_size: Number of tracks to fetch per batch
+            consecutive_failures: Count of consecutive parse failures before this batch
 
         Returns:
             Tuple of (tracks, new_offset, new_failures, should_continue) or None to stop

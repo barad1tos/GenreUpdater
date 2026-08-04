@@ -20,6 +20,13 @@ class BaseProcessor:
 
     Provides common initialization and dry-run functionality
     that is shared across all processing modules.
+
+    Args:
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        analytics: Service for performance tracking
+        config: Typed application configuration
+        dry_run: Whether to run in dry-run mode
     """
 
     def __init__(
@@ -30,16 +37,6 @@ class BaseProcessor:
         config: AppConfig,
         dry_run: bool,
     ) -> None:
-        """Initialize the base processor.
-
-        Args:
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            analytics: Service for performance tracking
-            config: Typed application configuration
-            dry_run: Whether to run in dry-run mode
-
-        """
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.analytics = analytics

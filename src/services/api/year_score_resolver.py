@@ -37,6 +37,15 @@ class YearScoreResolver:
     - Aggregating scores by year across multiple API sources
     - Selecting the best year considering future dates and reissues
     - Determining if the result is definitive
+
+    Args:
+        console_logger: Logger for console output
+        min_valid_year: Minimum year to consider valid (e.g., 1900)
+        current_year: The current calendar year
+        definitive_score_threshold: Min score to consider definitive
+        definitive_score_diff: Min difference to prefer one year over another
+        remaster_keywords: Keywords indicating reissue/remaster editions
+
     """
 
     def __init__(
@@ -49,17 +58,6 @@ class YearScoreResolver:
         definitive_score_diff: int,
         remaster_keywords: list[str] | None = None,
     ) -> None:
-        """Initialize the year score resolver.
-
-        Args:
-            console_logger: Logger for console output
-            min_valid_year: Minimum year to consider valid (e.g., 1900)
-            current_year: The current calendar year
-            definitive_score_threshold: Min score to consider definitive
-            definitive_score_diff: Min difference to prefer one year over another
-            remaster_keywords: Keywords indicating reissue/remaster editions
-
-        """
         self.console_logger = console_logger
         self.min_valid_year = min_valid_year
         self.current_year = current_year
@@ -164,6 +162,11 @@ class YearScoreResolver:
 
         If existing year appears in API results with >= 90% of best score,
         prefer stability over change.
+
+        Args:
+            existing_year: Current year from library (for stability boost)
+            final_year_scores: Mapping of year to its maximum score
+            sorted_years: Years sorted by score (desc), then year (asc)
 
         Returns:
             Tuple of (year, is_definitive, score) if boost applied, None otherwise.

@@ -65,7 +65,14 @@ class PendingVerificationService:
     """Service to track albums needing future verification of their release year.
 
     Uses hash-based keys for album data. File operations are asynchronous.
-    Initializes asynchronously.
+    Initializes asynchronously. Does NOT perform file loading in the constructor;
+    call the async initialize method after instantiation.
+
+    Args:
+        config: Typed application configuration
+        console_logger: Logger for console output
+        error_logger: Logger for error logging.
+
     """
 
     def __init__(
@@ -74,16 +81,6 @@ class PendingVerificationService:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Initialize the PendingVerificationService.
-
-        Does NOT perform file loading here. Use the async initialize method.
-
-        Args:
-            config: Typed application configuration
-            console_logger: Logger for console output
-            error_logger: Logger for error logging.
-
-        """
         self.config = config
         self.console_logger = console_logger
         self.error_logger = error_logger
@@ -327,6 +324,10 @@ class PendingVerificationService:
 
         Args:
             entries: List of PendingAlbumEntry objects to save
+
+        Raises:
+            OSError: If writing or renaming the pending verification file fails.
+            csv.Error: If writing a CSV row fails.
         """
         temp_file = f"{self.pending_file_path}.tmp"
 

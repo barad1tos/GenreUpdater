@@ -39,7 +39,18 @@ if TYPE_CHECKING:
 
 # noinspection PyTypeChecker
 class DatabaseVerifier:
-    """Manages database verification and incremental run tracking."""
+    """Manages database verification and incremental run tracking.
+
+    Args:
+        ap_client: AppleScript client for Music.app communication
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        db_verify_logger: Logger for verification log file
+        analytics: Analytics instance for tracking
+        config: Typed application configuration
+        dry_run: Whether to run in dry-run mode
+
+    """
 
     def __init__(
         self,
@@ -52,18 +63,6 @@ class DatabaseVerifier:
         config: AppConfig,
         dry_run: bool = False,
     ) -> None:
-        """Initialize the DatabaseVerifier.
-
-        Args:
-            ap_client: AppleScript client for Music.app communication
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            db_verify_logger: Logger for verification log file
-            analytics: Analytics instance for tracking
-            config: Typed application configuration
-            dry_run: Whether to run in dry-run mode
-
-        """
         self.ap_client = ap_client
         self.console_logger = console_logger
         self.error_logger = error_logger

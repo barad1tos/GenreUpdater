@@ -50,6 +50,16 @@ class YearFallbackHandler:
 
     Key principle: When we trust existing year over proposed year, we PROPAGATE
     the existing year to ALL tracks (including empty ones), not just preserve it.
+
+    Args:
+        console_logger: Logger for console output
+        pending_verification: Service for marking albums for verification
+        fallback_enabled: Whether fallback logic is enabled
+        absurd_year_threshold: Years below this are considered absurd
+        year_difference_threshold: Max allowed year difference before dramatic change
+        trust_api_score_threshold: Trust API if confidence >= this value
+        min_confidence_for_new_year: Minimum confidence to apply year when no existing year
+        api_orchestrator: API orchestrator for artist data lookups (optional)
     """
 
     def __init__(
@@ -64,19 +74,6 @@ class YearFallbackHandler:
         min_confidence_for_new_year: int = DEFAULT_MIN_CONFIDENCE_FOR_NEW_YEAR,
         api_orchestrator: ExternalApiServiceProtocol | None = None,
     ) -> None:
-        """Initialize the year fallback handler.
-
-        Args:
-            console_logger: Logger for console output
-            pending_verification: Service for marking albums for verification
-            fallback_enabled: Whether fallback logic is enabled
-            absurd_year_threshold: Years below this are considered absurd
-            year_difference_threshold: Max allowed year difference before dramatic change
-            trust_api_score_threshold: Trust API if confidence >= this value
-            min_confidence_for_new_year: Minimum confidence to apply year when no existing year
-            api_orchestrator: API orchestrator for artist data lookups (optional)
-
-        """
         self.console_logger = console_logger
         self.pending_verification = pending_verification
         self.fallback_enabled = fallback_enabled
@@ -302,6 +299,12 @@ class YearFallbackHandler:
 
         Implements escalation: after MAX_VERIFICATION_ATTEMPTS, accept the year
         rather than blocking forever.
+
+        Args:
+            proposed_year: Year proposed for the album
+            confidence_score: Confidence score for the proposed year
+            artist: Artist name
+            album: Album name
 
         Returns:
             proposed_year if should apply (after escalation),

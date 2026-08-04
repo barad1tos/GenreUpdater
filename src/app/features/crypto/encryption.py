@@ -33,16 +33,15 @@ FERNET_VERSION_BYTE = 0x80  # Fernet token version identifier byte
 
 
 class CryptographyManager:
-    """Manages Fernet-based encryption for tokens and configuration data."""
+    """Manages Fernet-based encryption for tokens and configuration data.
+
+    Args:
+        logger: Logger instance for error reporting
+        key_file_path: Path to encryption key file
+
+    """
 
     def __init__(self, logger: logging.Logger, key_file_path: str = "encryption.key") -> None:
-        """Initialize CryptographyManager.
-
-        Args:
-            logger: Logger instance for error reporting
-            key_file_path: Path to encryption key file
-
-        """
         self.logger = logger
         self.key_file_path = Path(key_file_path)
         self._fernet: Fernet | None = None
@@ -60,7 +59,9 @@ class CryptographyManager:
             32-byte encryption key
 
         Raises:
-            KeyGenerationError: If key generation fails
+            OSError: If key generation fails
+            TypeError: If key generation fails
+            ValueError: If key generation fails
 
         """
         try:
@@ -89,7 +90,9 @@ class CryptographyManager:
             Encryption key bytes
 
         Raises:
-            KeyGenerationError: If key operations fail
+            OSError: If key operations fail
+            TypeError: If key operations fail
+            ValueError: If key operations fail
 
         """
         try:
@@ -107,6 +110,9 @@ class CryptographyManager:
 
         Returns:
             Encryption key bytes
+
+        Raises:
+            ValueError: If the existing key file contains an invalid Fernet key format
 
         """
         # Try to load existing key
@@ -234,7 +240,9 @@ class CryptographyManager:
             Base64-encoded encrypted token
 
         Raises:
-            EncryptionError: If encryption fails
+            EncryptionError: If the token is empty or encryption fails
+            InvalidKeyError: If the encryption key is invalid
+            KeyGenerationError: If key generation fails
 
         """
         try:
@@ -269,7 +277,9 @@ class CryptographyManager:
 
         Raises:
             DecryptionError: If decryption fails
+            InvalidKeyError: If the encryption key is invalid
             InvalidTokenError: If token format is invalid
+            KeyGenerationError: If key generation fails
 
         """
         try:
@@ -317,9 +327,6 @@ class CryptographyManager:
         Args:
             new_passphrase: Passphrase for new key derivation
             backup_old_key: Whether to backup the old key
-
-        Raises:
-            KeyGenerationError: If key rotation fails
 
         """
         try:

@@ -56,7 +56,21 @@ class CachePolicy:
 
 
 class SmartCacheConfig:
-    """Smart cache configuration with content-aware policies."""
+    """Smart cache configuration with content-aware policies.
+
+    Attributes:
+        MINUTE: Number of seconds in a minute
+        HOUR: Number of seconds in an hour
+        DAY: Number of seconds in a day
+        WEEK: Number of seconds in a week
+        MONTH: Number of seconds in a 30-day month
+        INFINITE_TTL: TTL in seconds for content that should never expire (10 years)
+        DEFAULT_NEGATIVE_RESULT_TTL: Default TTL in seconds for cached negative lookup results
+
+    Args:
+        config: Optional typed application configuration
+
+    """
 
     # Time constants
     MINUTE = 60
@@ -72,11 +86,6 @@ class SmartCacheConfig:
     DEFAULT_NEGATIVE_RESULT_TTL = MONTH
 
     def __init__(self, config: AppConfig | None = None) -> None:
-        """Initialize smart cache configuration.
-
-        Args:
-            config: Optional typed application configuration
-        """
         self.logger = logging.getLogger(__name__)
         self._config = config
         self._policies = self._create_default_policies()
@@ -273,14 +282,14 @@ class CacheEvent:
 
 
 class EventDrivenCacheManager:
-    """Manages event-driven cache invalidation."""
+    """Manages event-driven cache invalidation.
+
+    Args:
+        config: Smart cache configuration instance
+
+    """
 
     def __init__(self, config: SmartCacheConfig) -> None:
-        """Initialize event-driven cache manager.
-
-        Args:
-            config: Smart cache configuration instance
-        """
         self.config = config
         self.logger = logging.getLogger(__name__)
         self._event_handlers: dict[CacheEventType, list[Callable[[CacheEvent], None]]] = {}

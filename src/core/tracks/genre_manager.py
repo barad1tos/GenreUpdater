@@ -32,7 +32,16 @@ if TYPE_CHECKING:
 
 
 class GenreManager(BaseProcessor):
-    """Manages genre determination and updates for tracks."""
+    """Manages genre determination and updates for tracks.
+
+    Args:
+        track_processor: Track processor for updating tracks
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        analytics: Service for performance tracking
+        config: Typed application configuration
+        dry_run: Whether to run in dry-run mode
+    """
 
     def __init__(
         self,
@@ -43,17 +52,6 @@ class GenreManager(BaseProcessor):
         config: AppConfig,
         dry_run: bool = False,
     ) -> None:
-        """Initialize the GenreManager.
-
-        Args:
-            track_processor: Track processor for updating tracks
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            analytics: Service for performance tracking
-            config: Typed application configuration
-            dry_run: Whether to run in dry-run mode
-
-        """
         super().__init__(console_logger, error_logger, analytics, config, dry_run)
         self.track_processor = track_processor
 

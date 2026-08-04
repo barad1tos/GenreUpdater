@@ -49,16 +49,15 @@ MAX_SCRIPT_SIZE = 10000  # 10KB limit for script size
 
 
 class AppleScriptSanitizationError(Exception):
-    """Exception raised when AppleScript code fails security validation."""
+    """Exception raised when AppleScript code fails security validation.
+
+    Args:
+        message: Error message describing the security violation
+        dangerous_pattern: The specific pattern that triggered the error
+
+    """
 
     def __init__(self, message: str, dangerous_pattern: str | None = None) -> None:
-        """Initialize the sanitization error.
-
-        Args:
-            message: Error message describing the security violation
-            dangerous_pattern: The specific pattern that triggered the error
-
-        """
         super().__init__(message)
         self.dangerous_pattern = dangerous_pattern
 
@@ -69,15 +68,13 @@ class AppleScriptSanitizer:
     This class provides methods to sanitize and validate AppleScript code
     to prevent command injection and other security vulnerabilities.
     Implements defense-in-depth through multiple validation layers.
+
+    Args:
+        logger: Optional logger instance for security event logging
+
     """
 
     def __init__(self, logger: logging.Logger | None = None) -> None:
-        """Initialize the AppleScript sanitizer.
-
-        Args:
-            logger: Optional logger instance for security event logging
-
-        """
         self.logger = logger or logging.getLogger(__name__)
         self._compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in DANGEROUS_APPLESCRIPT_PATTERNS]
 
@@ -93,7 +90,8 @@ class AppleScriptSanitizer:
             The sanitized string safe for AppleScript execution
 
         Raises:
-            ValueError: If the input value is None or not a string
+            ValueError: If the input value is None
+            TypeError: If the input value is not a string
 
         """
         if value is None:
@@ -180,10 +178,6 @@ class AppleScriptSanitizer:
 
         Returns:
             list[str]: Safe command list for subprocess execution
-
-        Raises:
-            AppleScriptSanitizationError: If validation fails
-            ValueError: If inputs are invalid
 
         """
         # Validate the script code first

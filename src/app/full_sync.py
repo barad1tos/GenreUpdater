@@ -64,6 +64,11 @@ async def run_full_resync(
 
         track_processor: Track processor instance
 
+    Raises:
+        OSError: If reading tracks or writing the synchronized database fails
+        RuntimeError: If the synchronization process fails unexpectedly
+        ValueError: If synchronization data is invalid
+
     """
     console_logger.info("Starting full media library resync...")
 

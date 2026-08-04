@@ -22,7 +22,15 @@ DRY_RUN_SUCCESS_MESSAGE = "Success (dry run)"
 
 
 class DryRunAppleScriptClient(AppleScriptClientProtocol):
-    """AppleScript client that logs actions instead of modifying the library."""
+    """AppleScript client that logs actions instead of modifying the library.
+
+    Args:
+        real_client: The real AppleScript client to delegate fetch operations to
+        config: Typed application configuration
+        console_logger: Logger for console output
+        error_logger: Logger for error output
+
+    """
 
     def __init__(
         self,
@@ -31,15 +39,6 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Initialize the DryRunAppleScriptClient with dependencies.
-
-        Args:
-            real_client: The real AppleScript client to delegate fetch operations to
-            config: Typed application configuration
-            console_logger: Logger for console output
-            error_logger: Logger for error output
-
-        """
         self._real_client = real_client
         self.console_logger = console_logger
         self.error_logger = error_logger

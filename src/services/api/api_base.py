@@ -49,25 +49,16 @@ class ApiRateLimiter:
     compliance with API rate limits. It uses a moving window algorithm that's
     more accurate than simple token bucket approaches.
 
-    Attributes:
-        requests_per_window: Maximum number of requests allowed in the time window
-        window_seconds: Size of the time window in seconds
-        call_times: List of timestamps for recent API calls
-        lock: Asyncio lock for thread-safe operations
+    Args:
+        requests_per_window: Maximum requests allowed in the time window
+        window_seconds: Duration of the time window in seconds
+
+    Raises:
+        ValueError: If parameters are not positive numbers
 
     """
 
     def __init__(self, requests_per_window: int, window_seconds: float) -> None:
-        """Initialize the rate limiter.
-
-        Args:
-            requests_per_window: Maximum requests allowed in the time window
-            window_seconds: Duration of the time window in seconds
-
-        Raises:
-            ValueError: If parameters are not positive numbers
-
-        """
         if requests_per_window <= 0:
             msg = "requests_per_window must be a positive integer"
             raise ValueError(msg)
@@ -163,16 +154,14 @@ class BaseApiClient:
     - Name normalization
     - Year validation
     - Common scoring logic
+
+    Args:
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+
     """
 
     def __init__(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
-        """Initialize base API client.
-
-        Args:
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-
-        """
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.compilation_pattern = re.compile(

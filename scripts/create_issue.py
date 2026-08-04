@@ -31,11 +31,9 @@ if TYPE_CHECKING:
 # Try to import github library, provide helpful error if missing
 try:
     from github import Auth, Github
-except ImportError:
-    Auth = None  # type: ignore[misc, assignment]
-    Github = None  # type: ignore[misc, assignment]
-    print("ERROR: PyGithub not installed. Run: uv add PyGithub")
-    sys.exit(1)
+except ImportError as import_error:
+    message = "PyGithub not installed. Run: uv add PyGithub"
+    raise SystemExit(message) from import_error
 
 
 # =============================================================================
@@ -412,7 +410,8 @@ def main() -> int:
         print("\n[DRY RUN MODE - No issues will be created]\n")
         repo = None
     else:
-        github_client = Github(auth=Auth.Token(token))  # type: ignore[arg-type]
+        assert token, "non-dry-run mode requires GITHUB_TOKEN (validated at startup)"
+        github_client = Github(auth=Auth.Token(token))
         repo = github_client.get_repo(args.repo)
         print(f"Connected to repository: {repo.full_name}")
 

@@ -48,6 +48,19 @@ class YearSearchCoordinator:
     - Script-optimized search (Cyrillic, CJK, etc.)
     - Concurrent API queries across multiple providers
     - API priority ordering based on configuration
+
+    Args:
+        console_logger: Logger for console output
+        error_logger: Logger for error output
+        config: Typed application configuration
+        preferred_api: Preferred API name for ordering
+        musicbrainz_client: MusicBrainz API client
+        discogs_client: Discogs API client
+        applemusic_client: Apple Music API client
+        release_scorer: Release scoring service
+        max_concurrent_api_calls: Maximum concurrent API requests (default 50).
+            Prevents socket exhaustion on large libraries.
+
     """
 
     def __init__(
@@ -63,21 +76,6 @@ class YearSearchCoordinator:
         release_scorer: ReleaseScorer,
         max_concurrent_api_calls: int = 50,
     ) -> None:
-        """Initialize the year search coordinator.
-
-        Args:
-            console_logger: Logger for console output
-            error_logger: Logger for error output
-            config: Typed application configuration
-            preferred_api: Preferred API name for ordering
-            musicbrainz_client: MusicBrainz API client
-            discogs_client: Discogs API client
-            applemusic_client: Apple Music API client
-            release_scorer: Release scoring service
-            max_concurrent_api_calls: Maximum concurrent API requests (default 50).
-                Prevents socket exhaustion on large libraries.
-
-        """
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config

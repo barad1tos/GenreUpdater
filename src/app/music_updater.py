@@ -39,15 +39,14 @@ if TYPE_CHECKING:
 
 # noinspection PyArgumentEqualDefault,PyTypeChecker
 class MusicUpdater:
-    """Orchestrates music library updates using modular components."""
+    """Orchestrates music library updates using modular components.
+
+    Args:
+        deps: Dependency container with all required services
+
+    """
 
     def __init__(self, deps: DependencyContainer) -> None:
-        """Initialize MusicUpdater with dependency injection.
-
-        Args:
-            deps: Dependency container with all required services
-
-        """
         self.deps = deps
         self.app_config = deps.app_config
         self.console_logger = deps.console_logger
