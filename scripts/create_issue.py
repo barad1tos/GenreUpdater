@@ -410,7 +410,9 @@ def main() -> int:
         print("\n[DRY RUN MODE - No issues will be created]\n")
         repo = None
     else:
-        assert token, "non-dry-run mode requires GITHUB_TOKEN (validated at startup)"
+        if not token:
+            print("ERROR: GITHUB_TOKEN environment variable not set")
+            return 1
         github_client = Github(auth=Auth.Token(token))
         repo = github_client.get_repo(args.repo)
         print(f"Connected to repository: {repo.full_name}")
