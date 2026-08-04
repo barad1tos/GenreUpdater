@@ -42,6 +42,34 @@ class YearRetriever:
     This class coordinates the year retrieval subsystem, delegating
     actual work to specialized components while maintaining backward
     compatibility with existing code.
+
+    Args:
+        track_processor: Track processor for updating tracks
+        cache_service: Cache service for storing years
+        external_api: External API service for fetching years
+        pending_verification: Service for managing pending verifications
+        retry_handler: Retry handler for transient error recovery
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        analytics: Service for performance tracking
+        config: Typed application configuration
+        dry_run: Whether to run in dry-run mode
+
+    Attributes:
+        MIN_VALID_YEAR: Minimum year considered valid
+        PARITY_THRESHOLD: Max difference for parity detection
+        TOP_YEARS_COUNT: Number of top years to consider for parity
+        DOMINANCE_MIN_SHARE: Min share of tracks for dominance (0.0-1.0)
+        SUSPICIOUS_ALBUM_MIN_LEN: Album names with length <= this are suspicious
+        SUSPICIOUS_MANY_YEARS: If >= this many unique years present, skip auto updates
+        MAX_RETRY_DELAY_SECONDS: Maximum delay in seconds between retry attempts
+        DEFAULT_YEAR_DIFFERENCE_THRESHOLD: Max allowed year difference before dramatic change
+        DEFAULT_FALLBACK_ENABLED: Whether fallback logic is enabled by default
+        DEFAULT_ABSURD_YEAR_THRESHOLD: Years below this are considered absurd
+        DEFAULT_SUSPICION_THRESHOLD_YEARS: If dominant year is this many years older
+            than earliest track added date, trigger API verification
+        normalize_collaboration_artist: Static helper that normalizes collaboration
+            artist names to the main artist for grouping
     """
 
     # Public constants (API contract - do not change)
@@ -72,21 +100,6 @@ class YearRetriever:
         config: AppConfig,
         dry_run: bool = False,
     ) -> None:
-        """Initialize the YearRetriever.
-
-        Args:
-            track_processor: Track processor for updating tracks
-            cache_service: Cache service for storing years
-            external_api: External API service for fetching years
-            pending_verification: Service for managing pending verifications
-            retry_handler: Retry handler for transient error recovery
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            analytics: Service for performance tracking
-            config: Typed application configuration
-            dry_run: Whether to run in dry-run mode
-
-        """
         # Store references
         self.track_processor = track_processor
         self.cache_service = cache_service

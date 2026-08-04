@@ -105,7 +105,21 @@ def _get_format_details(formats: list[DiscogsFormat]) -> str:
 
 
 class DiscogsClient(BaseApiClient):
-    """Discogs API client for fetching music metadata."""
+    """Discogs API client for fetching music metadata.
+
+    Args:
+        token: Discogs API token
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        analytics: Analytics service for performance tracking
+        make_api_request_func: Function to make API requests with rate-limiting
+        score_release_func: Function to score releases for originality
+        cache_service: Cache service for storing results
+        scoring_config: Year retrieval configuration with scoring rules
+        config: Typed application configuration
+        cache_ttl_days: Cache TTL in days
+
+    """
 
     def __init__(
         self,
@@ -121,21 +135,6 @@ class DiscogsClient(BaseApiClient):
         config: AppConfig,
         cache_ttl_days: int = 30,
     ) -> None:
-        """Initialize Discogs client.
-
-        Args:
-            token: Discogs API token
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            analytics: Analytics service for performance tracking
-            make_api_request_func: Function to make API requests with rate-limiting
-            score_release_func: Function to score releases for originality
-            cache_service: Cache service for storing results
-            scoring_config: Year retrieval configuration with scoring rules
-            config: Typed application configuration
-            cache_ttl_days: Cache TTL in days
-
-        """
         super().__init__(console_logger, error_logger)
         self.analytics = analytics
         self.token = token

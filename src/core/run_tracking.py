@@ -20,15 +20,14 @@ if TYPE_CHECKING:
 
 # noinspection PyTypeChecker
 class IncrementalRunTracker:
-    """Utility class for tracking incremental run timestamps."""
+    """Utility class for tracking incremental run timestamps.
+
+    Args:
+        config: Typed application configuration
+
+    """
 
     def __init__(self, config: AppConfig) -> None:
-        """Initialize the run tracker.
-
-        Args:
-            config: Typed application configuration
-
-        """
         self.config = config
 
     def get_last_run_file_path(self) -> str:

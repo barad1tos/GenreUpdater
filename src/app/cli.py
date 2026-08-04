@@ -111,7 +111,6 @@ class CLI:
     """Command-line interface handler."""
 
     def __init__(self) -> None:
-        """Initialize CLI parser."""
         self.parser = self._create_parser()
 
     @staticmethod

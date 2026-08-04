@@ -31,15 +31,15 @@ from typing import Any, ClassVar
 
 
 class FingerprintGenerationError(Exception):
-    """Raised when fingerprint generation fails."""
+    """Raised when fingerprint generation fails.
+
+    Args:
+        message: Error description
+        track_data: Track data that caused the error (optional, for debugging)
+
+    """
 
     def __init__(self, message: str, track_data: dict[str, Any] | None = None) -> None:
-        """Initialize fingerprint generation error.
-
-        Args:
-            message: Error description
-            track_data: Track data that caused the error (optional, for debugging)
-        """
         super().__init__(message)
         self.track_data = track_data
 
@@ -64,6 +64,16 @@ class FingerprintGenerator:
         - rating: User preference, not content change
         - last_played: Frequent changes irrelevant to processing
         - genre: This is what we're computing, can't use for fingerprint!
+
+    Attributes:
+        ENCODING: Text encoding used when hashing canonical track data
+        HASH_ALGORITHM: Hash algorithm used to compute the fingerprint
+        REQUIRED_PROPERTIES: Track property names that must be present for a valid fingerprint
+        OPTIONAL_PROPERTIES: Track property names with their default values when absent
+
+    Args:
+        logger: Logger for debugging fingerprint generation (optional)
+
     """
 
     # Constants for fingerprint generation
@@ -85,11 +95,6 @@ class FingerprintGenerator:
     }
 
     def __init__(self, logger: logging.Logger | None = None) -> None:
-        """Initialize fingerprint generator.
-
-        Args:
-            logger: Logger for debugging fingerprint generation (optional)
-        """
         self.logger = logger or logging.getLogger(__name__)
 
     def generate_track_fingerprint(self, track_data: dict[str, Any]) -> str:

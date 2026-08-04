@@ -12,7 +12,14 @@ if TYPE_CHECKING:
 
 
 class BatchProcessor:
-    """Handles batch processing of multiple artists."""
+    """Handles batch processing of multiple artists.
+
+    Args:
+        music_updater: Music updater instance
+        console_logger: Console logger
+        error_logger: Error logger
+
+    """
 
     def __init__(
         self,
@@ -20,14 +27,6 @@ class BatchProcessor:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
-        """Initialize batch processor.
-
-        Args:
-            music_updater: Music updater instance
-            console_logger: Console logger
-            error_logger: Error logger
-
-        """
         self.music_updater = music_updater
         self.console_logger = console_logger
         self.error_logger = error_logger
@@ -84,6 +83,9 @@ class BatchProcessor:
 
         Returns:
             Dictionary with successful and failed artists
+
+        Raises:
+            asyncio.CancelledError: If the batch processing task is cancelled
 
         """
         results: dict[str, list[str]] = {"successful": [], "failed": [], "skipped": []}

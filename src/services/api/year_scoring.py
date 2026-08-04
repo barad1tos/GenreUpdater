@@ -76,13 +76,13 @@ class ReleaseScorer:
     The algorithm considers multiple factors and applies configuration-driven
     scoring rules to ensure consistent and accurate results.
 
-    Attributes:
-        scoring_config: Configuration dictionary with scoring parameters
-        min_valid_year: Minimum valid year for releases (default: 1900)
-        current_year: Current year for validation (default: current system year)
-        definitive_score_threshold: Threshold for considering a score definitive
-        artist_period_context: Optional context about artist's active period
-        console_logger: Logger for debug output
+    Args:
+        scoring_config: Typed scoring parameters (uses defaults if None)
+        min_valid_year: Minimum valid year for releases
+        definitive_score_threshold: Threshold for definitive scoring
+        console_logger: Optional logger for debug output
+        remaster_keywords: Keywords to identify edition suffixes
+        major_market_codes: Country codes for major market bonus
 
     """
 
@@ -98,17 +98,6 @@ class ReleaseScorer:
         remaster_keywords: list[str] | None = None,
         major_market_codes: list[str] | None = None,
     ) -> None:
-        """Initialize the release scorer.
-
-        Args:
-            scoring_config: Typed scoring parameters (uses defaults if None)
-            min_valid_year: Minimum valid year for releases
-            definitive_score_threshold: Threshold for definitive scoring
-            console_logger: Optional logger for debug output
-            remaster_keywords: Keywords to identify edition suffixes
-            major_market_codes: Country codes for major market bonus
-
-        """
         self.scoring_config: ScoringConfig = scoring_config or ScoringConfig(
             base_score=10,
             artist_exact_match_bonus=20,

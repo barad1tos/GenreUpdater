@@ -128,16 +128,13 @@ class ExternalApiOrchestrator:
     This class implements a modular architecture for external API services,
     providing unified access to MusicBrainz and Discogs APIs.
 
-    Attributes:
+    Args:
         config: Configuration dictionary
         console_logger: Logger for general output
         error_logger: Logger for errors and warnings
+        analytics: Analytics service for performance tracking
         cache_service: Service for caching API responses
         pending_verification_service: Service for managing verification queue
-        session: HTTP session for API requests
-        rate_limiters: Rate limiters for each API provider
-        scoring_config: Configuration for release scoring algorithm
-        release_scorer: Scorer for evaluating release candidates
 
     """
 
@@ -178,7 +175,6 @@ class ExternalApiOrchestrator:
         cache_service: CacheOrchestrator,
         pending_verification_service: PendingVerificationService,
     ) -> None:
-        """Initialize the API orchestrator with configuration, loggers, and dependencies."""
         self.config = config
         self.console_logger = console_logger
         self.error_logger = error_logger
@@ -494,7 +490,10 @@ class ExternalApiOrchestrator:
             force: If True, close existing session and reinitialize.
 
         Raises:
-            Exception: Re-raises any exception from initialization after cleanup.
+            AttributeError: Re-raised after session cleanup if initialization fails due to a missing attribute.
+            RuntimeError: Re-raised after session cleanup if initialization fails due to a runtime error.
+            TypeError: Re-raised after session cleanup if initialization fails due to a type error.
+            ValueError: Re-raised after session cleanup if initialization fails due to a value error.
         """
         if force and self.session and not self.session.closed:
             await self.session.close()
@@ -840,6 +839,12 @@ class ExternalApiOrchestrator:
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
+        Args:
+            artist: Artist name
+            album: Album name
+            current_library_year: Year currently stored in the library for this album
+            earliest_track_added_year: Year the earliest track of the album was added to the library
+
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
             year_scores: dict mapping each year found by APIs to its max score
@@ -972,6 +977,12 @@ class ExternalApiOrchestrator:
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle errors during year search and return fallback year.
 
+        Args:
+            log_artist: Artist name formatted for logging
+            log_album: Album name formatted for logging
+            current_library_year: Year currently stored in the library for this album
+            earliest_track_added_year: Year the earliest track of the album was added to the library
+
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
         """
@@ -1080,6 +1091,14 @@ class ExternalApiOrchestrator:
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Handle case when no API results are found.
 
+        Args:
+            artist: Artist name
+            album: Album name
+            log_artist: Artist name formatted for logging
+            log_album: Album name formatted for logging
+            current_library_year: Year currently stored in the library for this album
+            earliest_track_added_year: Year the earliest track of the album was added to the library
+
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
         """
@@ -1110,6 +1129,15 @@ class ExternalApiOrchestrator:
         earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Process API results and determine the best release year.
+
+        Args:
+            all_releases: Scored releases collected from all API providers
+            artist: Artist name
+            album: Album name
+            log_artist: Artist name formatted for logging
+            log_album: Album name formatted for logging
+            current_library_year: Year currently stored in the library for this album
+            earliest_track_added_year: Year the earliest track of the album was added to the library
 
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)

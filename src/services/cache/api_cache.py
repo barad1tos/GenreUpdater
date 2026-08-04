@@ -30,15 +30,15 @@ if TYPE_CHECKING:
 
 
 class ApiCacheService:
-    """Specialized cache service for external API responses with JSON persistence."""
+    """Specialized cache service for external API responses with JSON persistence.
+
+    Args:
+        config: Typed application configuration
+        logger: Optional logger instance
+
+    """
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        """Initialize API cache service.
-
-        Args:
-            config: Typed application configuration
-            logger: Optional logger instance
-        """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         self.cache_config = SmartCacheConfig(config)

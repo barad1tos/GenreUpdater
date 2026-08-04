@@ -40,6 +40,16 @@ class TrackUpdateExecutor:
     - Security validation of parameters
     - Dry run mode recording
     - Cache invalidation after successful updates
+
+    Args:
+        ap_client: AppleScript client for executing updates
+        cache_service: Cache service for invalidation
+        security_validator: Validator for sanitizing inputs
+        config: Typed application configuration
+        console_logger: Logger for info/debug messages
+        error_logger: Logger for error messages
+        analytics: Service for performance tracking
+        dry_run: If True, record actions without executing
     """
 
     def __init__(
@@ -54,18 +64,6 @@ class TrackUpdateExecutor:
         *,
         dry_run: bool = False,
     ) -> None:
-        """Initialize the update executor.
-
-        Args:
-            ap_client: AppleScript client for executing updates
-            cache_service: Cache service for invalidation
-            security_validator: Validator for sanitizing inputs
-            config: Typed application configuration
-            console_logger: Logger for info/debug messages
-            error_logger: Logger for error messages
-            analytics: Service for performance tracking
-            dry_run: If True, record actions without executing
-        """
         self.ap_client = ap_client
         self.cache_service = cache_service
         self.security_validator = security_validator
@@ -483,7 +481,7 @@ class TrackUpdateExecutor:
             True if batch update succeeded
 
         Raises:
-            Exception: If batch update fails for any reason
+            RuntimeError: If batch update fails for any reason
         """
         # Build batch command using ASCII control character separators.
         # Each command has 3 fields (trackID, property, value) separated by ASCII 30.

@@ -255,7 +255,7 @@ async def spinner(message: str, console: Console | None = None) -> AsyncGenerato
         console: Optional Rich Console instance (creates new one if not provided)
 
     Yields:
-        Rich Status object that can be used to update the message
+        AsyncGenerator[Status]: Rich Status object that can be used to update the message
 
     Example:
         async with spinner("Fetching all track IDs from Music.app..."):
@@ -267,16 +267,15 @@ async def spinner(message: str, console: Console | None = None) -> AsyncGenerato
 
 
 class LoggerFilter:
-    """Filter that only allows records from specific logger names."""
+    """Filter that only allows records from specific logger names.
+
+    Args:
+        allowed_loggers: List of logger names that should pass the filter.
+            Child loggers (e.g., "main_logger.child") also pass if parent is allowed.
+
+    """
 
     def __init__(self, allowed_loggers: list[str]) -> None:
-        """Initialize filter with allowed logger names.
-
-        Args:
-            allowed_loggers: List of logger names that should pass the filter.
-                Child loggers (e.g., "main_logger.child") also pass if parent is allowed.
-
-        """
         self.allowed_loggers = set(allowed_loggers)
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -293,16 +292,15 @@ class LoggerFilter:
 
 
 class RunHandler:
-    """Handles tracking of script runs, adding separators between runs, and limiting logs to max number of runs."""
+    """Handles tracking of script runs, adding separators between runs, and limiting logs to max number of runs.
+
+    Args:
+        max_runs: Maximum number of runs to keep in log files.
+            Older runs are trimmed during log cleanup.
+
+    """
 
     def __init__(self, max_runs: int = 3) -> None:
-        """Initialize the RunHandler for log run tracking.
-
-        Args:
-            max_runs: Maximum number of runs to keep in log files.
-                Older runs are trimmed during log cleanup.
-
-        """
         self.max_runs = max_runs
         self.current_run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         self.run_start_time = time.monotonic()  # Use monotonic for duration
@@ -617,7 +615,6 @@ class CompactFormatter(logging.Formatter):
         include_separator: bool = False,
         config: AppConfig | None = None,
     ) -> None:
-        """Initialize the CompactFormatter."""
         # Define a default format string that includes placeholders for shortened paths
         # We will populate 'short_pathname' and 'short_filename' in the format method
         # Default format including time, level, logger name, shortened path/filename, and message
@@ -738,7 +735,6 @@ class RunTrackingHandler(logging.FileHandler):
         delay: bool = False,
         run_handler: RunHandler | None = None,
     ) -> None:
-        """Initialize the handler."""
         # Ensure directory exists before initializing FileHandler
         # Pass logger to ensure_directory
         # Cannot pass error_logger here easily before loggers are fully setup, use print fallback in ensure_directory
@@ -839,7 +835,6 @@ class Loggable:
     """Mixin providing ``console_logger`` and ``error_logger`` attributes."""
 
     def __init__(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
-        """Store the provided loggers."""
         self.console_logger = console_logger
         self.error_logger = error_logger
 

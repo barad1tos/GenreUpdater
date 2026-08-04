@@ -46,6 +46,16 @@ class YearDeterminator:
     - Apply fallback logic for uncertain updates
     - Handle prerelease and suspicious albums
     - Skip albums that already have valid years
+
+    Args:
+        cache_service: Cache service for storing/retrieving years
+        external_api: External API service for fetching years
+        pending_verification: Service for managing pending verifications
+        consistency_checker: Checker for year consistency
+        fallback_handler: Handler for fallback logic
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        config: Typed application configuration
     """
 
     def __init__(
@@ -60,19 +70,6 @@ class YearDeterminator:
         error_logger: logging.Logger,
         config: AppConfig,
     ) -> None:
-        """Initialize the YearDeterminator.
-
-        Args:
-            cache_service: Cache service for storing/retrieving years
-            external_api: External API service for fetching years
-            pending_verification: Service for managing pending verifications
-            consistency_checker: Checker for year consistency
-            fallback_handler: Handler for fallback logic
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            config: Typed application configuration
-
-        """
         self.cache_service = cache_service
         self.external_api = external_api
         self.pending_verification = pending_verification
@@ -292,6 +289,11 @@ class YearDeterminator:
     ) -> tuple[bool, str] | None:
         """Check if album was already processed via year_set_by_mgu tracking.
 
+        Args:
+            album_tracks: List of tracks in the album
+            artist: Artist name
+            album: Album name
+
         Returns:
             Tuple (True, "already_processed") if should skip, None otherwise.
 
@@ -330,6 +332,11 @@ class YearDeterminator:
         album: str,
     ) -> tuple[bool, str]:
         """Check cache and determine if album should be skipped.
+
+        Args:
+            album_tracks: List of tracks in the album
+            artist: Artist name
+            album: Album name
 
         Returns:
             Tuple of (should_skip, reason).

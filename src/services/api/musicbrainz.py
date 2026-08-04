@@ -185,7 +185,16 @@ class MusicBrainzReleasesResponse(TypedDict, total=False):
 
 
 class MusicBrainzClient(BaseApiClient):
-    """MusicBrainz API client for fetching music metadata."""
+    """MusicBrainz API client for fetching music metadata.
+
+    Args:
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        make_api_request_func: Function to make API requests with rate limiting
+        score_release_func: Function to score releases for originality
+        analytics: Analytics instance for performance tracking
+
+    """
 
     def __init__(
         self,
@@ -195,16 +204,6 @@ class MusicBrainzClient(BaseApiClient):
         score_release_func: Callable[..., float],
         analytics: Analytics,
     ) -> None:
-        """Initialize MusicBrainz client.
-
-        Args:
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            make_api_request_func: Function to make API requests with rate limiting
-            score_release_func: Function to score releases for originality
-            analytics: Analytics instance for performance tracking
-
-        """
         super().__init__(console_logger, error_logger)
         self._make_api_request = make_api_request_func
         self._score_original_release = score_release_func

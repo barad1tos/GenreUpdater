@@ -46,6 +46,18 @@ class ApiRequestExecutor:
         This executor only holds a session reference set via set_session().
         It may clear this reference on errors (e.g., event loop closed), but
         it will NEVER close the session. Closing is the owner's responsibility.
+
+    Args:
+        cache_service: Cache service for storing/retrieving API responses
+        rate_limiters: Dict mapping API names to rate limiters
+        console_logger: Logger for info/debug messages
+        error_logger: Logger for errors/warnings
+        user_agent: User-Agent header for requests
+        discogs_token: Discogs API authentication token
+        cache_ttl_days: How long to cache API responses (days)
+        default_max_retries: Default retry count for failed requests
+        default_retry_delay: Base delay between retries (seconds)
+
     """
 
     def __init__(
@@ -61,19 +73,6 @@ class ApiRequestExecutor:
         default_max_retries: int,
         default_retry_delay: float,
     ) -> None:
-        """Initialize the API request executor.
-
-        Args:
-            cache_service: Cache service for storing/retrieving API responses
-            rate_limiters: Dict mapping API names to rate limiters
-            console_logger: Logger for info/debug messages
-            error_logger: Logger for errors/warnings
-            user_agent: User-Agent header for requests
-            discogs_token: Discogs API authentication token
-            cache_ttl_days: How long to cache API responses (days)
-            default_max_retries: Default retry count for failed requests
-            default_retry_delay: Base delay between retries (seconds)
-        """
         self.cache_service = cache_service
         self.rate_limiters = rate_limiters
         self.console_logger = console_logger
@@ -207,6 +206,11 @@ class ApiRequestExecutor:
     ) -> dict[str, Any] | None:
         """Check cache for existing response.
 
+        Args:
+            cache_key: Cache key identifying the request
+            api_name: Name of the API (e.g., 'discogs', 'musicbrainz')
+            url: Request URL
+
         Returns:
             Cached response if valid, None if not cached or invalid
         """
@@ -259,6 +263,12 @@ class ApiRequestExecutor:
         timeout_override: float | None,
     ) -> tuple[dict[str, str], ApiRateLimiter, aiohttp.ClientTimeout] | None:
         """Prepare request headers, rate limiter, and timeout.
+
+        Args:
+            api_name: Name of the API (e.g., 'discogs', 'musicbrainz')
+            url: Request URL
+            headers_override: Additional headers to merge
+            timeout_override: Override default timeout
 
         Returns:
             Tuple of (headers, limiter, timeout) or None if preparation failed
@@ -385,9 +395,22 @@ class ApiRequestExecutor:
     ) -> dict[str, Any] | None:
         """Perform a single request attempt.
 
+        Args:
+            api_name: Name of the API (e.g., 'discogs', 'musicbrainz')
+            url: Request URL
+            params: Query parameters
+            request_headers: Prepared request headers
+            request_timeout: Request timeout configuration
+            limiter: Rate limiter for the API
+            attempt: Current retry attempt number (0-indexed)
+            log_url: URL string for logging purposes
+
         Returns:
             Response dict if successful, None if should retry,
             raises exception if failed
+
+        Raises:
+            RuntimeError: If the session is lost before making the request.
         """
         start_time = time.monotonic()
         acquired = False
@@ -463,9 +486,20 @@ class ApiRequestExecutor:
     ) -> dict[str, Any] | None:
         """Process HTTP response and determine the next action.
 
+        Args:
+            response: The HTTP response to process
+            api_name: Name of the API (e.g., 'discogs', 'musicbrainz')
+            url: Request URL
+            attempt: Current retry attempt number (0-indexed)
+            log_url: URL string for logging purposes
+            elapsed: Time elapsed for the request, in seconds
+
         Returns:
             Response dict if successful, None if should retry,
             raises exception if failed
+
+        Raises:
+            self._create_response_error: If the response status indicates a rate limit, server error, or other failure.
         """
         response_status = response.status
 

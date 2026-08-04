@@ -53,6 +53,14 @@ class AppleScriptClient(AppleScriptClientProtocol):
     """A client to run AppleScript commands asynchronously using the osascript command.
 
     Semaphore initialization is done in the async initialize method.
+
+    Args:
+        config: Application configuration providing script directory and timeouts
+        analytics: Analytics instance used to track script execution calls
+        console_logger: Logger for console output; defaults to a module logger
+        error_logger: Logger for error output; defaults to console_logger
+        retry_handler: Optional retry handler passed through to the executor
+
     """
 
     def __init__(
@@ -63,7 +71,6 @@ class AppleScriptClient(AppleScriptClientProtocol):
         error_logger: logging.Logger | None = None,
         retry_handler: DatabaseRetryHandler | None = None,
     ) -> None:
-        """Initialize the AppleScript client."""
         self.config = config
         self.analytics = analytics
         self.console_logger = console_logger if console_logger is not None else logging.getLogger(__name__)
@@ -244,6 +251,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
         Raises:
             TimeoutError: If script execution times out.
             OSError: If script execution fails.
+            asyncio.CancelledError: If the script execution task is cancelled.
+            subprocess.SubprocessError: If the underlying subprocess fails.
 
         """
         self.console_logger.debug("run_script called: script='%s'", script_name)
@@ -328,6 +337,9 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         Returns:
             List of track dictionaries with metadata
+
+        Raises:
+            ValueError: If batch_size is not positive.
 
         """
         if not track_ids:

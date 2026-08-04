@@ -25,15 +25,15 @@ if TYPE_CHECKING:
 
 
 class AlbumCacheService:
-    """Specialized cache service for album release years with CSV persistence."""
+    """Specialized cache service for album release years with CSV persistence.
+
+    Args:
+        config: Typed application configuration
+        logger: Optional logger instance
+
+    """
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        """Initialize album cache service.
-
-        Args:
-            config: Typed application configuration
-            logger: Optional logger instance
-        """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         self.cache_config = SmartCacheConfig(config)
@@ -346,6 +346,11 @@ class AlbumCacheService:
         Args:
             file_path: Path to CSV file
             items: List of AlbumCacheEntry objects
+
+        Raises:
+            BaseException: Re-raised when opening the temp file descriptor fails,
+                after closing the descriptor to avoid leaking it.
+
         """
         file_path_obj = Path(file_path)
         dir_name = file_path_obj.parent

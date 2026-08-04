@@ -23,17 +23,19 @@ if TYPE_CHECKING:
 
 
 class Orchestrator:
-    """Orchestrates the entire music update workflow."""
+    """Orchestrates the entire music update workflow.
+
+    Attributes:
+        COMMANDS_BYPASSING_MUSIC_CHECK: Commands that skip the Music.app running check.
+
+    Args:
+        deps: Dependency container with all required services
+
+    """
 
     COMMANDS_BYPASSING_MUSIC_CHECK: ClassVar[set[str]] = {"rotate_keys", "rotate-keys"}
 
     def __init__(self, deps: DependencyContainer) -> None:
-        """Initialize the orchestrator with dependencies.
-
-        Args:
-            deps: Dependency container with all required services
-
-        """
         self.deps = deps
         self.music_updater = MusicUpdater(deps)
         self.config = deps.app_config
@@ -270,6 +272,9 @@ class Orchestrator:
             suffix: File suffix for the backup (e.g., '.backup', '.yaml.backup')
             success_message: Message to log on successful backup creation
             preserve_existing: If True and backup exists, create timestamped backup instead of overwriting
+
+        Raises:
+            OSError: If copying the source file to the backup path fails
 
         """
         # Append suffix to full filename (preserves multi-dot names like config.prod.yaml)

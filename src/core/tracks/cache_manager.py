@@ -29,6 +29,12 @@ class TrackCacheManager:
     - Retrieving and validating cached tracks
     - Loading and saving library snapshots
     - Merging delta updates into snapshots
+
+    Args:
+        cache_service: Service for memory/disk cache operations
+        snapshot_service: Service for library snapshot operations (optional)
+        console_logger: Logger for info/debug messages
+        current_time_func: Optional function to get current time (for testing)
     """
 
     def __init__(
@@ -38,14 +44,6 @@ class TrackCacheManager:
         console_logger: logging.Logger,
         current_time_func: Callable[[], datetime] | None = None,
     ) -> None:
-        """Initialize the cache manager.
-
-        Args:
-            cache_service: Service for memory/disk cache operations
-            snapshot_service: Service for library snapshot operations (optional)
-            console_logger: Logger for info/debug messages
-            current_time_func: Optional function to get current time (for testing)
-        """
         self.cache_service = cache_service
         self.snapshot_service = snapshot_service
         self.console_logger = console_logger

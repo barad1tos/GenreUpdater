@@ -20,6 +20,12 @@ class AppleScriptFileValidator:
     - Path traversal prevention
     - Symlink rejection
     - File existence and access checks
+
+    Args:
+        apple_scripts_directory: Base directory containing AppleScript files
+        error_logger: Logger for error messages
+        console_logger: Logger for debug/info messages
+
     """
 
     def __init__(
@@ -28,13 +34,6 @@ class AppleScriptFileValidator:
         error_logger: logging.Logger,
         console_logger: logging.Logger,
     ) -> None:
-        """Initialize the file validator.
-
-        Args:
-            apple_scripts_directory: Base directory containing AppleScript files
-            error_logger: Logger for error messages
-            console_logger: Logger for debug/info messages
-        """
         self.apple_scripts_directory = apple_scripts_directory
         self.error_logger = error_logger
         self.console_logger = console_logger

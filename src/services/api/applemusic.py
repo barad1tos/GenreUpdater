@@ -41,6 +41,16 @@ class AppleMusicClient:
 
     Provides album search and metadata retrieval using Apple's public iTunes Search API.
     No authentication required - this is a public API service.
+
+    Args:
+        console_logger: Logger for console output
+        error_logger: Logger for error messages
+        make_api_request_func: Injected function for making API requests
+        score_release_func: Injected function for scoring releases
+        country_code: Country code for search results (default: US)
+        entity: Type of content to search for (default: album)
+        limit: Maximum number of results to return (default: 50)
+
     """
 
     def __init__(
@@ -54,18 +64,6 @@ class AppleMusicClient:
         entity: str = "album",
         limit: int = 50,
     ) -> None:
-        """Initialize the iTunes Search API client.
-
-        Args:
-            console_logger: Logger for console output
-            error_logger: Logger for error messages
-            make_api_request_func: Injected function for making API requests
-            score_release_func: Injected function for scoring releases
-            country_code: Country code for search results (default: US)
-            entity: Type of content to search for (default: album)
-            limit: Maximum number of results to return (default: 50)
-
-        """
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.make_api_request_func = make_api_request_func

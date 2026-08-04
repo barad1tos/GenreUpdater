@@ -51,6 +51,14 @@ class YearConsistencyChecker:
     - Detect year parity between top candidates
     - Find consensus release year across tracks
     - Identify tracks with anomalous years
+
+    Args:
+        console_logger: Logger for console output
+        top_years_count: Number of top years to consider for parity
+        parity_threshold: Max difference for parity detection
+        dominance_min_share: Min share of tracks for dominance (0.0-1.0)
+        suspicion_threshold_years: If dominant year is this many years older
+            than earliest track added date, trigger API verification
     """
 
     def __init__(
@@ -62,17 +70,6 @@ class YearConsistencyChecker:
         dominance_min_share: float = DOMINANCE_MIN_SHARE,
         suspicion_threshold_years: int = DEFAULT_SUSPICION_THRESHOLD_YEARS,
     ) -> None:
-        """Initialize the year consistency checker.
-
-        Args:
-            console_logger: Logger for console output
-            top_years_count: Number of top years to consider for parity
-            parity_threshold: Max difference for parity detection
-            dominance_min_share: Min share of tracks for dominance (0.0-1.0)
-            suspicion_threshold_years: If dominant year is this many years older
-                than earliest track added date, trigger API verification
-
-        """
         self.console_logger = console_logger
         self.top_years_count = top_years_count
         self.parity_threshold = parity_threshold
@@ -170,6 +167,11 @@ class YearConsistencyChecker:
 
     def _check_majority_dominance(self, most_common: tuple[str, int], total_tracks: int, tracks: list[TrackDict]) -> tuple[str | None, bool]:
         """Check if most common year has clear majority (>50% of all tracks).
+
+        Args:
+            most_common: (year, count) tuple for the most common year among tracks
+            total_tracks: Total number of tracks in the album
+            tracks: List of tracks, used to check if the dominant year is suspiciously old
 
         Returns:
             Tuple of (year_or_none, was_rejected_for_suspicion).

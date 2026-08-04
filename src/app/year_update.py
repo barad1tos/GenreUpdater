@@ -28,6 +28,17 @@ class YearUpdateService:
     """Service for year update operations.
 
     Handles year updates, reverts, and pipeline steps for track metadata.
+
+    Args:
+        track_processor: Processor for fetching and updating tracks.
+        year_retriever: Retriever for year operations.
+        snapshot_manager: Manager for pipeline snapshots.
+        config: Typed application configuration.
+        console_logger: Logger for console output.
+        error_logger: Logger for error output.
+        cleaning_service: Optional service for cleaning track metadata.
+        artist_renamer: Optional service for renaming artists.
+
     """
 
     def __init__(
@@ -41,18 +52,6 @@ class YearUpdateService:
         cleaning_service: TrackCleaningService | None = None,
         artist_renamer: ArtistRenamer | None = None,
     ) -> None:
-        """Initialize the year update service.
-
-        Args:
-            track_processor: Processor for fetching and updating tracks.
-            year_retriever: Retriever for year operations.
-            snapshot_manager: Manager for pipeline snapshots.
-            config: Typed application configuration.
-            console_logger: Logger for console output.
-            error_logger: Logger for error output.
-            cleaning_service: Optional service for cleaning track metadata.
-            artist_renamer: Optional service for renaming artists.
-        """
         self._track_processor = track_processor
         self._year_retriever = year_retriever
         self._snapshot_manager = snapshot_manager
@@ -204,6 +203,10 @@ class YearUpdateService:
         threshold: int,
     ) -> tuple[bool, str | None]:
         """Check if track needs year restoration.
+
+        Args:
+            track: Track data to check for a year mismatch.
+            threshold: Year difference threshold to consider as wrong.
 
         Returns:
             Tuple of (should_restore, release_year) where release_year is None if shouldn't restore.

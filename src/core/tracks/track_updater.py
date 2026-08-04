@@ -341,6 +341,9 @@ class TrackUpdater:
         Returns:
             True if successful, False otherwise
 
+        Raises:
+            TypeError: If execute_with_retry returns a non-bool result
+
         """
 
         async def _do_update() -> bool:

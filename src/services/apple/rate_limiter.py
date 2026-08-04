@@ -25,7 +25,18 @@ class RateLimiterStats(TypedDict):
 
 
 class AppleScriptRateLimiter:
-    """Advanced rate limiter using a moving window approach."""
+    """Advanced rate limiter using a moving window approach.
+
+    Args:
+        requests_per_window: Maximum requests allowed per time window.
+        window_seconds: Duration of the sliding window in seconds.
+        max_concurrent: Maximum concurrent requests (semaphore limit).
+        logger: Optional logger instance for debug output.
+
+    Raises:
+        ValueError: If any numeric parameter is not positive.
+
+    """
 
     def __init__(
         self,
@@ -34,18 +45,6 @@ class AppleScriptRateLimiter:
         max_concurrent: int = 3,
         logger: logging.Logger | None = None,
     ) -> None:
-        """Initialize the rate limiter with configurable limits.
-
-        Args:
-            requests_per_window: Maximum requests allowed per time window.
-            window_seconds: Duration of the sliding window in seconds.
-            max_concurrent: Maximum concurrent requests (semaphore limit).
-            logger: Optional logger instance for debug output.
-
-        Raises:
-            ValueError: If any numeric parameter is not positive.
-
-        """
         if requests_per_window <= 0:
             msg = "requests_per_window must be a positive integer"
             raise ValueError(msg)
@@ -90,6 +89,9 @@ class AppleScriptRateLimiter:
 
         Returns:
             Wait time in seconds (0.0 if no wait was needed).
+
+        Raises:
+            RuntimeError: If the rate limiter has not been initialized.
 
         """
         if self.semaphore is None:

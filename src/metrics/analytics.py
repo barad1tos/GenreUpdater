@@ -66,7 +66,17 @@ class LoggerContainer:
 
 
 class Analytics:
-    """Tracks function performance, success rates, and execution patterns."""
+    """Tracks function performance, success rates, and execution patterns.
+
+    Attributes:
+        GC_COLLECTION_THRESHOLD: Event count threshold after which GC is suggested post-report
+
+    Args:
+        config: Application configuration providing analytics settings
+        loggers: Container bundling console, error, and analytics loggers
+        max_events: Maximum number of events to retain; overrides the config default when provided
+
+    """
 
     # Class-level counter for unique IDs
     _instances = 0
@@ -87,7 +97,6 @@ class Analytics:
         loggers: LoggerContainer,
         max_events: int | None = None,
     ) -> None:
-        """Initialize the Analytics instance."""
         Analytics._instances += 1
         self.instance_id = Analytics._instances
 
@@ -196,6 +205,9 @@ class Analytics:
 
         Returns:
             Function result
+
+        Raises:
+            RuntimeError: If asyncio.run() fails for a reason other than being called from a running event loop
 
         Note:
             Cannot be called from within an active event loop. If you need to call
@@ -363,7 +375,7 @@ class Analytics:
             console: Optional Rich Console instance
 
         Yields:
-            Rich Status object that can be updated with progress info
+            Status: Rich object that can be updated with progress info
 
         Example:
             async with analytics.batch_mode("Fetching tracks...") as status:

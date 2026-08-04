@@ -734,6 +734,9 @@ class AnalyticsProtocol(Protocol):
             *args: Function arguments
             **kwargs: Function keyword arguments
 
+        Returns:
+            Result of the wrapped function call
+
         """
         ...
 
@@ -751,6 +754,9 @@ class AnalyticsProtocol(Protocol):
             event_type: Type of event for tracking
             *args: Function arguments
             **kwargs: Function keyword arguments
+
+        Returns:
+            Result of the wrapped function call
 
         """
         ...

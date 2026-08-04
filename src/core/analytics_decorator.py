@@ -57,6 +57,9 @@ def track_instance_method(event_type: str) -> Callable[[Callable[..., Any]], Cal
     Args:
         event_type: Category name for the tracked event
 
+    Returns:
+        Decorator that wraps a method with analytics tracking
+
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
