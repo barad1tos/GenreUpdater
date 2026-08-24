@@ -61,7 +61,7 @@ dev = [
     "pytest-sugar==1.1.1",
     "hypothesis==6.165.6",
     # Type stubs & tools
-    "types-pyyaml==6.0.12.20260724",
+    "types-pyyaml==6.0.12.20260815",
     "cst-lsp==0.1.3",
     "deptry==0.25.1",
     "pre-commit==4.6.2",
