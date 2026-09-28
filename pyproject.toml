@@ -45,8 +45,8 @@ dev = [
     "pytest-examples>=0.0.18",
     "pydoclint>=0.8.3",
     # Linting & formatting
-    "ruff==0.16.8",
-    "ty==0.0.84",
+    "ruff==0.16.9",
+    "ty==0.0.82",
     "basedpyright==1.40.1", # IDE support - ty is used for pre-commit
     "sourcery==1.46.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.4",
@@ -59,7 +59,7 @@ dev = [
     "coverage==7.16.1",
     "pytest-html==4.2.0",
     "pytest-sugar==1.1.1",
-    "hypothesis==6.168.0",
+    "hypothesis==6.168.1",
     # Type stubs & tools
     "types-pyyaml==6.0.12.20260906",
     "cst-lsp==0.1.3",
