@@ -59,9 +59,11 @@ The installer:
 1. Refuses to continue while a daemon run holds a lock, then unloads the LaunchAgent
 2. Creates the XDG directories
 3. Migrates `my-config.yaml`, `.env` and `artist-renames.yaml` into `~/.config/genreupdater/`
-   (copy only; existing files are kept), and repoints `apple_scripts_dir` to the pinned clone
+   and copies legacy state files missing from `~/.local/state/genreupdater/` (copy only;
+   existing files are kept). On every run it repoints `apple_scripts_dir` to the pinned clone
    and the Python state paths (`last_incremental_run_file`, `last_db_verify_log`) to
-   `~/.local/state/genreupdater/`, copying the existing state files there
+   `~/.local/state/genreupdater/` (also when the config came from the checkout's development
+   settings), so re-running it repairs an existing config
 4. Clones the repo into `~/.local/share/genreupdater/app` and checks out the latest release tag
 5. Runs `uv sync --frozen --no-dev`, deploys the scripts and the plist, and loads the LaunchAgent
 
