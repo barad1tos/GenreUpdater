@@ -421,6 +421,7 @@ class TestEmptyLibraryFetch:
                 snapshot_hash="hash",
             )
         )
+        deps.library_snapshot_service.is_enabled = MagicMock(return_value=True)
         deps.library_snapshot_service.get_snapshot_metadata = AsyncMock(return_value=metadata)
         updater = MusicUpdater(deps)
         if test_artists:
@@ -433,14 +434,35 @@ class TestEmptyLibraryFetch:
         """Zero tracks against a 32,658-track snapshot is a fetch failure, not an empty library."""
         updater = self._create_updater(known_track_count=32658)
 
-        with pytest.raises(LibraryFetchError, match="32658"):
+        with pytest.raises(LibraryFetchError, match=r"32658.*main\.py --fresh"):
             await updater.run_main_pipeline()
+
+    @pytest.mark.asyncio
+    async def test_empty_fresh_fetch_records_empty_library(self) -> None:
+        """--fresh accepts an empty library and persists it, so later runs stop failing."""
+        updater = self._create_updater(known_track_count=32658)
+        persist_to_disk = AsyncMock(return_value=True)
+        object.__setattr__(updater.snapshot_manager, "persist_to_disk", persist_to_disk)
+
+        await updater.run_main_pipeline(fresh=True)
+
+        persist_to_disk.assert_awaited_once()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("known_track_count", [None, 0])
     async def test_empty_fetch_without_known_library_completes(self, known_track_count: int | None) -> None:
         """A first run (no snapshot) or a snapshot of an empty library stays a clean exit."""
         updater = self._create_updater(known_track_count=known_track_count)
+
+        await updater.run_main_pipeline()
+
+        assert any("No tracks found" in message for message in updater.console_logger.warning_messages)
+
+    @pytest.mark.asyncio
+    async def test_empty_fetch_with_disabled_snapshot_completes(self) -> None:
+        """Metadata left from a disabled snapshot is not maintained, so it cannot prove a failure."""
+        updater = self._create_updater(known_track_count=32658)
+        cast(MagicMock, updater.deps.library_snapshot_service).is_enabled.return_value = False
 
         await updater.run_main_pipeline()
 
