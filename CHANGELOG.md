@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Daemon: `sync-fixtures.sh` (pushes to the protected `main` branch were always rejected)
+- `scripts/sync-diagnostics.sh`: no callers, and it pushed from the legacy daemon clone to the protected `main` branch
 
 ### Fixed
 
