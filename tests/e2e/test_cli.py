@@ -121,7 +121,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run"])
 
             with (
-                patch("core.models.metadata_utils.is_music_app_running", return_value=True),
+                patch("app.orchestrator.is_music_app_running", return_value=True),
             ):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
@@ -151,7 +151,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run", "clean_artist", "--artist", test_artist])
 
             with (
-                patch("core.models.metadata_utils.is_music_app_running", return_value=True),
+                patch("app.orchestrator.is_music_app_running", return_value=True),
             ):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
@@ -183,7 +183,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run", "update_years", "--artist", test_artist])
 
             with (
-                patch("core.models.metadata_utils.is_music_app_running", return_value=True),
+                patch("app.orchestrator.is_music_app_running", return_value=True),
             ):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
@@ -214,7 +214,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run", "revert_years", "--artist", test_artist, "--album", test_album])
 
             with (
-                patch("core.models.metadata_utils.is_music_app_running", return_value=True),
+                patch("app.orchestrator.is_music_app_running", return_value=True),
             ):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
@@ -243,7 +243,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run"])
 
             # Mock Music.app running check and execute command
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -253,7 +253,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run", "clean_artist", "--artist", "Test Artist"])
 
             # Mock Music.app running check and execute command
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -263,7 +263,7 @@ class TestCLIE2E:
             args = cli.parse_args(["--config", config_path, "--dry-run", "update_years", "--artist", "Test Artist"])
 
             # Mock Music.app running check and execute command
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -292,7 +292,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", custom_config_path, "--dry-run"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 # Mock Music.app running check and execute command
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
@@ -316,7 +316,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "update_genres", "--artist", test_artist])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -337,7 +337,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "genres"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -373,7 +373,7 @@ class TestCLIE2E:
                 ]
             )
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -405,7 +405,7 @@ class TestCLIE2E:
                 ]
             )
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -425,7 +425,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "verify_database"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -444,7 +444,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "verify-db"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -464,7 +464,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "verify_pending"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -483,7 +483,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "pending"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -520,7 +520,7 @@ class TestCLIE2E:
                 ]
             )
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -560,7 +560,7 @@ class TestCLIE2E:
                     ]
                 )
 
-                with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+                with patch("app.orchestrator.is_music_app_running", return_value=True):
                     orchestrator = Orchestrator(mock_deps)
                     await orchestrator.run_command(args)
 
@@ -597,7 +597,7 @@ class TestCLIE2E:
 
             # rotate_keys should NOT check for Music.app
             # It should run without the is_music_app_running mock returning True
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=False):
+            with patch("app.orchestrator.is_music_app_running", return_value=False):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -626,7 +626,7 @@ class TestCLIE2E:
                 ]
             )
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=False):
+            with patch("app.orchestrator.is_music_app_running", return_value=False):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -646,7 +646,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "--force"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -665,7 +665,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "--test-mode"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -684,7 +684,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "--verbose"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -703,7 +703,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "--quiet"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
@@ -726,7 +726,7 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run", "--fresh"])
 
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=True):
+            with patch("app.orchestrator.is_music_app_running", return_value=True):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
 
