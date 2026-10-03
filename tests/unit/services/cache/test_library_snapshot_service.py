@@ -100,8 +100,7 @@ def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False, **
                 "compress_level": 6,
             },
         },
-    }
-    defaults.update(overrides)
+    } | overrides
     return create_test_app_config(**defaults)
 
 

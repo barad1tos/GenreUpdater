@@ -84,11 +84,7 @@ class GenericCacheService:
             self.config.cache_ttl_seconds,
         ]
 
-        for ttl in candidate_values:
-            if ttl > 0:
-                return ttl
-
-        return fallback
+        return next((ttl for ttl in candidate_values if ttl > 0), fallback)
 
     def _start_cleanup_task(self) -> None:
         """Start periodic cleanup task for expired cache entries.

@@ -98,7 +98,7 @@ class TestKnownMissingYearAlbums:
         Skips if none of the known albums are present in the snapshot (CI fixtures).
         """
         # Count how many known albums are in the snapshot
-        albums_in_snapshot = sum(1 for artist, album, _ in KNOWN_MISSING_YEAR_ALBUMS if (artist, album) in albums_with_tracks)
+        albums_in_snapshot = sum((artist, album) in albums_with_tracks for artist, album, _ in KNOWN_MISSING_YEAR_ALBUMS)
         if albums_in_snapshot == 0:
             pytest.skip(f"None of {len(KNOWN_MISSING_YEAR_ALBUMS)} known albums present in snapshot. This is expected in CI with test fixtures.")
 

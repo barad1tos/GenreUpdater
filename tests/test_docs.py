@@ -58,8 +58,7 @@ def _extract_bash_blocks(docs_dir: Path) -> list[BashBlock]:
         lines = text.splitlines()
         idx = 0
         while idx < len(lines):
-            fence_match = _FENCE_PATTERN.match(lines[idx])
-            if fence_match:
+            if fence_match := _FENCE_PATTERN.match(lines[idx]):
                 settings = fence_match.group(1).strip()
                 skip = 'test="skip"' in settings or "test='skip'" in settings
                 start_line = idx + 1

@@ -800,8 +800,7 @@ class MusicBrainzClient(BaseApiClient):
             if not isinstance(info, dict):
                 continue
             # Access using dict key since API returns with dash, not underscore
-            catalog: Any = info.get("catalog-number")
-            if catalog:
+            if catalog := info.get("catalog-number"):
                 return str(catalog)
 
         return None
