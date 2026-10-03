@@ -8,13 +8,23 @@ The recommended approach is a **daemon** that monitors your Music library and ap
 
 ## LaunchAgent Setup
 
+!!! tip "Recommended: use the installer"
+    From a clone of the repository, run `./launchctl/bin/install.sh`. It deploys the daemon to
+    `~/.local/share/genreupdater/app` pinned to the latest release tag, keeps your config and
+    secrets in `~/.config/genreupdater/`, and installs the LaunchAgent. See
+    `launchctl/SERVICE_README.md` for details. The manual steps below are for custom setups.
+
 ### 1. Create the Daemon App
 
 Copy the project to a stable location:
 
 ```bash test="skip"
-cp -r /path/to/project ~/Library/Application\ Support/GenreUpdater/app
+cp -r /path/to/project ~/.local/share/genreupdater/app
 ```
+
+Configuration files are accepted only from the working directory or from `~/.config/`. If you
+keep your config outside the project, put it under `~/.config/` as a regular file (not a symlink)
+and pass it with `--config`.
 
 ### 2. Create LaunchAgent Plist
 
@@ -37,7 +47,7 @@ Create `~/Library/LaunchAgents/com.music.genreautoupdater.plist`:
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/YOUR_USERNAME/Library/Application Support/GenreUpdater/app</string>
+    <string>/Users/YOUR_USERNAME/.local/share/genreupdater/app</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -188,7 +198,7 @@ The daemon requires Music.app to be running. Add a check script:
 ```bash
 #!/bin/bash
 if pgrep -x "Music" > /dev/null; then
-    cd ~/Library/Application\ Support/GenreUpdater/app || exit 1
+    cd ~/.local/share/genreupdater/app || exit 1
     uv run python main.py
 fi
 ```
@@ -212,7 +222,7 @@ crontab -e
 
 Add:
 ```
-0 * * * * cd ~/Library/Application\ Support/GenreUpdater/app && /usr/local/bin/uv run python main.py >> /tmp/genreupdater.log 2>&1
+0 * * * * cd ~/.local/share/genreupdater/app && /usr/local/bin/uv run python main.py >> /tmp/genreupdater.log 2>&1
 ```
 
 This runs hourly.

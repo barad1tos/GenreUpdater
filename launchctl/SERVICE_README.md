@@ -1,425 +1,178 @@
 # Genre Updater Daemon Service
 
-Automated daemon that monitors your Music Library and updates album years when changes are detected.
+LaunchAgent that watches the Music Library and runs the Python pipeline when it changes,
+plus an hourly fallback tick.
 
-## File Structure
+## Layout
 
 ```
-launchctl/                              # In git repo (version controlled)
+launchctl/                                  # In the repository
 ├── bin/
-│   ├── install.sh                      # Deploys everything
-│   ├── run-daemon.sh                   # Main wrapper script
-│   ├── update.sh                       # Manual git pull trigger
-│   ├── notify.sh                       # macOS notifications
-│   └── sync-fixtures.sh                # Sync library snapshot to repo
-├── com.music.genreautoupdater.plist    # TEMPLATE (edit this!)
+│   ├── common.sh                           # Shared layout + helpers (sourced, not executed)
+│   ├── install.sh                          # Install / migrate / redeploy
+│   ├── run-daemon.sh                       # Wrapper called by launchd
+│   ├── update.sh                           # Switch to the latest release right away
+│   └── notify.sh                           # macOS notifications
+├── com.music.genreautoupdater.plist        # LaunchAgent TEMPLATE
 └── SERVICE_README.md
 
-~/Library/Application Support/GenreUpdater/   # LOCAL installation
-├── app/                                # Git clone of repo (main branch)
-│   └── [full repo clone]
-├── state/
-│   └── run.lock                        # PID lock file
-├── logs/
-│   ├── daemon.log
-│   ├── stdout.log
-│   ├── stderr.log
-│   └── launchctl-*.log
-└── bin/                                # Deployed copies of scripts
-    └── *.sh
+~/.config/genreupdater/                     # User-owned, never overwritten by install.sh
+├── my-config.yaml                          # Passed to Python via --config
+├── .env                                    # Secrets (DISCOGS_TOKEN, CONTACT_EMAIL, ...), mode 600
+└── artist-renames.yaml                     # Resolved relative to my-config.yaml
 
-~/Library/LaunchAgents/
-└── com.music.genreautoupdater.plist    # Deployed plist (with $HOME expanded)
+~/.local/share/genreupdater/
+├── app/                                    # Clone pinned to the latest vX.Y.Z tag (detached HEAD)
+│   └── .env -> ~/.config/genreupdater/.env
+└── bin/                                    # Copies of launchctl/bin/*.sh deployed by install.sh
+
+~/.local/state/genreupdater/
+├── logs/                                   # daemon.log, stdout.log, stderr.log, launchctl-*.log
+├── last_incremental_run.log, last_db_verify.log   # Python state referenced by my-config.yaml
+└── run.lock                                # PID lock
+
+~/Library/LaunchAgents/com.music.genreautoupdater.plist    # Deployed plist ($HOME expanded)
 ```
 
-## Architecture
+`~/Library/Application Support/GenreUpdater/` belongs to the Swift app and is not used by the daemon.
 
-The daemon is a **thin infrastructure wrapper**. All business logic is in Python.
+### Why this layout
 
-```
-┌─────────────────────────────────────────────────┐
-│  Python + AppleScript = Self-sufficient system  │
-│  Decides what to process, handles all logic     │
-└─────────────────────────────────────────────────┘
-                      ↑
-                      │ just runs
-┌─────────────────────────────────────────────────┐
-│  Daemon = Infrastructure only                   │
-│  Lock → Git pull → uv sync → Run Python         │
-└─────────────────────────────────────────────────┘
-```
+- **Config lives outside the clone.** Python accepts config files only from the working
+  directory or `~/.config/` (`core_config._validate_config_path`), and it resolves symlinks first,
+  so `~/.config/genreupdater/my-config.yaml` must be a regular file.
+- **The daemon runs releases, not branches.** Merging into `main` changes nothing until a
+  `vX.Y.Z` tag is pushed.
+- **No dependency on a development checkout.** `apple_scripts_dir` must point inside the pinned
+  clone, and no path may point into `~/Library/Application Support/GenreUpdater/`;
+  `run-daemon.sh` refuses to run otherwise.
 
-### Why This Structure?
-
-- **Development (v2.0/)**: Work on `dev` branch in iCloud, syncs across devices
-- **Daemon (app/)**: Isolated git clone in Application Support, always on `main`
-- **Isolation**: Daemon code is NOT synced via iCloud (prevents race conditions)
-- **Auto-update**: Daemon pulls from `origin/main` on each trigger
-
-## Quick Start
-
-### First-Time Setup
+## Install or migrate
 
 ```bash
-# Just run the installer - it handles everything
-cd ~/Developer/Own/scripts/python/Genres\ Autoupdater\ v2.0
+# From a repository checkout
 ./launchctl/bin/install.sh
 ```
 
-The installer automatically:
+The installer:
 
-1. Clones the repo to `~/Library/Application Support/GenreUpdater/app/`
-2. Copies scripts to `bin/`
-3. Creates config symlinks (see [Config Symlinks](#config-symlinks))
-4. Deploys the LaunchAgent plist
-5. Loads the service
+1. Refuses to continue while a daemon run holds a lock, then unloads the LaunchAgent
+2. Creates the XDG directories
+3. Migrates `my-config.yaml`, `.env` and `artist-renames.yaml` into `~/.config/genreupdater/`
+   (copy only; existing files are kept), and repoints `apple_scripts_dir` to the pinned clone
+   and the Python state paths (`last_incremental_run_file`, `last_db_verify_log`) to
+   `~/.local/state/genreupdater/`, copying the existing state files there
+4. Clones the repo into `~/.local/share/genreupdater/app` and checks out the latest release tag
+5. Runs `uv sync --frozen`, deploys the scripts and the plist, and loads the LaunchAgent
 
-### Verify Installation
+Re-run it after changing anything in `launchctl/`: deployed scripts are copies, not links.
 
-```bash
-# Check if service is loaded
-launchctl list | grep genreautoupdater
-
-# View logs
-tail -f ~/Library/Application\ Support/GenreUpdater/logs/daemon.log
-```
-
-## Configuration
-
-### Edit Plist Template (Recommended)
-
-Edit `launchctl/com.music.genreautoupdater.plist` in the repo:
-
-```xml
-<!-- Change throttle interval (minimum between triggers) -->
-<key>ThrottleInterval</key>
-<integer>300</integer>  <!-- 5 minutes -->
-
-        <!-- Change CPU priority (0=normal, 10=low) -->
-<key>Nice</key>
-<integer>10</integer>
-
-        <!-- Change timeout -->
-<key>ExitTimeOut</key>
-<integer>14400</integer>  <!-- 4 hours -->
-```
-
-Then redeploy:
+## Releasing
 
 ```bash
-./launchctl/bin/install.sh
+git tag -a v3.0.1 -m "v3.0.1" origin/main
+git push origin v3.0.1
 ```
 
-### Edit Wrapper Script
+The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pre-release tags
+(`v3.1.0-rc1`) are ignored; deleting a tag on origin rolls the daemon back on its next run.
 
-For runtime settings, edit `launchctl/bin/run-daemon.sh`:
+## Daemon flow
 
-```bash
-TIMEOUT_SECONDS=14400   # 4 hour max runtime
+```
+launchd trigger (Music Library change or hourly tick)
+  → pre-flight: app clone, regular config file, .env, apple_scripts_dir inside the clone
+  → lock (exit quietly if another run is active)
+  → git fetch --tags → checkout --force --detach <latest vX.Y.Z>
+  → link app/.env → ~/.config/genreupdater/.env
+  → uv sync --frozen (one retry with a clean venv)
+  → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
+  → notification (Glass on success, Basso on failure)
 ```
 
-Then redeploy:
-
-```bash
-./launchctl/bin/install.sh
-```
-
-### Music Library Path
-
-Edit the plist template, find WatchPaths:
-
-```xml
-<key>WatchPaths</key>
-<array>
-<string>$HOME/Music/Music/Music Library.musiclibrary</string>
-</array>
-```
-
-## Environment Variables
-
-Sync scripts support environment variable overrides for non-standard setups:
-
-| Variable       | Default                                                          | Used By                                    |
-|----------------|------------------------------------------------------------------|--------------------------------------------|
-| `MGU_LOGS_DIR` | `~/Library/Mobile Documents/com~apple~CloudDocs/4. Dev/MGU logs` | `sync-fixtures.sh`, `sync-diagnostics.sh`  |
-| `MGU_REPO_DIR` | `~/Library/Application Support/GenreUpdater/app`                 | `sync-fixtures.sh`, `sync-diagnostics.sh`  |
-
-These variables allow sync scripts to locate the library snapshot cache and the daemon's git clone
-without hardcoding paths. In most setups the defaults are correct and no override is needed.
-
-Example override:
-
-```bash
-MGU_LOGS_DIR="/custom/logs/path" MGU_REPO_DIR="/custom/repo" ./sync-fixtures.sh
-```
+Every infrastructure failure is logged and notified; none of them falls back silently.
 
 ## Commands
 
-| Script             | Description                                           |
-|--------------------|-------------------------------------------------------|
-| `install.sh`       | Deploy scripts + plist, create symlinks, load service |
-| `run-daemon.sh`    | Main wrapper (called by launchctl)                    |
-| `update.sh`        | Manually pull latest changes from main                |
-| `notify.sh`        | macOS notification helper                             |
-| `sync-fixtures.sh` | Sync library snapshot to repo via daemon's clone      |
-
-### Manual Operations
-
 ```bash
-# Trigger daemon manually
-launchctl kickstart -k gui/$(id -u)/com.music.genreautoupdater
+# Run now
+launchctl kickstart -k "gui/$(id -u)/com.music.genreautoupdater"
 
-# Manual run without kickstart
-~/Library/Application\ Support/GenreUpdater/bin/run-daemon.sh
+# Dry run against the deployed release
+cd ~/.local/share/genreupdater/app
+uv run python main.py --config ~/.config/genreupdater/my-config.yaml --test-mode --dry-run
 
-# Check status
-launchctl list | grep genreautoupdater
+# Switch to the latest release immediately
+~/.local/share/genreupdater/bin/update.sh
 
-# Stop service
-launchctl unload ~/Library/LaunchAgents/com.music.genreautoupdater.plist
+# Status
+launchctl print "gui/$(id -u)/com.music.genreautoupdater" | head -20
 
-# Start service
-launchctl load ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-
-# Uninstall completely
-launchctl unload ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-rm ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-rm -rf ~/Library/Application\ Support/GenreUpdater
+# Stop / start
+launchctl bootout "gui/$(id -u)/com.music.genreautoupdater"
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 ```
-
-## Trigger Behavior
-
-### WatchPaths Trigger
-
-The daemon watches:
-
-```
-~/Music/Music/Music Library.musiclibrary
-```
-
-Any change to this file triggers the daemon.
-
-### Daemon Flow
-
-```
-┌────────────────────────────────────────────┐
-│  Music Library Changed                     │
-│           │                                │
-│           ▼                                │
-│  ┌─────────────────────┐                   │
-│  │ Already running?    │──Yes──▶ Exit      │
-│  └────────┬────────────┘                   │
-│           │ No                             │
-│           ▼                                │
-│  ┌────────────────────┐                    │
-│  │  Symlink config    │                    │
-│  │  + .env            │                    │
-│  └────────┬───────────┘                    │
-│           │                                │
-│           ▼                                │
-│  ┌────────────────────┐                    │
-│  │  git pull          │                    │
-│  │  uv sync           │                    │
-│  │  run Python        │                    │
-│  └────────┬───────────┘                    │
-│           │                                │
-│           ▼                                │
-│  Python decides what to process            │
-│  (uses snapshot cache for speed)           │
-│           │                                │
-│           ▼                                │
-│  ┌────────────────────────────┐            │
-│  │  On success:               │            │
-│  │  1. Notify (Glass sound)   │            │
-│  │  2. sync-fixtures.sh       │            │
-│  │     (push snapshot to git) │            │
-│  └────────────────────────────┘            │
-│           │                                │
-│  ┌────────────────────────────┐            │
-│  │  On failure:               │            │
-│  │  1. Notify (Basso sound)   │            │
-│  │  2. Log error details      │            │
-│  └────────────────────────────┘            │
-└────────────────────────────────────────────┘
-```
-
-**Timings:**
-
-- LaunchAgent ThrottleInterval: 5 minutes (minimum between triggers)
-- Python startup and quick exit if nothing to do: ~3–4 seconds
-- Max runtime: 4 hours (timeout)
-
-## Config Symlinks
-
-`run-daemon.sh` creates symlinks from the DEV REPO (iCloud) into the daemon's clone so that
-the daemon uses the same user config and secrets as the development environment.
-
-| Symlink Target (daemon's clone) | Source (DEV REPO in iCloud) |
-|---------------------------------|-----------------------------|
-| `app/my-config.yaml`            | `v2.0/my-config.yaml`       |
-| `app/.env`                      | `v2.0/.env`                 |
-
-The symlinks are created **before** any Python execution and only if they don't already exist.
-Both `install.sh` and `run-daemon.sh` handle symlink creation, so they are restored automatically
-even if someone deletes the daemon's clone and re-runs the installer.
-
-**Why symlinks?**
-
-- `my-config.yaml` contains user-specific paths and API key references
-- `.env` contains encrypted API keys
-- Both are gitignored, so the daemon's `git reset --hard` would delete real copies
-- Symlinks survive `git reset --hard` because git doesn't track them
-
-## Sync Scripts
-
-### sync-fixtures.sh
-
-Copies the library snapshot from the logs/cache directory into `tests/fixtures/` and pushes the
-commit through the **daemon's git clone** (not the DEV REPO in iCloud).
-
-**Flow:**
-
-1. Finds snapshot at `$MGU_LOGS_DIR/cache/library_snapshot.json`
-2. Compares with existing `tests/fixtures/library_snapshot.json`
-3. If changed: copies, commits with `[skip ci]` tag, pushes to current branch
-4. Safety: only pushes from `main` or `dev` branch
-
-**Called by:** `run-daemon.sh` (after successful pipeline run, non-fatal on failure)
-
-**Important:** The script pushes via the daemon's clone (`~/Library/Application Support/GenreUpdater/app/`),
-not the DEV REPO in iCloud. This prevents git conflicts with the developer's working directory.
-
-## Development Workflow
-
-```
-┌─────────────────┐     PR/MR    ┌────────────────────┐
-│   dev branch    │ ───────────► │   main branch      │
-│   (v2.0/)       │              │   (app/)           │
-└─────────────────┘              └────────────────────┘
-        │                                  │
-        ▼                                  ▼
-   You develop                     Daemon auto-pulls
-   in iCloud                       from origin/main
-```
-
-1. Work in `v2.0/` on any branch
-2. Push changes, create PR to `main`
-3. Merge PR on GitHub
-4. Daemon automatically pulls changes on next trigger
-
-### Manual Update
-
-If you don't want to wait for a trigger:
-
-```bash
-~/Library/Application\ Support/GenreUpdater/bin/update.sh
-```
-
-## Multi-Machine Support
-
-Each machine has:
-
-- Shared dev code via iCloud (v2.0/)
-- Independent daemon clone (app/) - NOT synced
-- Local state (lock, logs) – NOT synced
-
-This means:
-
-- Each machine can run daemon independently
-- No conflict between machines
 
 ## Logs
 
-| Log             | Location                                           | Content             |
-|-----------------|----------------------------------------------------|---------------------|
-| daemon.log      | `~/Library/Application Support/GenreUpdater/logs/` | Wrapper script logs |
-| stdout.log      | `~/Library/Application Support/GenreUpdater/logs/` | Script output       |
-| stderr.log      | `~/Library/Application Support/GenreUpdater/logs/` | Script errors       |
-| launchctl-*.log | `~/Library/Application Support/GenreUpdater/logs/` | LaunchAgent logs    |
+| Log               | Content                                    |
+|-------------------|--------------------------------------------|
+| `daemon.log`      | Wrapper: release switches, sync, results   |
+| `stdout.log`      | Python output (rotated at 50 MB)           |
+| `stderr.log`      | Python errors (rotated at 50 MB)           |
+| `launchctl-*.log` | launchd-level output                       |
 
-### View Logs
+All of them live in `~/.local/state/genreupdater/logs/`. Python's own logs, reports and caches
+go to `logs_base_dir` from `my-config.yaml`.
 
 ```bash
-# Real-time daemon log
-tail -f ~/Library/Application\ Support/GenreUpdater/logs/daemon.log
-
-# Last run output
-cat ~/Library/Application\ Support/GenreUpdater/logs/stdout.log
-
-# Errors
-cat ~/Library/Application\ Support/GenreUpdater/logs/stderr.log
+tail -f ~/.local/state/genreupdater/logs/daemon.log
 ```
 
 ## Troubleshooting
 
-### Service Not Starting
+**"Config must be a regular file"**: `~/.config/genreupdater/my-config.yaml` is missing or is a
+symlink. Copy the real file there.
+
+**"apple_scripts_dir points outside the app clone"**: set it to
+`~/.local/share/genreupdater/app/applescripts`.
+
+**"No release tag found"**: push a `vX.Y.Z` tag (see Releasing).
+
+**Missing environment variables**: check `~/.config/genreupdater/.env` and the
+`app/.env` symlink (`ls -la ~/.local/share/genreupdater/app/.env`).
+
+**Plist problems**: `plutil -lint ~/Library/LaunchAgents/com.music.genreautoupdater.plist`
+
+## Rollback to the pre-XDG daemon
+
+The installer keeps the original plist and never touches the legacy files:
 
 ```bash
-# Check if loaded
-launchctl list | grep genreautoupdater
-
-# Check plist syntax
-plutil ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-
-# Reload
-launchctl unload ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-launchctl load ~/Library/LaunchAgents/com.music.genreautoupdater.plist
-```
-
-### Git Pull Fails
-
-```bash
-# Check daemon directory
-cd ~/Library/Application\ Support/GenreUpdater/app
-git status
-git remote -v
-
-# Manual fix
-git fetch origin main
-git reset --hard origin/main
-```
-
-### Missing Environment Variables
-
-If you see "Missing required environment variables" error:
-
-```bash
-# Check .env symlink
-ls -la ~/Library/Application\ Support/GenreUpdater/app/.env
-
-# If missing, recreate manually or re-run daemon script
-# (it creates symlinks automatically now)
-```
-
-### Sync Scripts Failing
-
-```bash
-# Check if snapshot exists
-ls -la ~/Library/Mobile\ Documents/com~apple~CloudDocs/4.\ Dev/MGU\ logs/cache/library_snapshot.json
-
-# Check daemon's git status (sync pushes from here, not DEV REPO)
-cd ~/Library/Application\ Support/GenreUpdater/app
-git status
-git log -3 --oneline
-
-# Manual sync (from daemon's clone)
-~/Library/Application\ Support/GenreUpdater/bin/sync-fixtures.sh
+launchctl bootout "gui/$(id -u)/com.music.genreautoupdater"
+cp ~/.local/state/genreupdater/com.music.genreautoupdater.plist.pre-xdg \
+   ~/Library/LaunchAgents/com.music.genreautoupdater.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 ```
 
 ## Changelog
 
+### 2026-10-03
+
+- **feat:** XDG layout (`~/.config`, `~/.local/share`, `~/.local/state`), separate from the
+  Swift app's Application Support directory
+- **feat:** the daemon deploys the latest stable release tag instead of `origin/main`
+- **feat:** config and secrets live in `~/.config/genreupdater/`, passed via `--config`
+- **feat:** pre-flight refuses an `apple_scripts_dir` outside the pinned clone
+- **fix:** `uv sync` failures were reported as success (`if ! cmd; then rc=$?` always yields 0)
+- **remove:** `sync-fixtures.sh`; pushes to the protected `main` branch were always rejected
+- **docs:** rewritten for the new layout
+
 ### 2026-02-05
 
-- **fix(sync):** Redirected sync-fixtures.sh to push from daemon's clone, not the DEV REPO in iCloud
-- **cleanup:** Removed legacy `v2.0-daemon` worktree (replaced by `app/` in Application Support)
-- **cleanup:** Pruned stale git worktree references
-- **docs:** Added Config Symlinks, Sync Scripts, Environment Variables sections
+- **fix(sync):** sync-fixtures.sh pushes from the daemon's clone, not the development checkout
+- **cleanup:** removed legacy `v2.0-daemon` worktree (replaced by `app/` in Application Support)
 
 ### 2025-12-26
 
 - Initial SERVICE_README.md
-
----
-
-**Status:** Production-ready
-**Last update:** 2026-02-05
