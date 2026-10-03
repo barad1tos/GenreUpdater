@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README Python badge updated to 3.13+
 - Converted 50 f-string logging calls to lazy `%` formatting for deferred evaluation (#216)
 - Migrated `print()` calls to structured logger in full_sync post-initialization
+- Daemon: moved to an XDG layout (`~/.config/genreupdater`, `~/.local/share/genreupdater`, `~/.local/state/genreupdater`), separate from the Swift app's Application Support directory
+- Daemon: deploys the latest stable release tag (`vX.Y.Z`) instead of `origin/main`; config and secrets live outside the clone
+
+### Removed
+
+- Daemon: `sync-fixtures.sh` (pushes to the protected `main` branch were always rejected)
 
 ### Fixed
 
@@ -53,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
 - AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
+- Daemon: `uv sync` failures in `run-daemon.sh` were treated as success
 
 ## [2.0.0] - 2025-09-04
 
