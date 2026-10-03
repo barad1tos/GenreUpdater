@@ -139,10 +139,12 @@ logging:
   dry_run_report_file: reports/dry_run_report.html
   # State files must live on local APFS (not iCloud Drive) to avoid EDEADLK
   # from iCloud file provider locking during active write. Absolute paths
-  # override logs_base_dir thanks to pathlib's join-reset-on-absolute behavior.
-  last_incremental_run_file: /Users/cloud/Library/Application Support/GenreUpdater/state/last_incremental_run.log
+  # override logs_base_dir thanks to pathlib's join-reset-on-absolute behavior
+  # (~ expands at config load). This checkout's config serves development runs,
+  # so its state stays apart from the launchd daemon's ~/.local/state/genreupdater.
+  last_incremental_run_file: ~/.local/state/genreupdater-dev/last_incremental_run.log
   pending_verification_file: csv/pending_year_verification.csv
-  last_db_verify_log: /Users/cloud/Library/Application Support/GenreUpdater/state/last_db_verify.log
+  last_db_verify_log: ~/.local/state/genreupdater-dev/last_db_verify.log
 
   # Log levels configuration
   levels:

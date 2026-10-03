@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -577,3 +578,87 @@ class TestUpdateVerificationTimestamp:
         ):
             # Should not raise despite the underlying OSError
             await service.update_verification_timestamp()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_marks_persist_every_album(
+    service: PendingVerificationService,
+    error_logger: MagicMock,
+) -> None:
+    """Concurrent marks (as year_batch issues them) must all reach disk without save errors."""
+    await service.initialize()
+    album_count = 20
+
+    await asyncio.gather(*(service.mark_for_verification(f"Artist {index}", f"Album {index}") for index in range(album_count)))
+
+    error_logger.exception.assert_not_called()
+    reloaded = PendingVerificationService(service.config, MagicMock(), MagicMock())
+    await reloaded.initialize()
+    assert len(await reloaded.get_all_pending_albums()) == album_count
+
+
+@pytest.mark.asyncio
+async def test_cancelled_save_keeps_later_save_waiting_for_its_write(
+    service: PendingVerificationService,
+    error_logger: MagicMock,
+) -> None:
+    """A save cancelled mid-write must still finish before the next save writes the newest state."""
+    await service.initialize()
+    original_save = service._blocking_save
+    write_started = threading.Event()
+    release_write = threading.Event()
+    first_write_done = threading.Event()
+
+    def gated_save(entries: list[PendingAlbumEntry]) -> None:
+        if write_started.is_set():
+            original_save(entries)
+            return
+        write_started.set()
+        release_write.wait(timeout=5)
+        original_save(entries)
+        first_write_done.set()
+
+    with patch.object(service, "_blocking_save", side_effect=gated_save):
+        first_mark = asyncio.create_task(service.mark_for_verification("Artist 1", "Album 1"))
+        await asyncio.to_thread(write_started.wait, 5)
+        first_mark.cancel()
+        second_mark = asyncio.create_task(service.mark_for_verification("Artist 2", "Album 2"))
+        # Gives an unserialized second save time to land before the stale first write
+        await asyncio.wait({second_mark}, timeout=0.5)
+        release_write.set()
+        await asyncio.gather(first_mark, second_mark, return_exceptions=True)
+        # The cancelled task is done at once, so wait on its executor thread directly
+        await asyncio.to_thread(first_write_done.wait, 5)
+
+    assert first_mark.cancelled()
+    error_logger.exception.assert_not_called()
+    reloaded = PendingVerificationService(service.config, MagicMock(), MagicMock())
+    await reloaded.initialize()
+    assert {entry.album for entry in await reloaded.get_all_pending_albums()} == {"Album 1", "Album 2"}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_save_reports_its_write_failure(
+    service: PendingVerificationService,
+    error_logger: MagicMock,
+) -> None:
+    """A write that fails after its save was cancelled is still logged."""
+    await service.initialize()
+    write_started = threading.Event()
+    release_write = threading.Event()
+
+    def failing_save(_entries: list[PendingAlbumEntry]) -> None:
+        write_started.set()
+        release_write.wait(timeout=5)
+        raise OSError("disk full")
+
+    with patch.object(service, "_blocking_save", side_effect=failing_save):
+        mark = asyncio.create_task(service.mark_for_verification("Artist", "Album"))
+        await asyncio.to_thread(write_started.wait, 5)
+        mark.cancel()
+        release_write.set()
+        with pytest.raises(asyncio.CancelledError):
+            await mark
+
+    error_logger.error.assert_called_once()
+    assert isinstance(error_logger.error.call_args.kwargs["exc_info"], OSError)

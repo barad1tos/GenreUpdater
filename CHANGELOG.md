@@ -46,9 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Daemon: `sync-fixtures.sh` (pushes to the protected `main` branch were always rejected)
+- `scripts/sync-diagnostics.sh`: no callers, and it pushed from the legacy daemon clone to the protected `main` branch
 
 ### Fixed
 
+- Year-verification queue saves no longer fail with `No such file or directory` on `pending_year_verification.csv.tmp` when several albums are marked at once, and a stale queue snapshot can no longer overwrite a newer one
 - `zip` misalignment in year_search_coordinator: filtered API tasks vs unfiltered api_order
 - Naive `datetime.fromtimestamp()` calls missing timezone in analytics.py
 - `logging.warning()` using root logger instead of module-level `_logger` in applescript_client
@@ -59,7 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
 - AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
+- Daemon: a run skipped because Music.app was not running exited successfully and showed an "Update completed successfully" notification; `main.py` now exits with `EX_TEMPFAIL` (75), and `run-daemon.sh` logs the skip without a notification
 - Daemon: `uv sync` failures in `run-daemon.sh` were treated as success
+- Daemon: re-running `install.sh` left a development-checkout `apple_scripts_dir` in an existing config and did not restore missing state files
+- A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure. A library that really became empty is recorded with `main.py --fresh`
+
+### Security
+
+- The Discogs token no longer appears in logs: startup no longer encrypts a plaintext token just to log the encrypted value, Discogs request headers hide the `Authorization` value, and debug config dumps replace the token with `<redacted>`
 
 ## [2.0.0] - 2025-09-04
 

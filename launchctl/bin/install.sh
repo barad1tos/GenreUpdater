@@ -114,13 +114,6 @@ rc=0
 migrate_file "$GU_CONFIG_FILE" "$LEGACY_APP/my-config.yaml" "$REPO_ROOT/my-config.yaml" || rc=$?
 case "$rc" in
     0)
-        # AppleScripts must come from the pinned clone, never from a development checkout
-        sed -i '' "s|^apple_scripts_dir:.*|apple_scripts_dir: $GU_APP_DIR/applescripts|" "$GU_CONFIG_FILE"
-        if grep -qxF "apple_scripts_dir: $GU_APP_DIR/applescripts" "$GU_CONFIG_FILE"; then
-            echo "  set apple_scripts_dir: $GU_APP_DIR/applescripts"
-        else
-            echo "  WARN: no top-level apple_scripts_dir found; set it to $GU_APP_DIR/applescripts"
-        fi
         if [[ -f "$LEGACY_APP/my-config.yaml" && -f "$REPO_ROOT/my-config.yaml" ]] \
             && ! cmp -s "$LEGACY_APP/my-config.yaml" "$REPO_ROOT/my-config.yaml"; then
             echo "  NOTE: the checkout's my-config.yaml differs from the migrated one. Review:"
@@ -130,6 +123,18 @@ case "$rc" in
     1) ;;
     *) die "No my-config.yaml to migrate; create $GU_CONFIG_FILE from config.yaml" ;;
 esac
+
+# AppleScripts must come from the pinned clone, never from a development checkout.
+# Checked on every run, so a config that already existed is repointed too.
+scripts_dir_line="apple_scripts_dir: $GU_APP_DIR/applescripts"
+if ! grep -qxF "$scripts_dir_line" "$GU_CONFIG_FILE"; then
+    sed -i '' "s|^apple_scripts_dir:.*|$scripts_dir_line|" "$GU_CONFIG_FILE"
+    if grep -qxF "$scripts_dir_line" "$GU_CONFIG_FILE"; then
+        echo "  set apple_scripts_dir: $GU_APP_DIR/applescripts"
+    else
+        echo "  WARN: no top-level apple_scripts_dir found; set it to $GU_APP_DIR/applescripts"
+    fi
+fi
 
 rc=0
 migrate_file "$GU_ENV_FILE" "$LEGACY_APP/.env" "$REPO_ROOT/.env" || rc=$?
@@ -142,17 +147,30 @@ migrate_file "$GU_CONFIG_DIR/artist-renames.yaml" "$LEGACY_APP/artist-renames.ya
 [[ "$rc" -le 1 ]] || echo "  WARN: artist-renames.yaml not found; artist renames will be skipped"
 
 step "Migrating daemon state to $GU_STATE_DIR"
-# last_incremental_run_file and last_db_verify_log may still point at the legacy state directory
 legacy_state_dir="$GU_LEGACY_DIR/state"
-legacy_state_tilde="~${legacy_state_dir#"$HOME"}"
-if grep -qF -e "$legacy_state_dir/" -e "$legacy_state_tilde/" "$GU_CONFIG_FILE"; then
-    for state_file in "$legacy_state_dir"/*; do
-        [[ -f "$state_file" && "$(basename "$state_file")" != run.lock ]] || continue
-        migrate_file "$GU_STATE_DIR/$(basename "$state_file")" "$state_file" || true
-    done
-    sed -i '' -e "s|$legacy_state_dir/|$GU_STATE_DIR/|g" -e "s|$legacy_state_tilde/|$GU_STATE_DIR/|g" "$GU_CONFIG_FILE"
+# Copy whatever state is missing here, even when the config was repointed by an earlier run;
+# migrate_file never overwrites, so state the XDG daemon already wrote stays
+for state_file in "$legacy_state_dir"/*; do
+    [[ -f "$state_file" && "$(basename "$state_file")" != run.lock ]] || continue
+    migrate_file "$GU_STATE_DIR/$(basename "$state_file")" "$state_file" || true
+done
+# The daemon's state files live in GU_STATE_DIR, whatever the config was seeded from
+# (legacy Application Support paths, or the checkout's development paths)
+config_before="$(cat "$GU_CONFIG_FILE")"
+# Value forms handled: absolute, relative, ~-prefixed, quoted, and with a trailing "# comment"
+state_keys=(last_incremental_run_file last_db_verify_log)
+for state_key in "${state_keys[@]}"; do
+    sed -i '' -E "s@^([[:space:]]*$state_key:)[[:space:]]*[\"']?([^#\"']*/)?([^/#\"'[:space:]]+)[\"']?([[:space:]]+#.*)?[[:space:]]*\$@\1 $GU_STATE_DIR/\3\4@" "$GU_CONFIG_FILE"
+done
+if [[ "$(cat "$GU_CONFIG_FILE")" != "$config_before" ]]; then
     echo "  repointed state paths to $GU_STATE_DIR"
 fi
+for state_key in "${state_keys[@]}"; do
+    if grep -qE "^[[:space:]]*$state_key:" "$GU_CONFIG_FILE" \
+        && ! grep -qE "^[[:space:]]*$state_key: $GU_STATE_DIR/" "$GU_CONFIG_FILE"; then
+        echo "  WARN: $state_key was not repointed; set it to a file in $GU_STATE_DIR"
+    fi
+done
 
 # Any remaining path into this checkout or the legacy directory would re-couple the daemon to them
 repo_root_tilde="~${REPO_ROOT#"$HOME"}"
