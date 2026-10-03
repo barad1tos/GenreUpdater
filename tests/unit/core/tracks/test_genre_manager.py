@@ -12,9 +12,9 @@ from core.models.protocols import AnalyticsProtocol
 from core.tracks.genre_manager import GenreManager
 from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
 
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
-from tests.mocks.track_data import DummyTrackData  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockLogger
+from tests.mocks.track_data import DummyTrackData
 
 if TYPE_CHECKING:
     from core.tracks.track_processor import TrackProcessor

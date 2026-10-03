@@ -5,3 +5,29 @@
 # library_snapshot.json is 14MB (37K tracks) - exceeds 150K char limit
 ignore:
   - tests/fixtures/**
+
+rule_settings:
+  disable:
+    # Its scope cannot be narrowed, and test modules sharing tests.factories / tests.mocks is the
+    # convention here (tests/conftest.py); the src-scoped custom rule below keeps the protection.
+    - dont-import-test-modules
+
+rules:
+  - id: no-test-imports-in-src
+    description: Production code must not import from the tests package
+    pattern: from ${module} import ${names+}
+    condition: module.matches_regex(r"^tests(\.|$)")
+    language: python
+    paths:
+      include:
+        - src
+        - main.py
+  - id: no-test-module-imports-in-src
+    description: Production code must not import from the tests package
+    pattern: import ${module}
+    condition: module.matches_regex(r"^tests(\.|$)")
+    language: python
+    paths:
+      include:
+        - src
+        - main.py
