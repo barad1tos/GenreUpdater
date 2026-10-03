@@ -29,7 +29,7 @@ logger.setLevel(logging.INFO)
 # Define constants
 LOG_LEVELS: list[str] = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NOTSET"]
 REQUIRED_ENV_VARS: list[str] = ["DISCOGS_TOKEN", "CONTACT_EMAIL"]
-SECRET_CONFIG_KEYS: frozenset[str] = frozenset({"discogs_token"})
+SECRET_CONFIG_KEYS: frozenset[str] = frozenset({"discogs_token"})  # lowercase; matched case-insensitively
 REDACTED_VALUE = "<redacted>"
 
 
@@ -89,7 +89,7 @@ def resolve_env_vars(config: ConfigValue) -> ConfigValue:
 def _redact_secrets(config: ConfigValue) -> ConfigValue:
     """Return a copy of the config with every secret value replaced by a placeholder, for logging."""
     if isinstance(config, dict):
-        return {str(key): REDACTED_VALUE if key in SECRET_CONFIG_KEYS else _redact_secrets(value) for key, value in config.items()}
+        return {str(key): REDACTED_VALUE if str(key).lower() in SECRET_CONFIG_KEYS else _redact_secrets(value) for key, value in config.items()}
     if isinstance(config, list):
         return [_redact_secrets(item) for item in config]
     return config

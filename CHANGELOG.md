@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- The Discogs token no longer appears in logs: startup no longer logs its encrypted value, Discogs request headers hide the `Authorization` value, and debug config dumps replace the token with `<redacted>`
+- The Discogs token no longer appears in logs: startup no longer encrypts a plaintext token just to log the encrypted value, Discogs request headers hide the `Authorization` value, and debug config dumps replace the token with `<redacted>`
 
 ## [2.0.0] - 2025-09-04
 

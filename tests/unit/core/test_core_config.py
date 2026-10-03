@@ -359,22 +359,30 @@ class TestLoadConfigDoesNotLogSecrets:
 
     SECRET_TOKEN = "discogs-secret-sentinel-value"  # noqa: S105
 
-    @pytest.mark.parametrize("token_yaml_value", ["${DISCOGS_TOKEN}", SECRET_TOKEN])
+    @pytest.mark.parametrize(
+        ("token_key", "token_yaml_value"),
+        [
+            ("discogs_token", "${DISCOGS_TOKEN}"),
+            ("discogs_token", SECRET_TOKEN),
+            ("Discogs_Token", SECRET_TOKEN),
+        ],
+    )
     def test_config_dumps_redact_discogs_token(
         self,
+        token_key: str,
         token_yaml_value: str,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Raw and resolved config dumps redact the token, whether literal or from the environment."""
+        """Raw and resolved config dumps redact the token: literal, from the environment, or under a case-variant key."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("DISCOGS_TOKEN", self.SECRET_TOKEN)
         monkeypatch.setenv("CONTACT_EMAIL", "test@example.com")
         config_file = _create_config_file(
             tmp_path,
             "config.yaml",
-            f"year_retrieval:\n  api_auth:\n    discogs_token: {token_yaml_value}\n    contact_email: ${{CONTACT_EMAIL}}\n",
+            f"year_retrieval:\n  api_auth:\n    {token_key}: {token_yaml_value}\n    contact_email: ${{CONTACT_EMAIL}}\n",
         )
         caplog.set_level(logging.DEBUG, logger="config")
 
@@ -383,4 +391,5 @@ class TestLoadConfigDoesNotLogSecrets:
 
         assert "[CONFIG] Resolved config" in caplog.text
         assert self.SECRET_TOKEN not in caplog.text
+        assert f"{token_key}: <redacted>" in caplog.text
         assert "test@example.com" in caplog.text

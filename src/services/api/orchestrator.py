@@ -322,16 +322,9 @@ class ExternalApiOrchestrator:
         return raw_token
 
     def _process_token_security(self, raw_token: str, key: str) -> str:
-        """Process token encryption/decryption if SecureConfig is available."""
-        if not self.secure_config:
-            return raw_token
-
-        if self.secure_config.is_token_encrypted(raw_token):
+        """Decrypt the token if it is encrypted and SecureConfig is available; return plaintext tokens unchanged."""
+        if self.secure_config and self.secure_config.is_token_encrypted(raw_token):
             return self._decrypt_token(raw_token, key)
-
-        if raw_token:
-            self._encrypt_token_for_future_storage(raw_token, key)
-
         return raw_token
 
     def _decrypt_token(self, encrypted_token: str, key: str) -> str:
@@ -347,17 +340,6 @@ class ExternalApiOrchestrator:
             return encrypted_token
 
         return decrypted_token
-
-    def _encrypt_token_for_future_storage(self, raw_token: str, key: str) -> None:
-        """Encrypt a plaintext token, logging only that encryption happened, never the value."""
-        if self.secure_config is None:
-            msg = f"secure_config must be initialized before encrypting token (key={key})"
-            raise RuntimeError(msg)
-        try:
-            self.secure_config.encrypt_token(raw_token, key)
-            self.console_logger.info("Token '%s' encrypted (value not logged)", key)
-        except SecurityConfigError as e:
-            self.error_logger.warning("Failed to encrypt %s: %s", key, e)
 
     def _initialize_rate_limiters(self) -> None:
         """Initialize rate limiters for each API provider."""
