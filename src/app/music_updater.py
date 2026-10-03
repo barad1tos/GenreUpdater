@@ -37,6 +37,13 @@ if TYPE_CHECKING:
     from core.models.cache_types import PendingAlbumEntry
 
 
+class LibraryFetchError(RuntimeError):
+    """Music.app returned no tracks for a library known to hold tracks.
+
+    Not retryable within the run: the AppleScript fetch path is broken and needs fixing.
+    """
+
+
 # noinspection PyArgumentEqualDefault,PyTypeChecker
 class MusicUpdater:
     """Orchestrates music library updates using modular components.
@@ -461,6 +468,7 @@ class MusicUpdater:
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
         if not tracks:
+            await self._handle_empty_library_fetch(force=force, fresh=fresh)
             self.console_logger.warning("No tracks found in Music.app (force=%s)", force)
             return
 
@@ -516,6 +524,42 @@ class MusicUpdater:
 
         self.snapshot_manager.clear()
         self.console_logger.info("Main update pipeline completed successfully")
+
+    async def _handle_empty_library_fetch(self, *, force: bool, fresh: bool) -> None:
+        """Fail an empty full-library fetch when the last snapshot recorded tracks.
+
+        A test-artist fetch can legitimately be empty, and without maintained snapshot
+        metadata (snapshots disabled, or a first run) an empty library cannot be told
+        apart from a failed fetch. A ``--fresh`` run accepts the empty library as the
+        new truth and persists it, which is the supported way out of the failure.
+
+        Args:
+            force: Whether the fetch ran in force mode, reported in the error
+            fresh: Whether the run was started with ``--fresh``
+
+        Raises:
+            LibraryFetchError: The snapshot metadata records a non-empty library.
+
+        """
+        if self.dry_run_test_artists:
+            return
+        snapshot_service = self.deps.library_snapshot_service
+        if not snapshot_service or not snapshot_service.is_enabled():
+            return
+        if fresh:
+            if not self.deps.dry_run:
+                await self.snapshot_manager.persist_to_disk()
+            return
+        metadata = await snapshot_service.get_snapshot_metadata()
+        if metadata is None or metadata.track_count == 0:
+            return
+        msg = (
+            f"Music.app returned no tracks (force={force}), but the library snapshot "
+            f"from {metadata.last_full_scan.isoformat()} recorded {metadata.track_count} tracks; "
+            "treating this as a failed fetch. If the library really is empty now, record it with "
+            "`uv run python main.py --fresh` (add the same --config if the run used one)"
+        )
+        raise LibraryFetchError(msg)
 
     @staticmethod
     def _should_update_run_timestamp(force: bool, incremental_tracks: list[TrackDict]) -> bool:
