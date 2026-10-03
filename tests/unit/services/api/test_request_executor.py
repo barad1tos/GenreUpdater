@@ -1150,6 +1150,29 @@ class TestProcessResponse:
                 result = await executor._process_response(mock_response, api_name="discogs", url="url", attempt=0, log_url="log_url", elapsed=0.5)
                 assert result == {"results": []}
 
+    @pytest.mark.asyncio
+    async def test_process_response_discogs_redacts_authorization_header(
+        self,
+        executor: ApiRequestExecutor,
+        mock_response: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Discogs header logging never includes the token from the Authorization header."""
+        mock_response.request_info.headers = {
+            "Authorization": f"Discogs token={TEST_API_TOKEN}",
+            "User-Agent": "TestAgent/1.0",
+        }
+
+        with (
+            patch.object(executor, "_read_response_text", new_callable=AsyncMock, return_value='{"results": []}'),
+            patch.object(executor, "_parse_json_response", new_callable=AsyncMock, return_value={"results": []}),
+            caplog.at_level(logging.DEBUG),
+        ):
+            await executor._process_response(mock_response, api_name="discogs", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+
+        assert TEST_API_TOKEN not in caplog.text
+        assert "TestAgent/1.0" in caplog.text
+
 
 class TestReadResponseText:
     """Tests for _read_response_text method."""

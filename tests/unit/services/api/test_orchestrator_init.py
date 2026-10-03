@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -216,3 +217,34 @@ class TestSecureConfigGuards:
 
         with pytest.raises(RuntimeError, match="secure_config must be initialized"):
             orchestrator._encrypt_token_for_future_storage("raw_token", "discogs_token")
+
+
+class TestTokenValuesNotLogged:
+    """Token encryption must never write the plaintext or ciphertext to logs."""
+
+    PLAINTEXT_TOKEN = "plain-discogs-token-value"  # noqa: S105
+    CIPHERTEXT_TOKEN = "gAAAAA-ciphertext-sentinel-value"  # noqa: S105
+
+    def test_encrypting_plaintext_token_logs_neither_value(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Encrypting a plaintext token reports the key name only."""
+        orchestrator = ExternalApiOrchestrator(
+            config=create_test_config(),
+            console_logger=logging.getLogger("test.orchestrator_init.console"),
+            error_logger=logging.getLogger("test.orchestrator_init.error"),
+            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            cache_service=create_mock_cache_service(),
+            pending_verification_service=create_mock_pending_verification_service(),
+        )
+        secure_config = MagicMock()
+        secure_config.is_token_encrypted.return_value = False
+        secure_config.encrypt_token.return_value = self.CIPHERTEXT_TOKEN
+        orchestrator.secure_config = secure_config
+
+        with caplog.at_level(logging.DEBUG):
+            token = orchestrator._process_token_security(self.PLAINTEXT_TOKEN, "discogs_token")
+
+        assert token == self.PLAINTEXT_TOKEN
+        secure_config.encrypt_token.assert_called_once_with(self.PLAINTEXT_TOKEN, "discogs_token")
+        assert self.CIPHERTEXT_TOKEN not in caplog.text
+        assert self.PLAINTEXT_TOKEN not in caplog.text
+        assert "Token 'discogs_token' encrypted" in caplog.text

@@ -349,15 +349,13 @@ class ExternalApiOrchestrator:
         return decrypted_token
 
     def _encrypt_token_for_future_storage(self, raw_token: str, key: str) -> None:
-        """Encrypt a plaintext token and log the encrypted value for future use."""
+        """Encrypt a plaintext token, logging only that encryption happened, never the value."""
         if self.secure_config is None:
             msg = f"secure_config must be initialized before encrypting token (key={key})"
             raise RuntimeError(msg)
         try:
-            encrypted_token = self.secure_config.encrypt_token(raw_token, key)
-            self.console_logger.info("Token '%s' encrypted. Update config.yaml with the encrypted value.", key)
-            # Store encrypted value for manual config update (visible only in debug logs)
-            self.console_logger.debug("Encrypted value for %s: %s", key, encrypted_token)
+            self.secure_config.encrypt_token(raw_token, key)
+            self.console_logger.info("Token '%s' encrypted (value not logged)", key)
         except SecurityConfigError as e:
             self.error_logger.warning("Failed to encrypt %s: %s", key, e)
 
