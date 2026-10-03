@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure
 - A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure. A library that really became empty is recorded with `main.py --fresh`
 
+### Security
+
+- The Discogs token no longer appears in logs: startup no longer encrypts a plaintext token just to log the encrypted value, Discogs request headers hide the `Authorization` value, and debug config dumps replace the token with `<redacted>`
+
 ## [2.0.0] - 2025-09-04
 
 ### Added

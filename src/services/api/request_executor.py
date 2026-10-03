@@ -29,6 +29,7 @@ HTTP_TOO_MANY_REQUESTS = 429
 HTTP_SERVER_ERROR = 500
 API_RESPONSE_LOG_LIMIT = 500
 SECURE_RANDOM = secrets.SystemRandom()
+REDACTED_VALUE = "<redacted>"
 
 
 class ApiRequestExecutor:
@@ -522,7 +523,10 @@ class ApiRequestExecutor:
         if api_name == "discogs":
             self.console_logger.debug(
                 "[discogs] Sending Headers: %s",
-                response.request_info.headers,
+                {
+                    header_name: REDACTED_VALUE if header_name.lower() == "authorization" else header_value
+                    for header_name, header_value in response.request_info.headers.items()
+                },
             )
 
         # Read response text
