@@ -578,6 +578,7 @@ def analyze_failure_patterns(
 async def diagnose_album(
     artist: str,
     album: str,
+    *,
     first_detected: str,
     reason: str,
     mb_client: MusicBrainzDiagnostic,
