@@ -142,12 +142,19 @@ class TestMusicUpdaterAllure:
 
         with (
             patch("app.music_updater.is_music_app_running", return_value=True),
-            patch("app.music_updater.save_changes_report"),
+            patch("app.music_updater.save_changes_report") as mock_save,
         ):
             await updater.run_clean_artist("Test Artist")
         # Check that updates were attempted
         scripts_run = deps.ap_client.scripts_run
         assert len(scripts_run) > 0
+
+        # Only track 1 needed cleaning, so the report carries exactly its name change
+        mock_save.assert_called_once()
+        changes_log = mock_save.call_args.args[0]
+        assert [(change.track_id, change.old_track_name, change.new_track_name) for change in changes_log] == [
+            ("1", "Track 1 (Remastered)", "Track 1"),
+        ]
 
     @pytest.mark.asyncio
     async def test_run_clean_artist_music_not_running(self) -> None:
@@ -205,33 +212,35 @@ class TestMusicUpdaterAllure:
         deps = self.create_mock_dependencies()
         updater = MusicUpdater(deps)
 
-        # Mock Music app running check
-        with patch("app.music_updater.is_music_app_running", return_value=True):
-            # Setup test tracks
-            track1 = DummyTrackData.create(track_id="1", artist="Pipeline Artist", album="Album 1", genre="Pop", year="")
-            track2 = DummyTrackData.create(track_id="2", artist="Pipeline Artist", album="Album 1", genre="Alternative", year="2020")
-            track3 = DummyTrackData.create(track_id="3", artist="Pipeline Artist", album="Album 1", genre="Indie", year="")
+        # Year retrieval is off in the test config; the year step needs it on
+        deps.app_config.year_retrieval.enabled = True
 
-            # Mock track fetching
-            await deps.cache_service.set_async("tracks_all", [track1, track2, track3])
+        track1 = DummyTrackData.create(track_id="1", artist="Pipeline Artist", album="Album 1", genre="Pop", year="")
+        track2 = DummyTrackData.create(track_id="2", artist="Pipeline Artist", album="Album 1", genre="Alternative", year="2020")
+        track3 = DummyTrackData.create(track_id="3", artist="Pipeline Artist", album="Album 1", genre="Indie", year="")
 
-            # Mock API responses
-            deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
-            deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
+        deps.external_api_service.get_album_year_response = ("2021", True, 85, {"2021": 85})
+        deps.ap_client.set_response("update_property.applescript", "Success: Property updated")
+
+        # With the snapshot service disabled, a full-library run fetches through AppleScript batches
+        fetch_batches = AsyncMock(return_value=[track1, track2, track3])
 
         with (
+            patch.object(updater.track_processor, "fetch_tracks_in_batches", fetch_batches),
+            # Incremental gate and run stamp read and write the shared lastrun file under logs_base_dir
+            patch.object(updater.database_verifier, "can_run_incremental", AsyncMock(return_value=True)),
+            patch.object(updater.database_verifier, "update_last_incremental_run", AsyncMock()),
             patch("app.music_updater.IncrementalRunTracker") as mock_tracker,
-            patch(
-                "metrics.change_reports.save_changes_report",
-                new_callable=AsyncMock,
-            ),
+            patch("app.music_updater.save_changes_report"),
+            patch("app.music_updater.sync_track_list_with_current", new_callable=AsyncMock),
         ):
-            mock_tracker.return_value.should_process.return_value = True
-            mock_tracker.return_value.mark_run_complete = MagicMock()
+            mock_tracker.return_value.get_last_run_timestamp = AsyncMock(return_value=None)
 
             await updater.run_main_pipeline()
-        # Verify tracks were fetched
-        assert deps.cache_service.load_count >= 0
+
+        fetch_batches.assert_awaited_once()
+        # One album lookup: library year 2020 from track 2, earliest add year 2024 from the default date_added
+        assert deps.external_api_service.get_album_year_calls == [("Pipeline Artist", "Album 1", "2020", 2024)]
 
     @pytest.mark.asyncio
     async def test_empty_track_list_handling(self) -> None:
