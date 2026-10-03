@@ -12,7 +12,7 @@ import pytest
 
 from core.models.track_models import TrackDict
 from core.tracks.year_fallback import YearFallbackHandler
-from tests.mocks.protocol_mocks import (  # sourcery skip: dont-import-test-modules
+from tests.mocks.protocol_mocks import (
     MockExternalApiService,
     MockPendingVerificationService,
 )

@@ -21,7 +21,7 @@ from core.tracks.year_consistency import (
     _is_reasonable_year as is_reasonable_year,  # pyright: ignore[reportPrivateUsage]
 )
 from core.tracks.year_retriever import YearRetriever
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig

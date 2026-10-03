@@ -10,7 +10,7 @@ import pytest
 
 from services.api.orchestrator import ExternalApiOrchestrator
 from tests.factories import create_test_app_config
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
