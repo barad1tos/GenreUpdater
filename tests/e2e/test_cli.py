@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from app.cli import CLI
-from app.orchestrator import Orchestrator
+from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from services.dependency_container import DependencyContainer
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
@@ -748,16 +748,13 @@ class TestCLIE2E:
             cli = CLI()
             args = cli.parse_args(["--config", config_path, "--dry-run"])
 
-            # Mock Music.app as not running
-            with patch("core.models.metadata_utils.is_music_app_running", return_value=False):
+            # The orchestrator binds the check at import time, so patch it there
+            with (
+                patch("app.orchestrator.is_music_app_running", return_value=False),
+                pytest.raises(MusicAppNotRunningError),
+            ):
                 orchestrator = Orchestrator(mock_deps)
                 await orchestrator.run_command(args)
-
-            # Should not crash, but should log error
-            # Verify error was logged (MockLogger stores messages)
-            error_logger = mock_deps.error_logger
-            # The error message contains "Music app is not running"
-            assert error_logger is not None
 
         finally:
             Path(config_path).unlink(missing_ok=True)

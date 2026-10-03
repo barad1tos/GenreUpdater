@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
 - AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
+- Daemon: a run skipped because Music.app was not running exited successfully and showed an "Update completed successfully" notification; `main.py` now exits with `EX_TEMPFAIL` (75), and `run-daemon.sh` logs the skip without a notification
 - Daemon: `uv sync` failures in `run-daemon.sh` were treated as success
 - Daemon: re-running `install.sh` left a development-checkout `apple_scripts_dir` in an existing config and did not restore missing state files
 - A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure

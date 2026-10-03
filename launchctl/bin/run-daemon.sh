@@ -7,7 +7,7 @@
 # - Pin the app clone to the latest stable release tag (vX.Y.Z)
 # - Dependency sync (uv)
 # - Run the Python pipeline with the user config from ~/.config/genreupdater
-# - Notifications on success/failure
+# - Notifications on success/failure (none when Music.app is closed and the run is skipped)
 #
 # Business logic is handled entirely by Python. The layout is defined in common.sh.
 
@@ -169,7 +169,10 @@ if timeout "$TIMEOUT_SECONDS" uv run python main.py --config "$GU_CONFIG_FILE" \
     notify "Genre Updater" "Update completed successfully ($target_tag)" "Glass"
 else
     EXIT_CODE=$?
-    if [[ $EXIT_CODE -eq 124 ]]; then
+    if [[ $EXIT_CODE -eq 75 ]]; then
+        # EX_TEMPFAIL: Music.app is closed, a normal state for the hourly tick
+        log "Music.app is not running; run skipped"
+    elif [[ $EXIT_CODE -eq 124 ]]; then
         log_error "Script timed out after ${TIMEOUT_SECONDS}s"
         notify "Genre Updater Error" "Script timed out after 4 hours"
     else
