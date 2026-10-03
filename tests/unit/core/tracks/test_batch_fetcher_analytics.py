@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from metrics.analytics import Analytics, LoggerContainer
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 
 @pytest.fixture

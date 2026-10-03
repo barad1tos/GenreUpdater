@@ -10,8 +10,8 @@ import pytest
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.models.track_models import TrackDict
 from metrics.analytics import Analytics
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig

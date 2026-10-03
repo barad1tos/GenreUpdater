@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.track_models import TrackDict

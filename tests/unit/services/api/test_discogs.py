@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 import pytest
 
 from services.api.discogs import DiscogsClient, DiscogsRelease
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockLogger
 
 
 class TestDiscogsClientAllure:
