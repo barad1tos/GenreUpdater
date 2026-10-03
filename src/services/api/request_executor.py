@@ -29,7 +29,8 @@ HTTP_TOO_MANY_REQUESTS = 429
 HTTP_SERVER_ERROR = 500
 API_RESPONSE_LOG_LIMIT = 500
 SECURE_RANDOM = secrets.SystemRandom()
-REDACTED_VALUE = "<redacted>"
+# Request headers safe to log; everything else (Authorization, cookies) is left out
+LOGGABLE_REQUEST_HEADERS = ("User-Agent", "Accept", "Accept-Encoding", "Content-Type")
 
 
 class ApiRequestExecutor:
@@ -521,12 +522,11 @@ class ApiRequestExecutor:
         response_status = response.status
 
         if api_name == "discogs":
+            # Allowlist rather than redact: any header not listed (Authorization, cookies) never reaches the log
+            sent_headers = response.request_info.headers
             self.console_logger.debug(
                 "[discogs] Sending Headers: %s",
-                {
-                    header_name: REDACTED_VALUE if header_name.lower() == "authorization" else header_value
-                    for header_name, header_value in response.request_info.headers.items()
-                },
+                {name: sent_headers[name] for name in LOGGABLE_REQUEST_HEADERS if name in sent_headers},
             )
 
         # Read response text
