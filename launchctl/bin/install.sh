@@ -157,12 +157,20 @@ done
 # The daemon's state files live in GU_STATE_DIR, whatever the config was seeded from
 # (legacy Application Support paths, or the checkout's development paths)
 config_before="$(cat "$GU_CONFIG_FILE")"
-for state_key in last_incremental_run_file last_db_verify_log; do
-    sed -i '' -E "s|^([[:space:]]*$state_key:)[[:space:]]*.*/([^/[:space:]]+)[[:space:]]*$|\1 $GU_STATE_DIR/\2|" "$GU_CONFIG_FILE"
+# Value forms handled: absolute, relative, ~-prefixed, quoted, and with a trailing "# comment"
+state_keys=(last_incremental_run_file last_db_verify_log)
+for state_key in "${state_keys[@]}"; do
+    sed -i '' -E "s@^([[:space:]]*$state_key:)[[:space:]]*[\"']?([^#\"']*/)?([^/#\"'[:space:]]+)[\"']?([[:space:]]+#.*)?[[:space:]]*\$@\1 $GU_STATE_DIR/\3\4@" "$GU_CONFIG_FILE"
 done
 if [[ "$(cat "$GU_CONFIG_FILE")" != "$config_before" ]]; then
     echo "  repointed state paths to $GU_STATE_DIR"
 fi
+for state_key in "${state_keys[@]}"; do
+    if grep -qE "^[[:space:]]*$state_key:" "$GU_CONFIG_FILE" \
+        && ! grep -qE "^[[:space:]]*$state_key: $GU_STATE_DIR/" "$GU_CONFIG_FILE"; then
+        echo "  WARN: $state_key was not repointed; set it to a file in $GU_STATE_DIR"
+    fi
+done
 
 # Any remaining path into this checkout or the legacy directory would re-couple the daemon to them
 repo_root_tilde="~${REPO_ROOT#"$HOME"}"
