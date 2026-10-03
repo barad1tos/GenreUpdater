@@ -11,7 +11,8 @@ The recommended approach is a **daemon** that monitors your Music library and ap
 !!! tip "Recommended: use the installer"
     From a clone of the repository, run `./launchctl/bin/install.sh`. It deploys the daemon to
     `~/.local/share/genreupdater/app` pinned to the latest release tag, keeps your config and
-    secrets in `~/.config/genreupdater/`, and installs the LaunchAgent. See
+    secrets in `~/.config/genreupdater/`, and installs the LaunchAgent. Re-running it is safe
+    and repairs paths in an existing config. See
     `launchctl/SERVICE_README.md` for details. The manual steps below are for custom setups.
 
 ### 1. Create the Daemon App
