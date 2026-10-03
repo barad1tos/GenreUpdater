@@ -371,6 +371,11 @@ class PendingVerificationService:
 
         Saves run one at a time, and each takes its snapshot only once it holds the
         save lock, so the last write to land always carries the newest state.
+        A cancelled save keeps the lock until its executor write finishes, because
+        the thread cannot be stopped and would otherwise overlap the next save.
+
+        Raises:
+            asyncio.CancelledError: If the save is cancelled; raised after the write ends.
         """
         loop = asyncio.get_running_loop()
 
@@ -378,11 +383,27 @@ class PendingVerificationService:
             async with self._lock:
                 entries = list(self.pending_albums.values())
 
+            save_future = loop.run_in_executor(None, self._blocking_save, entries)
             try:
-                await loop.run_in_executor(None, self._blocking_save, entries)
-                self.console_logger.info("Saved %d pending albums for verification", len(entries))
+                await asyncio.shield(save_future)
+            except asyncio.CancelledError:
+                await self._finish_cancelled_save(save_future, len(entries))
+                raise
             except (OSError, csv.Error) as e:
                 self.error_logger.exception("Error saving pending verification file: %s", e)
+            else:
+                self.console_logger.info("Saved %d pending albums for verification", len(entries))
+
+    async def _finish_cancelled_save(self, save_future: asyncio.Future[None], entry_count: int) -> None:
+        """Wait for a cancelled save's executor write and report how it ended."""
+        await asyncio.wait({save_future})
+        if (save_error := save_future.exception()) is not None:
+            self.error_logger.error(
+                "Error saving pending verification file after the save was cancelled (entries=%d): %s",
+                entry_count,
+                save_error,
+                exc_info=save_error,
+            )
 
     async def mark_for_verification(
         self,
