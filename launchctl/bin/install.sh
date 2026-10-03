@@ -18,6 +18,8 @@ source "$SCRIPT_DIR/common.sh"
 PLIST_TEMPLATE="$REPO_ROOT/launchctl/$GU_LABEL.plist"
 PLIST_TARGET="$HOME/Library/LaunchAgents/$GU_LABEL.plist"
 PLIST_LEGACY_BACKUP="$GU_STATE_DIR/$GU_LABEL.plist.pre-xdg"
+LAUNCHD_DOMAIN="gui/$(id -u)"
+LAUNCHD_SERVICE="$LAUNCHD_DOMAIN/$GU_LABEL"
 LEGACY_APP="$GU_LEGACY_DIR/app"
 DEPLOYED_SCRIPTS=(common.sh run-daemon.sh notify.sh update.sh)
 
@@ -31,6 +33,19 @@ step() {
     echo "==> $*"
 }
 
+# On a failed install, reload the agent that was running before; PLIST_TARGET is
+# replaced only after the new plist passes lint, so until then it is the previous one.
+agent_was_loaded=false
+restore_agent() {
+    local exit_code=$?
+    if [[ "$exit_code" -eq 0 || "$agent_was_loaded" != true ]]; then
+        return
+    fi
+    echo "Install failed; reloading the LaunchAgent from $PLIST_TARGET" >&2
+    launchctl bootstrap "$LAUNCHD_DOMAIN" "$PLIST_TARGET" \
+        || echo "Reload failed; run: launchctl bootstrap $LAUNCHD_DOMAIN \"$PLIST_TARGET\"" >&2
+}
+
 # Copy the first existing source to target, never overwriting target.
 # Returns 0 if copied, 1 if target already exists, 2 if no source exists.
 migrate_file() {
@@ -42,7 +57,8 @@ migrate_file() {
     fi
     for source in "$@"; do
         if [[ -f "$source" ]]; then
-            cp -L "$source" "$target"  # -L turns legacy symlinks into real files
+            # -L turns legacy symlinks into real files
+            cp -L "$source" "$target" || die "Could not copy $source to $target"
             echo "  copied: $source -> $target"
             return 0
         fi
@@ -57,6 +73,8 @@ for tool in git uv timeout plutil; do
     command -v "$tool" > /dev/null || die "'$tool' not found in PATH"
 done
 [[ -f "$PLIST_TEMPLATE" ]] || die "Plist template not found: $PLIST_TEMPLATE (run from a repository checkout)"
+# Checking out the release tag below would rewrite this script while it runs
+[[ "$REPO_ROOT" != "$GU_APP_DIR" ]] || die "Run install.sh from a development checkout, not from $GU_APP_DIR"
 
 # bootout below also terminates a running job, so refuse while a run holds a lock
 step "Checking that no daemon run is in progress"
@@ -67,7 +85,19 @@ for lock in "$GU_LEGACY_DIR/state/run.lock" "$GU_LOCK_FILE"; do
 done
 
 step "Unloading LaunchAgent $GU_LABEL"
-launchctl bootout "gui/$(id -u)/$GU_LABEL" 2> /dev/null || echo "  (was not loaded)"
+if launchctl print "$LAUNCHD_SERVICE" > /dev/null 2>&1; then
+    agent_was_loaded=true
+    trap restore_agent EXIT
+    launchctl bootout "$LAUNCHD_SERVICE"
+    # bootout returns before the service is gone; bootstrapping too early fails with "Input/output error"
+    for _ in {1..50}; do
+        launchctl print "$LAUNCHD_SERVICE" > /dev/null 2>&1 || break
+        sleep 0.2
+    done
+    ! launchctl print "$LAUNCHD_SERVICE" > /dev/null 2>&1 || die "$GU_LABEL is still loaded after bootout"
+else
+    echo "  (was not loaded)"
+fi
 
 step "Creating directories"
 mkdir -p "$GU_CONFIG_DIR" "$GU_BIN_DIR" "$GU_LOGS_DIR"
@@ -81,7 +111,11 @@ case "$rc" in
     0)
         # AppleScripts must come from the pinned clone, never from a development checkout
         sed -i '' "s|^apple_scripts_dir:.*|apple_scripts_dir: $GU_APP_DIR/applescripts|" "$GU_CONFIG_FILE"
-        echo "  set apple_scripts_dir: $GU_APP_DIR/applescripts"
+        if grep -qxF "apple_scripts_dir: $GU_APP_DIR/applescripts" "$GU_CONFIG_FILE"; then
+            echo "  set apple_scripts_dir: $GU_APP_DIR/applescripts"
+        else
+            echo "  WARN: no top-level apple_scripts_dir found; set it to $GU_APP_DIR/applescripts"
+        fi
         if [[ -f "$LEGACY_APP/my-config.yaml" && -f "$REPO_ROOT/my-config.yaml" ]] \
             && ! cmp -s "$LEGACY_APP/my-config.yaml" "$REPO_ROOT/my-config.yaml"; then
             echo "  NOTE: the checkout's my-config.yaml differs from the migrated one. Review:"
@@ -105,18 +139,20 @@ migrate_file "$GU_CONFIG_DIR/artist-renames.yaml" "$LEGACY_APP/artist-renames.ya
 step "Migrating daemon state to $GU_STATE_DIR"
 # last_incremental_run_file and last_db_verify_log may still point at the legacy state directory
 legacy_state_dir="$GU_LEGACY_DIR/state"
-if grep -qF "$legacy_state_dir/" "$GU_CONFIG_FILE"; then
+legacy_state_tilde="~${legacy_state_dir#"$HOME"}"
+if grep -qF -e "$legacy_state_dir/" -e "$legacy_state_tilde/" "$GU_CONFIG_FILE"; then
     for state_file in "$legacy_state_dir"/*; do
         [[ -f "$state_file" && "$(basename "$state_file")" != run.lock ]] || continue
         migrate_file "$GU_STATE_DIR/$(basename "$state_file")" "$state_file" || true
     done
-    sed -i '' "s|$legacy_state_dir/|$GU_STATE_DIR/|g" "$GU_CONFIG_FILE"
+    sed -i '' -e "s|$legacy_state_dir/|$GU_STATE_DIR/|g" -e "s|$legacy_state_tilde/|$GU_STATE_DIR/|g" "$GU_CONFIG_FILE"
     echo "  repointed state paths to $GU_STATE_DIR"
 fi
 
 # Any remaining path into this checkout or the legacy directory would re-couple the daemon to them
 repo_root_tilde="~${REPO_ROOT#"$HOME"}"
-if grep -nF -e "$REPO_ROOT" -e "$repo_root_tilde" -e "$GU_LEGACY_DIR" "$GU_CONFIG_FILE"; then
+legacy_dir_tilde="~${GU_LEGACY_DIR#"$HOME"}"
+if grep -nF -e "$REPO_ROOT" -e "$repo_root_tilde" -e "$GU_LEGACY_DIR" -e "$legacy_dir_tilde" "$GU_CONFIG_FILE"; then
     echo "  WARN: the lines above still point into $REPO_ROOT or $GU_LEGACY_DIR; repoint them before the first run"
 fi
 
@@ -147,9 +183,13 @@ if [[ -f "$PLIST_TARGET" && ! -f "$PLIST_LEGACY_BACKUP" ]] && grep -q "Applicati
     cp "$PLIST_TARGET" "$PLIST_LEGACY_BACKUP"
     echo "  backup: $PLIST_LEGACY_BACKUP"
 fi
-sed "s|\$HOME|$HOME|g" "$PLIST_TEMPLATE" > "$PLIST_TARGET"
-plutil -lint "$PLIST_TARGET" > /dev/null || die "Invalid plist: $PLIST_TARGET"
-launchctl bootstrap "gui/$(id -u)" "$PLIST_TARGET"
+# Stage and lint first, so a bad template never replaces a working plist
+plist_staged="$PLIST_TARGET.new"
+sed "s|\$HOME|$HOME|g" "$PLIST_TEMPLATE" > "$plist_staged"
+plutil -lint "$plist_staged" > /dev/null || die "Invalid plist: $plist_staged"
+mv -f "$plist_staged" "$PLIST_TARGET"
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$PLIST_TARGET"
+trap - EXIT
 echo "  loaded $GU_LABEL"
 
 cat << EOF

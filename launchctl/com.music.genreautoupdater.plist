@@ -57,7 +57,7 @@
     <key>Nice</key>
     <integer>10</integer>
 
-    <!-- 4 hour max runtime -->
+    <!-- Grace period between SIGTERM and SIGKILL when launchd stops the job; run-daemon.sh caps the runtime with timeout -->
     <key>ExitTimeOut</key>
     <integer>14400</integer>
 

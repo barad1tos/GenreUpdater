@@ -75,6 +75,10 @@ fi
 
 # AppleScripts must come from the pinned clone, never from a development checkout
 scripts_dir="$(awk -F': *' '/^apple_scripts_dir:/ { print $2; exit }' "$GU_CONFIG_FILE")"
+scripts_dir="${scripts_dir%%[[:space:]]#*}"  # inline comment
+scripts_dir="${scripts_dir%"${scripts_dir##*[![:space:]]}"}"  # trailing whitespace
+scripts_dir="${scripts_dir#[\"\']}"
+scripts_dir="${scripts_dir%[\"\']}"
 scripts_dir="${scripts_dir/#\~/$HOME}"
 if [[ "$scripts_dir" != "$GU_APP_DIR"/* ]]; then
     fail "apple_scripts_dir must point inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \

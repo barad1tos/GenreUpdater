@@ -10,6 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=SCRIPTDIR/common.sh
 source "$SCRIPT_DIR/common.sh"
 
+if [[ ! -d "$GU_APP_DIR/.git" ]]; then
+    echo "App clone not found: $GU_APP_DIR (run install.sh)" >&2
+    exit 1
+fi
+
 if gu_lock_is_held "$GU_LOCK_FILE"; then
     echo "A daemon run is in progress; try again later." >&2
     exit 1

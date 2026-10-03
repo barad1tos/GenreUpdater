@@ -65,6 +65,9 @@ The installer:
 4. Clones the repo into `~/.local/share/genreupdater/app` and checks out the latest release tag
 5. Runs `uv sync --frozen`, deploys the scripts and the plist, and loads the LaunchAgent
 
+If any step after the unload fails, the installer reloads the LaunchAgent that was loaded before,
+so a failed install never leaves the daemon switched off.
+
 Re-run it after changing anything in `launchctl/`: deployed scripts are copies, not links.
 
 ## Releasing
@@ -154,6 +157,14 @@ cp ~/.local/state/genreupdater/com.music.genreautoupdater.plist.pre-xdg \
    ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 ```
+
+This restores the old behaviour only while the XDG change is not on `main`. The legacy daemon
+resets its clone to `origin/main` on every run, and its `bin` is a link into that clone, so once the
+change is merged the old plist starts the new `run-daemon.sh` in the old layout. For the same
+reason, migrate a machine before its legacy daemon can pick up a `main` that contains this change.
+
+After the merge, roll back a bad release instead: delete its tag on origin and the daemon checks out
+the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag locally).
 
 ## Changelog
 
