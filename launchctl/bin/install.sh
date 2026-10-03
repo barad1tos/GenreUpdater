@@ -33,15 +33,18 @@ step() {
     echo "==> $*"
 }
 
-# On a failed install, reload the agent that was running before; PLIST_TARGET is
-# replaced only after the new plist passes lint, so until then it is the previous one.
+# On a failed install, put back and reload the plist that was loaded before
 agent_was_loaded=false
+plist_previous=""
 restore_agent() {
     local exit_code=$?
     if [[ "$exit_code" -eq 0 || "$agent_was_loaded" != true ]]; then
         return
     fi
-    echo "Install failed; reloading the LaunchAgent from $PLIST_TARGET" >&2
+    if [[ -n "$plist_previous" && -f "$plist_previous" ]]; then
+        mv -f "$plist_previous" "$PLIST_TARGET"
+    fi
+    echo "Install failed; reloading the previous LaunchAgent from $PLIST_TARGET" >&2
     launchctl bootstrap "$LAUNCHD_DOMAIN" "$PLIST_TARGET" \
         || echo "Reload failed; run: launchctl bootstrap $LAUNCHD_DOMAIN \"$PLIST_TARGET\"" >&2
 }
@@ -78,11 +81,13 @@ done
 
 # bootout below also terminates a running job, so refuse while a run holds a lock
 step "Checking that no daemon run is in progress"
-for lock in "$GU_LEGACY_DIR/state/run.lock" "$GU_LOCK_FILE"; do
-    if gu_lock_is_held "$lock"; then
-        die "A daemon run is in progress (lock: $lock). Wait for it to finish, then re-run."
-    fi
-done
+# The legacy daemon wrote its PID into run.lock; the XDG daemon holds a flock
+legacy_lock="$GU_LEGACY_DIR/state/run.lock"
+legacy_pid="$(cat "$legacy_lock" 2>/dev/null || true)"
+if [[ -n "$legacy_pid" ]] && kill -0 "$legacy_pid" 2>/dev/null; then
+    die "A legacy daemon run is in progress (PID $legacy_pid). Wait for it to finish, then re-run."
+fi
+gu_lock_is_held && die "A daemon run is in progress (lock: $GU_LOCK_FILE). Wait for it to finish, then re-run."
 
 step "Unloading LaunchAgent $GU_LABEL"
 if launchctl print "$LAUNCHD_SERVICE" > /dev/null 2>&1; then
@@ -187,9 +192,14 @@ fi
 plist_staged="$PLIST_TARGET.new"
 sed "s|\$HOME|$HOME|g" "$PLIST_TEMPLATE" > "$plist_staged"
 plutil -lint "$plist_staged" > /dev/null || die "Invalid plist: $plist_staged"
+if [[ -f "$PLIST_TARGET" ]]; then
+    plist_previous="$PLIST_TARGET.previous"
+    cp "$PLIST_TARGET" "$plist_previous"
+fi
 mv -f "$plist_staged" "$PLIST_TARGET"
 launchctl bootstrap "$LAUNCHD_DOMAIN" "$PLIST_TARGET"
 trap - EXIT
+rm -f "$plist_previous"
 echo "  loaded $GU_LABEL"
 
 cat << EOF

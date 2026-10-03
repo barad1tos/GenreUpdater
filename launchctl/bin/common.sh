@@ -6,7 +6,7 @@
 # Layout (the Swift app keeps ~/Library/Application Support/GenreUpdater to itself):
 #   ~/.config/genreupdater/       my-config.yaml, .env, artist-renames.yaml (user-owned)
 #   ~/.local/share/genreupdater/  app/ (clone pinned to the latest vX.Y.Z tag), bin/ (deployed scripts)
-#   ~/.local/state/genreupdater/  logs/, run.lock
+#   ~/.local/state/genreupdater/  logs/, run.lock (flock), Python state files
 #
 # shellcheck disable=SC2034  # variables are consumed by the sourcing scripts
 
@@ -52,10 +52,18 @@ gu_current_release_tag() {
     git -C "$GU_APP_DIR" tag --points-at HEAD --list 'v*' --sort=-v:refname | _gu_first_release_tag
 }
 
-# Succeed if a live process holds the given lock file
+# Take the daemon lock for the rest of this process, or fail if another process holds it.
+# flock via lockf(1) on fd 9: atomic, and released by the kernel when the holder exits,
+# so a crashed run never leaves a stale lock. The PID is written for diagnostics only.
+gu_acquire_lock() {
+    mkdir -p "$GU_STATE_DIR"
+    exec 9>> "$GU_LOCK_FILE"
+    lockf -s -t 0 9 || return 1
+    echo $$ > "$GU_LOCK_FILE"
+}
+
+# Succeed if another process holds the daemon lock
 gu_lock_is_held() {
-    local lock_file="$1" pid
-    [[ -f "$lock_file" ]] || return 1
-    pid="$(cat "$lock_file" 2>/dev/null || true)"
-    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+    [[ -f "$GU_LOCK_FILE" ]] || return 1
+    ! lockf -k -s -t 0 "$GU_LOCK_FILE" true
 }

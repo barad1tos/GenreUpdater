@@ -29,7 +29,7 @@ launchctl/                                  # In the repository
 ~/.local/state/genreupdater/
 ├── logs/                                   # daemon.log, stdout.log, stderr.log, launchctl-*.log
 ├── last_incremental_run.log, last_db_verify.log   # Python state referenced by my-config.yaml
-└── run.lock                                # PID lock
+└── run.lock                                # flock held by the running script (PID inside for diagnostics)
 
 ~/Library/LaunchAgents/com.music.genreautoupdater.plist    # Deployed plist ($HOME expanded)
 ```

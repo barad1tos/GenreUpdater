@@ -80,8 +80,11 @@ scripts_dir="${scripts_dir%"${scripts_dir##*[![:space:]]}"}"  # trailing whitesp
 scripts_dir="${scripts_dir#[\"\']}"
 scripts_dir="${scripts_dir%[\"\']}"
 scripts_dir="${scripts_dir/#\~/$HOME}"
-if [[ "$scripts_dir" != "$GU_APP_DIR"/* ]]; then
-    fail "apple_scripts_dir must point inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \
+# Compare canonical paths, so ".." components and symlinks cannot lead out of the clone
+scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P || true)"
+app_dir_real="$(cd "$GU_APP_DIR" && pwd -P)"
+if [[ "$scripts_dir_real" != "$app_dir_real"/* ]]; then
+    fail "apple_scripts_dir must be an existing directory inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \
         "apple_scripts_dir points outside the app clone"
 fi
 
@@ -91,16 +94,11 @@ if grep -qE '^[^#]*Application Support/GenreUpdater' "$GU_CONFIG_FILE"; then
         "Config points into the legacy directory"
 fi
 
-# === Lock acquisition (macOS-compatible PID-based) ===
-if gu_lock_is_held "$GU_LOCK_FILE"; then
-    log "Another instance is already running (PID: $(cat "$GU_LOCK_FILE")). Exiting."
+# === Lock acquisition ===
+if ! gu_acquire_lock; then
+    log "Another instance is already running (PID: $(cat "$GU_LOCK_FILE" 2>/dev/null || echo unknown)). Exiting."
     exit 0
 fi
-if [[ -f "$GU_LOCK_FILE" ]]; then
-    log "Removing stale lock (old PID: $(cat "$GU_LOCK_FILE" 2>/dev/null || echo empty))"
-fi
-echo $$ > "$GU_LOCK_FILE"
-trap 'rm -f "$GU_LOCK_FILE"' EXIT
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===

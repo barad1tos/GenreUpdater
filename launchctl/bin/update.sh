@@ -15,15 +15,11 @@ if [[ ! -d "$GU_APP_DIR/.git" ]]; then
     exit 1
 fi
 
-if gu_lock_is_held "$GU_LOCK_FILE"; then
+# Hold the daemon lock so a launchd trigger cannot start mid-update
+if ! gu_acquire_lock; then
     echo "A daemon run is in progress; try again later." >&2
     exit 1
 fi
-
-# Hold the daemon lock so a launchd trigger cannot start mid-update
-mkdir -p "$GU_STATE_DIR"
-echo $$ > "$GU_LOCK_FILE"
-trap 'rm -f "$GU_LOCK_FILE"' EXIT
 
 gu_fetch_tags
 current_tag="$(gu_current_release_tag)"
@@ -47,6 +43,12 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
+previous_ref="$(git -C "$GU_APP_DIR" rev-parse HEAD)"
 git -C "$GU_APP_DIR" checkout --quiet --force --detach "refs/tags/$target_tag"
-(cd "$GU_APP_DIR" && uv sync --frozen --no-dev)
+if ! (cd "$GU_APP_DIR" && uv sync --frozen --no-dev); then
+    # Keep code and environment consistent: go back to the release the venv was built for
+    git -C "$GU_APP_DIR" checkout --quiet --force --detach "$previous_ref"
+    echo "Dependency sync failed; stayed on ${current_tag:-$previous_ref}" >&2
+    exit 1
+fi
 echo "Now on $target_tag"
