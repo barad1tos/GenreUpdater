@@ -48,5 +48,5 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 git -C "$GU_APP_DIR" checkout --quiet --force --detach "refs/tags/$target_tag"
-(cd "$GU_APP_DIR" && uv sync --frozen)
+(cd "$GU_APP_DIR" && uv sync --frozen --no-dev)
 echo "Now on $target_tag"

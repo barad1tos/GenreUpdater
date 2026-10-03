@@ -135,7 +135,7 @@ sync_dependencies() {
     local sync_exit
 
     sync_exit=0
-    sync_output=$(uv sync --frozen 2>&1) || sync_exit=$?
+    sync_output=$(uv sync --frozen --no-dev 2>&1) || sync_exit=$?
     echo "$sync_output" >> "$DAEMON_LOG"
 
     if [[ $sync_exit -eq 0 ]]; then
@@ -146,7 +146,7 @@ sync_dependencies() {
     rm -rf "$GU_APP_DIR/.venv" "$GU_APP_DIR/src/music_genre_updater.egg-info"
 
     sync_exit=0
-    sync_output=$(uv sync --frozen 2>&1) || sync_exit=$?
+    sync_output=$(uv sync --frozen --no-dev 2>&1) || sync_exit=$?
     echo "$sync_output" >> "$DAEMON_LOG"
 
     if [[ $sync_exit -eq 0 ]]; then

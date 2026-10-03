@@ -169,7 +169,7 @@ ln -sfn "$GU_ENV_FILE" "$GU_APP_DIR/.env"
 echo "  pinned to $release_tag"
 
 step "Syncing dependencies"
-(cd "$GU_APP_DIR" && uv sync --frozen)
+(cd "$GU_APP_DIR" && uv sync --frozen --no-dev)
 
 step "Deploying scripts to $GU_BIN_DIR"
 for script in "${DEPLOYED_SCRIPTS[@]}"; do

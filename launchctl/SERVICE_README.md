@@ -63,7 +63,7 @@ The installer:
    and the Python state paths (`last_incremental_run_file`, `last_db_verify_log`) to
    `~/.local/state/genreupdater/`, copying the existing state files there
 4. Clones the repo into `~/.local/share/genreupdater/app` and checks out the latest release tag
-5. Runs `uv sync --frozen`, deploys the scripts and the plist, and loads the LaunchAgent
+5. Runs `uv sync --frozen --no-dev`, deploys the scripts and the plist, and loads the LaunchAgent
 
 If any step after the unload fails, the installer reloads the LaunchAgent that was loaded before,
 so a failed install never leaves the daemon switched off.
@@ -88,7 +88,7 @@ launchd trigger (Music Library change or hourly tick)
   → lock (exit quietly if another run is active)
   → git fetch --tags → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
-  → uv sync --frozen (one retry with a clean venv)
+  → uv sync --frozen --no-dev (one retry with a clean venv)
   → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
   → notification (Glass on success, Basso on failure)
 ```
@@ -158,7 +158,7 @@ cp ~/.local/state/genreupdater/com.music.genreautoupdater.plist.pre-xdg \
 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.music.genreautoupdater.plist
 ```
 
-This restores the old behaviour only while the XDG change is not on `main`. The legacy daemon
+This restores the old behavior only while the XDG change is not on `main`. The legacy daemon
 resets its clone to `origin/main` on every run, and its `bin` is a link into that clone, so once the
 change is merged the old plist starts the new `run-daemon.sh` in the old layout. For the same
 reason, migrate a machine before its legacy daemon can pick up a `main` that contains this change.
