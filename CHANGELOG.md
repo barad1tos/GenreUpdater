@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Year-verification queue saves no longer fail with `No such file or directory` on `pending_year_verification.csv.tmp` when several albums are marked at once, and a stale queue snapshot can no longer overwrite a newer one
 - `zip` misalignment in year_search_coordinator: filtered API tasks vs unfiltered api_order
 - Naive `datetime.fromtimestamp()` calls missing timezone in analytics.py
 - `logging.warning()` using root logger instead of module-level `_logger` in applescript_client
