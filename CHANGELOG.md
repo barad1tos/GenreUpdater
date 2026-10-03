@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
 - Daemon: `uv sync` failures in `run-daemon.sh` were treated as success
 - Daemon: re-running `install.sh` left a development-checkout `apple_scripts_dir` in an existing config and did not restore missing state files
+- A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure
 
 ## [2.0.0] - 2025-09-04
 

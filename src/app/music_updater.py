@@ -37,6 +37,13 @@ if TYPE_CHECKING:
     from core.models.cache_types import PendingAlbumEntry
 
 
+class LibraryFetchError(RuntimeError):
+    """Music.app returned no tracks for a library known to hold tracks.
+
+    Not retryable within the run: the AppleScript fetch path is broken and needs fixing.
+    """
+
+
 # noinspection PyArgumentEqualDefault,PyTypeChecker
 class MusicUpdater:
     """Orchestrates music library updates using modular components.
@@ -461,6 +468,7 @@ class MusicUpdater:
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
         if not tracks:
+            await self._raise_if_library_known_non_empty(force)
             self.console_logger.warning("No tracks found in Music.app (force=%s)", force)
             return
 
@@ -516,6 +524,32 @@ class MusicUpdater:
 
         self.snapshot_manager.clear()
         self.console_logger.info("Main update pipeline completed successfully")
+
+    async def _raise_if_library_known_non_empty(self, force: bool) -> None:
+        """Fail an empty full-library fetch when the last snapshot recorded tracks.
+
+        A test-artist fetch can legitimately be empty, and without snapshot metadata
+        (first run) an empty library cannot be told apart from a failed fetch.
+
+        Args:
+            force: Whether the fetch ran in force mode, reported in the error
+
+        Raises:
+            LibraryFetchError: The snapshot metadata records a non-empty library.
+
+        """
+        if self.dry_run_test_artists:
+            return
+        snapshot_service = self.deps.library_snapshot_service
+        metadata = await snapshot_service.get_snapshot_metadata() if snapshot_service else None
+        if metadata is None or metadata.track_count == 0:
+            return
+        msg = (
+            f"Music.app returned no tracks (force={force}), but the library snapshot "
+            f"from {metadata.last_full_scan.isoformat()} recorded {metadata.track_count} tracks; "
+            "treating this as a failed fetch"
+        )
+        raise LibraryFetchError(msg)
 
     @staticmethod
     def _should_update_run_timestamp(force: bool, incremental_tracks: list[TrackDict]) -> bool:
