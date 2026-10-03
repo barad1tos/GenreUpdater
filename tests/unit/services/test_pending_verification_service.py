@@ -577,3 +577,20 @@ class TestUpdateVerificationTimestamp:
         ):
             # Should not raise despite the underlying OSError
             await service.update_verification_timestamp()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_marks_persist_every_album(
+    service: PendingVerificationService,
+    error_logger: MagicMock,
+) -> None:
+    """Concurrent marks (as year_batch issues them) must all reach disk without save errors."""
+    await service.initialize()
+    album_count = 20
+
+    await asyncio.gather(*(service.mark_for_verification(f"Artist {index}", f"Album {index}") for index in range(album_count)))
+
+    error_logger.exception.assert_not_called()
+    reloaded = PendingVerificationService(service.config, MagicMock(), MagicMock())
+    await reloaded.initialize()
+    assert len(await reloaded.get_all_pending_albums()) == album_count

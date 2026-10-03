@@ -101,6 +101,9 @@ class PendingVerificationService:
 
         # asyncio.Lock for thread-safe access to pending_albums cache
         self._lock = asyncio.Lock()
+        # Serializes disk writes: every save reuses one temp path, so overlapping
+        # executor threads would rename each other's temp file away
+        self._save_lock = asyncio.Lock()
 
         # Error callback for blocking operations (bridges sync code to logger)
         self._error_callback: ErrorCallback = self.error_logger.warning
@@ -364,17 +367,22 @@ class PendingVerificationService:
             raise
 
     async def _save_pending_albums(self) -> None:
-        """Save the current list of pending albums to the CSV file asynchronously."""
+        """Save the current list of pending albums to the CSV file asynchronously.
+
+        Saves run one at a time, and each takes its snapshot only once it holds the
+        save lock, so the last write to land always carries the newest state.
+        """
         loop = asyncio.get_running_loop()
 
-        async with self._lock:
-            entries = list(self.pending_albums.values())
+        async with self._save_lock:
+            async with self._lock:
+                entries = list(self.pending_albums.values())
 
-        try:
-            await loop.run_in_executor(None, self._blocking_save, entries)
-            self.console_logger.info("Saved %d pending albums for verification", len(entries))
-        except (OSError, csv.Error) as e:
-            self.error_logger.exception("Error saving pending verification file: %s", e)
+            try:
+                await loop.run_in_executor(None, self._blocking_save, entries)
+                self.console_logger.info("Saved %d pending albums for verification", len(entries))
+            except (OSError, csv.Error) as e:
+                self.error_logger.exception("Error saving pending verification file: %s", e)
 
     async def mark_for_verification(
         self,
