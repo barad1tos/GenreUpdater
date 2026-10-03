@@ -8,7 +8,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from app.music_updater import MusicUpdater
-from app.orchestrator import Orchestrator
+from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from tests.factories import create_test_app_config
 
 _TEST_PASSWORD = "test-password"  # noqa: S105 - test-only credential placeholder
@@ -101,13 +101,12 @@ class TestOrchestratorAllure:
         orchestrator = Orchestrator(deps)
         args = self.create_mock_args(command="clean_artist", artist="Test Artist")
 
-        with patch("app.orchestrator.is_music_app_running", return_value=False):
+        with (
+            patch("app.orchestrator.is_music_app_running", return_value=False),
+            pytest.raises(MusicAppNotRunningError, match="'clean_artist'"),
+        ):
             await orchestrator.run_command(args)
-        console_error_mock = cast(Mock, orchestrator.console_logger.error)
-        console_error_mock.assert_called_once_with(
-            "Music.app is not running - cannot execute '%s' command. Please start Music.app before running this script.",
-            "clean_artist",
-        )
+        cast(Mock, orchestrator.console_logger.error).assert_not_called()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

@@ -22,6 +22,18 @@ if TYPE_CHECKING:
     from services.dependency_container import DependencyContainer
 
 
+class MusicAppNotRunningError(Exception):
+    """Music.app is closed, so a command that needs it cannot run.
+
+    This is a normal state for scheduled runs, not a failure: the caller should
+    skip the run and try again later.
+    """
+
+    def __init__(self, command: str) -> None:
+        super().__init__(f"Music.app is not running - skipped '{command}' command")
+        self.command = command
+
+
 class Orchestrator:
     """Orchestrates the entire music update workflow.
 
@@ -48,6 +60,9 @@ class Orchestrator:
         Args:
             args: Parsed command-line arguments from argparse.
 
+        Raises:
+            MusicAppNotRunningError: The command needs Music.app and it is not running.
+
         """
         # Reset per-run state
         reset_cleaning_exceptions_log()
@@ -63,11 +78,7 @@ class Orchestrator:
 
         # Check if Music app is running for commands that depend on it
         if self._requires_music_app(command) and not is_music_app_running(self.error_logger):
-            self.console_logger.error(
-                "Music.app is not running - cannot execute '%s' command. Please start Music.app before running this script.",
-                command or "default",
-            )
-            return
+            raise MusicAppNotRunningError(command or "default")
 
         # Set dry-run context if needed
         if args.dry_run or getattr(args, "test_mode", False):

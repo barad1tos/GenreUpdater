@@ -92,10 +92,14 @@ launchd trigger (Music Library change or hourly tick)
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
   → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
-  → notification (Glass on success, Basso on failure)
+  → notification (Glass on success, Basso on failure; none when the run is skipped)
 ```
 
 Every infrastructure failure is logged and notified; none of them falls back silently.
+
+When Music.app is not running, `main.py` exits with `EX_TEMPFAIL` (75). The wrapper logs
+`Music.app is not running; run skipped` to `daemon.log` and sends no notification, since a closed
+Music.app is a normal state for the hourly tick. Every other non-zero exit code is a failure.
 
 ## Commands
 

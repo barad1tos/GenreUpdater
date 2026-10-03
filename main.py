@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from app.app_config import Config
 from app.cli import CLI
-from app.orchestrator import Orchestrator
+from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from core.logger import SafeQueueListener, get_loggers
 from services.dependency_container import DependencyContainer
 
@@ -92,6 +92,13 @@ def _handle_keyboard_interrupt(logger_console: logging.Logger | None) -> None:
     sys.exit(130)
 
 
+def _handle_music_app_not_running(error: MusicAppNotRunningError, logger_console: logging.Logger | None) -> None:
+    """Exit with EX_TEMPFAIL so the daemon wrapper records a skipped run, not a failure."""
+    if logger_console:
+        logger_console.info("%s; start Music.app to run it", error)
+    sys.exit(os.EX_TEMPFAIL)
+
+
 def _handle_critical_error(error: Exception, logger_error: logging.Logger | None) -> None:
     """Handle critical errors."""
     if logger_error:
@@ -155,6 +162,9 @@ async def main_async() -> None:
 
     except KeyboardInterrupt:
         _handle_keyboard_interrupt(logger_console)
+
+    except MusicAppNotRunningError as e:
+        _handle_music_app_not_running(e, logger_console)
 
     except (RuntimeError, ValueError, OSError, ImportError) as e:
         _handle_critical_error(e, logger_error)
