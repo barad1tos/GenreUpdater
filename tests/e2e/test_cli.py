@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,6 +21,20 @@ from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: don
 # noinspection PyUnusedLocal
 class TestCLIE2E:
     """End-to-End tests for the command line interface."""
+
+    @pytest.fixture(autouse=True)
+    def _music_app_running_downstream(self) -> Iterator[None]:
+        """Report Music.app as running to the checks behind the orchestrator.
+
+        MusicUpdater and full_sync import their own reference to the check, so without this a
+        runner without Music.app returns early there and the commands are not exercised. Tests
+        still patch the orchestrator's check themselves to choose the running state.
+        """
+        with (
+            patch("app.music_updater.is_music_app_running", return_value=True),
+            patch("app.full_sync.is_music_app_running", return_value=True),
+        ):
+            yield
 
     @staticmethod
     def create_temp_config(**overrides: Any) -> tuple[str, dict[str, Any]]:
