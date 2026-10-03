@@ -41,8 +41,8 @@ class AppleScriptFileValidator:
     def validate_script_path(self, script_path: str) -> bool:
         """Validate that the script path is safe to execute.
 
-        Ensures the path is within the allowed scripts directory and
-        doesn't contain suspicious patterns like directory traversal.
+        Ensures the path is within the allowed scripts directory and that no
+        component below that directory is hidden or starts with ``~``.
 
         Args:
             script_path: Path to the script to validate
@@ -63,8 +63,9 @@ class AppleScriptFileValidator:
                 self.error_logger.error("Script path is outside allowed directory: %s", script_path)
                 return False
 
-            # Check for suspicious patterns
-            if any(part.startswith((".", "~")) or part == ".." for part in Path(script_path).parts):
+            # Check for suspicious patterns below the scripts directory; its own location
+            # may legitimately sit under hidden directories such as ~/.local/share
+            if any(part.startswith((".", "~")) for part in resolved_path.relative_to(scripts_directory).parts):
                 self.error_logger.error("Suspicious script path: %s", script_path)
                 return False
 
