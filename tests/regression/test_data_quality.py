@@ -81,7 +81,7 @@ class TestTrackDataQuality:
         library_tracks: list[TrackDict],
     ) -> None:
         """Most tracks should have year data."""
-        without_year = sum(1 for t in library_tracks if not t.year or t.year == "0")
+        without_year = sum(not t.year or t.year == "0" for t in library_tracks)
         total = len(library_tracks)
         pct = (without_year / total) * 100 if total > 0 else 0
 
@@ -94,7 +94,7 @@ class TestTrackDataQuality:
         library_tracks: list[TrackDict],
     ) -> None:
         """Most tracks should have genre data."""
-        without_genre = sum(1 for t in library_tracks if not t.genre)
+        without_genre = sum(not t.genre for t in library_tracks)
         total = len(library_tracks)
         pct = (without_genre / total) * 100 if total > 0 else 0
 
@@ -107,7 +107,7 @@ class TestTrackDataQuality:
         library_tracks: list[TrackDict],
     ) -> None:
         """'Unknown' genre should not appear in tracks."""
-        unknown_count = sum(1 for t in library_tracks if t.genre == "Unknown")
+        unknown_count = sum(t.genre == "Unknown" for t in library_tracks)
 
         assert unknown_count <= Baseline.MAX_UNKNOWN_GENRE_TRACKS, (
             f"Too many tracks with 'Unknown' genre: {unknown_count}\nBaseline: <={Baseline.MAX_UNKNOWN_GENRE_TRACKS}"
@@ -261,7 +261,7 @@ class TestDataIntegrity:
         library_tracks: list[TrackDict],
     ) -> None:
         """Every track should have an artist (allow some exceptions)."""
-        without_artist = sum(1 for t in library_tracks if not t.artist)
+        without_artist = sum(not t.artist for t in library_tracks)
         total = len(library_tracks)
         pct = (without_artist / total) * 100 if total > 0 else 0
 

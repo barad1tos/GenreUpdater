@@ -142,16 +142,12 @@ class TestMusicUpdaterAllure:
 
         with (
             patch("app.music_updater.is_music_app_running", return_value=True),
-            patch("app.music_updater.save_changes_report") as mock_save,
+            patch("app.music_updater.save_changes_report"),
         ):
             await updater.run_clean_artist("Test Artist")
         # Check that updates were attempted
         scripts_run = deps.ap_client.scripts_run
         assert len(scripts_run) > 0
-
-        # Verify that save_changes_report was called for tracks that needed cleaning
-        if mock_save.called:
-            pass
 
     @pytest.mark.asyncio
     async def test_run_clean_artist_music_not_running(self) -> None:
@@ -236,10 +232,6 @@ class TestMusicUpdaterAllure:
             await updater.run_main_pipeline()
         # Verify tracks were fetched
         assert deps.cache_service.load_count >= 0
-
-        # Verify external API was used for year retrieval
-        if deps.external_api_service.get_album_year_calls:
-            pass
 
     @pytest.mark.asyncio
     async def test_empty_track_list_handling(self) -> None:

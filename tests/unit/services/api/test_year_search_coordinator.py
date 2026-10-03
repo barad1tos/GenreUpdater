@@ -481,9 +481,7 @@ class TestExecuteStandardApiSearch:
         original_get = coordinator._get_api_client
 
         def selective_get(api_name: str) -> Any:
-            if api_name == "discogs":
-                return None
-            return original_get(api_name)
+            return None if api_name == "discogs" else original_get(api_name)
 
         with patch.object(coordinator, "_get_api_client", side_effect=selective_get):
             results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
