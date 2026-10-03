@@ -66,6 +66,39 @@ class TestValidateScriptPathOutsideDirectory:
         mock_error_logger.error.assert_called_once()
 
 
+class TestValidateScriptPathHiddenComponents:
+    """Hidden-name checks apply inside the scripts directory, not to its location."""
+
+    def test_scripts_dir_under_hidden_parent_is_allowed(
+        self,
+        mock_error_logger: MagicMock,
+        mock_console_logger: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that a scripts directory under ~/.local/share-like parents is accepted."""
+        scripts_dir = tmp_path / ".local" / "share" / "app" / "applescripts"
+        scripts_dir.mkdir(parents=True)
+        script = scripts_dir / "fetch_tracks.applescript"
+        script.write_text("-- ok")
+        validator = AppleScriptFileValidator(str(scripts_dir), mock_error_logger, mock_console_logger)
+
+        assert validator.validate_script_path(str(script)) is True
+        mock_error_logger.error.assert_not_called()
+
+    def test_hidden_component_inside_scripts_dir_returns_false(
+        self,
+        validator: AppleScriptFileValidator,
+        mock_error_logger: MagicMock,
+        scripts_dir: Path,
+    ) -> None:
+        """Test that a hidden file inside the scripts directory is still rejected."""
+        hidden = scripts_dir / ".hidden.applescript"
+        hidden.write_text("-- hidden")
+
+        assert validator.validate_script_path(str(hidden)) is False
+        assert "Suspicious script path" in mock_error_logger.error.call_args[0][0]
+
+
 class TestValidateScriptFileAccessResolvedPathEscape:
     """Tests for validate_script_file_access when resolved path escapes allowed dir."""
 

@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ASCII art log separators replaced with structured single-line messages
 - E2E test assertions for test_mode + dry_run scenarios
 - Whitespace normalization in metadata cleaning comparisons
+- AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
 
 ## [2.0.0] - 2025-09-04
 
