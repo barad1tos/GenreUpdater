@@ -88,3 +88,6 @@ site/
 .security-key
 logs/security/
 tests/e2e/__pycache__
+
+# Personal copy of config.yaml (see README); the daemon reads ~/.config/genreupdater/my-config.yaml
+my-config.yaml
