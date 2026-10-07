@@ -290,7 +290,7 @@ class TestIsReasonableYear:
             (None, False),
         ],
     )
-    def test_is_reasonable_year(self, year: str, expected: bool) -> None:
+    def test_is_reasonable_year(self, year: Any, expected: bool) -> None:
         """Test _is_reasonable_year function."""
         result = is_reasonable_year(year)
         assert result == expected

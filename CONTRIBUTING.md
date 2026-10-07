@@ -73,11 +73,13 @@ project.
    uv run ruff format src/ tests/
 
    # Type checking
-   uv run ty check --python .venv
+   uv run ty check
 
    # Tests
    uv run pytest tests/unit/ -x
    ```
+
+   ty checks `src/` and `tests/`. In an editor, ty's language server shows the same diagnostics; the project ships no pyright configuration.
 
 4. **Commit your changes**
 

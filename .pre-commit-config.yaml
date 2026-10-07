@@ -41,7 +41,7 @@ repos:
 
       - id: ty
         name: ty (type checker)
-        entry: uv run ty check --python .venv
+        entry: uv run ty check
         language: system
         types: [python]
         pass_filenames: false  # ty checks whole project, not individual files

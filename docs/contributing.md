@@ -53,8 +53,10 @@ uv run ruff format src/
 This project uses **ty** (not mypy):
 
 ```bash
-uv run ty check --python .venv
+uv run ty check
 ```
+
+ty checks `src/` and `tests/`. In an editor, ty's language server shows the same diagnostics; the project ships no pyright configuration.
 
 ### All Checks
 

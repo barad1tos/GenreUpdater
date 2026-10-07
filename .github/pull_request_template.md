@@ -10,7 +10,7 @@
 
 - [ ] Unit tests pass (`uv run pytest tests/unit/`)
 - [ ] Lint checks pass (`uv run ruff check src/`)
-- [ ] Type checks pass (`uv run ty check --python .venv`)
+- [ ] Type checks pass (`uv run ty check`)
 
 ## Related Issues
 
