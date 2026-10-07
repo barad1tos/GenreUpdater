@@ -50,7 +50,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Format check
         run: uv run ruff format --check src/ tests/ main.py
@@ -85,7 +85,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Bandit security scan
         run: uv run bandit -r src/ -c pyproject.toml
@@ -120,7 +120,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Run tests
         env:
@@ -170,7 +170,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck

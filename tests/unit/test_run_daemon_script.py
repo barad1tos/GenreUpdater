@@ -181,7 +181,7 @@ def _make_sandbox(
     _write_executable(fake_bin / "sleep", sleep_body.format(upstream=upstream, origin_link=origin_link))
     _write_executable(fake_bin / "lockf", "exit 0")
     _write_executable(fake_bin / "timeout", timeout_body)
-    _write_executable(fake_bin / "uv", "exit 0")
+    _write_executable(fake_bin / "uv", 'echo "$*" >> "$HOME/uv-calls"')
     # notify.sh passes title, message and sound after "--"; keep the title and the message
     _write_executable(
         fake_bin / "osascript", f'while (( $# )) && [[ $1 != -- ]]; do shift; done\nprintf "%s\\t%s\\n" "$2" "$3" >> "{notification_log}"'
@@ -211,6 +211,18 @@ def test_reachable_origin_pins_the_new_release_on_the_first_attempt(tmp_path: Pa
     assert sandbox.pinned_tag() == "v1.1.0"
     assert sandbox.notification_titles() == ["Genre Updater"]
     assert "Fetch attempt" not in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+
+
+def test_pipeline_runs_without_reinstalling_the_dev_group(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, origin_up=True)
+
+    sandbox.run()
+
+    # uv run syncs the default groups, dev included, unless told otherwise; the daemon syncs with --no-dev
+    uv_calls = (sandbox.home / "uv-calls").read_text(encoding="utf-8").splitlines()
+    pipeline_arguments = next(call for call in uv_calls if call.startswith("run ")).split()
+    assert "--no-dev" in pipeline_arguments
+    assert "--frozen" in pipeline_arguments
 
 
 def test_each_fetch_attempt_is_capped_at_30_seconds(tmp_path: Path) -> None:

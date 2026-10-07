@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrated `print()` calls to structured logger in full_sync post-initialization
 - Daemon: moved to an XDG layout (`~/.config/genreupdater`, `~/.local/share/genreupdater`, `~/.local/state/genreupdater`), separate from the Swift app's Application Support directory
 - Daemon: deploys the latest stable release tag (`vX.Y.Z`) instead of `origin/main`; config and secrets live outside the clone
+- Daemon: runs the pipeline with `uv run --frozen --no-dev`, so a run no longer reinstalls the 99 development packages that its own `uv sync --no-dev` removed
+- Dependabot updates Python dependencies through the uv ecosystem, so `uv.lock` moves together with `pyproject.toml`, and CI installs with `uv sync --locked`, which fails when the two drift apart
 
 ### Removed
 
