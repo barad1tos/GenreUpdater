@@ -12,7 +12,7 @@ import pytest
 from app.features.batch.batch_processor import BatchProcessor
 from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
 class TestBatchProcessingE2E:

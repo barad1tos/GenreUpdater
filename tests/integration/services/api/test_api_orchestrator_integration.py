@@ -25,7 +25,7 @@ from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.year_scoring import create_release_scorer, ArtistPeriodContext
 from services.cache.orchestrator import CacheOrchestrator
 from services.pending_verification import PendingVerificationService
-from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockLogger
 
 
 def make_scored_release(

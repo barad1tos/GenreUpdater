@@ -12,7 +12,7 @@ import pytest
 from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
 from core.models.track_models import TrackDict
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
 class TestFullApplicationPipelineE2E:

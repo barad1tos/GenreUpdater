@@ -12,8 +12,8 @@ from core.models.protocols import AnalyticsProtocol
 from core.models.types import TrackDict
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_fallback import YearFallbackHandler
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.protocol_mocks import (  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import (
     MockExternalApiService,
     MockPendingVerificationService,
 )

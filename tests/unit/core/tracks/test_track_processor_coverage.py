@@ -13,7 +13,7 @@ from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.models.validators import SecurityValidationError, SecurityValidator
 from core.tracks.track_processor import TrackProcessor
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol, CacheServiceProtocol, LibrarySnapshotServiceProtocol

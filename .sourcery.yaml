@@ -5,3 +5,11 @@
 # library_snapshot.json is 14MB (37K tracks) - exceeds 150K char limit
 ignore:
   - tests/fixtures/**
+
+rule_settings:
+  enable:
+    - default
+  # The rule guards against importing test modules; every `tests.` import here reads
+  # a shared helper (tests.factories, tests.mocks or a conftest), never a test_*.py file
+  disable:
+    - dont-import-test-modules

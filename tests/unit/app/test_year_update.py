@@ -10,7 +10,7 @@ import pytest
 
 from app.year_update import YearUpdateService
 from core.models.track_models import ChangeLogEntry, TrackDict
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig

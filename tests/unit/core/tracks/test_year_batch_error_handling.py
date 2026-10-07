@@ -13,12 +13,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 from tests.unit.core.tracks.conftest import (
     create_test_track,
     create_year_batch_processor,
     create_year_determinator_mock,
-)  # sourcery skip: dont-import-test-modules
+)
 
 if TYPE_CHECKING:
     from core.models.track_models import ChangeLogEntry
