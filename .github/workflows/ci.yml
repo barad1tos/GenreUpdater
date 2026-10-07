@@ -10,14 +10,9 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+  # Every pull request runs, so the required Gate check always reports and never blocks a merge
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '.github/**'
-      - 'docs/**'
-      - '**/*.md'
-      - 'LICENSE'
-      - '.gitignore'
   workflow_dispatch:
 
 concurrency:
