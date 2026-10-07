@@ -73,7 +73,7 @@ project.
    uv run ruff format src/ tests/
 
    # Type checking
-   uv run mypy src/
+   uv run ty check src/ main.py --python .venv
 
    # Tests
    uv run pytest tests/unit/ -x
@@ -190,7 +190,7 @@ uv run pytest -m "not slow"
 1. **Ensure all checks pass**
    - Lint (ruff)
    - Format (ruff format)
-   - Type check (mypy)
+   - Type check (ty)
    - Tests (pytest)
 
 2. **Update documentation** if needed

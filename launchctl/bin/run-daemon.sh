@@ -221,7 +221,7 @@ log "Dependencies synced"
 log "Starting main pipeline ($target_tag)..."
 EXIT_CODE=0
 
-if timeout "$TIMEOUT_SECONDS" uv run python main.py --config "$GU_CONFIG_FILE" \
+if timeout "$TIMEOUT_SECONDS" uv run --frozen --no-dev python main.py --config "$GU_CONFIG_FILE" \
     >> "$GU_LOGS_DIR/stdout.log" 2>> "$GU_LOGS_DIR/stderr.log"; then
     log "Main pipeline completed successfully"
     notify "Genre Updater" "Update completed successfully ($target_tag)" "Glass"

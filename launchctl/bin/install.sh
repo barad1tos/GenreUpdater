@@ -229,7 +229,7 @@ App:     $GU_APP_DIR
 Logs:    $GU_LOGS_DIR
 
 Verify before relying on it:
-  (cd "$GU_APP_DIR" && uv run python main.py --config "$GU_CONFIG_FILE" --test-mode --dry-run)
+  (cd "$GU_APP_DIR" && uv run --frozen --no-dev python main.py --config "$GU_CONFIG_FILE" --test-mode --dry-run)
   launchctl kickstart -k "gui/\$(id -u)/$GU_LABEL" && tail -f "$GU_LOGS_DIR/daemon.log"
 
 Legacy daemon files were left untouched. After a few successful runs, remove only the Python ones:

@@ -92,7 +92,7 @@ launchd trigger (Music Library change or hourly tick)
   → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
-  → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
+  → uv run --frozen --no-dev python main.py --config ~/.config/genreupdater/my-config.yaml
   → notification (Glass on success, Basso on failure; none when the run is skipped)
 ```
 
@@ -112,7 +112,7 @@ launchctl kickstart -k "gui/$(id -u)/com.music.genreautoupdater"
 
 # Dry run against the deployed release
 cd ~/.local/share/genreupdater/app
-uv run python main.py --config ~/.config/genreupdater/my-config.yaml --test-mode --dry-run
+uv run --frozen --no-dev python main.py --config ~/.config/genreupdater/my-config.yaml --test-mode --dry-run
 
 # Switch to the latest release immediately
 ~/.local/share/genreupdater/bin/update.sh
@@ -179,6 +179,7 @@ the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag loca
 ### 2026-10-07
 
 - **fix:** a trigger that fires before the network is up retries `git fetch` for about a minute and, if there is still no network, skips the run quietly instead of failing with "Git fetch failed"; a fetch that fails with a network present names the cause in the notification, and each attempt is capped at 30 s
+- **perf:** the pipeline runs with `uv run --frozen --no-dev`, so a run no longer reinstalls the development packages that `uv sync --frozen --no-dev` removed
 
 ### 2026-10-03
 
