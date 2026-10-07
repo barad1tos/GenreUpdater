@@ -81,7 +81,7 @@ scripts_dir="${scripts_dir#[\"\']}"
 scripts_dir="${scripts_dir%[\"\']}"
 scripts_dir="${scripts_dir/#\~/$HOME}"
 # Compare canonical paths, so ".." components and symlinks cannot lead out of the clone
-scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P || true)"
+scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P)" || scripts_dir_real=""
 app_dir_real="$(cd "$GU_APP_DIR" && pwd -P)"
 if [[ "$scripts_dir_real" != "$app_dir_real"/* ]]; then
     fail "apple_scripts_dir must be an existing directory inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \
@@ -102,22 +102,28 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
-# A trigger right after boot can fire before the network is up: give it a minute to appear
-wait_for_network() {
-    local checks_left=12
-    # route(8) exits 0 even when the route is missing; only a found route prints its interface
-    until [[ "$(route -n get default 2>/dev/null)" == *"interface:"* ]]; do
-        (( checks_left-- > 0 )) || return 1
+# A trigger right after boot or wake can fire before the network is up: retry for a minute
+fetch_release_tags() {
+    local retries_left=12
+    until gu_fetch_tags >> "$DAEMON_LOG" 2>&1; do
+        (( retries_left-- > 0 )) || return 1
         sleep 5
     done
 }
 
-# An unreachable origin is not an infrastructure failure: stay on the tags fetched earlier
+# route(8) exits 0 even when the route is missing; only a found route prints its interface
+has_default_route() {
+    [[ "$(route -n get default 2>/dev/null)" == *"interface:"* ]]
+}
+
 log "Fetching release tags..."
-if ! wait_for_network; then
-    log "No default route after 60s; skipping git fetch, using release tags fetched earlier"
-elif ! gu_fetch_tags >> "$DAEMON_LOG" 2>&1; then
-    log "git fetch failed; using release tags fetched earlier"
+if ! fetch_release_tags; then
+    # Offline is a normal state, like a closed Music.app: year lookups would fail and use up their attempts
+    if ! has_default_route; then
+        log "No network after 60s; run skipped"
+        exit 75  # EX_TEMPFAIL, as for a closed Music.app
+    fi
+    fail "git fetch failed" "Git fetch failed"
 fi
 
 target_tag="$(gu_latest_release_tag)"

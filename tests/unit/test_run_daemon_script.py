@@ -1,4 +1,4 @@
-"""Tests for launchctl/bin/run-daemon.sh: release pinning when origin is unreachable at launch."""
+"""Tests for launchctl/bin/run-daemon.sh: release pinning when the network is not up at launch."""
 
 from __future__ import annotations
 
@@ -13,12 +13,22 @@ import pytest
 RUN_DAEMON_SCRIPT = Path(__file__).resolve().parents[2] / "launchctl" / "bin" / "run-daemon.sh"
 _GIT_PATH = shutil.which("git")
 
-# macOS route(8) exits 0 whether or not the route exists; only its stdout tells them apart
-ROUTE_MISSING = 'echo "route: writing to routing socket: not in table" >&2'
-ROUTE_PRESENT = 'printf "destination: default\\n  interface: en0\\n"'
+# A default route exists once $HOME/network-up does. macOS route(8) exits 0 whether or not
+# the route exists; only its stdout tells them apart, so the fake keeps that contract.
+ROUTE_SCRIPT = """if [[ -e "$HOME/network-up" ]]; then
+    printf "destination: default\\n  interface: en0\\n"
+else
+    echo "route: writing to routing socket: not in table" >&2
+fi"""
 
-# The machine never gets a default route during the run
-NETWORK_NEVER_UP = "{route_missing}"
+# The network, and with it origin, comes up while the daemon waits for the second time
+NETWORK_UP_ON_SECOND_SLEEP = """calls_file="$HOME/sleep-calls"
+calls=$(( $(cat "$calls_file" 2>/dev/null || echo 0) + 1 ))
+echo "$calls" > "$calls_file"
+if (( calls >= 2 )); then
+    touch "$HOME/network-up"
+    ln -sfn "{upstream}" "{origin_link}"
+fi"""
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -68,15 +78,17 @@ class DaemonSandbox:
         return self.notification_log.read_text(encoding="utf-8").splitlines()
 
 
-def _make_sandbox(tmp_path: Path, route_body: str) -> DaemonSandbox:
+def _make_sandbox(tmp_path: Path, *, network_up: bool = False, sleep_body: str = "exit 0") -> DaemonSandbox:
     """Build the daemon layout from common.sh with real git and fakes for the external commands.
 
-    Origin is reachable only through ``network/origin``, a link that ``route_body`` creates once
-    the network comes up, so an unreachable origin and an absent default route coincide.
+    Origin is reachable only through ``network/origin``, a link that nothing creates unless
+    ``sleep_body`` brings the network up, so a fetch fails until then.
     """
     home = tmp_path / "home"
     fake_bin = home / ".local" / "bin"
     fake_bin.mkdir(parents=True)
+    if network_up:
+        (home / "network-up").touch()
     environment = {
         "HOME": str(home),
         "PATH": os.environ["PATH"],
@@ -111,9 +123,8 @@ def _make_sandbox(tmp_path: Path, route_body: str) -> DaemonSandbox:
     (config_dir / ".env").write_text("DISCOGS_TOKEN=test\n", encoding="utf-8")
 
     notification_log = tmp_path / "notifications.txt"
-    route_script = route_body.format(upstream=upstream, origin_link=origin_link, route_missing=ROUTE_MISSING, route_present=ROUTE_PRESENT)
-    _write_executable(fake_bin / "route", route_script)
-    _write_executable(fake_bin / "sleep", "exit 0")
+    _write_executable(fake_bin / "route", ROUTE_SCRIPT)
+    _write_executable(fake_bin / "sleep", sleep_body.format(upstream=upstream, origin_link=origin_link))
     _write_executable(fake_bin / "lockf", "exit 0")
     _write_executable(fake_bin / "timeout", 'shift\nexec "$@"')
     _write_executable(fake_bin / "uv", "exit 0")
@@ -122,32 +133,32 @@ def _make_sandbox(tmp_path: Path, route_body: str) -> DaemonSandbox:
     return DaemonSandbox(environment=environment, app_dir=app_dir, notification_log=notification_log)
 
 
-def test_offline_launch_completes_on_the_release_it_already_has(tmp_path: Path) -> None:
-    sandbox = _make_sandbox(tmp_path, NETWORK_NEVER_UP)
+def test_offline_launch_is_skipped_without_running_the_pipeline(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path)
 
     result = sandbox.run()
 
-    assert result.returncode == 0, result.stdout + result.stderr
+    # EX_TEMPFAIL, the same exit as a run skipped because Music.app is closed
+    assert result.returncode == 75, result.stdout + result.stderr
     assert sandbox.pinned_tag() == "v1.0.0"
-    assert sandbox.notification_titles() == ["Genre Updater"]
+    assert sandbox.notification_titles() == []
 
 
-def test_launch_before_network_is_up_pins_new_release_once_online(tmp_path: Path) -> None:
-    network_up_on_third_check = """
-calls_file="$HOME/route-calls"
-calls=$(( $(cat "$calls_file" 2>/dev/null || echo 0) + 1 ))
-echo "$calls" > "$calls_file"
-if (( calls < 3 )); then
-    {route_missing}
-    exit 0
-fi
-ln -sfn "{upstream}" "{origin_link}"
-{route_present}
-"""
-    sandbox = _make_sandbox(tmp_path, network_up_on_third_check)
+def test_network_coming_up_during_the_wait_pins_the_new_release(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, sleep_body=NETWORK_UP_ON_SECOND_SLEEP)
 
     result = sandbox.run()
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert sandbox.pinned_tag() == "v1.1.0"
     assert sandbox.notification_titles() == ["Genre Updater"]
+
+
+def test_unreachable_origin_on_a_working_network_fails_loudly(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, network_up=True)
+
+    result = sandbox.run()
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert sandbox.pinned_tag() == "v1.0.0"
+    assert sandbox.notification_titles() == ["Genre Updater Error"]

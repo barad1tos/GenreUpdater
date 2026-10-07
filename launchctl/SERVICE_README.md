@@ -88,7 +88,7 @@ The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pr
 launchd trigger (Music Library change or hourly tick)
   → pre-flight: app clone, regular config file, .env, apple_scripts_dir inside the clone
   → lock (exit quietly if another run is active)
-  → wait up to 60 s for a default route → git fetch --tags (offline: keep the tags fetched earlier)
+  → git fetch --tags, retried for up to 60 s (still no network: run skipped)
   → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
@@ -96,7 +96,9 @@ launchd trigger (Music Library change or hourly tick)
   → notification (Glass on success, Basso on failure; none when the run is skipped)
 ```
 
-Every infrastructure failure is logged and notified; none of them falls back silently. An unreachable origin is not a failure: a trigger can fire right after boot, before the network is up, so the run logs `using release tags fetched earlier` to `daemon.log` and deploys the newest release it already knows, without a notification.
+Every infrastructure failure is logged and notified; none of them falls back silently.
+
+A trigger right after boot or wake can fire before the network is up, so `git fetch` is retried for up to 60 s. If there is still no default route after that, the run logs `No network after 60s; run skipped` to `daemon.log`, exits with `EX_TEMPFAIL` (75) and sends no notification, like a closed Music.app: year lookups without network would fail and use up their verification attempts. A fetch that keeps failing while the network is up is a failure and is notified.
 
 When Music.app is not running, `main.py` exits with `EX_TEMPFAIL` (75). The wrapper logs
 `Music.app is not running; run skipped` to `daemon.log` and sends no notification, since a closed
@@ -177,7 +179,7 @@ the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag loca
 
 ### 2026-10-07
 
-- **fix:** a trigger that fires before the network is up waits up to 60 s for a default route and, if origin stays unreachable, deploys the newest release fetched earlier instead of failing with "Git fetch failed"
+- **fix:** a trigger that fires before the network is up retries `git fetch` for up to 60 s and, if there is still no network, skips the run quietly instead of failing with "Git fetch failed"
 
 ### 2026-10-03
 
