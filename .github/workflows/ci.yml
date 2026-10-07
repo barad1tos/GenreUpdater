@@ -10,7 +10,7 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
-  # Every pull request runs, so the required Gate check always reports and never blocks a merge
+  # No paths-ignore: Gate is a required check, so it must report on every PR; a path-filtered PR would wait for it forever
   pull_request:
     branches: [main]
   workflow_dispatch:
