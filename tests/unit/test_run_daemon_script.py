@@ -250,7 +250,10 @@ def test_unreachable_origin_on_a_working_network_fails_loudly(tmp_path: Path) ->
     assert sandbox.notification_titles() == ["Genre Updater Error"]
     # git's first error names the cause; its last line ("...and the repository exists.") is advice
     assert sandbox.notification_messages()[0].startswith("Git fetch failed: fatal: ")
-    assert "does not appear to be a git repository" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+    daemon_log = sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+    assert "does not appear to be a git repository" in daemon_log
+    # Only git's full output, appended as it is, carries the advice lines
+    assert "Please make sure you have the correct access rights" in daemon_log
 
 
 def test_unresolved_host_keeps_the_cause_in_the_notification(tmp_path: Path) -> None:
