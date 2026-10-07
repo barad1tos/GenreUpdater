@@ -10,6 +10,7 @@ from app.music_updater import MusicUpdater
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
+from services.cache.snapshot import LibrarySnapshotService
 from services.dependency_container import DependencyContainer
 from tests.factories import create_test_app_config
 
@@ -186,16 +187,21 @@ async def test_main_pipeline_reuses_track_snapshot(
     )
     retry_handler = DatabaseRetryHandler(logger=logger, default_policy=retry_policy)
 
-    deps = MagicMock(spec=DependencyContainer)
+    # A disabled snapshot service, as the real container returns when snapshots are off
+    snapshot_service = MagicMock(spec=LibrarySnapshotService)
+    snapshot_service.is_enabled.return_value = False
+
+    deps = MagicMock(spec_set=DependencyContainer)
     deps.configure_mock(
         app_config=app_config,
+        config_path=tmp_dir / "config.yaml",
         console_logger=logger,
         error_logger=logger,
         analytics=analytics,
         analytics_logger=logger,
         ap_client=DummyAppleScriptClient(),
         cache_service=DummyCacheService(),
-        library_snapshot_service=None,
+        library_snapshot_service=snapshot_service,
         pending_verification_service=DummyPendingVerificationService(),
         external_api_service=DummyExternalApiService(),
         retry_handler=retry_handler,
