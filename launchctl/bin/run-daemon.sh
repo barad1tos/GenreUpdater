@@ -24,6 +24,7 @@ source "$SCRIPT_DIR/common.sh"
 DAEMON_LOG="$GU_LOGS_DIR/daemon.log"
 TIMEOUT_SECONDS=14400  # 4 hours
 FETCH_ATTEMPTS=13      # 12 waits of 5 s: about a minute when each attempt fails at once
+FETCH_TIMEOUT=30       # seconds per attempt, so a stalled transfer cannot hold the lock indefinitely
 
 # === Logging and notifications ===
 log() {
@@ -104,26 +105,42 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
-# A trigger right after boot or wake can fire before the network is up, so retry; gu_fetch_tags
-# caps each attempt at 30 s. Sets fetch_error to the cause: git's last line, or the time cap.
+# git's first "fatal:" or "error:" line names the cause; the lines after it are advice
+first_git_error() {
+    local line last=""
+    while IFS= read -r line; do
+        case "$line" in
+            fatal:* | error:*)
+                printf '%s\n' "$line"
+                return
+                ;;
+        esac
+        [[ -n "$line" ]] && last="$line"
+    done <<< "$1"
+    printf '%s\n' "${last:-no output}"
+}
+
+# A trigger right after boot or wake can fire before the network is up, so retry.
+# Sets fetch_error to the cause of the last failed attempt.
 fetch_release_tags() {
     local attempt=1 fetch_output fetch_status
     while :; do
         fetch_status=0
-        fetch_output="$(gu_fetch_tags 2>&1)" || fetch_status=$?
+        fetch_output="$(timeout "$FETCH_TIMEOUT" git -C "$GU_APP_DIR" "${GU_FETCH_TAGS_ARGS[@]}" 2>&1)" || fetch_status=$?
         (( fetch_status == 0 )) && break
         if (( fetch_status == 124 )); then
             # timeout(1) kills the fetch without a word and exits 124
-            fetch_error="timed out after 30 s"
+            fetch_error="timed out after $FETCH_TIMEOUT s"
         else
-            fetch_error="${fetch_output##*$'\n'}"
-            fetch_error="${fetch_error:-no output}"
+            printf '%s\n' "$fetch_output" >> "$DAEMON_LOG"
+            fetch_error="$(first_git_error "$fetch_output")"
         fi
         log "Fetch attempt $attempt failed: $fetch_error"
         (( attempt++ < FETCH_ATTEMPTS )) || return 1
         sleep 5
     done
     (( attempt == 1 )) || log "Fetch succeeded on attempt $attempt"
+    return 0
 }
 
 # route(8) exits 0 even when the route is missing and says so only in its message; any other
@@ -141,7 +158,9 @@ if ! fetch_release_tags; then
         log "No network after $FETCH_ATTEMPTS fetch attempts; run skipped"
         exit 75  # EX_TEMPFAIL
     fi
-    fail "git fetch failed after $FETCH_ATTEMPTS attempts: $fetch_error" "Git fetch failed: ${fetch_error:0:80}"
+    # A notification has room for the cause, not for git's "unable to access '<url>': " prefix
+    notify_cause="${fetch_error#"fatal: unable to access '"*"': "}"
+    fail "git fetch failed after $FETCH_ATTEMPTS attempts: $fetch_error" "Git fetch failed: ${notify_cause:0:80}"
 fi
 
 target_tag="$(gu_latest_release_tag)"

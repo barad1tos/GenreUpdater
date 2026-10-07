@@ -40,9 +40,14 @@ ORIGIN_UP_ON_FIRST_SLEEP = 'ln -sfn "{upstream}" "{origin_link}"'
 # Record each requested wait, so a test can add up how long the daemon waits
 RECORDING_SLEEP = 'echo "$1" >> "$HOME/sleep-seconds"'
 
-# timeout(1) runs the command; when it has to kill it, it prints nothing and exits 124
-PASSING_TIMEOUT = 'shift\nexec "$@"'
+# timeout(1) runs the command, here after recording the cap and the command it was given;
+# when it has to kill the command, it prints nothing and exits 124
+PASSING_TIMEOUT = 'echo "$1 $2" >> "$HOME/timeout-calls"\nshift\nexec "$@"'
 EXPIRED_TIMEOUT = "exit 124"
+
+# git's error for an HTTPS origin it cannot reach: the cause follows a long URL prefix
+UNRESOLVED_HOST = """echo "fatal: unable to access 'https://github.com/barad1tos/GenreUpdater.git/': Could not resolve host: github.com" >&2
+exit 128"""
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -88,9 +93,17 @@ class DaemonSandbox:
         Returns:
             A list of notification titles.
         """
+        return [title for title, _ in self._notifications()]
+
+    def notification_messages(self) -> list[str]:
+        """Return the messages of the notifications the run sent, in send order."""
+        return [message for _, message in self._notifications()]
+
+    def _notifications(self) -> list[tuple[str, str]]:
         if not self.notification_log.exists():
             return []
-        return self.notification_log.read_text(encoding="utf-8").splitlines()
+        lines = self.notification_log.read_text(encoding="utf-8").splitlines()
+        return [(title, message) for title, _, message in (line.partition("\t") for line in lines)]
 
     def log_path(self, name: str) -> Path:
         """Get the path of a daemon log file.
@@ -108,6 +121,7 @@ def _make_sandbox(
     tmp_path: Path,
     *,
     network_up: bool = False,
+    origin_up: bool = False,
     sleep_body: str = "exit 0",
     route_body: str = ROUTE_SCRIPT,
     timeout_body: str = PASSING_TIMEOUT,
@@ -115,8 +129,9 @@ def _make_sandbox(
 ) -> DaemonSandbox:
     """Build the daemon layout from common.sh with real git and fakes for the external commands.
 
-    Origin is reachable only through ``network/origin``, a link that nothing creates unless
-    ``sleep_body`` does, so a fetch fails until then. ``sleep_body`` is a ``str.format`` template
+    Origin is reachable only through ``network/origin``, a link that exists from the start with
+    ``origin_up`` and is otherwise created only by ``sleep_body``, so a fetch fails until then.
+    ``sleep_body`` is a ``str.format`` template
     that receives ``{upstream}`` and ``{origin_link}``, so literal braces must be doubled; the
     other bodies are written as they are.
     """
@@ -149,6 +164,9 @@ def _make_sandbox(
     origin_link = tmp_path / "network" / "origin"
     origin_link.parent.mkdir()
     _git(environment, "-C", str(app_dir), "remote", "set-url", "origin", str(origin_link))
+    if origin_up:
+        (home / "network-up").touch()
+        origin_link.symlink_to(upstream)
 
     _git(environment, "-C", str(upstream), "commit", "--quiet", "--allow-empty", "--message=second release")
     _git(environment, "-C", str(upstream), "tag", "v1.1.0")
@@ -164,8 +182,10 @@ def _make_sandbox(
     _write_executable(fake_bin / "lockf", "exit 0")
     _write_executable(fake_bin / "timeout", timeout_body)
     _write_executable(fake_bin / "uv", "exit 0")
-    # notify.sh passes title, message and sound after "--"; keep the title
-    _write_executable(fake_bin / "osascript", f'while (( $# )) && [[ $1 != -- ]]; do shift; done\nprintf "%s\\n" "$2" >> "{notification_log}"')
+    # notify.sh passes title, message and sound after "--"; keep the title and the message
+    _write_executable(
+        fake_bin / "osascript", f'while (( $# )) && [[ $1 != -- ]]; do shift; done\nprintf "%s\\t%s\\n" "$2" "$3" >> "{notification_log}"'
+    )
     return DaemonSandbox(environment=environment, home=home, app_dir=app_dir, notification_log=notification_log)
 
 
@@ -180,6 +200,25 @@ def test_offline_launch_is_skipped_without_running_the_pipeline(tmp_path: Path) 
     # The pipeline step's >> redirect creates stdout.log, even though the fake uv prints nothing
     assert not sandbox.log_path("stdout.log").exists()
     assert "run skipped" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+
+
+def test_reachable_origin_pins_the_new_release_on_the_first_attempt(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, origin_up=True)
+
+    result = sandbox.run()
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sandbox.pinned_tag() == "v1.1.0"
+    assert sandbox.notification_titles() == ["Genre Updater"]
+    assert "Fetch attempt" not in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+
+
+def test_each_fetch_attempt_is_capped_at_30_seconds(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, origin_up=True)
+
+    sandbox.run()
+
+    assert "30 git" in (sandbox.home / "timeout-calls").read_text(encoding="utf-8").splitlines()
 
 
 def test_network_coming_up_during_the_wait_pins_the_new_release(tmp_path: Path) -> None:
@@ -209,7 +248,18 @@ def test_unreachable_origin_on_a_working_network_fails_loudly(tmp_path: Path) ->
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert sandbox.notification_titles() == ["Genre Updater Error"]
-    assert "git fetch failed" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+    # git's first error names the cause; its last line ("...and the repository exists.") is advice
+    assert sandbox.notification_messages()[0].startswith("Git fetch failed: fatal: ")
+    assert "does not appear to be a git repository" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
+
+
+def test_unresolved_host_keeps_the_cause_in_the_notification(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, network_up=True, timeout_body=UNRESOLVED_HOST)
+
+    result = sandbox.run()
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Could not resolve host: github.com" in sandbox.notification_messages()[0]
 
 
 def test_route_that_cannot_run_is_not_taken_for_offline(tmp_path: Path) -> None:
