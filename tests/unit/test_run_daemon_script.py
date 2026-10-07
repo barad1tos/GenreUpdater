@@ -216,13 +216,17 @@ def test_reachable_origin_pins_the_new_release_on_the_first_attempt(tmp_path: Pa
 def test_pipeline_runs_without_reinstalling_the_dev_group(tmp_path: Path) -> None:
     sandbox = _make_sandbox(tmp_path, origin_up=True)
 
-    sandbox.run()
+    result = sandbox.run()
 
+    assert result.returncode == 0, result.stdout + result.stderr
     # uv run syncs the default groups, dev included, unless told otherwise; the daemon syncs with --no-dev
     uv_calls = (sandbox.home / "uv-calls").read_text(encoding="utf-8").splitlines()
-    pipeline_arguments = next(call for call in uv_calls if call.startswith("run ")).split()
-    assert "--no-dev" in pipeline_arguments
-    assert "--frozen" in pipeline_arguments
+    pipeline_call = next((call for call in uv_calls if call.startswith("run ")), "")
+    assert pipeline_call, f"the pipeline never ran: {uv_calls}"
+    # Flags after "python" would reach main.py, not uv
+    uv_options = pipeline_call.split(" python ", 1)[0].split()
+    assert "--no-dev" in uv_options
+    assert "--frozen" in uv_options
 
 
 def test_each_fetch_attempt_is_capped_at_30_seconds(tmp_path: Path) -> None:

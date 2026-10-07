@@ -67,10 +67,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-fixture.outputs.skip != 'true'
-        run: |
-          uv sync --locked
-          # Install PyGithub for issue creation
-          uv add PyGithub
+        run: uv sync --locked
 
       - name: Run diagnostics
         if: steps.check-fixture.outputs.skip != 'true'

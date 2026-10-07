@@ -73,7 +73,7 @@ project.
    uv run ruff format src/ tests/
 
    # Type checking
-   uv run mypy src/
+   uv run ty check src/ main.py --python .venv
 
    # Tests
    uv run pytest tests/unit/ -x

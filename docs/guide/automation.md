@@ -200,7 +200,7 @@ The daemon requires Music.app to be running. Add a check script:
 #!/bin/bash
 if pgrep -x "Music" > /dev/null; then
     cd ~/.local/share/genreupdater/app || exit 1
-    uv run python main.py
+    uv run --frozen --no-dev python main.py
 fi
 ```
 
@@ -223,7 +223,7 @@ crontab -e
 
 Add:
 ```
-0 * * * * cd ~/.local/share/genreupdater/app && /usr/local/bin/uv run python main.py >> /tmp/genreupdater.log 2>&1
+0 * * * * cd ~/.local/share/genreupdater/app && /usr/local/bin/uv run --frozen --no-dev python main.py >> /tmp/genreupdater.log 2>&1
 ```
 
 This runs hourly.
