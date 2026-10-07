@@ -44,7 +44,6 @@ repos:
         entry: uv run ty check --python .venv
         language: system
         types: [python]
-        files: ^src/
         pass_filenames: false  # ty checks whole project, not individual files
 
       - id: pydoclint

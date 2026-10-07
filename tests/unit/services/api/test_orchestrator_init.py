@@ -66,9 +66,9 @@ class TestInitializeClosesSessionOnFailure:
 
         orchestrator = ExternalApiOrchestrator(
             config=config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -98,9 +98,9 @@ class TestInitializeClosesSessionOnFailure:
 
         orchestrator = ExternalApiOrchestrator(
             config=config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -129,9 +129,9 @@ class TestInitializeClosesSessionOnFailure:
 
         orchestrator = ExternalApiOrchestrator(
             config=config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -159,9 +159,9 @@ class TestInitializeClosesSessionOnFailure:
 
         orchestrator = ExternalApiOrchestrator(
             config=config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -195,9 +195,9 @@ class TestSecureConfigGuards:
 
         orchestrator = ExternalApiOrchestrator(
             config=config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -223,7 +223,7 @@ class TestTokenValuesNotLogged:
             config=create_test_config(),
             console_logger=logging.getLogger("test.orchestrator_init.console"),
             error_logger=logging.getLogger("test.orchestrator_init.error"),
-            analytics=MockAnalytics(),  # type: ignore[arg-type]
+            analytics=MockAnalytics(),
             cache_service=create_mock_cache_service(),
             pending_verification_service=create_mock_pending_verification_service(),
         )

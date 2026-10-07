@@ -11,8 +11,6 @@ This file contains the 6 additional tests specified in the testing plan:
 
 from __future__ import annotations
 
-import logging
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,54 +19,31 @@ from core.models.metadata_utils import determine_dominant_genre_for_artist, grou
 from core.models.track_models import TrackDict
 from core.tracks.genre_manager import GenreManager
 from tests.factories import create_test_app_config
-
-
-def _create_mock_logger() -> MagicMock:
-    """Create a mock logger with message tracking."""
-    mock = MagicMock(spec=logging.Logger)
-    mock.info_messages = []
-    mock.warning_messages = []
-    mock.error_messages = []
-    mock.debug_messages = []
-
-    def track_info(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track info log messages."""
-        mock.info_messages.append(str(msg) % args if args else str(msg))
-
-    def track_error(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track error log messages."""
-        mock.error_messages.append(str(msg) % args if args else str(msg))
-
-    def track_debug(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track debug log messages."""
-        mock.debug_messages.append(str(msg) % args if args else str(msg))
-
-    def track_warning(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track warning log messages."""
-        mock.warning_messages.append(str(msg) % args if args else str(msg))
-
-    mock.info.side_effect = track_info
-    mock.error.side_effect = track_error
-    mock.debug.side_effect = track_debug
-    mock.warning.side_effect = track_warning
-    return mock
+from tests.mocks.csv_mock import MockLogger
 
 
 class TestGenreManagerCoreFunctionality:
     """Tests for core GenreManager functionality specified in testing plan."""
 
     @staticmethod
+    def create_track_processor() -> AsyncMock:
+        """Create a track processor mock whose updates succeed."""
+        track_processor = AsyncMock()
+        track_processor.update_track_async = AsyncMock(return_value=True)
+        return track_processor
+
+    @staticmethod
     def create_genre_manager(
         dry_run: bool = False,
+        track_processor: AsyncMock | None = None,
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
-        mock_track_processor = AsyncMock()
-        mock_track_processor.update_track_async = AsyncMock(return_value=True)
-
+        if track_processor is None:
+            track_processor = TestGenreManagerCoreFunctionality.create_track_processor()
         return GenreManager(
-            track_processor=mock_track_processor,
-            console_logger=_create_mock_logger(),
-            error_logger=_create_mock_logger(),
+            track_processor=track_processor,
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             analytics=MagicMock(),
             config=create_test_app_config(),
             dry_run=dry_run,
@@ -102,8 +77,8 @@ class TestGenreManagerCoreFunctionality:
         tracks = [
             self.create_dummy_track("1", "Song A", artist="Artist 1", album="Album A"),
         ]
-        error_logger = _create_mock_logger()
-        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
+        error_logger = MockLogger()
+        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)
         assert dominant_genre == "Rock"
 
     def test_calculate_dominant_genre_tie(self) -> None:
@@ -116,8 +91,8 @@ class TestGenreManagerCoreFunctionality:
             self.create_dummy_track("3", "Song B1", artist="Artist 1", album="Album B", genre="Pop"),
             self.create_dummy_track("4", "Song B2", artist="Artist 1", album="Album B", genre="Pop"),
         ]
-        error_logger = _create_mock_logger()
-        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
+        error_logger = MockLogger()
+        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)
         # Should select "Rock" from Album A (earliest album)
         assert dominant_genre == "Rock"
 
@@ -131,16 +106,16 @@ class TestGenreManagerCoreFunctionality:
             self.create_dummy_track("3", "Rock Song 2", artist="Artist 1", album="Album B"),
             self.create_dummy_track("4", "Rock Song 3", artist="Artist 1", album="Album B"),
         ]
-        error_logger = _create_mock_logger()
-        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
+        error_logger = MockLogger()
+        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)
         # Algorithm selects earliest album's genre, not most frequent
         assert dominant_genre == "Jazz"
 
     def test_calculate_dominant_genre_empty(self) -> None:
         """Test dominant genre calculation with empty track list."""
         tracks: list[TrackDict] = []
-        error_logger = _create_mock_logger()
-        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)  # type: ignore[arg-type]
+        error_logger = MockLogger()
+        dominant_genre = determine_dominant_genre_for_artist(tracks, error_logger)
         assert dominant_genre == "Unknown"
 
     def test_process_artist_genres(self) -> None:
@@ -156,11 +131,11 @@ class TestGenreManagerCoreFunctionality:
             self.create_dummy_track("5", "Song 5", artist="Artist 3", album="Album C", genre="Jazz"),
         ]
         grouped_tracks = group_tracks_by_artist(tracks)
-        error_logger = _create_mock_logger()
+        error_logger = MockLogger()
         artist_genres = {}
 
         for artist, artist_tracks in grouped_tracks.items():
-            dominant_genre = determine_dominant_genre_for_artist(artist_tracks, error_logger)  # type: ignore[arg-type]
+            dominant_genre = determine_dominant_genre_for_artist(artist_tracks, error_logger)
             artist_genres[artist] = dominant_genre
         # Keys are lowercase due to case-insensitive grouping
         expected_genres = {
@@ -176,7 +151,8 @@ class TestGenreManagerCoreFunctionality:
     @pytest.mark.asyncio
     async def test_apply_genre_to_tracks(self) -> None:
         """Test applying calculated genres to tracks."""
-        genre_manager = self.create_genre_manager()
+        track_processor = self.create_track_processor()
+        genre_manager = self.create_genre_manager(track_processor=track_processor)
 
         # Tracks with missing/incorrect genres
         tracks = [
@@ -218,7 +194,7 @@ class TestGenreManagerCoreFunctionality:
         assert update_results[2]["change_logged"] is False
 
         # Verify track processor was called for updates
-        assert genre_manager.track_processor.update_track_async.call_count == 2  # type: ignore[attr-defined]
+        assert track_processor.update_track_async.call_count == 2
 
     @pytest.mark.asyncio
     async def test_handle_tracks_without_ids(self) -> None:
@@ -235,9 +211,9 @@ class TestGenreManagerCoreFunctionality:
 
         # Verify error was logged
         error_logger = genre_manager.error_logger
-        assert hasattr(error_logger, "error_messages")
-        assert len(error_logger.error_messages) > 0  # type: ignore[attr-defined]
-        assert "Track missing 'id' field" in error_logger.error_messages[0]  # type: ignore[attr-defined]
+        assert isinstance(error_logger, MockLogger)
+        assert len(error_logger.error_messages) > 0
+        assert "Track missing 'id' field" in error_logger.error_messages[0]
 
     @pytest.mark.asyncio
     async def test_skip_prerelease_tracks(self) -> None:

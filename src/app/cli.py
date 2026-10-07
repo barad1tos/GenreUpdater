@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 # argparse._SubParsersAction has no stable public type alias
-type _SubParsersAction = argparse._SubParsersAction  # generic param omitted: basedpyright lacks stubs for subscript
+type _SubParsersAction = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def _add_clean_artist_command(subparsers: _SubParsersAction) -> None:

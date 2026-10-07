@@ -1154,7 +1154,6 @@ class TestHandlePartialSyncCache:
 
         track = _create_test_track("14", year_set_by_mgu=None)
         processed_albums = {"Artist|Album": "2023"}
-        mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
         await handle_partial_sync_cache(
             track,
@@ -1175,13 +1174,14 @@ class TestHandlePartialSyncCache:
         mock_cache_service: CacheServiceProtocol,
         error_logger: logging.Logger,
         caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Should handle cache errors gracefully."""
         from metrics.track_sync import handle_partial_sync_cache
 
         track = _create_test_track("15", year_set_by_mgu=None)
         processed_albums = {"Artist|Album": "2023"}
-        mock_cache_service.get_album_year_from_cache = AsyncMock(side_effect=OSError("Cache error"))
+        monkeypatch.setattr(mock_cache_service, "get_album_year_from_cache", AsyncMock(side_effect=OSError("Cache error")))
 
         with caplog.at_level(logging.ERROR):
             await handle_partial_sync_cache(

@@ -18,7 +18,7 @@ from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.track_updater import TrackUpdater
 from core.models.protocols import AnalyticsProtocol
 from core.tracks.year_consistency import (
-    _is_reasonable_year as is_reasonable_year,  # pyright: ignore[reportPrivateUsage]
+    _is_reasonable_year as is_reasonable_year,
 )
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
@@ -180,11 +180,11 @@ class TestValidateTrackIds:
     def test_logs_warning_for_missing_ids(self, year_retriever: YearRetriever) -> None:
         """Test logs warning for tracks without IDs."""
         # Intentionally pass invalid data to test validation
-        track_ids = ["", "123", None]  # type: ignore[list-item]
+        track_ids: list[Any] = ["", "123", None]
         result = year_retriever._batch_processor._track_updater._validate_track_ids(
             track_ids,
             artist="Test Artist",
-            album="Test Album",  # type: ignore[arg-type]
+            album="Test Album",
         )
         assert result == ["123"]
 
@@ -287,7 +287,7 @@ class TestIsReasonableYear:
             ("1800", False),  # Before MIN_VALID_YEAR (1900)
             ("invalid", False),
             ("", False),
-            (None, False),  # type: ignore[arg-type]
+            (None, False),
         ],
     )
     def test_is_reasonable_year(self, year: str, expected: bool) -> None:
@@ -1717,9 +1717,9 @@ class TestCheckSuspiciousAlbumBranches:
         # Create tracks that would trigger an error in the check logic
         mock_track = MagicMock()
         mock_track.get.side_effect = TypeError("Test error")
-        tracks = [mock_track]
+        tracks: list[TrackDict] = [mock_track]
 
-        result = await year_retriever._year_determinator.check_suspicious_album("Artist", "Album", tracks)  # type: ignore[arg-type]
+        result = await year_retriever._year_determinator.check_suspicious_album("Artist", "Album", tracks)
         # Should return False (not skip) and log the error
         assert result is False
 

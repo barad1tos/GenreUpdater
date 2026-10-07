@@ -49,9 +49,9 @@ class TestExternalApiOrchestratorAllure:
 
         return ExternalApiOrchestrator(
             config=test_config,
-            console_logger=console_logger,  # type: ignore[arg-type]
-            error_logger=error_logger,  # type: ignore[arg-type]
-            analytics=test_analytics,  # type: ignore[arg-type]
+            console_logger=console_logger,
+            error_logger=error_logger,
+            analytics=test_analytics,
             cache_service=cache_service,
             pending_verification_service=pending_verification_service,
         )
@@ -64,10 +64,10 @@ class TestExternalApiOrchestratorAllure:
 
         orchestrator = ExternalApiOrchestrator(
             config=test_config,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             cache_service=mock_cache,
-            analytics=mock_analytics,  # type: ignore[arg-type]
+            analytics=mock_analytics,
             pending_verification_service=MagicMock(),
         )
         assert orchestrator.config == test_config

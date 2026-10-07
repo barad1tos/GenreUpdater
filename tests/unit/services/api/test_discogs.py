@@ -10,7 +10,7 @@ import pytest
 
 from services.api.discogs import DiscogsClient, DiscogsRelease
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockLogger  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
 class TestDiscogsClientAllure:
@@ -36,24 +36,13 @@ class TestDiscogsClientAllure:
             mock_cache_service.get_async = AsyncMock(return_value=None)
             mock_cache_service.set_async = AsyncMock()
 
-        # Create a mock analytics that bypasses the decorator
-        class MockAnalytics:
-            """Mock analytics service that bypasses tracking."""
-
-            @staticmethod
-            async def execute_async_wrapped_call(func: Any, _event_type: str, *args: Any, **kwargs: Any) -> Any:
-                """Execute async function without tracking."""
-                return await func(*args, **kwargs)
-
-        mock_analytics = MockAnalytics()
-
         test_api_token = "test_token"  # noqa: S105
         app_config = create_test_app_config()
         return DiscogsClient(
             token=test_api_token,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
-            analytics=mock_analytics,  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
             cache_service=mock_cache_service,

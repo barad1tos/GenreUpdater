@@ -47,7 +47,6 @@ dev = [
     # Linting & formatting
     "ruff==0.16.10",
     "ty==0.0.84",
-    "basedpyright==1.40.1", # IDE support - ty is used for pre-commit
     "sourcery==1.46.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.4",
     "pip-audit==2.10.1",
@@ -247,7 +246,6 @@ extra-paths = ["src"]
 
 [tool.ty.src]
 exclude = [
-    "**/tests/**",
     "**/.venv/**",
     "**/venv/**",
     "**/__pycache__/**",
@@ -256,40 +254,6 @@ exclude = [
 [tool.ty.rules]
 # Warn on unresolved imports but don't fail (external packages may lack stubs)
 unresolved-import = "warn"
-
-[tool.pyright]
-include = ["src", "main.py", "tests", "docs"]
-extraPaths = ["src"]
-stubPath = "stubs"
-exclude = ["venv", "**/__pycache__", "**/node_modules"]
-venvPath = "."
-venv = ".venv"
-pythonVersion = "3.13"
-typeCheckingMode = "basic"
-reportMissingImports = true
-reportMissingTypeStubs = false
-reportUnusedImport = true
-reportUnusedClass = "warning"
-reportUnusedFunction = "warning"
-reportUnusedVariable = "warning"
-reportGeneralTypeIssues = true
-reportOptionalSubscript = true
-reportOptionalMemberAccess = true
-reportOptionalCall = true
-reportOptionalIterable = true
-reportOptionalContextManager = true
-reportOptionalOperand = true
-
-# Disable walrus operator suggestions to avoid conflicts
-reportUnnecessaryComparison = false
-reportUnnecessaryContains = false
-
-# PyCharm compatibility: Allow cast() calls for type clarity even when "unnecessary"
-reportUnnecessaryCast = false
-
-# Pydantic v2: Standard type checking
-reportDeprecated = true
-reportIncompatibleMethodOverride = true
 
 # ─────────────────────────────────────────────────────────────────────────────
 

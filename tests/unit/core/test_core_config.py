@@ -197,7 +197,7 @@ class TestValidateConfigDataType:
     def test_raises_for_list(self) -> None:
         """Should raise TypeError for list."""
         with pytest.raises(TypeError, match="not a dictionary"):
-            _validate_config_data_type(["item1", "item2"])  # type: ignore[arg-type]
+            _validate_config_data_type(["item1", "item2"])
 
     def test_raises_for_string(self) -> None:
         """Should raise TypeError for string."""
@@ -336,22 +336,22 @@ class TestDevelopmentConfigTestArtists:
     def test_raises_for_dict_input(self) -> None:
         """Should raise ValueError for dict input."""
         with pytest.raises(ValidationError, match="test_artists must be a string, list, or tuple"):
-            DevelopmentConfig(test_artists={"artist": "value"})  # type: ignore[arg-type]
+            DevelopmentConfig.model_validate({"test_artists": {"artist": "value"}})
 
     def test_raises_for_int_input(self) -> None:
         """Should raise ValueError for int input."""
         with pytest.raises(ValidationError, match="test_artists must be a string, list, or tuple"):
-            DevelopmentConfig(test_artists=42)  # type: ignore[arg-type]
+            DevelopmentConfig.model_validate({"test_artists": 42})
 
     def test_raises_for_non_string_list_element(self) -> None:
         """Should raise TypeError when list contains non-string."""
         with pytest.raises(TypeError, match=r"test_artists\[1\] must be str"):
-            DevelopmentConfig(test_artists=["Artist1", 123])  # type: ignore[list-item]
+            DevelopmentConfig.model_validate({"test_artists": ["Artist1", 123]})
 
     def test_raises_for_non_string_tuple_element(self) -> None:
         """Should raise TypeError when tuple contains non-string."""
         with pytest.raises(TypeError, match=r"test_artists\[0\] must be str"):
-            DevelopmentConfig(test_artists=(None, "Artist"))  # type: ignore[arg-type]
+            DevelopmentConfig.model_validate({"test_artists": (None, "Artist")})
 
 
 class TestLoadConfigDoesNotLogSecrets:

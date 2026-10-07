@@ -29,8 +29,8 @@ class TestIncrementalPipelineIntegration:
         test_config = config or create_test_app_config()
 
         return IncrementalFilterService(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             analytics=cast(Analytics, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,

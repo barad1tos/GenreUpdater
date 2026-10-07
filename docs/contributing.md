@@ -53,7 +53,7 @@ uv run ruff format src/
 This project uses **ty** (not mypy):
 
 ```bash
-uv run ty check src/ --python .venv
+uv run ty check --python .venv
 ```
 
 ### All Checks

@@ -15,13 +15,13 @@ from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.protocol_mocks import (
+    MockCacheService,
+    MockExternalApiService,
+    MockPendingVerificationService,
+)
 
 if TYPE_CHECKING:
-    from core.models.protocols import (
-        CacheServiceProtocol,
-        ExternalApiServiceProtocol,
-        PendingVerificationServiceProtocol,
-    )
     from core.models.track_models import AppConfig
 
 
@@ -53,60 +53,6 @@ class _MockAnalytics:
 
     def record_count(self, name: str, count: int = 1) -> None:
         """Record count metric."""
-
-
-class _MockCacheService:
-    """Mock cache service for testing."""
-
-    def __init__(self) -> None:
-        """Initialize mock cache service."""
-        self._cache: dict[str, Any] = {}
-
-    async def get_async(self, key: str) -> Any:
-        """Get cached value."""
-        return self._cache.get(key)
-
-    async def set_async(self, key: str, value: Any, _ttl: int | None = None) -> None:
-        """Set cached value."""
-        self._cache[key] = value
-
-    async def get_album_year_from_cache(self, _artist: str, _album: str) -> str | None:
-        """Get album year from cache."""
-        return self._cache.get(f"{_artist}|{_album}_year")
-
-    async def get_album_year_entry_from_cache(self, _artist: str, _album: str) -> None:
-        """Get album year entry from cache (returns None to trigger API call)."""
-        return
-
-    async def store_album_year_in_cache(self, _artist: str, _album: str, _year: str, confidence: int = 0) -> None:
-        """Store album year in cache."""
-
-
-class _MockExternalApiService:
-    """Mock external API service for testing."""
-
-    def __init__(self) -> None:
-        """Initialize mock external API service."""
-        self.get_album_year_calls: list[tuple[str, str, str | None, int | None]] = []
-        self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
-
-    async def get_album_year(
-        self,
-        artist: str,
-        album: str,
-        current_library_year: str | None = None,
-        earliest_track_added_year: int | None = None,
-    ) -> tuple[str | None, bool, int, dict[str, int]]:
-        """Get album year from API."""
-        self.get_album_year_calls.append((artist, album, current_library_year, earliest_track_added_year))
-        return self.get_album_year_response
-
-
-class _MockPendingVerificationService:
-    """Mock pending verification service for testing."""
-
-    async def mark_for_verification(self, artist: str, album: str, reason: str) -> None:
-        """Mark album for verification."""
 
 
 class _DummyTrackData:
@@ -165,13 +111,13 @@ class TestYearRetrieverAllure:
             track_processor.update_track_async = AsyncMock(return_value=True)
 
         if cache_service is None:
-            cache_service = _MockCacheService()
+            cache_service = MockCacheService()
 
         if external_api is None:
-            external_api = _MockExternalApiService()
+            external_api = MockExternalApiService()
 
         if pending_verification is None:
-            pending_verification = _MockPendingVerificationService()
+            pending_verification = MockPendingVerificationService()
 
         if retry_handler is None:
             retry_handler = TestYearRetrieverAllure._create_retry_handler()
@@ -242,9 +188,9 @@ class TestYearRetrieverAllure:
     def test_year_retriever_initialization_comprehensive(self) -> None:
         """Test comprehensive YearRetriever initialization."""
         mock_track_processor = MagicMock()
-        mock_cache_service = cast("CacheServiceProtocol", cast(object, _MockCacheService()))
-        mock_external_api = cast("ExternalApiServiceProtocol", cast(object, _MockExternalApiService()))
-        mock_pending_verification = cast("PendingVerificationServiceProtocol", cast(object, _MockPendingVerificationService()))
+        mock_cache_service = MockCacheService()
+        mock_external_api = MockExternalApiService()
+        mock_pending_verification = MockPendingVerificationService()
         mock_retry_handler = self._create_retry_handler()
 
         config = create_test_app_config()
@@ -340,7 +286,7 @@ class TestYearRetrieverAllure:
     @pytest.mark.asyncio
     async def test_determine_album_year_from_api(self) -> None:
         """Test album year determination from external API."""
-        mock_external_api = _MockExternalApiService()
+        mock_external_api = MockExternalApiService()
         expected_year = "1995"
         mock_external_api.get_album_year_response = (expected_year, True, 85, {expected_year: 85})
         retriever = self.create_year_retriever(external_api=mock_external_api)
@@ -363,7 +309,7 @@ class TestYearRetrieverAllure:
         year to apply the year-match rule (skip verification if API year == existing year).
         Previously, force mode would set current_library_year=None, breaking this check.
         """
-        mock_external_api = _MockExternalApiService()
+        mock_external_api = MockExternalApiService()
         expected_year = "1999"
         mock_external_api.get_album_year_response = (expected_year, True, 85, {expected_year: 85})
         retriever = self.create_year_retriever(external_api=mock_external_api)

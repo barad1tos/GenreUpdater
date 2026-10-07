@@ -101,7 +101,7 @@ class TestDetermineDominantGenreForArtist:
         logger = logging.getLogger("test")
 
         with caplog.at_level(logging.ERROR):
-            result = determine_dominant_genre_for_artist(tracks, logger)  # type: ignore[arg-type]
+            result = determine_dominant_genre_for_artist(tracks, logger)
 
         assert result == "Unknown"
 
@@ -237,15 +237,15 @@ class TestGetGenreFromTrack:
 
     def test_none_genre_returns_unknown(self) -> None:
         """None genre should return Unknown."""
-        track: dict[str, Any] = {
-            "id": "1",
-            "name": "Track",
-            "artist": "Artist",
-            "album": "Album",
-            "genre": None,
-            "date_added": "2020-01-01 00:00:00",
-        }
-        result = _get_genre_from_track(track)  # type: ignore[arg-type]
+        track = TrackDict(
+            id="1",
+            name="Track",
+            artist="Artist",
+            album="Album",
+            genre=None,
+            date_added="2020-01-01 00:00:00",
+        )
+        result = _get_genre_from_track(track)
         assert result == "Unknown"
 
 

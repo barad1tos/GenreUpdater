@@ -3,24 +3,15 @@
 import logging
 from datetime import datetime
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from app.music_updater import MusicUpdater
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
+from services.dependency_container import DependencyContainer
 from tests.factories import create_test_app_config
-
-
-class MockDependencyContainer:
-    """Mock dependency container for testing."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        """Initialize mock container with given attributes."""
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-        if not hasattr(self, "library_snapshot_service"):
-            self.library_snapshot_service = None
 
 
 class DummyAppleScriptClient:
@@ -166,14 +157,6 @@ async def test_main_pipeline_reuses_track_snapshot(
     logger = logging.getLogger("test.music_updater.snapshot")
     logger.addHandler(logging.NullHandler())
 
-    config: dict[str, Any] = {
-        "logs_base_dir": str(tmp_dir),
-        "logging": {"csv_output_file": "csv/track_list.csv"},
-        "batch_processing": {"batch_size": 10},
-        "development": {"test_artists": []},
-        "analytics": {"duration_thresholds": {"short_max": 1, "medium_max": 5, "long_max": 10}},
-    }
-
     app_config = create_test_app_config(
         logs_base_dir=str(tmp_dir),
         batch_processing={"batch_size": 10},
@@ -203,8 +186,8 @@ async def test_main_pipeline_reuses_track_snapshot(
     )
     retry_handler = DatabaseRetryHandler(logger=logger, default_policy=retry_policy)
 
-    deps = MockDependencyContainer(
-        config=config,
+    deps = MagicMock(spec=DependencyContainer)
+    deps.configure_mock(
         app_config=app_config,
         console_logger=logger,
         error_logger=logger,
@@ -212,16 +195,15 @@ async def test_main_pipeline_reuses_track_snapshot(
         analytics_logger=logger,
         ap_client=DummyAppleScriptClient(),
         cache_service=DummyCacheService(),
+        library_snapshot_service=None,
         pending_verification_service=DummyPendingVerificationService(),
         external_api_service=DummyExternalApiService(),
         retry_handler=retry_handler,
         dry_run=False,
-        year_updates_logger=logger,
         db_verify_logger=logger,
-        logging_listener=None,
     )
 
-    music_updater = MusicUpdater(deps)  # type: ignore[arg-type]
+    music_updater = MusicUpdater(deps)
 
     tracks = [
         TrackDict(id="1", name="Song A", artist="Artist", album="Album", genre="Old", year="2000"),
@@ -232,13 +214,13 @@ async def test_main_pipeline_reuses_track_snapshot(
     fake_genre_manager = FakeGenreManager()
     fake_db_verifier = FakeDatabaseVerifier()
 
-    music_updater.track_processor = fake_tp  # type: ignore[assignment]
-    music_updater.genre_manager = fake_genre_manager  # type: ignore[assignment]
-    music_updater.database_verifier = fake_db_verifier  # type: ignore[assignment]
+    monkeypatch.setattr(music_updater, "track_processor", fake_tp)
+    monkeypatch.setattr(music_updater, "genre_manager", fake_genre_manager)
+    monkeypatch.setattr(music_updater, "database_verifier", fake_db_verifier)
 
     # Create FakeYearService with the music_updater's snapshot_manager
     fake_year_service = FakeYearService(music_updater.snapshot_manager)
-    music_updater.year_service = fake_year_service  # type: ignore[assignment]
+    monkeypatch.setattr(music_updater, "year_service", fake_year_service)
 
     captured: dict[str, Any] = {}
 

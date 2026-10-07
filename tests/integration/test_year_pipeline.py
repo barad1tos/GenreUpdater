@@ -33,6 +33,13 @@ class TestYearPipelineIntegration:
         return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
 
     @staticmethod
+    def create_track_processor() -> AsyncMock:
+        """Create a track processor mock whose updates succeed."""
+        track_processor = AsyncMock()
+        track_processor.update_track_async = AsyncMock(return_value=True)
+        return track_processor
+
+    @staticmethod
     def create_year_retriever(
         *,
         mock_track_processor: AsyncMock | None = None,
@@ -44,8 +51,7 @@ class TestYearPipelineIntegration:
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if mock_track_processor is None:
-            mock_track_processor = AsyncMock()
-            mock_track_processor.update_track_async = AsyncMock(return_value=True)
+            mock_track_processor = TestYearPipelineIntegration.create_track_processor()
 
         if mock_cache_service is None:
             mock_cache_service = MagicMock()
@@ -136,8 +142,8 @@ class TestYearPipelineIntegration:
             external_api=cast(Any, mock_external_api),
             pending_verification=cast(Any, mock_pending_verification),
             retry_handler=retry_handler,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
@@ -177,7 +183,8 @@ class TestYearPipelineIntegration:
         mock_external_api = AsyncMock()
         mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90))
 
-        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_external_api=mock_external_api)
+        track_processor = TestYearPipelineIntegration.create_track_processor()
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
         result = await year_retriever.process_album_years(tracks)
         # Verify external API was called
         mock_external_api.get_album_year.assert_called()
@@ -186,7 +193,7 @@ class TestYearPipelineIntegration:
         assert isinstance(result, bool)
 
         # Verify tracks were processed
-        call_count = year_retriever.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
+        call_count = track_processor.update_track_async.call_count
         assert call_count >= 0  # Should process tracks needing year updates
 
     @pytest.mark.asyncio

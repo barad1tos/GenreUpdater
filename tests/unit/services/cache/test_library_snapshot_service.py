@@ -100,8 +100,7 @@ def _make_config(tmp_path: pytest.TempPathFactory, *, compress: bool = False, **
                 "compress_level": 6,
             },
         },
-    }
-    defaults.update(overrides)
+    } | overrides
     return create_test_app_config(**defaults)
 
 
@@ -227,7 +226,7 @@ def test_metadata_serialization_roundtrip() -> None:
 
 
 @pytest.mark.asyncio
-async def test_concurrent_writes_are_serialized(tmp_path_factory: pytest.TempPathFactory) -> None:
+async def test_concurrent_writes_are_serialized(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that concurrent snapshot writes are serialized via lock."""
     import asyncio
 
@@ -246,7 +245,7 @@ async def test_concurrent_writes_are_serialized(tmp_path_factory: pytest.TempPat
         original_write(path, data)
         execution_order.append(f"end_{len(data)}")
 
-    service._write_bytes_atomic = tracking_write  # type: ignore[method-assign,assignment]
+    monkeypatch.setattr(service, "_write_bytes_atomic", tracking_write)
 
     tracks1 = [TrackDict(id="1", name="Track1", artist="Artist1", album="Album1")]
     tracks2 = [

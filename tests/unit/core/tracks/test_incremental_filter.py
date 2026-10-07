@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
@@ -12,28 +11,10 @@ from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
 from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.mocks.csv_mock import MockLogger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-
-def _create_mock_logger() -> MagicMock:
-    """Create a mock logger with message tracking."""
-    mock = MagicMock(spec=logging.Logger)
-    mock.info_messages = []
-    mock.debug_messages = []
-
-    def track_info(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track info-level log messages for assertion."""
-        mock.info_messages.append(str(msg) % args if args else str(msg))
-
-    def track_debug(msg: object, *args: object, **_kwargs: Any) -> None:
-        """Track debug-level log messages for assertion."""
-        mock.debug_messages.append(str(msg) % args if args else str(msg))
-
-    mock.info.side_effect = track_info
-    mock.debug.side_effect = track_debug
-    return mock
 
 
 def _create_track(
@@ -97,8 +78,8 @@ class TestIncrementalFilterService:
         track_list_loader: _MockLoadTrackList | None = None,
     ) -> IncrementalFilterService:
         """Create a service instance for testing."""
-        console_logger = _create_mock_logger()
-        error_logger = _create_mock_logger()
+        console_logger = MockLogger()
+        error_logger = MockLogger()
         analytics = cast(AnalyticsProtocol, cast(object, MagicMock(spec=AnalyticsProtocol)))
         config = create_test_app_config()
 
@@ -130,7 +111,8 @@ class TestIncrementalFilterService:
 
         # Check logging
         console_logger = service.console_logger
-        assert any("No last run time found, processing all 2 tracks" in msg for msg in console_logger.info_messages)  # type: ignore[attr-defined]
+        assert isinstance(console_logger, MockLogger)
+        assert any("No last run time found, processing all 2 tracks" in msg for msg in console_logger.info_messages)
 
     def test_filter_tracks_with_new_tracks(self) -> None:
         """Test filtering with new tracks based on date_added."""
