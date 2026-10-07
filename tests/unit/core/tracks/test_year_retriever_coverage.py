@@ -277,13 +277,15 @@ class TestGetSetLastUpdatedTracks:
 class TestIsReasonableYear:
     """Tests for module-level _is_reasonable_year function."""
 
+    NEXT_YEAR = datetime.now(UTC).year + 1
+
     @pytest.mark.parametrize(
         ("year", "expected"),
         [
             ("2020", True),
             ("1900", True),
-            ("2026", True),  # current_year + 1 is valid
-            ("2030", False),  # Too far in future (>current_year+1)
+            pytest.param(str(NEXT_YEAR), True, id="next-year"),  # current_year + 1 is the latest valid year
+            pytest.param(str(NEXT_YEAR + 1), False, id="year-after-next"),  # Too far in future (>current_year+1)
             ("1800", False),  # Before MIN_VALID_YEAR (1900)
             ("invalid", False),
             ("", False),

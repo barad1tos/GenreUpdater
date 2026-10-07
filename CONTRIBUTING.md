@@ -79,7 +79,7 @@ project.
    uv run pytest tests/unit/ -x
    ```
 
-   ty checks `src/` and `tests/`. In an editor, ty's language server shows the same diagnostics; the project ships no pyright configuration.
+   ty checks every Python file in the repository, including `tests/`, `scripts/`, `tools/` and `docs/`. For CI's diagnostics in an editor, run ty's language server from the project environment (`uv run ty server`, or the editor's option to use ty from the interpreter); the project ships no pyright configuration, so Pylance or basedpyright run on their own defaults.
 
 4. **Commit your changes**
 

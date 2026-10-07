@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import argparse
 
-# argparse._SubParsersAction has no stable public type alias
+# argparse has no public name for the subparsers action, and only typeshed makes it generic;
+# a lazy type alias is never evaluated, so the subscript cannot raise TypeError at runtime
 type _SubParsersAction = argparse._SubParsersAction[argparse.ArgumentParser]
 
 

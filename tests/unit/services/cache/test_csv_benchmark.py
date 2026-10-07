@@ -35,7 +35,7 @@ class SimpleCsvArtistIndex:
         cache_key = f"artist::{artist.lower()}"
         cached = self.cache_service.get(cache_key)
         if isinstance(cached, list):
-            # The cache holds values of many types; this key only ever stores CSV rows
+            # The cache holds values of many types; these per-artist keys only ever store CSV rows
             return cast("list[dict[str, str]]", cached)
 
         tracks = self._read_tracks_for_artist(artist)

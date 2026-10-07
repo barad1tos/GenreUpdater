@@ -31,7 +31,7 @@ class MockLogger(logging.Logger):
         self.logged_messages: list[tuple[int, str]] = []
 
     def handle(self, record: logging.LogRecord) -> None:
-        """Capture log records instead of emitting them."""
+        """Record each message's level and unformatted template instead of passing it to handlers."""
         self.logged_messages.append((record.levelno, str(record.msg)))
 
 
