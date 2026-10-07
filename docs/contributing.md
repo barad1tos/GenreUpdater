@@ -56,7 +56,7 @@ This project uses **ty** (not mypy):
 uv run ty check
 ```
 
-ty checks every Python file in the repository, including `tests/`, `scripts/`, `tools/` and `docs/`. For CI's diagnostics in an editor, run ty's language server from the project environment (`uv run ty server`, or the editor's option to use ty from the interpreter); the project ships no pyright configuration, so Pylance or basedpyright run on their own defaults.
+ty checks every Python file in the repository, including `tests/`, `scripts/`, `tools/` and `docs/`. To see CI's diagnostics in an editor, run ty's language server from the project environment (`uv run ty server`, or the editor setting that takes ty from the project interpreter's environment); the project ships no pyright configuration, so Pylance and basedpyright fall back to their own defaults and can disagree with CI.
 
 ### All Checks
 

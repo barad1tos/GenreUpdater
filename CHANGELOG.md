@@ -44,11 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daemon: deploys the latest stable release tag (`vX.Y.Z`) instead of `origin/main`; config and secrets live outside the clone
 - Daemon: runs the pipeline with `uv run --frozen --no-dev`, so a run no longer reinstalls the development packages that its own `uv sync --frozen --no-dev` removed
 - Dependabot updates Python dependencies through the uv ecosystem, so `uv.lock` moves together with `pyproject.toml`, and CI installs with `uv sync --locked`, so a lock that drifts from `pyproject.toml` turns CI red instead of being relocked silently
-- ty type-checks the whole repository, including the test suite, `scripts/`, `tools/` and `docs/`: CI and the pre-commit hook run `uv run ty check`, and the hook runs on any Python change
+- ty type-checks the whole repository, including the test suite, `scripts/`, `tools/` and `docs/`: CI and the pre-commit hook run `uv run ty check`, and the hook runs on every Python or stub change instead of only changes under `src/`
 
 ### Removed
 
-- basedpyright and its `[tool.pyright]` configuration; ty is the single type checker, so editors should run ty's language server, since Pylance or basedpyright now use their own defaults
+- basedpyright and its `[tool.pyright]` configuration; ty is the only type checker, so Pylance and basedpyright fall back to their own defaults, and ty's language server is how an editor shows CI's diagnostics
 - Daemon: `sync-fixtures.sh` (pushes to the protected `main` branch were always rejected)
 - `scripts/sync-diagnostics.sh`: no callers, and it pushed from the legacy daemon clone to the protected `main` branch
 

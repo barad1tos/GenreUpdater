@@ -187,7 +187,8 @@ async def test_main_pipeline_reuses_track_snapshot(
     )
     retry_handler = DatabaseRetryHandler(logger=logger, default_policy=retry_policy)
 
-    # MusicUpdater gates every snapshot read on is_enabled(), so a disabled service keeps this run on the full batch fetch
+    # MusicUpdater's fetch and TrackCacheManager.update_snapshot (reached on persist) both return early when is_enabled() is False,
+    # so a disabled service keeps this run on the full batch fetch and writes no snapshot
     snapshot_service = MagicMock(spec=LibrarySnapshotService)
     snapshot_service.is_enabled.return_value = False
 
@@ -209,7 +210,7 @@ async def test_main_pipeline_reuses_track_snapshot(
         db_verify_logger=logger,
     )
     # Reading a dependency the test did not configure raises instead of returning a mock.
-    # The seal reaches snapshot_service too, so a call past its is_enabled() gate fails.
+    # configure_mock adopts the unnamed snapshot_service as a child, so the seal covers it and a call past its is_enabled() gate raises.
     seal(deps)
 
     music_updater = MusicUpdater(deps)

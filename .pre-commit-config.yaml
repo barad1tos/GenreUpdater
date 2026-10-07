@@ -43,7 +43,7 @@ repos:
         name: ty (type checker)
         entry: uv run ty check
         language: system
-        types: [python]
+        types_or: [python, pyi]
         pass_filenames: false  # ty checks whole project, not individual files
 
       - id: pydoclint

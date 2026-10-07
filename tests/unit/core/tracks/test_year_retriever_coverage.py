@@ -277,16 +277,12 @@ class TestGetSetLastUpdatedTracks:
 class TestIsReasonableYear:
     """Tests for module-level _is_reasonable_year function."""
 
-    NEXT_YEAR = datetime.now(UTC).year + 1
-
     @pytest.mark.parametrize(
         ("year", "expected"),
         [
             ("2020", True),
             ("1900", True),
-            pytest.param(str(NEXT_YEAR), True, id="next-year"),  # current_year + 1 is the latest valid year
-            pytest.param(str(NEXT_YEAR + 1), False, id="year-after-next"),  # Too far in future (>current_year+1)
-            ("1800", False),  # Before MIN_VALID_YEAR (1900)
+            ("1899", False),  # Just below the 1900 lower bound
             ("invalid", False),
             ("", False),
             (None, False),
@@ -296,6 +292,14 @@ class TestIsReasonableYear:
         """Test _is_reasonable_year function."""
         result = is_reasonable_year(year)
         assert result == expected
+
+    @pytest.mark.parametrize(
+        ("years_ahead", "expected"),
+        [pytest.param(1, True, id="next-year"), pytest.param(2, False, id="year-after-next")],
+    )
+    def test_upper_bound_follows_current_year(self, years_ahead: int, expected: bool) -> None:
+        """Read the clock at call time, as the production check does, so a run spanning New Year in UTC cannot flip the result."""
+        assert is_reasonable_year(str(datetime.now(UTC).year + years_ahead)) is expected
 
 
 class TestUpdateAlbumTracksBulkAsync:

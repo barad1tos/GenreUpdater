@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 # argparse has no public name for the subparsers action, and only typeshed makes it generic;
-# a lazy type alias is never evaluated, so the subscript cannot raise TypeError at runtime
+# a type alias evaluates its value only when __value__ is read, so importing this module never runs the subscript
 type _SubParsersAction = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
