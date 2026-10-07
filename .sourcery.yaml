@@ -10,7 +10,8 @@ rule_settings:
   enable:
     - default
   # The built-in rule flags every import from the tests package, shared helpers included
-  # (tests.factories, tests.mocks, a conftest); the rules below flag only test_*.py modules
+  # (tests.factories, tests.mocks, a conftest); the rules below flag only test_*.py modules and
+  # test_* names, which pytest collects again as tests of the module that imports them
   disable:
     - dont-import-test-modules
 
@@ -26,7 +27,7 @@ rules:
     condition: module.matches_regex(r"(^|\.)test_\w*$")
     language: python
   - id: no-test-module-import-name
-    description: Import shared test helpers, never a test_*.py module
+    description: Never import a test_* module or function; pytest collects it again in the importing module
     pattern: from ${package} import ..., ${name}, ...
     condition: name.matches_regex(r"^test_\w*$")
     language: python
