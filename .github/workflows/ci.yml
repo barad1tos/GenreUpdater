@@ -68,6 +68,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Secrets only: its rules ship with Trivy, so a newly published CVE cannot fail this step.
+      # Runs before uv sync so the scan never walks .venv.
+      - name: Trivy secret scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'secret'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -101,6 +112,8 @@ jobs:
           fail-on-severity: high
           fail-on-scopes: runtime, development, unknown
           comment-summary-in-pr: never
+          # The scorecard lookup calls deps.dev without error handling and finds nothing for PyPI
+          show-openssf-scorecard: false
 
   test:
     name: Test
@@ -185,7 +198,9 @@ jobs:
         run: uv run pytest tests/test_docs.py -v -p no:xdist --override-ini="addopts="
 
   gate:
-    name: Gate
+    # Only the pull_request run is "Gate": a dev push run of the same head SHA skips dependency
+    # review and must not stand in for the required check
+    name: ${{ github.event_name == 'pull_request' && 'Gate' || format('Gate ({0})', github.event_name) }}
     runs-on: ubuntu-latest
     needs: [quality, security, test, docs, dependency-review]
     if: always()

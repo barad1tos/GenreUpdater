@@ -1,14 +1,15 @@
 name: Trivy
 
-# Full vulnerability scan of everything on main. It stays outside the required Gate: a CVE
-# published for a dependency already on main must not block unrelated PRs. The dependency
-# review job in ci.yml blocks the vulnerable versions a PR adds; this tracks the rest in
-# code scanning, where Dependabot security updates close them.
+# Vulnerability scan of every locked dependency on main, dev group included. It stays outside
+# the required Gate: a CVE published for a dependency already on main must not block unrelated
+# PRs. The dependency review job in ci.yml blocks the vulnerable versions a PR adds; this tracks
+# the rest in code scanning, where Dependabot security updates close them.
 on:
+  # Fires for human merges only: auto-merges pushed with GITHUB_TOKEN start no workflow
   push:
     branches: [main]
   schedule:
-    # Daily, so a newly published CVE shows up even when nothing is merged
+    # Daily, so a newly published CVE or a bot merge is scanned within a day
     - cron: '17 4 * * *'
   workflow_dispatch:
 
@@ -30,6 +31,9 @@ jobs:
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # Trivy skips the dev dependency group of uv.lock unless told otherwise
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
         with:
           scan-type: 'fs'
           scan-ref: '.'
