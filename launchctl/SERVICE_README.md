@@ -88,7 +88,7 @@ The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pr
 launchd trigger (Music Library change or hourly tick)
   → pre-flight: app clone, regular config file, .env, apple_scripts_dir inside the clone
   → lock (exit quietly if another run is active)
-  → git fetch --tags, retried for up to 60 s (still no network: run skipped)
+  → git fetch --tags, up to 13 attempts 5 s apart (still no network: run skipped)
   → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
@@ -98,7 +98,7 @@ launchd trigger (Music Library change or hourly tick)
 
 Every infrastructure failure is logged and notified; none of them falls back silently.
 
-A trigger right after boot or wake can fire before the network is up, so `git fetch` is retried for up to 60 s. If there is still no default route after that, the run logs `No network after 60s; run skipped` to `daemon.log`, exits with `EX_TEMPFAIL` (75) and sends no notification, like a closed Music.app: year lookups without network would fail and use up their verification attempts. A fetch that keeps failing while the network is up is a failure and is notified.
+A trigger right after boot or wake can fire before the network is up, so `git fetch` gets up to 13 attempts, 5 s apart, each capped at 30 s; every failed attempt logs git's last line to `daemon.log`. Without a network the attempts fail at once, so after about a minute with still no default route the run logs `No network after 13 fetch attempts; run skipped`, exits with `EX_TEMPFAIL` (75) and sends no notification, like a closed Music.app: year lookups without network would fail and use up their verification attempts. A fetch that keeps failing while a default route exists is a failure and is notified with git's last error. That includes a router that is up while its internet link is not, for example after a power cut that restarted both: every run in that state notifies, as it always did, until the internet comes back.
 
 When Music.app is not running, `main.py` exits with `EX_TEMPFAIL` (75). The wrapper logs
 `Music.app is not running; run skipped` to `daemon.log` and sends no notification, since a closed
@@ -179,7 +179,7 @@ the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag loca
 
 ### 2026-10-07
 
-- **fix:** a trigger that fires before the network is up retries `git fetch` for up to 60 s and, if there is still no network, skips the run quietly instead of failing with "Git fetch failed"
+- **fix:** a trigger that fires before the network is up retries `git fetch` for about a minute and, if there is still no network, skips the run quietly instead of failing with "Git fetch failed"; a fetch that fails with a network present reports git's last error, and each attempt is capped at 30 s
 
 ### 2026-10-03
 

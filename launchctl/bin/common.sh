@@ -31,9 +31,10 @@ GU_REPO_URL="https://github.com/barad1tos/GenreUpdater.git"
 GU_LEGACY_DIR="$HOME/Library/Application Support/GenreUpdater"
 
 # Refresh tags from origin; --prune-tags drops tags deleted upstream,
-# so a yanked release never stays "latest"
+# so a yanked release never stays "latest". timeout keeps a stalled
+# transfer from holding the daemon lock forever.
 gu_fetch_tags() {
-    git -C "$GU_APP_DIR" fetch --quiet --prune --prune-tags --force --tags origin
+    timeout 30 git -C "$GU_APP_DIR" fetch --quiet --prune --prune-tags --force --tags origin
 }
 
 # Keep only the first stable release tag (vX.Y.Z) from a sorted list.

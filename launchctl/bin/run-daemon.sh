@@ -7,7 +7,7 @@
 # - Pin the app clone to the latest stable release tag (vX.Y.Z)
 # - Dependency sync (uv)
 # - Run the Python pipeline with the user config from ~/.config/genreupdater
-# - Notifications on success/failure (none when Music.app is closed and the run is skipped)
+# - Notifications on success/failure (none when a run is skipped: Music.app closed, or no network)
 #
 # Business logic is handled entirely by Python. The layout is defined in common.sh.
 
@@ -85,7 +85,7 @@ scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P)" || scripts_dir_rea
 app_dir_real="$(cd "$GU_APP_DIR" && pwd -P)"
 if [[ "$scripts_dir_real" != "$app_dir_real"/* ]]; then
     fail "apple_scripts_dir must be an existing directory inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \
-        "apple_scripts_dir points outside the app clone"
+        "apple_scripts_dir is missing or outside the app clone"
 fi
 
 # Daemon state lives in $GU_STATE_DIR; the legacy directory belongs to the Swift app
@@ -102,28 +102,34 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
-# A trigger right after boot or wake can fire before the network is up: retry for a minute
+# A trigger right after boot or wake can fire before the network is up: retry for about a minute.
+# Sets fetch_error to git's last line, which names the cause.
 fetch_release_tags() {
-    local retries_left=12
-    until gu_fetch_tags >> "$DAEMON_LOG" 2>&1; do
-        (( retries_left-- > 0 )) || return 1
+    local attempt=1 fetch_output
+    until fetch_output="$(gu_fetch_tags 2>&1)"; do
+        fetch_error="${fetch_output##*$'\n'}"
+        log "Fetch attempt $attempt failed: ${fetch_error:-no output}"
+        (( attempt++ < 13 )) || return 1
         sleep 5
     done
+    (( attempt == 1 )) || log "Fetch succeeded on attempt $attempt"
 }
 
-# route(8) exits 0 even when the route is missing; only a found route prints its interface
+# route(8) exits 0 even when the route is missing and says so only in its message; any other
+# answer, including a route command that cannot run, counts as a network, so the failure stays loud
 has_default_route() {
-    [[ "$(route -n get default 2>/dev/null)" == *"interface:"* ]]
+    [[ "$(route -n get default 2>&1)" != *"not in table"* ]]
 }
 
 log "Fetching release tags..."
+fetch_error=""
 if ! fetch_release_tags; then
     # Offline is a normal state, like a closed Music.app: year lookups would fail and use up their attempts
     if ! has_default_route; then
-        log "No network after 60s; run skipped"
+        log "No network after 13 fetch attempts; run skipped"
         exit 75  # EX_TEMPFAIL, as for a closed Music.app
     fi
-    fail "git fetch failed" "Git fetch failed"
+    fail "git fetch failed after 13 attempts: ${fetch_error:-no output}" "Git fetch failed: ${fetch_error:0:80}"
 fi
 
 target_tag="$(gu_latest_release_tag)"
