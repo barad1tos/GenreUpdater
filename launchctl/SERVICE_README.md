@@ -88,7 +88,8 @@ The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pr
 launchd trigger (Music Library change or hourly tick)
   → pre-flight: app clone, regular config file, .env, apple_scripts_dir inside the clone
   → lock (exit quietly if another run is active)
-  → git fetch --tags → checkout --force --detach <latest vX.Y.Z>
+  → git fetch --tags, up to 13 attempts 5 s apart (still no network: run skipped)
+  → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
   → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
@@ -96,6 +97,8 @@ launchd trigger (Music Library change or hourly tick)
 ```
 
 Every infrastructure failure is logged and notified; none of them falls back silently.
+
+A trigger right after boot or wake can fire before the network is up, so `git fetch` gets up to 13 attempts, 5 s apart, each capped at 30 s; every failed attempt logs its cause to `daemon.log` (git's first `fatal:` or `error:` line, else its last line; `timed out after 30 s`; or `no output`) and, unless it timed out, appends git's full output. Without a network the attempts fail at once, so after about a minute with still no default route the run logs `No network after 13 fetch attempts; run skipped`, exits with `EX_TEMPFAIL` (75) and sends no notification, like a closed Music.app. The run is skipped rather than started on the deployed release because year lookups without network would fail and use up the albums' verification attempts. If all attempts fail while a default route exists, the run fails with a notification that carries the last cause. That includes a router that is up while its internet link is not, for example after a power cut when the router is back before its link: every run notifies until the internet is back.
 
 When Music.app is not running, `main.py` exits with `EX_TEMPFAIL` (75). The wrapper logs
 `Music.app is not running; run skipped` to `daemon.log` and sends no notification, since a closed
@@ -143,8 +146,7 @@ tail -f ~/.local/state/genreupdater/logs/daemon.log
 **"Config must be a regular file"**: `~/.config/genreupdater/my-config.yaml` is missing or is a
 symlink. Copy the real file there.
 
-**"apple_scripts_dir points outside the app clone"**: set it to
-`~/.local/share/genreupdater/app/applescripts`.
+**"apple_scripts_dir is missing or outside the app clone"**: point it at an existing directory inside the clone, normally `~/.local/share/genreupdater/app/applescripts`.
 
 **"No release tag found"**: push a `vX.Y.Z` tag (see Releasing).
 
@@ -173,6 +175,10 @@ After the merge, roll back a bad release instead: delete its tag on origin and t
 the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag locally).
 
 ## Changelog
+
+### 2026-10-07
+
+- **fix:** a trigger that fires before the network is up retries `git fetch` for about a minute and, if there is still no network, skips the run quietly instead of failing with "Git fetch failed"; a fetch that fails with a network present names the cause in the notification, and each attempt is capped at 30 s
 
 ### 2026-10-03
 

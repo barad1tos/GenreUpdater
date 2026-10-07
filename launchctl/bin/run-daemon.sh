@@ -7,14 +7,15 @@
 # - Pin the app clone to the latest stable release tag (vX.Y.Z)
 # - Dependency sync (uv)
 # - Run the Python pipeline with the user config from ~/.config/genreupdater
-# - Notifications on success/failure (none when Music.app is closed and the run is skipped)
+# - Notifications on success/failure (none when a run is skipped: another run holds the lock,
+#   Music.app is closed, or there is no network)
 #
 # Business logic is handled entirely by Python. The layout is defined in common.sh.
 
 set -euo pipefail
 
-# === PATH setup for launchd (uv is in ~/.local/bin) ===
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# === PATH setup for launchd (uv is in ~/.local/bin, route in /sbin) ===
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=SCRIPTDIR/common.sh
@@ -22,6 +23,8 @@ source "$SCRIPT_DIR/common.sh"
 
 DAEMON_LOG="$GU_LOGS_DIR/daemon.log"
 TIMEOUT_SECONDS=14400  # 4 hours
+FETCH_ATTEMPTS=13      # 12 waits of 5 s: about a minute when each attempt fails at once
+FETCH_TIMEOUT=30       # seconds per attempt, so a stalled transfer cannot hold the lock indefinitely
 
 # === Logging and notifications ===
 log() {
@@ -81,11 +84,11 @@ scripts_dir="${scripts_dir#[\"\']}"
 scripts_dir="${scripts_dir%[\"\']}"
 scripts_dir="${scripts_dir/#\~/$HOME}"
 # Compare canonical paths, so ".." components and symlinks cannot lead out of the clone
-scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P || true)"
+scripts_dir_real="$(cd "$scripts_dir" 2>/dev/null && pwd -P)" || scripts_dir_real=""
 app_dir_real="$(cd "$GU_APP_DIR" && pwd -P)"
 if [[ "$scripts_dir_real" != "$app_dir_real"/* ]]; then
     fail "apple_scripts_dir must be an existing directory inside $GU_APP_DIR (got: ${scripts_dir:-<unset>})" \
-        "apple_scripts_dir points outside the app clone"
+        "apple_scripts_dir is missing or outside the app clone"
 fi
 
 # Daemon state lives in $GU_STATE_DIR; the legacy directory belongs to the Swift app
@@ -102,8 +105,63 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
+# git's first "fatal:" or "error:" line names the cause; the lines after it are advice
+first_git_error() {
+    local line last=""
+    while IFS= read -r line; do
+        case "$line" in
+            fatal:* | error:*)
+                printf '%s\n' "$line"
+                return
+                ;;
+        esac
+        [[ -n "$line" ]] && last="$line"
+    done <<< "$1"
+    printf '%s\n' "${last:-no output}"
+}
+
+# A trigger right after boot or wake can fire before the network is up, so retry.
+# Sets fetch_error to the cause of the last failed attempt.
+fetch_release_tags() {
+    local attempt=1 fetch_output fetch_status
+    while :; do
+        fetch_status=0
+        fetch_output="$(timeout "$FETCH_TIMEOUT" git -C "$GU_APP_DIR" "${GU_FETCH_TAGS_ARGS[@]}" 2>&1)" || fetch_status=$?
+        (( fetch_status == 0 )) && break
+        if (( fetch_status == 124 )); then
+            # timeout(1) kills the fetch without a word and exits 124
+            fetch_error="timed out after $FETCH_TIMEOUT s"
+        else
+            printf '%s\n' "$fetch_output" >> "$DAEMON_LOG"
+            fetch_error="$(first_git_error "$fetch_output")"
+        fi
+        log "Fetch attempt $attempt failed: $fetch_error"
+        (( attempt++ < FETCH_ATTEMPTS )) || return 1
+        sleep 5
+    done
+    (( attempt == 1 )) || log "Fetch succeeded on attempt $attempt"
+    return 0
+}
+
+# route(8) exits 0 even when the route is missing and says so only in its message; any other
+# answer, including a route command that cannot run, counts as a network, so the failure stays loud
+has_default_route() {
+    [[ "$(route -n get default 2>&1)" != *"not in table"* ]]
+}
+
 log "Fetching release tags..."
-gu_fetch_tags >> "$DAEMON_LOG" 2>&1 || fail "git fetch failed" "Git fetch failed"
+fetch_error=""
+if ! fetch_release_tags; then
+    # Offline is a normal state, like a closed Music.app: skip quietly rather than run the deployed
+    # release, where every failed year lookup would use up one of the album's verification attempts
+    if ! has_default_route; then
+        log "No network after $FETCH_ATTEMPTS fetch attempts; run skipped"
+        exit 75  # EX_TEMPFAIL
+    fi
+    # A notification has room for the cause, not for git's "unable to access '<url>': " prefix
+    notify_cause="${fetch_error#"fatal: unable to access '"*"': "}"
+    fail "git fetch failed after $FETCH_ATTEMPTS attempts: $fetch_error" "Git fetch failed: ${notify_cause:0:80}"
+fi
 
 target_tag="$(gu_latest_release_tag)"
 [[ -n "$target_tag" ]] || fail "No release tag (vX.Y.Z) found on origin" "No release tag found"
