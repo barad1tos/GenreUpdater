@@ -88,14 +88,15 @@ The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pr
 launchd trigger (Music Library change or hourly tick)
   → pre-flight: app clone, regular config file, .env, apple_scripts_dir inside the clone
   → lock (exit quietly if another run is active)
-  → git fetch --tags → checkout --force --detach <latest vX.Y.Z>
+  → wait up to 60 s for a default route → git fetch --tags (offline: keep the tags fetched earlier)
+  → checkout --force --detach <latest vX.Y.Z>
   → link app/.env → ~/.config/genreupdater/.env
   → uv sync --frozen --no-dev (one retry with a clean venv)
   → uv run python main.py --config ~/.config/genreupdater/my-config.yaml
   → notification (Glass on success, Basso on failure; none when the run is skipped)
 ```
 
-Every infrastructure failure is logged and notified; none of them falls back silently.
+Every infrastructure failure is logged and notified; none of them falls back silently. An unreachable origin is not a failure: a trigger can fire right after boot, before the network is up, so the run logs `using release tags fetched earlier` to `daemon.log` and deploys the newest release it already knows, without a notification.
 
 When Music.app is not running, `main.py` exits with `EX_TEMPFAIL` (75). The wrapper logs
 `Music.app is not running; run skipped` to `daemon.log` and sends no notification, since a closed
@@ -173,6 +174,10 @@ After the merge, roll back a bad release instead: delete its tag on origin and t
 the previous `vX.Y.Z` on its next run (`--prune-tags` drops the deleted tag locally).
 
 ## Changelog
+
+### 2026-10-07
+
+- **fix:** a trigger that fires before the network is up waits up to 60 s for a default route and, if origin stays unreachable, deploys the newest release fetched earlier instead of failing with "Git fetch failed"
 
 ### 2026-10-03
 

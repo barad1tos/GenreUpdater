@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-# === PATH setup for launchd (uv is in ~/.local/bin) ===
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# === PATH setup for launchd (uv is in ~/.local/bin, route in /sbin) ===
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=SCRIPTDIR/common.sh
@@ -102,8 +102,23 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
+# A trigger right after boot can fire before the network is up: give it a minute to appear
+wait_for_network() {
+    local checks_left=12
+    # route(8) exits 0 even when the route is missing; only a found route prints its interface
+    until [[ "$(route -n get default 2>/dev/null)" == *"interface:"* ]]; do
+        (( checks_left-- > 0 )) || return 1
+        sleep 5
+    done
+}
+
+# An unreachable origin is not an infrastructure failure: stay on the tags fetched earlier
 log "Fetching release tags..."
-gu_fetch_tags >> "$DAEMON_LOG" 2>&1 || fail "git fetch failed" "Git fetch failed"
+if ! wait_for_network; then
+    log "No default route after 60s; skipping git fetch, using release tags fetched earlier"
+elif ! gu_fetch_tags >> "$DAEMON_LOG" 2>&1; then
+    log "git fetch failed; using release tags fetched earlier"
+fi
 
 target_tag="$(gu_latest_release_tag)"
 [[ -n "$target_tag" ]] || fail "No release tag (vX.Y.Z) found on origin" "No release tag found"
