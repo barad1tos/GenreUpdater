@@ -190,7 +190,7 @@ uv run pytest -m "not slow"
 1. **Ensure all checks pass**
    - Lint (ruff)
    - Format (ruff format)
-   - Type check (mypy)
+   - Type check (ty)
    - Tests (pytest)
 
 2. **Update documentation** if needed

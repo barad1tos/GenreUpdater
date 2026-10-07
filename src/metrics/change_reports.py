@@ -543,7 +543,6 @@ def _convert_changelog_to_dict(item: dict[str, Any] | ChangeLogEntry) -> dict[st
     when ChangeLogEntry evolves, preventing silent omissions.
     """
     if isinstance(item, ChangeLogEntry):
-        # Type ignore because Pydantic's model_dump() returns dict[str, Any] but mypy sees it as Any
         result: dict[str, Any] = item.model_dump()
         # Maintain backwards compatibility for summary consumers expecting 'album'
         if "album" not in result:

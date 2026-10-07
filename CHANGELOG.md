@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pull request template with checklist
 - Issue templates (bug report, feature request)
 - CODEOWNERS file for automatic reviewers
-- Pre-commit hooks configuration (ruff, mypy)
+- Pre-commit hooks configuration (ruff, ty)
 - Test coverage enforcement (--cov-fail-under=70)
 - Tests for lazy `%` logging paths across discogs, musicbrainz, year_search_coordinator, analytics (#216)
 - Tests for 39 uncovered patch lines: except-branches, UTC timezone, isinstance guards, file_validator (#241)
