@@ -10,14 +10,9 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+  # No paths-ignore: Gate is a required check, so it must report on every PR; a path-filtered PR would wait for it forever
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '.github/**'
-      - 'docs/**'
-      - '**/*.md'
-      - 'LICENSE'
-      - '.gitignore'
   workflow_dispatch:
 
 concurrency:
@@ -73,6 +68,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Secrets only: its rules ship with Trivy, so a newly published CVE cannot fail this step.
+      # Runs before uv sync so the scan never walks .venv.
+      - name: Trivy secret scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'secret'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -90,14 +96,24 @@ jobs:
       - name: Bandit security scan
         run: uv run bandit -r src/ -c pyproject.toml
 
-      - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
+  # Blocks only what this PR adds: a known-vulnerable dependency version. A CVE published for a
+  # dependency already on main would otherwise block every unrelated PR; trivy.yml tracks those.
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Block vulnerable dependencies added by this PR
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-          ignore-unfixed: true
+          fail-on-severity: high
+          fail-on-scopes: runtime, development, unknown
+          comment-summary-in-pr: never
+          # The scorecard lookup calls deps.dev without error handling and finds nothing for PyPI
+          show-openssf-scorecard: false
 
   test:
     name: Test
@@ -182,22 +198,31 @@ jobs:
         run: uv run pytest tests/test_docs.py -v -p no:xdist --override-ini="addopts="
 
   gate:
-    name: Gate
+    # Only the pull_request run is "Gate": a dev push run of the same head SHA skips dependency
+    # review and must not stand in for the required check
+    name: ${{ github.event_name == 'pull_request' && 'Gate' || format('Gate ({0})', github.event_name) }}
     runs-on: ubuntu-latest
-    needs: [quality, security, test, docs]
+    needs: [quality, security, test, docs, dependency-review]
     if: always()
     steps:
       - name: Check results
         run: |
+          review="${{ needs.dependency-review.result }}"
+          # Dependency review compares a PR's base and head, so it is skipped on pushes
+          if [[ "${{ github.event_name }}" != "pull_request" && "$review" == "skipped" ]]; then
+            review=success
+          fi
           if [[ "${{ needs.quality.result }}" != "success" ]] || \
              [[ "${{ needs.security.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
-             [[ "${{ needs.docs.result }}" != "success" ]]; then
+             [[ "${{ needs.docs.result }}" != "success" ]] || \
+             [[ "$review" != "success" ]]; then
             echo "❌ One or more checks failed"
             echo "  quality: ${{ needs.quality.result }}"
             echo "  security: ${{ needs.security.result }}"
             echo "  test: ${{ needs.test.result }}"
             echo "  docs: ${{ needs.docs.result }}"
+            echo "  dependency review: ${{ needs.dependency-review.result }}"
             exit 1
           fi
           echo "✅ All checks passed"
