@@ -228,7 +228,7 @@ class DatabaseRetryHandler:
             policy: Retry policy to use (defaults to database_policy)
 
         Yields:
-            AsyncGenerator[RetryOperationContext]: Context for tracking retry progress
+            RetryOperationContext: Context for tracking retry progress
 
         Raises:
             OSError: Re-raised when the operation fails with a non-transient error or retries are exhausted
