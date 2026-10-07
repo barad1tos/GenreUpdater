@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daemon: deploys the latest stable release tag (`vX.Y.Z`) instead of `origin/main`; config and secrets live outside the clone
 - Daemon: runs the pipeline with `uv run --frozen --no-dev`, so a run no longer reinstalls the development packages that its own `uv sync --frozen --no-dev` removed
 - Dependabot updates Python dependencies through the uv ecosystem, so `uv.lock` moves together with `pyproject.toml`, and CI installs with `uv sync --locked`, so a lock that drifts from `pyproject.toml` turns CI red instead of being relocked silently
-- ty type-checks the test suite as well as `src/`: CI and the pre-commit hook check the whole project, and the tests use protocol-conformant fakes and `monkeypatch` instead of mypy-era `# type: ignore` comments
+- ty type-checks the test suite as well as `src/`: CI and the pre-commit hook check the whole project
 
 ### Removed
 

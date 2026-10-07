@@ -11,7 +11,7 @@ from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
 from core.models.protocols import AnalyticsProtocol
 
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_mock_track_processor, create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
@@ -20,13 +20,6 @@ if TYPE_CHECKING:
 
 class TestGenrePipelineIntegration:
     """Integration tests for the complete genre pipeline workflow."""
-
-    @staticmethod
-    def create_track_processor() -> AsyncMock:
-        """Create a track processor mock whose updates succeed."""
-        track_processor = AsyncMock()
-        track_processor.update_track_async = AsyncMock(return_value=True)
-        return track_processor
 
     @staticmethod
     def create_genre_manager(
@@ -113,7 +106,7 @@ class TestGenrePipelineIntegration:
         ]
 
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
-        track_processor = TestGenrePipelineIntegration.create_track_processor()
+        track_processor = create_mock_track_processor()
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
         # Verify that tracks were processed
@@ -151,7 +144,7 @@ class TestGenrePipelineIntegration:
         )
         del mock_orchestrator  # Created for demonstration but not used in current test
 
-        track_processor = TestGenrePipelineIntegration.create_track_processor()
+        track_processor = create_mock_track_processor()
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         # Note: This test focuses on genre pipeline integration
         # The actual API fallback logic is in Year Retrieval Pipeline
@@ -187,7 +180,7 @@ class TestGenrePipelineIntegration:
         ]
 
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
-        track_processor = TestGenrePipelineIntegration.create_track_processor()
+        track_processor = create_mock_track_processor()
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         # First run - should populate any internal caches
         first_run_tracks, first_run_logs = await genre_manager.update_genres_by_artist_async(tracks=tracks)
@@ -228,7 +221,7 @@ class TestGenrePipelineIntegration:
 
         # Configure for batch processing
         batch_config = create_test_app_config(genre_update={"batch_size": 10, "concurrent_limit": 3})
-        track_processor = TestGenrePipelineIntegration.create_track_processor()
+        track_processor = create_mock_track_processor()
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, batch_config, False)
         start_time = datetime.now(UTC)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)

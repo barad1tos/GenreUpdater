@@ -11,7 +11,7 @@ from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
 from core.models.protocols import AnalyticsProtocol
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_mock_track_processor, create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 
@@ -33,13 +33,6 @@ class TestYearPipelineIntegration:
         return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
 
     @staticmethod
-    def create_track_processor() -> AsyncMock:
-        """Create a track processor mock whose updates succeed."""
-        track_processor = AsyncMock()
-        track_processor.update_track_async = AsyncMock(return_value=True)
-        return track_processor
-
-    @staticmethod
     def create_year_retriever(
         *,
         mock_track_processor: AsyncMock | None = None,
@@ -51,7 +44,7 @@ class TestYearPipelineIntegration:
     ) -> YearRetriever:
         """Create a YearRetriever instance for testing."""
         if mock_track_processor is None:
-            mock_track_processor = TestYearPipelineIntegration.create_track_processor()
+            mock_track_processor = create_mock_track_processor()
 
         if mock_cache_service is None:
             mock_cache_service = MagicMock()
@@ -183,7 +176,7 @@ class TestYearPipelineIntegration:
         mock_external_api = AsyncMock()
         mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90))
 
-        track_processor = TestYearPipelineIntegration.create_track_processor()
+        track_processor = create_mock_track_processor()
         year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
         result = await year_retriever.process_album_years(tracks)
         # Verify external API was called

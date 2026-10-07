@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, seal
 
 import pytest
 from app.music_updater import MusicUpdater
@@ -202,6 +202,8 @@ async def test_main_pipeline_reuses_track_snapshot(
         dry_run=False,
         db_verify_logger=logger,
     )
+    # Reading a dependency the test did not configure raises instead of returning a mock
+    seal(deps)
 
     music_updater = MusicUpdater(deps)
 

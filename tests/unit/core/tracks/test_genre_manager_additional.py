@@ -18,19 +18,12 @@ import pytest
 from core.models.metadata_utils import determine_dominant_genre_for_artist, group_tracks_by_artist
 from core.models.track_models import TrackDict
 from core.tracks.genre_manager import GenreManager
-from tests.factories import create_test_app_config
+from tests.factories import create_mock_track_processor, create_test_app_config
 from tests.mocks.csv_mock import MockLogger
 
 
 class TestGenreManagerCoreFunctionality:
     """Tests for core GenreManager functionality specified in testing plan."""
-
-    @staticmethod
-    def create_track_processor() -> AsyncMock:
-        """Create a track processor mock whose updates succeed."""
-        track_processor = AsyncMock()
-        track_processor.update_track_async = AsyncMock(return_value=True)
-        return track_processor
 
     @staticmethod
     def create_genre_manager(
@@ -39,7 +32,7 @@ class TestGenreManagerCoreFunctionality:
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
         if track_processor is None:
-            track_processor = TestGenreManagerCoreFunctionality.create_track_processor()
+            track_processor = create_mock_track_processor()
         return GenreManager(
             track_processor=track_processor,
             console_logger=MockLogger(),
@@ -151,7 +144,7 @@ class TestGenreManagerCoreFunctionality:
     @pytest.mark.asyncio
     async def test_apply_genre_to_tracks(self) -> None:
         """Test applying calculated genres to tracks."""
-        track_processor = self.create_track_processor()
+        track_processor = create_mock_track_processor()
         genre_manager = self.create_genre_manager(track_processor=track_processor)
 
         # Tracks with missing/incorrect genres
