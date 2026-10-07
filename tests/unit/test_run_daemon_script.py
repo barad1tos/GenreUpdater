@@ -1,4 +1,4 @@
-"""Tests for launchctl/bin/run-daemon.sh: release pinning when the network is not up at launch."""
+"""Tests for launchctl/bin/run-daemon.sh: git fetch retries, the offline skip, and the failures that must notify."""
 
 from __future__ import annotations
 
@@ -39,6 +39,10 @@ ORIGIN_UP_ON_FIRST_SLEEP = 'ln -sfn "{upstream}" "{origin_link}"'
 
 # Record each requested wait, so a test can add up how long the daemon waits
 RECORDING_SLEEP = 'echo "$1" >> "$HOME/sleep-seconds"'
+
+# timeout(1) runs the command; when it has to kill it, it prints nothing and exits 124
+PASSING_TIMEOUT = 'shift\nexec "$@"'
+EXPIRED_TIMEOUT = "exit 124"
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -106,12 +110,15 @@ def _make_sandbox(
     network_up: bool = False,
     sleep_body: str = "exit 0",
     route_body: str = ROUTE_SCRIPT,
+    timeout_body: str = PASSING_TIMEOUT,
     apple_scripts_dir: str = APPLE_SCRIPTS_DIR,
 ) -> DaemonSandbox:
     """Build the daemon layout from common.sh with real git and fakes for the external commands.
 
     Origin is reachable only through ``network/origin``, a link that nothing creates unless
-    ``sleep_body`` does, so a fetch fails until then.
+    ``sleep_body`` does, so a fetch fails until then. ``sleep_body`` is a ``str.format`` template
+    that receives ``{upstream}`` and ``{origin_link}``, so literal braces must be doubled; the
+    other bodies are written as they are.
     """
     home = tmp_path / "home"
     fake_bin = home / ".local" / "bin"
@@ -155,7 +162,7 @@ def _make_sandbox(
     _write_executable(fake_bin / "route", route_body)
     _write_executable(fake_bin / "sleep", sleep_body.format(upstream=upstream, origin_link=origin_link))
     _write_executable(fake_bin / "lockf", "exit 0")
-    _write_executable(fake_bin / "timeout", 'shift\nexec "$@"')
+    _write_executable(fake_bin / "timeout", timeout_body)
     _write_executable(fake_bin / "uv", "exit 0")
     # notify.sh passes title, message and sound after "--"; keep the title
     _write_executable(fake_bin / "osascript", f'while (( $# )) && [[ $1 != -- ]]; do shift; done\nprintf "%s\\n" "$2" >> "{notification_log}"')
@@ -170,7 +177,7 @@ def test_offline_launch_is_skipped_without_running_the_pipeline(tmp_path: Path) 
     # EX_TEMPFAIL, the same exit as a run skipped because Music.app is closed
     assert result.returncode == 75, result.stdout + result.stderr
     assert sandbox.notification_titles() == []
-    # Only the pipeline writes stdout.log
+    # The pipeline step's >> redirect creates stdout.log, even though the fake uv prints nothing
     assert not sandbox.log_path("stdout.log").exists()
     assert "run skipped" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
 
@@ -222,6 +229,16 @@ def test_failing_fetch_is_retried_for_a_minute(tmp_path: Path, network_up: bool)
 
     waits = (sandbox.home / "sleep-seconds").read_text(encoding="utf-8").split()
     assert sum(int(seconds) for seconds in waits) == 60
+
+
+def test_fetch_killed_by_its_time_cap_is_reported_as_timed_out(tmp_path: Path) -> None:
+    sandbox = _make_sandbox(tmp_path, network_up=True, timeout_body=EXPIRED_TIMEOUT)
+
+    result = sandbox.run()
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert sandbox.notification_titles() == ["Genre Updater Error"]
+    assert "timed out" in sandbox.log_path("daemon.log").read_text(encoding="utf-8")
 
 
 def test_missing_apple_scripts_dir_fails_loudly(tmp_path: Path) -> None:

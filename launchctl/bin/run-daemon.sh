@@ -7,7 +7,8 @@
 # - Pin the app clone to the latest stable release tag (vX.Y.Z)
 # - Dependency sync (uv)
 # - Run the Python pipeline with the user config from ~/.config/genreupdater
-# - Notifications on success/failure (none when a run is skipped: Music.app closed, or no network)
+# - Notifications on success/failure (none when a run is skipped: another run holds the lock,
+#   Music.app is closed, or there is no network)
 #
 # Business logic is handled entirely by Python. The layout is defined in common.sh.
 
@@ -22,6 +23,7 @@ source "$SCRIPT_DIR/common.sh"
 
 DAEMON_LOG="$GU_LOGS_DIR/daemon.log"
 TIMEOUT_SECONDS=14400  # 4 hours
+FETCH_ATTEMPTS=13      # 12 waits of 5 s: about a minute when each attempt fails at once
 
 # === Logging and notifications ===
 log() {
@@ -102,14 +104,23 @@ fi
 log "Lock acquired (PID: $$)"
 
 # === Pin to the latest release ===
-# A trigger right after boot or wake can fire before the network is up: retry for about a minute.
-# Sets fetch_error to git's last line, which names the cause.
+# A trigger right after boot or wake can fire before the network is up, so retry; gu_fetch_tags
+# caps each attempt at 30 s. Sets fetch_error to the cause: git's last line, or the time cap.
 fetch_release_tags() {
-    local attempt=1 fetch_output
-    until fetch_output="$(gu_fetch_tags 2>&1)"; do
-        fetch_error="${fetch_output##*$'\n'}"
-        log "Fetch attempt $attempt failed: ${fetch_error:-no output}"
-        (( attempt++ < 13 )) || return 1
+    local attempt=1 fetch_output fetch_status
+    while :; do
+        fetch_status=0
+        fetch_output="$(gu_fetch_tags 2>&1)" || fetch_status=$?
+        (( fetch_status == 0 )) && break
+        if (( fetch_status == 124 )); then
+            # timeout(1) kills the fetch without a word and exits 124
+            fetch_error="timed out after 30 s"
+        else
+            fetch_error="${fetch_output##*$'\n'}"
+            fetch_error="${fetch_error:-no output}"
+        fi
+        log "Fetch attempt $attempt failed: $fetch_error"
+        (( attempt++ < FETCH_ATTEMPTS )) || return 1
         sleep 5
     done
     (( attempt == 1 )) || log "Fetch succeeded on attempt $attempt"
@@ -124,12 +135,13 @@ has_default_route() {
 log "Fetching release tags..."
 fetch_error=""
 if ! fetch_release_tags; then
-    # Offline is a normal state, like a closed Music.app: year lookups would fail and use up their attempts
+    # Offline is a normal state, like a closed Music.app: skip quietly rather than run the deployed
+    # release, where every failed year lookup would use up one of the album's verification attempts
     if ! has_default_route; then
-        log "No network after 13 fetch attempts; run skipped"
-        exit 75  # EX_TEMPFAIL, as for a closed Music.app
+        log "No network after $FETCH_ATTEMPTS fetch attempts; run skipped"
+        exit 75  # EX_TEMPFAIL
     fi
-    fail "git fetch failed after 13 attempts: ${fetch_error:-no output}" "Git fetch failed: ${fetch_error:0:80}"
+    fail "git fetch failed after $FETCH_ATTEMPTS attempts: $fetch_error" "Git fetch failed: ${fetch_error:0:80}"
 fi
 
 target_tag="$(gu_latest_release_tag)"

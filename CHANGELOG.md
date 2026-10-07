@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AppleScripts were rejected when the scripts directory sat below a hidden directory such as `~/.local/share`
 - Daemon: a run skipped because Music.app was not running exited successfully and showed an "Update completed successfully" notification; `main.py` now exits with `EX_TEMPFAIL` (75), and `run-daemon.sh` logs the skip without a notification
 - Daemon: `uv sync` failures in `run-daemon.sh` were treated as success
-- Daemon: a run triggered right after boot or wake, before the network was up, failed with a "Git fetch failed" notification; `run-daemon.sh` now retries the fetch for about a minute and, if there is still no network, skips the run without a notification; with a network present, the failure notification now carries git's last error
+- Daemon: a run triggered right after boot or wake, before the network was up, failed with a "Git fetch failed" notification; `run-daemon.sh` now retries the fetch for about a minute and, if there is still no network, skips the run without a notification; with a network present, the failure notification now names the cause, and each fetch attempt is capped at 30 s so a stalled transfer can no longer hold the daemon lock
 - Daemon: re-running `install.sh` left a development-checkout `apple_scripts_dir` in an existing config and did not restore missing state files
 - A run that fetched no tracks from a library the last snapshot recorded as non-empty exited successfully; it now exits with an error, so the daemon reports the failure. A library that really became empty is recorded with `main.py --fresh`
 
