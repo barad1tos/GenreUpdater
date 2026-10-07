@@ -6,6 +6,7 @@ import asyncio
 import logging
 import unittest.mock
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -297,9 +298,11 @@ class TestIsReasonableYear:
         ("years_ahead", "expected"),
         [pytest.param(1, True, id="next-year"), pytest.param(2, False, id="year-after-next")],
     )
-    def test_upper_bound_follows_current_year(self, years_ahead: int, expected: bool) -> None:
-        """Read the clock at call time, as the production check does, so a run spanning New Year in UTC cannot flip the result."""
-        assert is_reasonable_year(str(datetime.now(UTC).year + years_ahead)) is expected
+    def test_upper_bound_follows_current_year(self, monkeypatch: pytest.MonkeyPatch, years_ahead: int, expected: bool) -> None:
+        """Pin the clock _is_reasonable_year reads, so the test and the check always agree on the current year."""
+        pinned_now = datetime(2026, 6, 1, tzinfo=UTC)
+        monkeypatch.setattr("core.tracks.year_consistency.datetime", SimpleNamespace(now=lambda **_kwargs: pinned_now))
+        assert is_reasonable_year(str(pinned_now.year + years_ahead)) is expected
 
 
 class TestUpdateAlbumTracksBulkAsync:
