@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -442,32 +443,22 @@ class TestSearchReleaseGroupsSuccessLog:
 class TestFetchReleasesForGroupsExceptionHandling:
     """Tests for _fetch_releases_for_groups exception in results (line 552)."""
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(OSError("network timeout"), id="OSError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_fetch_releases_logs_warning_on_gather_exception(self) -> None:
+    async def test_fetch_releases_logs_warning_on_gather_exception(self, error: BaseException) -> None:
+        """A failed or cancelled release fetch is logged and leaves that release group without releases."""
         error_logger = MockLogger()
-        call_count = 0
 
         async def mock_api_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
-            """Mock API request function designed to simulate a network timeout error.
-
-            This function increments the call count each time it is called and
-            raises an `OSError` to simulate a network timeout during an API request.
-
-            Args:
-                *_args: Positional arguments passed to the mock API request.
-                **_kwargs: Keyword arguments passed to the mock API request.
-
-            Raises:
-                OSError: Always raised to simulate a network timeout.
-
-            Returns:
-                dict[str, Any]: This function never successfully returns, as it
-                always raises an exception.
-            """
-            nonlocal call_count
-            call_count += 1
-            raise OSError("network timeout")
+            """Fail the release fetch with the parametrized error."""
+            raise error
 
         client = MusicBrainzClient(
             console_logger=MockLogger(),

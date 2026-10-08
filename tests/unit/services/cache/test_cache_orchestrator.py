@@ -59,13 +59,20 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(Exception("Album init failed"), id="Exception"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_initialize_handles_service_failure(self) -> None:
-        """Test that initialization raises RuntimeError when a service fails."""
+    async def test_initialize_handles_service_failure(self, error: BaseException) -> None:
+        """Initialization raises RuntimeError when a service fails or its initialization is cancelled."""
         orchestrator = self.create_orchestrator()
 
         with (
-            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=Exception("Album init failed")),
+            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=error),
             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock),
             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock),
             pytest.raises(RuntimeError, match="Cache service initialization failed"),
@@ -242,6 +249,33 @@ class TestCacheOrchestrator:
             mock_album.assert_called_once()
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(OSError("disk full"), id="OSError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_save_all_to_disk_logs_failed_save(self, error: BaseException) -> None:
+        """A save that fails or is cancelled is logged with its exception, and the other caches are still saved."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
+
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=error),
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api,
+            patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic,
+        ):
+            await orchestrator.save_all_to_disk()
+
+            mock_api.assert_called_once()
+            mock_generic.assert_called_once()
+
+        logger.error.assert_called_once()
+        # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
+        assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
 
     # Backward compatibility tests
 

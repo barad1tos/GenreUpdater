@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -13,8 +14,10 @@ from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
+from core.tracks.track_updater import TrackUpdater
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockLogger
 from tests.mocks.protocol_mocks import (
     MockCacheService,
     MockExternalApiService,
@@ -390,3 +393,31 @@ class TestYearRetrieverAllure:
 
         # Verify all tracks were attempted
         assert mock_track_processor.update_track_async.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_update_album_tracks_counts_cancelled_update_as_failed(self) -> None:
+        """A track update cancelled on its own counts as failed and is logged with its exception type."""
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(side_effect=[True, asyncio.CancelledError(), True])
+        error_logger = MockLogger()
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=error_logger,
+            config=create_test_app_config(),
+        )
+        tracks = [
+            _DummyTrackData.create(track_id="success_001", name="Success 1"),
+            _DummyTrackData.create(track_id="cancelled_001", name="Cancelled 1"),
+            _DummyTrackData.create(track_id="success_002", name="Success 2"),
+        ]
+
+        success_count, failed_count = await track_updater.update_album_tracks_bulk_async(
+            tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
+        )
+
+        assert (success_count, failed_count) == (2, 1)
+        assert len(error_logger.error_messages) == 1
+        assert "cancelled_001" in error_logger.error_messages[0]
+        assert "CancelledError" in error_logger.error_messages[0]

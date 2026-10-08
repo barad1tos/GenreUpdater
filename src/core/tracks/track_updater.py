@@ -302,18 +302,20 @@ class TrackUpdater:
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count results
+            # Count results; BaseException, since a cancelled update comes back as CancelledError, which is truthy
             for index, result in enumerate(results):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     failed += 1
                     track_id_in_batch = batch[index] if index < len(batch) else "unknown"
                     self.error_logger.error(
-                        "Failed to update track %s (artist=%s, album=%s, year=%s): %s",
+                        "Failed to update track %s (artist=%s, album=%s, year=%s): %s: %s",
                         track_id_in_batch,
                         artist,
                         album,
                         year,
+                        type(result).__name__,
                         result,
+                        exc_info=result,
                     )
                 elif result:
                     successful += 1

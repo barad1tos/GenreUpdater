@@ -295,7 +295,8 @@ class GenreManager(BaseProcessor):
 
         successful_results: list[Any] = []
         for i, result in enumerate(results):
-            if isinstance(result, Exception):
+            # BaseException, so a cancelled task is not handed on as a result
+            if isinstance(result, BaseException):
                 self.error_logger.error(
                     "%s task %d failed: %s",
                     operation_name,

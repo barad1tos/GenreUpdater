@@ -310,6 +310,25 @@ class TestGenreManager:
         assert len(results) == 2  # Only successful results
         assert all(result == "success" for result in results)
 
+    @pytest.mark.asyncio
+    async def test_gather_with_error_handling_drops_cancelled_task(self) -> None:
+        """A task cancelled on its own is a failure, not a result handed on for processing."""
+        manager = TestGenreManager.create_manager()
+
+        async def success_task() -> str:
+            """Create a task that succeeds."""
+            return "success"
+
+        async def cancelled_task() -> str:
+            """Create a task that ends cancelled."""
+            raise asyncio.CancelledError
+
+        tasks = [asyncio.create_task(success_task()), asyncio.create_task(cancelled_task())]
+
+        results = await manager.test_gather_with_error_handling(tasks, "test operation")
+
+        assert results == ["success"]
+
     def test_process_batch_results_with_updates(self) -> None:
         """Test processing batch results with updates."""
         updated_tracks: list[TrackDict] = []

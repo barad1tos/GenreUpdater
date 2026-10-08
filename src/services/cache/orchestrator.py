@@ -75,7 +75,8 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         failed_services: list[str] = []
         for (service_name, _), result in zip(service_tasks, results, strict=True):
-            if isinstance(result, Exception):
+            # BaseException, so a cancelled initialization fails startup instead of passing as done
+            if isinstance(result, BaseException):
                 self.logger.error("Failed to initialize %s: %s", LogFormat.entity(service_name), result, exc_info=result)
                 failed_services.append(service_name)
 
@@ -231,7 +232,8 @@ class CacheOrchestrator(CacheServiceProtocol):
         results = await asyncio.gather(*(task for _, task in save_tasks), return_exceptions=True)
 
         for (service_name, _), result in zip(save_tasks, results, strict=True):
-            if isinstance(result, Exception):
+            # BaseException, so a cancelled save is logged instead of lost silently
+            if isinstance(result, BaseException):
                 self.logger.error("Failed to save %s to disk: %s", LogFormat.entity(service_name), result, exc_info=result)
 
         self.logger.info("All caches saved to disk")
