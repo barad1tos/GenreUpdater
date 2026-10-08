@@ -432,8 +432,17 @@ class TestYearRetrieverAllure:
     @pytest.mark.asyncio
     async def test_update_tracks_for_album_records_only_updated_tracks(self, failure: bool | BaseException) -> None:
         """A track whose update failed stays out of the updated tracks and the change log, and keeps its year."""
+
+        async def update_track(*, track_id: str, **_kwargs: object) -> bool:
+            """Fail the track under test by its ID, so the result does not depend on call order."""
+            if track_id != "failed_001":
+                return True
+            if isinstance(failure, BaseException):
+                raise failure
+            return failure
+
         mock_track_processor = MagicMock()
-        mock_track_processor.update_track_async = AsyncMock(side_effect=[True, failure])
+        mock_track_processor.update_track_async = AsyncMock(side_effect=update_track)
         track_updater = TrackUpdater(
             track_processor=mock_track_processor,
             retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
@@ -448,7 +457,8 @@ class TestYearRetrieverAllure:
         await track_updater.update_tracks_for_album(
             "Test Artist",
             "Test Album",
-            album_tracks=[_DummyTrackData.create(track_id="success_001", name="Success 1", year="1999"), failed_track],
+            # The failed track comes first, so recording the first N tracks by count would record it
+            album_tracks=[failed_track, _DummyTrackData.create(track_id="success_001", name="Success 1", year="1999")],
             year="2000",
             updated_tracks=updated_tracks,
             changes_log=changes_log,

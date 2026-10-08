@@ -7,12 +7,15 @@ and that directory validation handles filesystem errors gracefully.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from services.cache.orchestrator import CacheOrchestrator
 from services.dependency_container import DependencyContainer
+from tests.factories import create_test_app_config
 
 
 class TestDependencyContainerShutdown:
@@ -192,6 +195,38 @@ class TestDependencyContainerShutdown:
         # Should not raise — the except (OSError, RuntimeError, asyncio.CancelledError) catches it
         await container.close()
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(OSError("disk full"), id="OSError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_close_warns_when_a_cache_was_not_saved(
+        self,
+        container: DependencyContainer,
+        mock_loggers: tuple[MagicMock, MagicMock, MagicMock, MagicMock],
+        error: BaseException,
+    ) -> None:
+        """A cache that fails to save makes close() warn with its name, and the cache still shuts down."""
+        console_logger, *_ = mock_loggers
+        cache_service = CacheOrchestrator(create_test_app_config(), MagicMock(spec=logging.Logger))
+        container._cache_service = cache_service
+
+        with (
+            patch.object(cache_service.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=error),
+            patch.object(cache_service.api_service, "save_to_disk", new_callable=AsyncMock),
+            patch.object(cache_service.generic_service, "save_to_disk", new_callable=AsyncMock),
+            patch.object(cache_service, "shutdown", new_callable=AsyncMock) as shutdown,
+        ):
+            await container.close()
+
+        shutdown.assert_awaited_once()
+        save_warnings = [warning for warning in console_logger.warning.call_args_list if warning.args[0] == "Failed to save cache: %s"]
+        assert len(save_warnings) == 1
+        assert "AlbumCacheService" in str(save_warnings[0].args[1])
+
 
 class TestLogAppleScriptsDir:
     """Tests for DependencyContainer._log_apple_scripts_dir error paths."""
@@ -231,6 +266,6 @@ class TestLogAppleScriptsDir:
 
         with patch("services.dependency_container.Path") as mock_path_cls:
             mock_path_cls.return_value.is_dir.side_effect = OSError("I/O error")
-            container._log_apple_scripts_dir(mock_client, is_dry_run=False)
+            container._log_apple_scripts_dir(mock_client)
 
         console_logger.exception.assert_called_once()

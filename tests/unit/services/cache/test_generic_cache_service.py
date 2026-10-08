@@ -260,6 +260,29 @@ class TestGenericCacheService:
             assert any(entry["value"] for entry in payload.values())
 
     @pytest.mark.asyncio
+    async def test_save_to_disk_raises_when_write_fails(self, tmp_path: Path) -> None:
+        """A cache file that cannot be written raises, so the orchestrator can report the failed save."""
+        blocker = tmp_path / "not_a_directory"
+        blocker.write_text("", encoding="utf-8")
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=100))
+        service.cache_file = blocker / "generic_cache.json"
+        service.set("persist_key", {"value": "data"}, ttl=60)
+
+        with pytest.raises(OSError):
+            await service.save_to_disk()
+
+    @pytest.mark.asyncio
+    async def test_save_to_disk_raises_when_stale_file_stays(self, tmp_path: Path) -> None:
+        """An empty cache whose old file cannot be removed raises, since the next start would load that stale file."""
+        stale_path = tmp_path / "generic_cache.json"
+        stale_path.mkdir()
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=100))
+        service.cache_file = stale_path
+
+        with pytest.raises(OSError):
+            await service.save_to_disk()
+
+    @pytest.mark.asyncio
     async def test_load_from_disk_restores_entries(self) -> None:
         """Ensure initialize() repopulates cache from existing file."""
         hashed_key = UnifiedHashService.hash_generic_key("abc")

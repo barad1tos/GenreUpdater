@@ -16,6 +16,8 @@ from services.cache.orchestrator import CacheOrchestrator
 from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from core.models.protocols import CacheableValue
     from core.models.track_models import AppConfig
 
@@ -284,6 +286,26 @@ class TestCacheOrchestrator:
         logger.error.assert_called_once()
         # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
         assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
+        assert call("All caches saved to disk") not in logger.info.call_args_list
+
+    @pytest.mark.asyncio
+    async def test_save_all_to_disk_names_every_failed_cache(self, tmp_path: Path) -> None:
+        """Every failed save is logged and named, including the generic cache's own write failure."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
+        blocker = tmp_path / "not_a_directory"
+        blocker.write_text("", encoding="utf-8")
+        orchestrator.generic_service.cache_file = blocker / "generic_cache.json"
+        orchestrator.generic_service.set("persist_key", {"value": "data"}, ttl=60)
+
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=OSError("disk full")),
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock),
+            pytest.raises(RuntimeError, match="AlbumCacheService, GenericCacheService"),
+        ):
+            await orchestrator.save_all_to_disk()
+
+        assert logger.error.call_count == 2
         assert call("All caches saved to disk") not in logger.info.call_args_list
 
     # Backward compatibility tests
