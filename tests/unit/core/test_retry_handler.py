@@ -418,14 +418,21 @@ class TestExecuteWithRetry:
         assert sleep.await_args_list == [call(1.0)]
 
     @pytest.mark.asyncio
-    async def test_negative_max_retries_runs_the_operation_once(self, retry_handler: DatabaseRetryHandler) -> None:
-        """A negative retry count means no retries, not no attempt: the operation still runs once."""
+    async def test_negative_max_retries_runs_the_operation_once(
+        self,
+        *,
+        retry_handler: DatabaseRetryHandler,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A negative retry count means no retries, not no attempt: the operation runs once, and the log counts one attempt."""
         operation = AsyncMock(return_value="success")
 
-        result = await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=-1))
+        with caplog.at_level(logging.DEBUG, logger="test.retry"):
+            result = await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=-1))
 
         assert result == "success"
         operation.assert_awaited_once()
+        assert any("succeeded on attempt 1/1" in record.getMessage() for record in caplog.records)
 
     @pytest.mark.asyncio
     async def test_negative_max_retries_does_not_retry_a_failure(

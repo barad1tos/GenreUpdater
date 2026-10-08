@@ -207,6 +207,8 @@ class DatabaseRetryHandler:
 
         last_error: Exception | None = None
         attempt = 0
+        # A negative max_retries still allows the one attempt the loop always makes
+        attempt_limit = max(retry_policy.max_retries, 0) + 1
 
         while True:
             # Check for total operation timeout
@@ -219,7 +221,7 @@ class DatabaseRetryHandler:
                     "Operation '%s' succeeded on attempt %d/%d (%.2fs elapsed)",
                     operation_id,
                     attempt + 1,
-                    retry_policy.max_retries + 1,
+                    attempt_limit,
                     context.total_elapsed_seconds,
                 )
                 return result
@@ -257,7 +259,7 @@ class DatabaseRetryHandler:
                     "Operation '%s' failed on attempt %d/%d: %s. Retrying in %.2fs...",
                     operation_id,
                     attempt + 1,
-                    retry_policy.max_retries + 1,
+                    attempt_limit,
                     error,
                     delay_seconds,
                 )
