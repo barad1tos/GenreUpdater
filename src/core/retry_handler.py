@@ -187,9 +187,12 @@ class DatabaseRetryHandler:
     ) -> RetryResult:
         """Execute operation with retry logic.
 
-        Calls the operation again after each transient error, waiting the backoff delay
-        between attempts. A non-transient error, the last allowed attempt failing, or the
-        total timeout passing ends the loop with an error.
+        Retries after a ValueError, RuntimeError or OSError that is_transient_error
+        classifies as transient, waiting the backoff delay between attempts; any other
+        exception propagates at once. A non-transient error or a failed last attempt
+        ends the loop with that error. The total timeout is checked before each attempt,
+        so once it has passed no new attempt starts and TimeoutError is raised; a result
+        that arrives after the deadline is still returned.
 
         Args:
             operation: Async callable to execute with retry
