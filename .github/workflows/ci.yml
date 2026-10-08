@@ -56,6 +56,12 @@ jobs:
       - name: Type check
         run: uv run ty check
 
+      # The hook's pydoclint over all of src/, not just staged files, so a pydoclint update that flags
+      # existing docstrings fails its own PR into main. --config turns a missing [tool.pydoclint] into
+      # an error instead of a silent fallback to numpy style, which would pass Google docstrings unchecked
+      - name: Docstring check
+        run: uv run pydoclint --config=pyproject.toml src/
+
       - name: Dead code check
         run: uv run deadcode src/ --no-color
 
