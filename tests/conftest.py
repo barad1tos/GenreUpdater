@@ -68,7 +68,8 @@ def error_logger(request: pytest.FixtureRequest) -> logging.Logger:
 def rich_console_logger(request: pytest.FixtureRequest) -> Iterator[tuple[logging.Logger, io.StringIO]]:
     """Console logger rendered by Rich with markup on, as the app's console is, and the text it printed."""
     output = io.StringIO()
-    handler = RichHandler(console=Console(file=output, width=500), markup=True, show_path=False)
+    # No color system, so FORCE_COLOR in the environment cannot split the printed text with escape codes
+    handler = RichHandler(console=Console(file=output, width=500, color_system=None), markup=True, show_path=False)
     logger = logging.getLogger(f"test.{request.node.name}.rich_console")
     logger.addHandler(handler)
     logger.propagate = False
