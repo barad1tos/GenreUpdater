@@ -63,17 +63,15 @@ class TestRetryOperationContext:
     def test_creation(self) -> None:
         """Test context creation."""
         policy = RetryPolicy()
-        context = RetryOperationContext(operation_id="test_op", policy=policy)
+        context = RetryOperationContext(policy=policy)
 
-        assert context.operation_id == "test_op"
-        assert context.attempt_count == 0
-        assert context.last_error is None
+        assert context.policy is policy
         assert isinstance(context.start_time, datetime)
 
     def test_total_elapsed_seconds(self) -> None:
         """Test elapsed time calculation."""
         policy = RetryPolicy()
-        context = RetryOperationContext(operation_id="test_op", policy=policy)
+        context = RetryOperationContext(policy=policy)
 
         # Should be very small (just created)
         assert context.total_elapsed_seconds >= 0
@@ -82,7 +80,7 @@ class TestRetryOperationContext:
     def test_has_exceeded_timeout_false(self) -> None:
         """Test timeout not exceeded."""
         policy = RetryPolicy(operation_timeout_seconds=300.0)
-        context = RetryOperationContext(operation_id="test_op", policy=policy)
+        context = RetryOperationContext(policy=policy)
 
         assert context.has_exceeded_timeout is False
 
@@ -91,7 +89,6 @@ class TestRetryOperationContext:
         policy = RetryPolicy(operation_timeout_seconds=0.001)
         # Set start time in the past
         context = RetryOperationContext(
-            operation_id="test_op",
             policy=policy,
             start_time=datetime.now(UTC) - timedelta(seconds=10),
         )

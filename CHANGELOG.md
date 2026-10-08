@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - basedpyright and its `[tool.pyright]` configuration; ty is the only type checker, so Pylance and basedpyright fall back to their own defaults, and ty's language server is how an editor shows CI's diagnostics
 - Daemon: `sync-fixtures.sh` (pushes to the protected `main` branch were always rejected)
 - `scripts/sync-diagnostics.sh`: no callers, and it pushed from the legacy daemon clone to the protected `main` branch
-- `DatabaseRetryHandler.async_retry_operation` and the retry metadata only it carried: a context manager cannot re-run its `async with` block, so the first transient error raised `RuntimeError` instead of retrying, and nothing called it; `execute_with_retry` remains the retry API
+- `DatabaseRetryHandler.async_retry_operation`, with `RetryMetadata` and the `RetryOperationContext` fields only its callers could read: it could not retry, because a context manager cannot re-run its `async with` block, so the first transient error raised `RuntimeError`, and only its own tests called it; `execute_with_retry` remains the retry API
 
 ### Fixed
 

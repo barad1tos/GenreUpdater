@@ -38,16 +38,13 @@ class RetryPolicy:
 
 @dataclass
 class RetryOperationContext:
-    """Context information for retry operations.
+    """Timing state of one execute_with_retry call.
 
-    Tracks operation progress and attempt history for one retry loop.
+    Holds the policy and the start time that the total timeout is measured from.
     """
 
-    operation_id: str
     policy: RetryPolicy
     start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
-    attempt_count: int = 0
-    last_error: Exception | None = None
 
     @property
     def total_elapsed_seconds(self) -> float:
@@ -63,8 +60,8 @@ class RetryOperationContext:
 class DatabaseRetryHandler:
     """Advanced retry handler for database operations with intelligent error detection.
 
-    Provides exponential backoff with jitter and transient error classification;
-    execute_with_retry runs an operation through that retry loop.
+    Provides exponential backoff with jitter and transient error classification,
+    which execute_with_retry applies to an operation.
 
     Args:
         logger: Logger instance for retry operation tracking
@@ -189,9 +186,9 @@ class DatabaseRetryHandler:
 
         Retries after a ValueError, RuntimeError or OSError that is_transient_error
         classifies as transient, waiting the backoff delay between attempts; any other
-        exception propagates at once. A non-transient error or a failed last attempt
-        ends the loop with that error. The total timeout is checked only before an
-        attempt starts: past the deadline, TimeoutError replaces the next attempt. An
+        exception propagates at once. A non-transient error, or any error from the last
+        allowed attempt, is re-raised unchanged. The total timeout is checked only before
+        an attempt starts: past the deadline, TimeoutError replaces the next attempt. An
         attempt already running is not interrupted, so its result, or an error that ends
         the loop, comes through unchanged even after the deadline.
 
@@ -211,10 +208,7 @@ class DatabaseRetryHandler:
 
         """
         retry_policy: RetryPolicy = policy or self.database_policy
-        context: RetryOperationContext = RetryOperationContext(
-            operation_id=operation_id,
-            policy=retry_policy,
-        )
+        context: RetryOperationContext = RetryOperationContext(policy=retry_policy)
 
         self.logger.debug(
             "Starting retry operation '%s' with policy: max_retries=%d, base_delay=%.2fs",
@@ -226,8 +220,6 @@ class DatabaseRetryHandler:
         last_error: Exception | None = None
 
         for attempt in range(retry_policy.max_retries + 1):
-            context.attempt_count = attempt + 1
-
             # Check for total operation timeout
             if context.has_exceeded_timeout:
                 self._raise_timeout_error(operation_id, context, retry_policy)
@@ -245,7 +237,6 @@ class DatabaseRetryHandler:
 
             except (ValueError, RuntimeError, OSError) as error:
                 last_error = error
-                context.last_error = error
 
                 # Check if this is the last attempt
                 if attempt >= retry_policy.max_retries:
@@ -305,7 +296,6 @@ class DatabaseRetryHandler:
 
         """
         timeout_error = TimeoutError(f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s")
-        context.last_error = timeout_error
         self.logger.error(
             "Operation '%s' timed out after %.2fs (max: %.2fs)",
             operation_id,
