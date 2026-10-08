@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.models.protocols import AnalyticsProtocol
-from core.models.track_models import TrackDict
+from core.models.track_models import ChangeLogEntry, TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
@@ -421,3 +421,39 @@ class TestYearRetrieverAllure:
         assert len(error_logger.error_messages) == 1
         assert "cancelled_001" in error_logger.error_messages[0]
         assert "CancelledError" in error_logger.error_messages[0]
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            pytest.param(False, id="update-failed"),
+            pytest.param(asyncio.CancelledError(), id="update-cancelled"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_update_tracks_for_album_records_only_updated_tracks(self, failure: bool | BaseException) -> None:
+        """A track whose update failed stays out of the updated tracks and the change log, and keeps its year."""
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(side_effect=[True, failure])
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            config=create_test_app_config(),
+        )
+        failed_track = _DummyTrackData.create(track_id="failed_001", name="Failed 1", year="1999")
+        updated_tracks: list[TrackDict] = []
+        changes_log: list[ChangeLogEntry] = []
+
+        await track_updater.update_tracks_for_album(
+            "Test Artist",
+            "Test Album",
+            album_tracks=[_DummyTrackData.create(track_id="success_001", name="Success 1", year="1999"), failed_track],
+            year="2000",
+            updated_tracks=updated_tracks,
+            changes_log=changes_log,
+        )
+
+        assert [track.id for track in updated_tracks] == ["success_001"]
+        assert [entry.track_id for entry in changes_log] == ["success_001"]
+        assert failed_track.year == "1999"

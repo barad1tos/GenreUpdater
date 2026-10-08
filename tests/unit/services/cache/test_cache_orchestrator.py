@@ -7,7 +7,7 @@ import logging
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from core.models.track_models import TrackDict
@@ -241,8 +241,9 @@ class TestCacheOrchestrator:
 
     @pytest.mark.asyncio
     async def test_save_all_to_disk(self) -> None:
-        """Test that save_all_to_disk saves all services."""
-        orchestrator = self.create_orchestrator()
+        """Test that save_all_to_disk saves all services and reports success."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
 
         with (
             patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album,
@@ -255,6 +256,8 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
+        logger.info.assert_any_call("All caches saved to disk")
+
     @pytest.mark.parametrize(
         "error",
         [
@@ -263,8 +266,8 @@ class TestCacheOrchestrator:
         ],
     )
     @pytest.mark.asyncio
-    async def test_save_all_to_disk_logs_failed_save(self, error: BaseException) -> None:
-        """A save that fails or is cancelled is logged with its exception, and the other caches are still saved."""
+    async def test_save_all_to_disk_reports_failed_save(self, error: BaseException) -> None:
+        """A save that fails or is cancelled is logged and raised to the caller, and the other caches are still saved."""
         logger = MagicMock(spec=logging.Logger)
         orchestrator = CacheOrchestrator(create_test_app_config(), logger)
 
@@ -272,15 +275,16 @@ class TestCacheOrchestrator:
             patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=error),
             patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api,
             patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic,
+            pytest.raises(RuntimeError, match="AlbumCacheService"),
         ):
             await orchestrator.save_all_to_disk()
 
-            mock_api.assert_called_once()
-            mock_generic.assert_called_once()
-
+        mock_api.assert_called_once()
+        mock_generic.assert_called_once()
         logger.error.assert_called_once()
         # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
         assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
+        assert call("All caches saved to disk") not in logger.info.call_args_list
 
     # Backward compatibility tests
 

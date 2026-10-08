@@ -80,16 +80,11 @@ class TrackUpdater:
             )
             return
 
-        successful, _ = await self.update_album_tracks_bulk_async(
-            tracks=tracks_needing_update,
-            year=year,
-            artist=artist,
-            album=album,
-        )
+        updated_ids, _ = await self._apply_year(tracks_needing_update, year=year, artist=artist, album=album)
 
-        if successful > 0:
+        if updated_ids:
             self.record_successful_updates(
-                tracks_needing_update,
+                [track for track in tracks_needing_update if str(track.get("id", "")) in updated_ids],
                 year=year,
                 artist=artist,
                 album=album,
@@ -264,6 +259,29 @@ class TrackUpdater:
             Tuple of (successful_count, failed_count)
 
         """
+        updated_ids, failed = await self._apply_year(tracks, year=year, artist=artist, album=album)
+        return len(updated_ids), failed
+
+    async def _apply_year(
+        self,
+        tracks: list[TrackDict],
+        *,
+        year: str,
+        artist: str,
+        album: str,
+    ) -> tuple[set[str], int]:
+        """Write the year to the tracks in concurrent batches.
+
+        Args:
+            tracks: Tracks to update
+            year: Year to set
+            artist: Artist name for contextual logging
+            album: Album name for contextual logging
+
+        Returns:
+            IDs of the tracks updated, and the number of updates that failed
+
+        """
         # Extract and validate track IDs
         track_ids = [str(track.get("id", "")) for track in tracks if track.get("id")]
         valid_track_ids = self._validate_track_ids(track_ids, artist=artist, album=album)
@@ -274,14 +292,14 @@ class TrackUpdater:
                 album,
                 len(tracks),
             )
-            return 0, len(tracks)
+            return set(), len(tracks)
 
         # Build mapping from track_id to track name for logging
         track_names: dict[str, str] = {str(track.get("id", "")): str(track.get("name", "")) for track in tracks if track.get("id")}
 
         # Process in batches
         batch_size = self.config.apple_script_concurrency
-        successful = 0
+        updated_ids: set[str] = set()
         failed = 0
 
         for i in range(0, len(valid_track_ids), batch_size):
@@ -318,18 +336,18 @@ class TrackUpdater:
                         exc_info=result,
                     )
                 elif result:
-                    successful += 1
+                    updated_ids.add(batch[index])
                 else:
                     failed += 1
 
         # Log summary
         self.console_logger.info(
             "Year update results: %d successful, %d failed",
-            successful,
+            len(updated_ids),
             failed,
         )
 
-        return successful, failed
+        return updated_ids, failed
 
     async def _update_track_with_retry(
         self,
