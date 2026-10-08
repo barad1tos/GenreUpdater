@@ -255,7 +255,7 @@ async def spinner(message: str, console: Console | None = None) -> AsyncGenerato
         console: Optional Rich Console instance (creates new one if not provided)
 
     Yields:
-        AsyncGenerator[Status]: Rich Status object that can be used to update the message
+        Status: Rich Status object that can be used to update the message
 
     Example:
         async with spinner("Fetching all track IDs from Music.app..."):
