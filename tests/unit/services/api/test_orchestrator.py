@@ -241,22 +241,34 @@ class TestExternalApiOrchestratorAllure:
         assert "discogs" in orchestrator.rate_limiters
 
     @pytest.mark.asyncio
-    async def test_get_album_year_logs_search_setup_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A failure while preparing the year search returns no year; the error log and the console both note it, debugging off."""
+    async def test_get_album_year_logs_search_setup_failure(
+        self,
+        *,
+        monkeypatch: pytest.MonkeyPatch,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failure while preparing the year search returns no year; the error log keeps its traceback and the console notes it, debugging off."""
         # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
         year_debugging_off = DebugConfig()
         year_debugging_off.year = False
         monkeypatch.setattr("services.api.orchestrator.debug", year_debugging_off)
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
-        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(side_effect=TypeError("unexpected artist data")))
+        orchestrator.error_logger = error_logger
+        setup_error = TypeError("unexpected artist data")
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(side_effect=setup_error))
 
-        result = await orchestrator.get_album_year("Artist", "Album")
+        with caplog.at_level(logging.ERROR, logger=error_logger.name):
+            result = await orchestrator.get_album_year("Artist", "Album")
 
         assert result == (None, False, 0, {})
-        error_logger = orchestrator.error_logger
-        assert isinstance(error_logger, MockLogger)
-        assert len(error_logger.exception_messages) == 1
-        assert "'Artist - Album'" in error_logger.exception_messages[0]
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        assert "'Artist - Album'" in error_records[0].getMessage()
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is setup_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
         console_logger = orchestrator.console_logger
         assert isinstance(console_logger, MockLogger)
         assert len(console_logger.warning_messages) == 1
@@ -264,18 +276,30 @@ class TestExternalApiOrchestratorAllure:
         assert "TypeError" in console_logger.warning_messages[0]
 
     @pytest.mark.asyncio
-    async def test_get_album_year_warns_on_search_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A failure while fetching releases is noted on the console as well as in the error log."""
+    async def test_get_album_year_warns_on_search_failure(
+        self,
+        *,
+        monkeypatch: pytest.MonkeyPatch,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failure while fetching releases is noted on the console, and the error log keeps its traceback."""
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        orchestrator.error_logger = error_logger
+        search_error = TimeoutError("search timed out")
         monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=("artist", "album", "Artist", "Album", None)))
-        monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=TimeoutError("search timed out")))
+        monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=search_error))
 
-        result = await orchestrator.get_album_year("Artist", "Album")
+        with caplog.at_level(logging.ERROR, logger=error_logger.name):
+            result = await orchestrator.get_album_year("Artist", "Album")
 
         assert result == (None, False, 0, {})
-        error_logger = orchestrator.error_logger
-        assert isinstance(error_logger, MockLogger)
-        assert len(error_logger.exception_messages) == 1
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is search_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
         console_logger = orchestrator.console_logger
         assert isinstance(console_logger, MockLogger)
         lookup_warnings = [message for message in console_logger.warning_messages if "Year lookup failed" in message]
