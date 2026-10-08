@@ -244,7 +244,7 @@ class TestDiscogsClientAllure:
 
     @pytest.mark.asyncio
     async def test_failed_master_fetch_is_not_cached(self) -> None:
-        """A failed master request leaves the cache alone, so the next run asks for the master again."""
+        """A failed master request leaves the cache alone, so a later lookup of the master asks again."""
         mock_cache_service = MagicMock()
         mock_cache_service.get_async = AsyncMock(return_value=None)
         mock_cache_service.set_async = AsyncMock()
@@ -253,8 +253,50 @@ class TestDiscogsClientAllure:
         assert await client._fetch_master_release_year(4242) is None
         mock_cache_service.set_async.assert_not_called()
 
+    @staticmethod
+    def create_pressing(release_id: int, master_id: int | None) -> DiscogsRelease:
+        """Create one 'Test Artist - Test Album' search result that scoring keeps."""
+        return {
+            "id": release_id,
+            "title": "Test Artist - Test Album",
+            "year": 2020,
+            "type": "release",
+            "formats": [],
+            "genre": [],
+            "style": [],
+            "label": [],
+            "resource_url": "",
+            "uri": "",
+            "master_id": master_id,
+            "master_url": None,
+        }
+
     @pytest.mark.asyncio
-    async def test_master_without_year_is_cached_as_no_year(self) -> None:
+    async def test_release_outside_any_master_skips_master_fetch(self) -> None:
+        """Discogs gives master_id 0 to a release outside any master, so no master is requested for it."""
+        mock_api_request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        pressing = TestDiscogsClientAllure.create_pressing(1, master_id=0)
+
+        scored = await client._process_discogs_results([pressing], "test artist", "test album", artist_region=None, reissue_keywords=[])
+
+        assert len(scored) == 1
+        mock_api_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_master_is_requested_once_per_search(self) -> None:
+        """Pressings that share a master ask for it once per search, even though a failed fetch caches nothing."""
+        mock_api_request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+        pressings = [TestDiscogsClientAllure.create_pressing(release_id, master_id=654321) for release_id in (1, 2, 3)]
+
+        scored = await client._process_discogs_results(pressings, "test artist", "test album", artist_region=None, reissue_keywords=[])
+
+        assert len(scored) == 3
+        assert [call.args[1] for call in mock_api_request.call_args_list] == ["https://api.discogs.com/masters/654321"]
+
+    @pytest.mark.asyncio
+    async def test_yearless_master_is_cached(self) -> None:
         """A master that answers without a year is still cached as NO_YEAR."""
         mock_cache_service = MagicMock()
         mock_cache_service.get_async = AsyncMock(return_value=None)
@@ -482,6 +524,7 @@ class TestDiscogsClientAllure:
             reissue_keywords=[],
             detail_fetch_count=0,
             detail_fetch_limit=10,
+            master_years={},
         )
 
         assert scored is None

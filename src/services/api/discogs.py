@@ -185,7 +185,7 @@ class DiscogsClient(BaseApiClient):
             master_id: Discogs master release ID
 
         Returns:
-            Original release year or None if fetch fails
+            Original release year, or None when the master has no year or the request failed
 
         """
         # Check cache first (including negative results)
@@ -207,7 +207,7 @@ class DiscogsClient(BaseApiClient):
 
             master_data = await self._make_api_request("discogs", master_url, params=params)
             if not master_data:
-                # A failed request says nothing about the master; leave the cache alone so the next run asks again
+                # A failed request says nothing about the master; leave the cache alone so a later lookup of it asks again
                 return None
 
             cache_ttl = self.cache_ttl_days * 86400
@@ -686,6 +686,7 @@ class DiscogsClient(BaseApiClient):
         reissue_keywords: list[str],
         detail_fetch_count: int,
         detail_fetch_limit: int,
+        master_years: dict[int, int | None],
     ) -> tuple[ScoredRelease | None, int]:
         """Process a single Discogs search result item.
 
@@ -697,6 +698,7 @@ class DiscogsClient(BaseApiClient):
             reissue_keywords: Keywords to detect reissues
             detail_fetch_count: Current number of detail fetches performed
             detail_fetch_limit: Maximum number of detail fetches allowed
+            master_years: Master years this search already fetched, by master ID; filled in here
 
         Returns:
             Tuple of (scored_release or None, updated_detail_fetch_count)
@@ -720,10 +722,13 @@ class DiscogsClient(BaseApiClient):
         is_reissue = any(keyword.lower() in title_lower for keyword in reissue_keywords)
 
         # Fetch master release year if available (analogous to MusicBrainz release-group first-release-date)
+        # Discogs gives master_id 0 to a release outside any master. Pressings of one album share their master, and a
+        # failed fetch caches nothing, so each master is asked for once per search
         master_year: int | None = None
-        master_id = item.get("master_id")
-        if master_id is not None:
-            master_year = await self._fetch_master_release_year(master_id)
+        if master_id := item.get("master_id"):
+            if master_id not in master_years:
+                master_years[master_id] = await self._fetch_master_release_year(master_id)
+            master_year = master_years[master_id]
 
         # Create and return scored release
         scored_release = self._create_scored_release(
@@ -763,6 +768,7 @@ class DiscogsClient(BaseApiClient):
         scored_releases: list[ScoredRelease] = []
         detail_fetch_count = 0
         detail_fetch_limit = 10
+        master_years: dict[int, int | None] = {}
 
         for item in results:
             scored_release, detail_fetch_count = await self._process_single_discogs_item(
@@ -773,6 +779,7 @@ class DiscogsClient(BaseApiClient):
                 reissue_keywords=reissue_keywords,
                 detail_fetch_count=detail_fetch_count,
                 detail_fetch_limit=detail_fetch_limit,
+                master_years=master_years,
             )
 
             if scored_release:
