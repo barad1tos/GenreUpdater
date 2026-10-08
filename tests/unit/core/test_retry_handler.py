@@ -1,7 +1,8 @@
 """Tests for retry handler with exponential backoff."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +11,21 @@ from core.retry_handler import (
     RetryOperationContext,
     RetryPolicy,
 )
+
+
+class SteppingClock:
+    """Stand-in for the retry handler's datetime that moves only when a test advances it."""
+
+    def __init__(self) -> None:
+        self.current = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def now(self, _tz: tzinfo | None = None) -> datetime:
+        """Return the current fake time."""
+        return self.current
+
+    def advance(self, seconds: float) -> None:
+        """Move the fake time forward."""
+        self.current += timedelta(seconds=seconds)
 
 
 @pytest.fixture
@@ -22,6 +38,14 @@ def logger() -> logging.Logger:
 def retry_handler(logger: logging.Logger) -> DatabaseRetryHandler:
     """Create a DatabaseRetryHandler instance."""
     return DatabaseRetryHandler(logger)
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> SteppingClock:
+    """Replace the clock the retry handler reads, so a test decides when the deadline passes."""
+    stepping_clock = SteppingClock()
+    monkeypatch.setattr("core.retry_handler.datetime", stepping_clock)
+    return stepping_clock
 
 
 class TestRetryPolicy:
@@ -226,6 +250,99 @@ class TestExecuteWithRetry:
 
         result = await retry_handler.execute_with_retry(operation, "test_op")
         assert result == "success"
+
+    @pytest.mark.asyncio
+    async def test_transient_error_is_retried_after_backoff_delay(
+        self,
+        retry_handler: DatabaseRetryHandler,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A transient error is retried after the backoff delay for that attempt."""
+        policy = RetryPolicy(max_retries=2)
+        sleep = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", sleep)
+        operation = AsyncMock(side_effect=[OSError("connection reset"), "success"])
+
+        result = await retry_handler.execute_with_retry(operation, "test_op", policy)
+
+        assert result == "success"
+        assert operation.await_count == 2
+        sleep.assert_awaited_once_with(DatabaseRetryHandler.calculate_delay_seconds(0, policy))
+
+    @pytest.mark.asyncio
+    async def test_last_attempt_error_is_reraised_unchanged(self, retry_handler: DatabaseRetryHandler) -> None:
+        """When every attempt fails, the last attempt's error is re-raised as it was."""
+        error = OSError("connection reset")
+        operation = AsyncMock(side_effect=error)
+
+        with pytest.raises(OSError, match="connection reset") as raised:
+            await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=2, base_delay_seconds=0.0))
+
+        assert raised.value is error
+        assert operation.await_count == 3
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(ValueError("invalid value"), id="non-transient"),
+            pytest.param(LookupError("connection reset"), id="type-never-retried"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_error_propagates_without_retry(self, retry_handler: DatabaseRetryHandler, error: Exception) -> None:
+        """A non-transient error, or an exception other than ValueError, RuntimeError and OSError, propagates after one call."""
+        operation = AsyncMock(side_effect=error)
+
+        with pytest.raises(type(error), match=str(error)) as raised:
+            await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=2, base_delay_seconds=0.0))
+
+        assert raised.value is error
+        assert operation.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_timeout_replaces_next_attempt(self, retry_handler: DatabaseRetryHandler, clock: SteppingClock) -> None:
+        """Once the deadline has passed, TimeoutError is raised instead of starting the next attempt."""
+
+        async def slow_transient_failure() -> str:
+            """Fail transiently after the deadline has passed."""
+            clock.advance(11)
+            raise OSError("connection reset")
+
+        operation = AsyncMock(side_effect=slow_transient_failure)
+        policy = RetryPolicy(max_retries=2, base_delay_seconds=0.0, operation_timeout_seconds=10.0)
+
+        with pytest.raises(TimeoutError, match="exceeded total timeout"):
+            await retry_handler.execute_with_retry(operation, "test_op", policy)
+
+        assert operation.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_running_attempt_keeps_result_after_deadline(self, retry_handler: DatabaseRetryHandler, clock: SteppingClock) -> None:
+        """An attempt that finishes after the deadline still returns its result."""
+
+        async def slow_success() -> str:
+            """Succeed after the deadline has passed."""
+            clock.advance(11)
+            return "late success"
+
+        result = await retry_handler.execute_with_retry(slow_success, "test_op", RetryPolicy(operation_timeout_seconds=10.0))
+
+        assert result == "late success"
+
+    @pytest.mark.asyncio
+    async def test_running_attempt_keeps_error_after_deadline(self, retry_handler: DatabaseRetryHandler, clock: SteppingClock) -> None:
+        """An error that ends the loop comes through unchanged even after the deadline."""
+        error = ValueError("invalid value")
+
+        async def slow_failure() -> str:
+            """Fail with a non-transient error after the deadline has passed."""
+            clock.advance(11)
+            raise error
+
+        with pytest.raises(ValueError, match="invalid value") as raised:
+            await retry_handler.execute_with_retry(slow_failure, "test_op", RetryPolicy(operation_timeout_seconds=10.0))
+
+        assert raised.value is error
 
 
 class TestDatabaseRetryHandlerInit:
