@@ -1,54 +1,23 @@
 """Database retry handler with exponential backoff and transient error detection.
 
-This module provides sophisticated retry mechanisms for database operations
-with intelligent error classification and adaptive delay strategies.
+This module retries async operations with exponential backoff,
+classifying errors so that only transient ones are retried.
 """
 
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TypedDict, TypeVar, cast, TYPE_CHECKING
+from typing import TypeVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
+    from collections.abc import Awaitable, Callable
     import logging
 
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")
-
-
-class RetryMetadata(TypedDict, total=False):
-    """Type definition for retry operation metadata.
-
-    Defines the structure of metadata that can be stored
-    in RetryOperationContext for tracking and debugging.
-    """
-
-    # Database operation metadata
-    table: str  # Database table name
-
-    # Timing metadata
-    timestamp: str  # ISO format timestamp
-
-    # Music metadata fields
-    expected_year: str  # Release year as string
-    track_count: str  # Number of tracks as string
-
-    # Generic fields for extensibility
-    operation_type: str  # Type of operation being retried
-    source: str  # Data source identifier
-    reason: str  # Reason for retry or operation
-
-
-def _create_empty_metadata() -> RetryMetadata:
-    """Create an empty RetryMetadata dict for default_factory."""
-    # Two-step cast: dict -> object -> RetryMetadata (TypedDict)
-    # Empty dict is valid for RetryMetadata since all fields are optional (total=False)
-    return cast(RetryMetadata, cast(object, {}))
 
 
 @dataclass
@@ -69,18 +38,13 @@ class RetryPolicy:
 
 @dataclass
 class RetryOperationContext:
-    """Context information for retry operations.
+    """Timing state of one execute_with_retry call.
 
-    Tracks operation progress, attempt history, and metadata
-    for comprehensive retry operation management.
+    Holds the policy and the start time that the total timeout is measured from.
     """
 
-    operation_id: str
     policy: RetryPolicy
     start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
-    attempt_count: int = 0
-    last_error: Exception | None = None
-    metadata: RetryMetadata = field(default_factory=_create_empty_metadata)
 
     @property
     def total_elapsed_seconds(self) -> float:
@@ -96,8 +60,8 @@ class RetryOperationContext:
 class DatabaseRetryHandler:
     """Advanced retry handler for database operations with intelligent error detection.
 
-    Provides exponential backoff with jitter, transient error classification,
-    and comprehensive retry context management for reliable database operations.
+    Provides exponential backoff with jitter and transient error classification,
+    which execute_with_retry applies to an operation.
 
     Args:
         logger: Logger instance for retry operation tracking
@@ -212,107 +176,6 @@ class DatabaseRetryHandler:
 
         return final_delay
 
-    @asynccontextmanager
-    async def async_retry_operation(
-        self,
-        operation_id: str,
-        policy: RetryPolicy | None = None,
-    ) -> AsyncGenerator[RetryOperationContext]:
-        """Async context manager for retry operations with comprehensive tracking.
-
-        Provides retry context with operation tracking, error handling,
-        and automatic retry logic for database operations.
-
-        Args:
-            operation_id: Unique identifier for the operation
-            policy: Retry policy to use (defaults to database_policy)
-
-        Yields:
-            RetryOperationContext: Context for tracking retry progress
-
-        Raises:
-            OSError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-            RuntimeError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-            ValueError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-
-        Example:
-            async with retry_handler.async_retry_operation("db_read") as ctx:
-                ctx.metadata["table"] = "tracks"
-                result = await database_operation()
-
-        """
-        retry_policy: RetryPolicy = policy or self.database_policy
-        context: RetryOperationContext = RetryOperationContext(
-            operation_id=operation_id,
-            policy=retry_policy,
-        )
-
-        self.logger.debug(
-            "Starting retry operation '%s' with policy: max_retries=%d, base_delay=%.2fs",
-            operation_id,
-            retry_policy.max_retries,
-            retry_policy.base_delay_seconds,
-        )
-
-        for attempt in range(retry_policy.max_retries + 1):
-            context.attempt_count = attempt + 1
-
-            try:
-                # Check for total operation timeout
-                if context.has_exceeded_timeout:
-                    self._raise_timeout_error(operation_id, context, retry_policy)
-
-                # Yield context for operation execution
-                yield context
-
-            except (ValueError, RuntimeError, OSError) as error:
-                context.last_error = error
-
-                # Check if this is the last attempt
-                if attempt >= retry_policy.max_retries:
-                    self.logger.exception(
-                        "Operation '%s' failed permanently after %d attempts (%.2fs elapsed)",
-                        operation_id,
-                        attempt + 1,
-                        context.total_elapsed_seconds,
-                    )
-                    raise
-
-                # Check if error is worth retrying
-                if not self.is_transient_error(error):
-                    self.logger.warning(
-                        "Operation '%s' failed with non-transient error: %s",
-                        operation_id,
-                        error,
-                    )
-                    raise
-
-                # Calculate delay for next attempt
-                delay_seconds: float = DatabaseRetryHandler.calculate_delay_seconds(attempt, retry_policy)
-
-                self.logger.warning(
-                    "Operation '%s' failed on attempt %d/%d: %s. Retrying in %.2fs...",
-                    operation_id,
-                    attempt + 1,
-                    retry_policy.max_retries + 1,
-                    error,
-                    delay_seconds,
-                )
-
-                # Wait before retry
-                await asyncio.sleep(delay_seconds)
-
-            else:
-                # If we reach here, operation succeeded
-                self.logger.debug(
-                    "Operation '%s' succeeded on attempt %d/%d (%.2fs elapsed)",
-                    operation_id,
-                    attempt + 1,
-                    retry_policy.max_retries + 1,
-                    context.total_elapsed_seconds,
-                )
-                return
-
     async def execute_with_retry(
         self,
         operation: Callable[[], Awaitable[RetryResult]],
@@ -321,7 +184,13 @@ class DatabaseRetryHandler:
     ) -> RetryResult:
         """Execute operation with retry logic.
 
-        Implements retry loop directly for reliable async operation retry.
+        Retries after a ValueError, RuntimeError or OSError that is_transient_error
+        classifies as transient, waiting the backoff delay between attempts; any other
+        exception propagates at once. A non-transient error, or any error from the last
+        allowed attempt, is re-raised unchanged. The total timeout is checked only before
+        an attempt starts: past the deadline, TimeoutError replaces the next attempt. An
+        attempt already running is not interrupted, so its result, or an error that ends
+        the loop, comes through unchanged even after the deadline.
 
         Args:
             operation: Async callable to execute with retry
@@ -339,10 +208,7 @@ class DatabaseRetryHandler:
 
         """
         retry_policy: RetryPolicy = policy or self.database_policy
-        context: RetryOperationContext = RetryOperationContext(
-            operation_id=operation_id,
-            policy=retry_policy,
-        )
+        context: RetryOperationContext = RetryOperationContext(policy=retry_policy)
 
         self.logger.debug(
             "Starting retry operation '%s' with policy: max_retries=%d, base_delay=%.2fs",
@@ -354,8 +220,6 @@ class DatabaseRetryHandler:
         last_error: Exception | None = None
 
         for attempt in range(retry_policy.max_retries + 1):
-            context.attempt_count = attempt + 1
-
             # Check for total operation timeout
             if context.has_exceeded_timeout:
                 self._raise_timeout_error(operation_id, context, retry_policy)
@@ -373,7 +237,6 @@ class DatabaseRetryHandler:
 
             except (ValueError, RuntimeError, OSError) as error:
                 last_error = error
-                context.last_error = error
 
                 # Check if this is the last attempt
                 if attempt >= retry_policy.max_retries:
@@ -433,7 +296,6 @@ class DatabaseRetryHandler:
 
         """
         timeout_error = TimeoutError(f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s")
-        context.last_error = timeout_error
         self.logger.error(
             "Operation '%s' timed out after %.2fs (max: %.2fs)",
             operation_id,
