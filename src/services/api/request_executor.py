@@ -222,19 +222,15 @@ class ApiRequestExecutor:
             return None
 
         if isinstance(cached_response, dict):
-            if cached_response != {}:
+            if cached_response:
                 self.console_logger.debug(
                     "Using cached response for %s request to %s",
                     api_name,
                     url,
                 )
                 return cached_response
-            self.console_logger.debug(
-                "Cached empty response for %s request to %s",
-                api_name,
-                url,
-            )
-            return {}  # Return empty dict to signal "no result but cached"
+            # Earlier versions stored a failed request as {}; ask the API again so those records heal
+            return None
 
         self.console_logger.warning(
             "Unexpected cached response type for %s request to %s: %s",
@@ -250,13 +246,11 @@ class ApiRequestExecutor:
         cache_key: str,
         result: dict[str, Any] | None,
     ) -> None:
-        """Cache the API response."""
+        """Cache the API response; a failed request (None) is not cached, so the next lookup asks the API again."""
+        if result is None:
+            return
         cache_ttl_seconds = self.cache_ttl_days * 86400
-        await self.cache_service.set_async(
-            cache_key,
-            result if result is not None else {},
-            ttl=cache_ttl_seconds,
-        )
+        await self.cache_service.set_async(cache_key, result, ttl=cache_ttl_seconds)
 
     def _prepare_request(
         self,

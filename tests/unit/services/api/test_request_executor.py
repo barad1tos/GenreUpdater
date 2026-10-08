@@ -15,6 +15,7 @@ from services.api.request_executor import (
     WAIT_TIME_LOG_THRESHOLD,
     ApiRequestExecutor,
 )
+from tests.mocks.protocol_mocks import MockCacheService
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
@@ -225,17 +226,17 @@ class TestCheckCache:
         assert result == cached_data
 
     @pytest.mark.asyncio
-    async def test_check_cache_empty_dict(
+    async def test_check_cache_treats_empty_dict_as_miss(
         self,
         executor: ApiRequestExecutor,
         mock_cache_service: AsyncMock,
     ) -> None:
-        """Test cached empty dict is returned."""
+        """A cached {} is a failed request stored by an earlier version, so the API is asked again."""
         mock_cache_service.get_async.return_value = {}
 
         result = await executor._check_cache("key", "api", "url")
 
-        assert result == {}
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_check_cache_invalid_type_invalidates(
@@ -272,16 +273,64 @@ class TestCacheResult:
         assert args[1]["ttl"] == 86400  # 1 day in seconds
 
     @pytest.mark.asyncio
-    async def test_cache_result_none_as_empty_dict(
+    async def test_cache_result_skips_failed_request(
         self,
         executor: ApiRequestExecutor,
         mock_cache_service: AsyncMock,
     ) -> None:
-        """Test caching None stores empty dict."""
+        """A failed request is not cached, so the next lookup reaches the API."""
         await executor._cache_result("key", None)
 
-        args = mock_cache_service.set_async.call_args
-        assert args[0][1] == {}
+        mock_cache_service.set_async.assert_not_called()
+
+
+class TestFailedRequestCaching:
+    """A failed request must not reach the cache, and a {} record from an earlier version must not hide the API."""
+
+    @pytest.fixture
+    def mock_cache_service(self) -> MockCacheService:
+        """Back the executor with the dict-backed cache fake, so a test sees what execute_request stored."""
+        return MockCacheService()
+
+    @pytest.mark.asyncio
+    async def test_failed_request_is_asked_again(
+        self,
+        executor: ApiRequestExecutor,
+        mock_session: MagicMock,
+        mock_cache_service: MockCacheService,
+    ) -> None:
+        """A failed request leaves nothing in the cache, so the next call reaches the API and caches its answer."""
+        executor.set_session(mock_session)
+        url = "https://api.discogs.com/database/search"
+        answer = {"results": [{"title": "Album"}]}
+
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[None, answer]) as request:
+            assert await executor.execute_request("discogs", url) is None
+            assert mock_cache_service.storage == {}
+            assert await executor.execute_request("discogs", url) == answer
+
+        assert request.await_count == 2
+        assert list(mock_cache_service.storage.values()) == [answer]
+
+    @pytest.mark.asyncio
+    async def test_empty_record_from_earlier_version_heals(
+        self,
+        executor: ApiRequestExecutor,
+        mock_session: MagicMock,
+        mock_cache_service: MockCacheService,
+    ) -> None:
+        """A {} record is asked again: a new failure leaves it as it is, and a real answer replaces it."""
+        executor.set_session(mock_session)
+        url = "https://musicbrainz.org/ws/2/release-group"
+        mock_cache_service.storage[executor._build_cache_key("musicbrainz", url, None)] = {}
+        no_matches = {"count": 0, "release-groups": []}
+
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[None, no_matches]):
+            assert await executor.execute_request("musicbrainz", url) is None
+            assert list(mock_cache_service.storage.values()) == [{}]
+            assert await executor.execute_request("musicbrainz", url) == no_matches
+
+        assert list(mock_cache_service.storage.values()) == [no_matches]
 
 
 class TestBuildLogUrl:
