@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 import pytest
 from core.tracks.genre_manager import GenreManager
-from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
 from core.models.protocols import AnalyticsProtocol
 
@@ -60,21 +59,6 @@ class TestGenrePipelineIntegration:
             tracks.append(track)
         return tracks
 
-    @staticmethod
-    def create_mock_api_orchestrator(
-        fallback_responses: list[tuple[str | None, bool, int]] | None,
-    ) -> MagicMock:
-        """Create a mock API orchestrator with fallback behavior."""
-        mock_orchestrator = MagicMock(spec=ExternalApiOrchestrator)
-
-        if fallback_responses:
-            mock_orchestrator.get_album_year = AsyncMock(side_effect=fallback_responses)
-        else:
-            # Default successful response
-            mock_orchestrator.get_album_year = AsyncMock(return_value=("2020", True, 85))
-
-        return mock_orchestrator
-
     @pytest.mark.asyncio
     async def test_genre_pipeline_full_flow(self) -> None:
         """Test complete genre pipeline execution with multiple artists and tracks."""
@@ -121,39 +105,27 @@ class TestGenrePipelineIntegration:
         unique_artists = {track.artist for track in tracks}
         assert len(unique_artists) == 3
 
-    # noinspection PyUnusedLocal
     @pytest.mark.asyncio
-    async def test_genre_pipeline_api_fallback(self) -> None:
-        """Test API fallback chain during genre pipeline execution."""
+    async def test_genre_pipeline_leaves_artist_without_genre(self) -> None:
+        """An artist whose tracks carry no genre at all gets no update, and the pipeline still finishes."""
         tracks_data = [
             {"id": "1", "name": "Song 1", "artist": "Rare Artist", "album": "Rare Album", "genre": "", "date_added": "2024-01-01 10:00:00"},
             {"id": "2", "name": "Song 2", "artist": "Rare Artist", "album": "Rare Album", "genre": "", "date_added": "2024-01-01 11:00:00"},
         ]
 
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
-
-        # Mock API fallback scenario: MB fails, Discogs fails, LastFM succeeds
-        mock_orchestrator = TestGenrePipelineIntegration.create_mock_api_orchestrator(
-            [
-                (None, False, 0),  # MusicBrainz fails
-                (None, False, 0),  # Discogs fails
-                ("2019", True, 85),  # LastFM succeeds
-            ]
-        )
-        del mock_orchestrator  # Created for demonstration but not used in current test
-
         track_processor = create_mock_track_processor()
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
-        # Note: This test focuses on genre pipeline integration
-        # The actual API fallback logic is in Year Retrieval Pipeline
-        # Here we test that genre pipeline continues when API calls are involved
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
-        # Genre pipeline should continue processing even with API issues
-        assert isinstance(updated_tracks, list)
-        assert isinstance(change_logs, list)
 
+        assert updated_tracks == []
+        assert change_logs == []
         # Neither track has a genre, so there is no dominant genre to propagate
         track_processor.update_track_async.assert_not_called()
+        # Skipped, not crashed: the artist gather turns an exception into an error log
+        error_logger = genre_manager.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert error_logger.error_messages == []
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_cache_usage(self) -> None:

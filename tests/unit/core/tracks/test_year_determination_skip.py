@@ -18,11 +18,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import MockExternalApiService
 from tests.unit.core.tracks.conftest import create_test_track
 
 from core.models.protocols import (
     CacheServiceProtocol,
-    ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
 from core.tracks.year_consistency import YearConsistencyChecker
@@ -42,13 +42,6 @@ def _create_mock_cache_service() -> MagicMock:
     service.get_album_year_entry_from_cache = AsyncMock(return_value=None)
     service.store_album_year_in_cache = AsyncMock()
     return service
-
-
-def _create_mock_external_api() -> MagicMock:
-    """Create a mock external API service."""
-    api = MagicMock()
-    api.get_album_year = AsyncMock(return_value=(None, False, 0))
-    return api
 
 
 def _create_mock_pending_verification() -> MagicMock:
@@ -78,7 +71,6 @@ def _create_mock_fallback_handler() -> MagicMock:
 def _create_year_determinator(
     *,
     cache_service: MagicMock | None = None,
-    external_api: MagicMock | None = None,
     pending_verification: MagicMock | None = None,
     consistency_checker: MagicMock | None = None,
     fallback_handler: MagicMock | None = None,
@@ -88,7 +80,7 @@ def _create_year_determinator(
     # Cast through object to satisfy type checker for mock objects
     return YearDeterminator(
         cache_service=cast(CacheServiceProtocol, cast(object, cache_service or _create_mock_cache_service())),
-        external_api=cast(ExternalApiServiceProtocol, cast(object, external_api or _create_mock_external_api())),
+        external_api=MockExternalApiService(),
         pending_verification=cast(PendingVerificationServiceProtocol, cast(object, pending_verification or _create_mock_pending_verification())),
         consistency_checker=cast(YearConsistencyChecker, consistency_checker or _create_mock_consistency_checker()),
         fallback_handler=cast(YearFallbackHandler, fallback_handler or _create_mock_fallback_handler()),

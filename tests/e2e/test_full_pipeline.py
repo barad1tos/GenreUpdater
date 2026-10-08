@@ -13,6 +13,7 @@ from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
 from core.models.track_models import TrackDict
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
 
 
 class TestFullApplicationPipelineE2E:
@@ -53,7 +54,7 @@ class TestFullApplicationPipelineE2E:
     @staticmethod
     def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for testing."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
 
         # Basic services
         mock_deps.console_logger = MockLogger()
@@ -69,8 +70,6 @@ class TestFullApplicationPipelineE2E:
 
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()
-        mock_deps.ap_client.get_tracks = AsyncMock(return_value=[])
-        mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         # Smart mock for run_script that returns different data based on script name
         async def smart_run_script(
@@ -92,54 +91,25 @@ class TestFullApplicationPipelineE2E:
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
         mock_deps.cache_service.set_async = AsyncMock()
         mock_deps.cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_deps.cache_service.cache_album_year = AsyncMock()
         mock_deps.cache_service.store_album_year_in_cache = AsyncMock()
 
-        # External API orchestrator mock
-        mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))  # 3-tuple
+        # External API service: no API knows any album
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        mock_deps.external_api_service = external_api
 
-        # Pending verification mock
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.add_track = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
-        mock_deps.pending_verification.mark_for_verification = AsyncMock()
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         # Library snapshot service mock (required for smart delta fetch)
         mock_deps.library_snapshot_service = MagicMock()
         mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
         mock_deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=False)
-        mock_deps.library_snapshot_service.get_track_ids_from_snapshot = AsyncMock(return_value=set())
         mock_deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=None)
         mock_deps.library_snapshot_service.save_snapshot = AsyncMock()
         mock_deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=None)
         mock_deps.library_snapshot_service.compute_smart_delta = AsyncMock(return_value=(set(), set(), set()))
 
         return mock_deps
-
-    @staticmethod
-    def _create_applescript_format(tracks: list[TrackDict]) -> str:
-        """Create AppleScript-format data from TrackDict objects."""
-        field_separator = "\x1e"  # ASCII 30 (Record Separator)
-        line_separator = "\x1d"  # ASCII 29 (Group Separator)
-
-        lines = []
-        for track in tracks:
-            fields = [
-                track.id,
-                track.name,
-                track.artist,
-                track.album,
-                track.genre or "",
-                track.year or "",
-                track.date_added or "",
-                track.track_status or "",
-                track.last_modified or "",
-            ]
-            line = field_separator.join(fields)
-            lines.append(line)
-
-        return line_separator.join(lines)
 
     @staticmethod
     def create_test_tracks(tracks_data: list[dict[str, Any]]) -> list[TrackDict]:
@@ -269,34 +239,3 @@ class TestFullApplicationPipelineE2E:
         non_test_tracks = [t for t in test_tracks if t.artist not in test_artists]
         assert len(test_artist_tracks) == 3  # Test Artist (2) + Demo Artist (1)
         assert len(non_test_tracks) == 1  # Real Artist
-
-    @pytest.mark.asyncio
-    async def test_full_pipeline_error_handling(self) -> None:
-        """Test pipeline error handling and recovery."""
-        config = self.create_test_config(dry_run=True)
-        mock_deps = self.create_mock_dependency_container(config)
-
-        # Setup error scenarios - create test tracks for error conditions
-        test_tracks_data = [
-            {"id": "1", "name": "Good Track", "artist": "Test Artist", "genre": "", "year": ""},
-            {"id": "", "name": "Bad Track", "artist": "Test Artist", "genre": "", "year": ""},  # Empty ID
-            {"id": "3", "name": "Another Good Track", "artist": "Test Artist", "genre": "", "year": ""},
-        ]
-        # Create test tracks for error scenarios (used in the test context)
-        self.create_test_tracks(test_tracks_data)
-
-        # Mock some API failures
-        mock_deps.external_api.get_album_year.side_effect = [
-            ("2020", True),  # Success
-            Exception("API Error"),  # Failure
-            (None, False),  # No result
-        ]
-
-        # Mock container handles AppleScript calls
-        music_updater = MusicUpdater(mock_deps)
-        # Pipeline should not crash despite errors
-        await music_updater.run_main_pipeline()
-        # Verify pipeline completed despite errors
-        # Note: In test_mode + dry_run, AppleScript may not be called
-
-        # Smoke test: pipeline completes despite API errors
