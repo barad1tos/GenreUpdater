@@ -240,7 +240,7 @@ class TestExternalApiOrchestratorAllure:
 
     @pytest.mark.asyncio
     async def test_get_album_year_logs_search_setup_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A failure while preparing the year search returns no year and is logged even with year debugging off."""
+        """A failure while preparing the year search returns no year; the error log and the console both note it, debugging off."""
         # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
         year_debugging_off = DebugConfig()
         year_debugging_off.year = False
@@ -255,3 +255,8 @@ class TestExternalApiOrchestratorAllure:
         assert isinstance(error_logger, MockLogger)
         assert len(error_logger.exception_messages) == 1
         assert "'Artist - Album'" in error_logger.exception_messages[0]
+        console_logger = orchestrator.console_logger
+        assert isinstance(console_logger, MockLogger)
+        assert len(console_logger.warning_messages) == 1
+        assert "'Artist - Album'" in console_logger.warning_messages[0]
+        assert "TypeError" in console_logger.warning_messages[0]
