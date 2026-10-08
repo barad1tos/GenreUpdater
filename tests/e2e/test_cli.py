@@ -16,6 +16,7 @@ from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from services.dependency_container import DependencyContainer
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.protocol_mocks import MockExternalApiService
 
 
 # noinspection PyUnusedLocal
@@ -64,7 +65,7 @@ class TestCLIE2E:
     @staticmethod
     def create_mock_dependency_container(config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for CLI testing."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
 
         # Basic services — wire app_config from the config dict for consistency
         dev_config = config.get("development", {})
@@ -103,17 +104,10 @@ class TestCLIE2E:
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
         mock_deps.cache_service.set_async = AsyncMock()
 
-        # API orchestrator mock
-        mock_deps.api_orchestrator = MagicMock()
-        mock_deps.api_orchestrator.get_artist_genres = AsyncMock(return_value=["Rock", "Alternative"])
-        mock_deps.api_orchestrator.get_album_year = AsyncMock(return_value=("2020", True, 85))
+        # External API service: every album resolves to 2020
+        mock_deps.external_api_service = MockExternalApiService()
 
-        # Verification service mock
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.add_track = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
-
-        # Pending verification SERVICE mock (accessed via music_updater.deps.pending_verification_service)
+        # Pending verification service mock (accessed via music_updater.deps.pending_verification_service)
         mock_deps.pending_verification_service = MagicMock()
         mock_deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
         mock_deps.pending_verification_service.get_all_pending_albums = AsyncMock(return_value=[])

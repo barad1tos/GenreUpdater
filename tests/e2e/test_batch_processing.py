@@ -13,6 +13,7 @@ from app.features.batch.batch_processor import BatchProcessor
 from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
 
 
 class TestBatchProcessingE2E:
@@ -51,7 +52,7 @@ class TestBatchProcessingE2E:
     @staticmethod
     def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for batch testing."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
 
         # Basic services
         mock_deps.console_logger = MockLogger()
@@ -84,15 +85,12 @@ class TestBatchProcessingE2E:
         mock_deps.cache_service.cache_album_year = AsyncMock()
         mock_deps.cache_service.store_album_year_in_cache = AsyncMock()
 
-        # External API orchestrator mock
-        mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))
+        # External API service: no API knows any album
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        mock_deps.external_api_service = external_api
 
-        # Pending verification mock
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.add_track = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
-        mock_deps.pending_verification.mark_for_verification = AsyncMock()
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         # Library snapshot service mock
         mock_deps.library_snapshot_service = MagicMock()
@@ -482,7 +480,7 @@ class TestBatchProcessorErrorHandling:
     @staticmethod
     def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create mock dependency container."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
@@ -498,11 +496,11 @@ class TestBatchProcessorErrorHandling:
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
         mock_deps.cache_service.set_async = AsyncMock()
 
-        mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        mock_deps.external_api_service = external_api
 
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         mock_deps.library_snapshot_service = MagicMock()
         mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
@@ -588,7 +586,7 @@ class TestBatchProcessingIntegrationScenarios:
     @staticmethod
     def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create mock dependency container with full services."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
         mock_deps.console_logger = MockLogger()
         mock_deps.error_logger = MockLogger()
         mock_deps.analytics = MockAnalytics()
@@ -607,12 +605,10 @@ class TestBatchProcessingIntegrationScenarios:
         mock_deps.cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         mock_deps.cache_service.store_album_year_in_cache = AsyncMock()
 
-        mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=("2020", True, 85))
+        # External API service: every album resolves to 2020
+        mock_deps.external_api_service = MockExternalApiService()
 
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
-        mock_deps.pending_verification.mark_for_verification = AsyncMock()
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         mock_deps.library_snapshot_service = MagicMock()
         mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)

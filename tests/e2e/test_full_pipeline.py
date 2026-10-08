@@ -13,6 +13,7 @@ from app.music_updater import MusicUpdater
 from services.dependency_container import DependencyContainer
 from core.models.track_models import TrackDict
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
 
 
 class TestFullApplicationPipelineE2E:
@@ -53,7 +54,7 @@ class TestFullApplicationPipelineE2E:
     @staticmethod
     def create_mock_dependency_container(_config: dict[str, Any]) -> MagicMock:
         """Create a mock dependency container for testing."""
-        mock_deps = MagicMock(spec=DependencyContainer)
+        mock_deps = MagicMock(spec_set=DependencyContainer)
 
         # Basic services
         mock_deps.console_logger = MockLogger()
@@ -95,15 +96,12 @@ class TestFullApplicationPipelineE2E:
         mock_deps.cache_service.cache_album_year = AsyncMock()
         mock_deps.cache_service.store_album_year_in_cache = AsyncMock()
 
-        # External API orchestrator mock
-        mock_deps.external_api = MagicMock()
-        mock_deps.external_api.get_album_year = AsyncMock(return_value=(None, False, 0))  # 3-tuple
+        # External API service: no API knows any album
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        mock_deps.external_api_service = external_api
 
-        # Pending verification mock
-        mock_deps.pending_verification = MagicMock()
-        mock_deps.pending_verification.add_track = MagicMock()
-        mock_deps.pending_verification.get_pending_tracks = MagicMock(return_value=[])
-        mock_deps.pending_verification.mark_for_verification = AsyncMock()
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         # Library snapshot service mock (required for smart delta fetch)
         mock_deps.library_snapshot_service = MagicMock()
@@ -286,11 +284,13 @@ class TestFullApplicationPipelineE2E:
         self.create_test_tracks(test_tracks_data)
 
         # Mock some API failures
-        mock_deps.external_api.get_album_year.side_effect = [
-            ("2020", True),  # Success
-            Exception("API Error"),  # Failure
-            (None, False),  # No result
-        ]
+        mock_deps.external_api_service.get_album_year = AsyncMock(
+            side_effect=[
+                ("2020", True, 85, {"2020": 85}),  # Success
+                Exception("API Error"),  # Failure
+                (None, False, 0, {}),  # No result
+            ]
+        )
 
         # Mock container handles AppleScript calls
         music_updater = MusicUpdater(mock_deps)
