@@ -11,7 +11,7 @@ from services.api.orchestrator import ExternalApiOrchestrator
 from core.models.track_models import TrackDict
 from core.models.protocols import AnalyticsProtocol
 
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_mock_track_processor, create_test_app_config  # sourcery skip: dont-import-test-modules
 from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
 
 if TYPE_CHECKING:
@@ -23,23 +23,19 @@ class TestGenrePipelineIntegration:
 
     @staticmethod
     def create_genre_manager(
-        mock_track_processor: AsyncMock | None,
+        mock_track_processor: AsyncMock,
         config: AppConfig | None,
         dry_run: bool,
     ) -> GenreManager:
         """Create a GenreManager instance for testing."""
-        if mock_track_processor is None:
-            mock_track_processor = AsyncMock()
-            mock_track_processor.update_track_async = AsyncMock(return_value=True)
-
         test_config = config or create_test_app_config(
             genre_update={"batch_size": 100, "concurrent_limit": 5},
         )
 
         return GenreManager(
             track_processor=mock_track_processor,
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
@@ -83,14 +79,14 @@ class TestGenrePipelineIntegration:
     async def test_genre_pipeline_full_flow(self) -> None:
         """Test complete genre pipeline execution with multiple artists and tracks."""
         tracks_data = [
-            # Artist 1 - Rock tracks (should get Rock genre)
+            # Artist 1 - earliest album (Album A) has no genre, so no track changes
             {"id": "1", "name": "Song 1", "artist": "Rock Artist", "album": "Album A", "genre": "", "date_added": "2024-01-01 10:00:00"},
             {"id": "2", "name": "Song 2", "artist": "Rock Artist", "album": "Album A", "genre": "", "date_added": "2024-01-01 11:00:00"},
             {"id": "3", "name": "Song 3", "artist": "Rock Artist", "album": "Album B", "genre": "Rock", "date_added": "2024-01-02 10:00:00"},
-            # Artist 2 - Pop tracks (should get Pop genre)
+            # Artist 2 - earliest album is Pop, so the empty track 5 becomes Pop
             {"id": "4", "name": "Pop Song 1", "artist": "Pop Artist", "album": "Pop Album", "genre": "Pop", "date_added": "2024-01-03 10:00:00"},
             {"id": "5", "name": "Pop Song 2", "artist": "Pop Artist", "album": "Pop Album", "genre": "", "date_added": "2024-01-03 11:00:00"},
-            # Artist 3 - Mixed genres (should get earliest album genre)
+            # Artist 3 - earliest album is Jazz, so the Blues track 7 becomes Jazz
             {
                 "id": "6",
                 "name": "Jazz Song",
@@ -110,17 +106,16 @@ class TestGenrePipelineIntegration:
         ]
 
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
-        genre_manager = TestGenrePipelineIntegration.create_genre_manager(None, None, False)
+        track_processor = create_mock_track_processor()
+        genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
         # Verify that tracks were processed
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Verify track processor was called for tracks needing updates
-        # Should be called for tracks with empty genres: ids 1, 2, 5
-        # Note: Actual implementation may skip some updates based on logic
-        actual_updates = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
-        assert actual_updates >= 0, f"Expected some updates, got {actual_updates}"
+        # Each artist takes the genre of its earliest album (determine_dominant_genre_for_artist)
+        updates = {call.kwargs["track_id"]: call.kwargs["new_genre"] for call in track_processor.update_track_async.call_args_list}
+        assert updates == {"5": "Pop", "7": "Jazz"}
 
         # Verify artists were processed (should be 3 unique artists)
         unique_artists = {track.artist for track in tracks}
@@ -147,7 +142,8 @@ class TestGenrePipelineIntegration:
         )
         del mock_orchestrator  # Created for demonstration but not used in current test
 
-        genre_manager = TestGenrePipelineIntegration.create_genre_manager(None, None, False)
+        track_processor = create_mock_track_processor()
+        genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         # Note: This test focuses on genre pipeline integration
         # The actual API fallback logic is in Year Retrieval Pipeline
         # Here we test that genre pipeline continues when API calls are involved
@@ -156,8 +152,8 @@ class TestGenrePipelineIntegration:
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Should still attempt to process tracks
-        assert genre_manager.track_processor.update_track_async.call_count >= 0  # type: ignore[attr-defined]
+        # Neither track has a genre, so there is no dominant genre to propagate
+        track_processor.update_track_async.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_cache_usage(self) -> None:
@@ -182,7 +178,8 @@ class TestGenrePipelineIntegration:
         ]
 
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
-        genre_manager = TestGenrePipelineIntegration.create_genre_manager(None, None, False)
+        track_processor = create_mock_track_processor()
+        genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, None, False)
         # First run - should populate any internal caches
         first_run_tracks, first_run_logs = await genre_manager.update_genres_by_artist_async(tracks=tracks)
         # Second run - should use cached data where applicable
@@ -193,12 +190,12 @@ class TestGenrePipelineIntegration:
 
         # Track processor should be called same number of times
         # (assuming no caching at track update level)
-        _first_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
+        _first_call_count = track_processor.update_track_async.call_count
 
         # Reset and run again
-        genre_manager.track_processor.update_track_async.reset_mock()  # type: ignore[attr-defined]
+        track_processor.update_track_async.reset_mock()
         await genre_manager.update_genres_by_artist_async(tracks)
-        _second_call_count = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
+        _second_call_count = track_processor.update_track_async.call_count
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_batch_processing(self) -> None:
@@ -222,7 +219,8 @@ class TestGenrePipelineIntegration:
 
         # Configure for batch processing
         batch_config = create_test_app_config(genre_update={"batch_size": 10, "concurrent_limit": 3})
-        genre_manager = TestGenrePipelineIntegration.create_genre_manager(None, batch_config, False)
+        track_processor = create_mock_track_processor()
+        genre_manager = TestGenrePipelineIntegration.create_genre_manager(track_processor, batch_config, False)
         start_time = datetime.now(UTC)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
         end_time = datetime.now(UTC)
@@ -231,26 +229,30 @@ class TestGenrePipelineIntegration:
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Count tracks that needed updates (empty genres)
-        _tracks_needing_updates = len([t for t in tracks if not t.genre])
-        actual_updates = genre_manager.track_processor.update_track_async.call_count  # type: ignore[attr-defined]
-
-        # Should process all tracks needing updates
-        assert actual_updates >= 0  # At least some processing should occur
+        # Artists 1 and 4 start with a Rock album, so their empty tracks become Rock;
+        # artists 2 and 3 start with an album that has no genre, so theirs stay empty
+        updates = {call.kwargs["track_id"]: call.kwargs["new_genre"] for call in track_processor.update_track_async.call_args_list}
+        assert updates == dict.fromkeys(("2", "3", "5", "17", "18", "20"), "Rock")
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_error_recovery(self) -> None:
-        """Test error recovery mechanisms in genre pipeline."""
+        """A failed track update is logged and does not stop the other artists' updates."""
         tracks_data = [
+            # Each artist's earliest track carries the genre that its later empty-genre track receives
+            {"id": "10", "name": "Good Opener", "artist": "Good Artist", "album": "Good Album", "genre": "Rock", "date_added": "2024-01-01 09:00:00"},
             {"id": "1", "name": "Good Song", "artist": "Good Artist", "album": "Good Album", "genre": "", "date_added": "2024-01-01 10:00:00"},
+            {"id": "20", "name": "Bad Opener", "artist": "Bad Artist", "album": "Bad Album", "genre": "Pop", "date_added": "2024-01-01 10:30:00"},
+            {"id": "2", "name": "Failing Song", "artist": "Bad Artist", "album": "Bad Album", "genre": "", "date_added": "2024-01-01 10:45:00"},
+            # A track without an ID fails validation and is never sent for update
+            {"id": "", "name": "Bad Song", "artist": "Bad Artist", "album": "Bad Album", "genre": "", "date_added": "2024-01-01 11:00:00"},
             {
-                "id": "",
-                "name": "Bad Song",
-                "artist": "Bad Artist",
-                "album": "Bad Album",
-                "genre": "",
-                "date_added": "2024-01-01 11:00:00",
-            },  # Empty ID
+                "id": "30",
+                "name": "Another Opener",
+                "artist": "Another Artist",
+                "album": "Another Album",
+                "genre": "Jazz",
+                "date_added": "2024-01-01 11:30:00",
+            },
             {
                 "id": "3",
                 "name": "Another Good Song",
@@ -260,28 +262,25 @@ class TestGenrePipelineIntegration:
                 "date_added": "2024-01-01 12:00:00",
             },
         ]
-
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
 
-        # Mock track processor to simulate some errors
+        async def update_track(*, track_id: str, **_kwargs: object) -> bool:
+            """Fail the update of track 2 and accept every other track."""
+            if track_id == "2":
+                raise RuntimeError("Simulated update error")
+            return True
+
         mock_track_processor = AsyncMock()
-        # First call succeeds, second fails, third succeeds
-        mock_track_processor.update_track_async.side_effect = [
-            True,  # Success
-            Exception("Simulated update error"),  # Error
-            True,  # Success
-        ]
+        mock_track_processor.update_track_async.side_effect = update_track
 
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(mock_track_processor, None, False)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
-        # Pipeline should continue despite errors
-        assert isinstance(updated_tracks, list)
-        assert isinstance(change_logs, list)
 
-        # Should have attempted to process tracks
-        call_count = mock_track_processor.update_track_async.call_count  # type: ignore[attr-defined]
-        assert call_count >= 0
+        attempted = {call.kwargs["track_id"] for call in mock_track_processor.update_track_async.call_args_list}
+        assert attempted == {"1", "2", "3"}
+        assert {track.id: track.genre for track in updated_tracks} == {"1": "Rock", "3": "Jazz"}
+        assert {log.track_id for log in change_logs} == {"1", "3"}
 
-        # Error logger should have recorded any errors
-        if error_messages := getattr(genre_manager.error_logger, "error_messages", []):
-            _error_count = len(error_messages)
+        error_logger = genre_manager.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert any("Simulated update error" in message for message in error_logger.error_messages)

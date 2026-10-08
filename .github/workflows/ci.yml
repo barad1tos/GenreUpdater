@@ -54,7 +54,7 @@ jobs:
         run: uv run ruff check src/ tests/ main.py
 
       - name: Type check
-        run: uv run ty check src/ main.py --python .venv
+        run: uv run ty check
 
       - name: Dead code check
         run: uv run deadcode src/ --no-color

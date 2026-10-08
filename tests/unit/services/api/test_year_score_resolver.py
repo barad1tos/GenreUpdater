@@ -47,7 +47,7 @@ def resolver_with_keywords(logger: logging.Logger) -> YearScoreResolver:
     )
 
 
-def create_scored_release(year: str, score: int, **kwargs: Any) -> ScoredRelease:
+def create_scored_release(year: str | None, score: int, **kwargs: Any) -> ScoredRelease:
     """Helper to create a ScoredRelease dict."""
     release: ScoredRelease = {
         "title": kwargs.get("title", "Test Album"),
@@ -148,10 +148,10 @@ class TestAggregateYearScores:
         """Test handles None year values."""
         releases = [
             create_scored_release("2020", 85),
-            {"year": None, "score": 90, "title": "Test", "artist": "Test"},  # type: ignore[typeddict-item]
+            create_scored_release(None, 90, title="Test", artist="Test"),
         ]
 
-        result = resolver.aggregate_year_scores(releases)  # type: ignore[arg-type]
+        result = resolver.aggregate_year_scores(releases)
 
         assert "2020" in result
         assert len(result) == 1

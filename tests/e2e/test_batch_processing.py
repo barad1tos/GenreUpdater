@@ -510,7 +510,7 @@ class TestBatchProcessorErrorHandling:
         return mock_deps
 
     @pytest.mark.asyncio
-    async def test_batch_recovers_from_artist_processing_error(self) -> None:
+    async def test_batch_recovers_from_artist_processing_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that batch continues after individual artist processing error."""
         config = self.create_test_config()
         mock_deps = self.create_mock_dependency_container(config)
@@ -526,7 +526,7 @@ class TestBatchProcessorErrorHandling:
                 raise ValueError("Simulated processing error")
             return await original_clean(target_artist)
 
-        music_updater.run_clean_artist = mock_clean_artist  # type: ignore[method-assign]
+        monkeypatch.setattr(music_updater, "run_clean_artist", mock_clean_artist)
 
         batch_processor = BatchProcessor(
             music_updater,
@@ -644,7 +644,7 @@ class TestBatchProcessingIntegrationScenarios:
         assert len(years_results["successful"]) + len(years_results["failed"]) == len(artists)
 
     @pytest.mark.asyncio
-    async def test_batch_with_mixed_operation_results(self) -> None:
+    async def test_batch_with_mixed_operation_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test batch processing where some operations succeed and some fail."""
         config = self.create_test_config()
         mock_deps = self.create_mock_dependency_container(config)
@@ -658,7 +658,7 @@ class TestBatchProcessingIntegrationScenarios:
             """Track clean artist calls for verification."""
             processing_log.append(f"clean:{target_artist}")
 
-        music_updater.run_clean_artist = tracking_clean  # type: ignore[method-assign]
+        monkeypatch.setattr(music_updater, "run_clean_artist", tracking_clean)
 
         batch_processor = BatchProcessor(
             music_updater,

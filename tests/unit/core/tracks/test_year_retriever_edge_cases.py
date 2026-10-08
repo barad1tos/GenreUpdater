@@ -9,8 +9,6 @@ Note: Tests access private methods (prefixed with _) which is intentional
 for unit testing internal behavior.
 """
 
-# pyright: reportPrivateUsage=false
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast

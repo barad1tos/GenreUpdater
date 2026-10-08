@@ -244,10 +244,10 @@ Track 3|Artist 3|Album 3|2022|Pop"""
             sanitizer.sanitize_string(None)
 
         with pytest.raises(TypeError, match="Expected string, got int"):
-            sanitizer.sanitize_string(123)  # type: ignore[arg-type]
+            sanitizer.sanitize_string(123)
 
         with pytest.raises(TypeError, match="Expected string, got list"):
-            sanitizer.sanitize_string([1, 2, 3])  # type: ignore[arg-type]
+            sanitizer.sanitize_string([1, 2, 3])
 
     def test_script_path_validation(self) -> None:
         """Test script path validation."""

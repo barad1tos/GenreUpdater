@@ -145,13 +145,15 @@ class TestFingerprintValidation:
 
     def test_non_dict_raises_error(self, generator: FingerprintGenerator) -> None:
         """Test that non-dict input raises error."""
+        not_a_dict: Any = "not a dict"
         with pytest.raises(FingerprintGenerationError, match="must be a dictionary"):
-            generator.generate_track_fingerprint("not a dict")  # type: ignore[arg-type]
+            generator.generate_track_fingerprint(not_a_dict)
 
     def test_none_input_raises_error(self, generator: FingerprintGenerator) -> None:
         """Test that None input raises error."""
+        missing_track: Any = None
         with pytest.raises(FingerprintGenerationError, match="must be a dictionary"):
-            generator.generate_track_fingerprint(None)  # type: ignore[arg-type]
+            generator.generate_track_fingerprint(missing_track)
 
 
 class TestFingerprintValidateFormat:
@@ -184,9 +186,9 @@ class TestFingerprintValidateFormat:
 
     def test_validate_non_string_fails(self) -> None:
         """Test that non-string input fails validation."""
-        assert FingerprintGenerator.validate_fingerprint(123) is False  # type: ignore[arg-type]
-        assert FingerprintGenerator.validate_fingerprint(None) is False  # type: ignore[arg-type]
-        assert FingerprintGenerator.validate_fingerprint([]) is False  # type: ignore[arg-type]
+        assert FingerprintGenerator.validate_fingerprint(123) is False
+        assert FingerprintGenerator.validate_fingerprint(None) is False
+        assert FingerprintGenerator.validate_fingerprint([]) is False
 
 
 class TestNormalization:

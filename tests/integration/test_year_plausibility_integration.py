@@ -9,7 +9,6 @@ Tests use mocked external dependencies but real internal logic.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -31,20 +30,9 @@ class MockLogger(logging.Logger):
         super().__init__(name)
         self.logged_messages: list[tuple[int, str]] = []
 
-    def _log(
-        self,
-        level: int,
-        msg: object,
-        args: tuple[object, ...] | Mapping[str, object],
-        *,
-        exc_info: Any = None,
-        extra: Mapping[str, object] | None = None,
-        stack_info: bool = False,
-        stacklevel: int = 1,
-    ) -> None:
-        """Capture log messages."""
-        del args, exc_info, extra, stack_info, stacklevel  # unused
-        self.logged_messages.append((level, str(msg)))
+    def handle(self, record: logging.LogRecord) -> None:
+        """Record each message's level and unformatted template instead of passing it to handlers."""
+        self.logged_messages.append((record.levelno, str(record.msg)))
 
 
 class MockAnalytics:

@@ -41,10 +41,9 @@ repos:
 
       - id: ty
         name: ty (type checker)
-        entry: uv run ty check --python .venv
+        entry: uv run ty check
         language: system
-        types: [python]
-        files: ^src/
+        types_or: [python, pyi]
         pass_filenames: false  # ty checks whole project, not individual files
 
       - id: pydoclint

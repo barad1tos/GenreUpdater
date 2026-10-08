@@ -7,6 +7,7 @@ that can be imported by any test module (including xdist workers).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -112,6 +113,13 @@ MINIMAL_CONFIG_DATA: dict[str, Any] = {
         },
     },
 }
+
+
+def create_mock_track_processor() -> AsyncMock:
+    """Create a TrackProcessor stand-in whose track updates succeed."""
+    track_processor = AsyncMock()
+    track_processor.update_track_async = AsyncMock(return_value=True)
+    return track_processor
 
 
 def create_test_app_config(**overrides: Any) -> AppConfig:

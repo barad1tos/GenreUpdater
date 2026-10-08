@@ -187,7 +187,7 @@ uv run ruff check src/ --fix
 uv run ruff format src/
 
 # Type check
-uv run ty check src/ --python .venv
+uv run ty check
 
 # Build docs
 uv run mkdocs serve

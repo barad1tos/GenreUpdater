@@ -42,8 +42,8 @@ class TestGenreManager:
 
         return GenreManager(
             track_processor=mock_track_processor,
-            console_logger=console_logger,  # type: ignore[arg-type]
-            error_logger=error_logger,  # type: ignore[arg-type]
+            console_logger=console_logger,
+            error_logger=error_logger,
             analytics=analytics,
             config=test_config,
         )

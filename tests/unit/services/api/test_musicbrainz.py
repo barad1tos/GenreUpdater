@@ -32,8 +32,8 @@ class TestMusicBrainzClientAllure:
             mock_score_release = MagicMock(return_value=0.85)
 
         return MusicBrainzClient(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
             analytics=_mock_analytics(),
@@ -203,8 +203,8 @@ class TestMusicBrainzArtistMatching:
     def create_client() -> MusicBrainzClient:
         """Create a basic MusicBrainzClient for testing."""
         return MusicBrainzClient(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
             make_api_request_func=AsyncMock(return_value={}),
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),
@@ -365,8 +365,8 @@ class TestGetArtistInfoExceptionHandler:
         mock_api_request = AsyncMock(side_effect=OSError("connection failed"))
         error_logger = MockLogger()
         client = MusicBrainzClient(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=error_logger,  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=error_logger,
             make_api_request_func=mock_api_request,
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),
@@ -392,8 +392,8 @@ class TestFieldedReleaseGroupSearchSuccessLog:
             }
         )
         client = MusicBrainzClient(
-            console_logger=console_logger,  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=console_logger,
+            error_logger=MockLogger(),
             make_api_request_func=mock_api_request,
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),
@@ -426,8 +426,8 @@ class TestSearchReleaseGroupsSuccessLog:
             }
         )
         client = MusicBrainzClient(
-            console_logger=console_logger,  # type: ignore[arg-type]
-            error_logger=MockLogger(),  # type: ignore[arg-type]
+            console_logger=console_logger,
+            error_logger=MockLogger(),
             make_api_request_func=mock_api_request,
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),
@@ -470,8 +470,8 @@ class TestFetchReleasesForGroupsExceptionHandling:
             raise OSError("network timeout")
 
         client = MusicBrainzClient(
-            console_logger=MockLogger(),  # type: ignore[arg-type]
-            error_logger=error_logger,  # type: ignore[arg-type]
+            console_logger=MockLogger(),
+            error_logger=error_logger,
             make_api_request_func=mock_api_request,
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),

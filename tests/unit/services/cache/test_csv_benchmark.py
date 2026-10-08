@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import csv
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from services.cache.generic_cache import GenericCacheService
@@ -34,8 +34,9 @@ class SimpleCsvArtistIndex:
         """Return tracks for the given artist, caching results after the first read."""
         cache_key = f"artist::{artist.lower()}"
         cached = self.cache_service.get(cache_key)
-        if cached is not None:
-            return cached  # type: ignore[return-value]
+        if isinstance(cached, list):
+            # The cache holds values of many types; these per-artist keys only ever store CSV rows
+            return cast("list[dict[str, str]]", cached)
 
         tracks = self._read_tracks_for_artist(artist)
         self.cache_service.set(cache_key, tracks)

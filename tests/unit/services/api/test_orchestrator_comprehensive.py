@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -331,9 +331,10 @@ class TestExternalApiOrchestrator:
         pending_verification = MagicMock()
 
         # Passing None instead of AppConfig raises AttributeError on attribute access
+        missing_config: Any = None
         with pytest.raises(AttributeError):
             ExternalApiOrchestrator(
-                config=None,  # type: ignore[arg-type]
+                config=missing_config,
                 console_logger=console_logger,
                 error_logger=error_logger,
                 analytics=analytics,

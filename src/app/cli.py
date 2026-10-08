@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 
-# argparse._SubParsersAction has no stable public type alias
-type _SubParsersAction = argparse._SubParsersAction  # generic param omitted: basedpyright lacks stubs for subscript
+# argparse has no public name for the subparsers action, and the runtime class is not generic
+# (only typeshed declares a type parameter), so the alias stays unsubscripted
+type _SubParsersAction = argparse._SubParsersAction
 
 
 def _add_clean_artist_command(subparsers: _SubParsersAction) -> None:
