@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -424,11 +425,27 @@ class TestTryApiList:
 class TestLogMethods:
     """Tests for logging methods."""
 
-    def test_log_api_error(self, coordinator: YearSearchCoordinator) -> None:
-        """Test _log_api_error doesn't raise."""
-        error = ValueError("Test error")
-        # Should not raise
-        coordinator._log_api_error("musicbrainz", "Artist", "Album", error)
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(ValueError("Test error"), id="ValueError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
+    def test_log_api_error(
+        self,
+        coordinator: YearSearchCoordinator,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+        error: BaseException,
+    ) -> None:
+        """An API error is logged with its type, so a cancelled search, whose message is empty, still says what happened."""
+        with caplog.at_level(logging.WARNING, logger=error_logger.name):
+            coordinator._log_api_error("musicbrainz", "Artist", "Album", error)
+
+        messages = [record.getMessage() for record in caplog.records if record.name == error_logger.name]
+        assert len(messages) == 1
+        assert type(error).__name__ in messages[0]
 
     def test_log_empty_api_result(self, coordinator: YearSearchCoordinator) -> None:
         """Test _log_empty_api_result doesn't raise."""
@@ -481,6 +498,7 @@ class TestExecuteStandardApiSearch:
         original_get = coordinator._get_api_client
 
         def selective_get(api_name: str) -> Any:
+            """Return no Discogs client, and the real client for every other API."""
             if api_name == "discogs":
                 return None
             return original_get(api_name)

@@ -1009,9 +1009,6 @@ class TestUpdateTracksForAlbum:
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
 
-        # Mock bulk update to succeed on the batch processor
-        object.__setattr__(year_retriever._batch_processor._track_updater, "update_album_tracks_bulk_async", AsyncMock(return_value=(2, 0)))
-
         await year_retriever._batch_processor._track_updater.update_tracks_for_album(
             artist="Artist",
             album="Album",
@@ -1841,9 +1838,6 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
         ]
         updated_tracks: list[TrackDict] = []
         changes_log: list[Any] = []
-
-        # Mock the bulk update on the batch processor
-        object.__setattr__(year_retriever._batch_processor._track_updater, "update_album_tracks_bulk_async", AsyncMock(return_value=(1, 0)))
 
         await year_retriever._batch_processor._track_updater.update_tracks_for_album(
             artist="Artist",

@@ -7,7 +7,7 @@ import logging
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from core.models.track_models import TrackDict
@@ -16,6 +16,8 @@ from services.cache.orchestrator import CacheOrchestrator
 from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from core.models.protocols import CacheableValue
     from core.models.track_models import AppConfig
 
@@ -59,18 +61,31 @@ class TestCacheOrchestrator:
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(Exception("Album init failed"), id="Exception"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_initialize_handles_service_failure(self) -> None:
-        """Test that initialization raises RuntimeError when a service fails."""
-        orchestrator = self.create_orchestrator()
+    async def test_initialize_handles_service_failure(self, error: BaseException) -> None:
+        """Initialization raises RuntimeError and logs the service when it fails or its initialization is cancelled."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
 
         with (
-            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=Exception("Album init failed")),
+            patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=error),
             patch.object(orchestrator.api_service, "initialize", new_callable=AsyncMock),
             patch.object(orchestrator.generic_service, "initialize", new_callable=AsyncMock),
             pytest.raises(RuntimeError, match="Cache service initialization failed"),
         ):
             await orchestrator.initialize()
+
+        logger.error.assert_called_once()
+        assert "AlbumCacheService" in logger.error.call_args.args[1]
+        # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
+        assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
 
     # Album cache tests
 
@@ -229,8 +244,9 @@ class TestCacheOrchestrator:
 
     @pytest.mark.asyncio
     async def test_save_all_to_disk(self) -> None:
-        """Test that save_all_to_disk saves all services."""
-        orchestrator = self.create_orchestrator()
+        """Test that save_all_to_disk saves all services and reports success."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
 
         with (
             patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock) as mock_album,
@@ -242,6 +258,60 @@ class TestCacheOrchestrator:
             mock_album.assert_called_once()
             mock_api.assert_called_once()
             mock_generic.assert_called_once()
+
+        logger.info.assert_any_call("All caches saved to disk")
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(OSError("disk full"), id="OSError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_save_all_to_disk_reports_failed_save(self, error: BaseException) -> None:
+        """A save that fails or is cancelled is logged and raised to the caller, and the other caches are still saved."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
+
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=error),
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock) as mock_api,
+            patch.object(orchestrator.generic_service, "save_to_disk", new_callable=AsyncMock) as mock_generic,
+            pytest.raises(RuntimeError, match="AlbumCacheService"),
+        ):
+            await orchestrator.save_all_to_disk()
+
+        mock_api.assert_called_once()
+        mock_generic.assert_called_once()
+        logger.error.assert_called_once()
+        assert "AlbumCacheService" in logger.error.call_args.args[1]
+        # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
+        assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
+        assert call("All caches saved to disk") not in logger.info.call_args_list
+
+    @pytest.mark.asyncio
+    async def test_save_all_to_disk_names_every_failed_cache(self, tmp_path: Path) -> None:
+        """Every failed save is logged and named, including the generic cache's own write failure."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
+        blocker = tmp_path / "not_a_directory"
+        blocker.write_text("", encoding="utf-8")
+        orchestrator.generic_service.cache_file = blocker / "generic_cache.json"
+        orchestrator.generic_service.set("persist_key", {"value": "data"}, ttl=60)
+
+        with (
+            patch.object(orchestrator.album_service, "save_to_disk", new_callable=AsyncMock, side_effect=OSError("disk full")),
+            patch.object(orchestrator.api_service, "save_to_disk", new_callable=AsyncMock),
+            pytest.raises(RuntimeError, match="AlbumCacheService, GenericCacheService"),
+        ):
+            await orchestrator.save_all_to_disk()
+
+        logged_services = [error_call.args[1] for error_call in logger.error.call_args_list]
+        assert len(logged_services) == 2
+        assert "AlbumCacheService" in logged_services[0]
+        assert "GenericCacheService" in logged_services[1]
+        assert call("All caches saved to disk") not in logger.info.call_args_list
 
     # Backward compatibility tests
 

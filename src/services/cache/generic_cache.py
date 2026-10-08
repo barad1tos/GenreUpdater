@@ -84,11 +84,7 @@ class GenericCacheService:
             self.config.cache_ttl_seconds,
         ]
 
-        for ttl in candidate_values:
-            if ttl > 0:
-                return ttl
-
-        return fallback
+        return next((ttl for ttl in candidate_values if ttl > 0), fallback)
 
     def _start_cleanup_task(self) -> None:
         """Start periodic cleanup task for expired cache entries.
@@ -316,14 +312,21 @@ class GenericCacheService:
         }
 
     async def save_to_disk(self) -> None:
-        """Persist cache contents to disk."""
+        """Persist cache contents to disk.
+
+        Raises:
+            OSError: If the cache file cannot be written, or an empty cache cannot remove its old file; logged first
+
+        """
         if not self.cache:
             if self.cache_file.exists():
                 try:
                     self.cache_file.unlink()
                     self.logger.info("Deleted empty generic cache file: [cyan]%s[/cyan]", self.cache_file.name)
                 except OSError as e:
+                    # The old file would be loaded again on the next start, so this is a failed save
                     self.logger.warning("Failed to remove generic cache file %s: %s", self.cache_file, e)
+                    raise
             return
 
         def blocking_save() -> None:
@@ -342,6 +345,7 @@ class GenericCacheService:
             self.logger.info("Generic cache saved to [cyan]%s[/cyan] (%d entries)", self.cache_file.name, len(self.cache))
         except OSError as e:
             self.logger.exception("Failed to save generic cache to %s: %s", self.cache_file, e)
+            raise
 
     async def _load_from_disk(self) -> None:
         """Load cache contents from disk if available."""

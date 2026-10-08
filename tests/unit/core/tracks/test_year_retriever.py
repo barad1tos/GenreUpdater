@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -9,12 +10,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.models.protocols import AnalyticsProtocol
-from core.models.track_models import TrackDict
+from core.models.track_models import ChangeLogEntry, TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
+from core.tracks.track_updater import TrackUpdater
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockLogger
 from tests.mocks.protocol_mocks import (
     MockCacheService,
     MockExternalApiService,
@@ -390,3 +393,101 @@ class TestYearRetrieverAllure:
 
         # Verify all tracks were attempted
         assert mock_track_processor.update_track_async.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_update_album_tracks_counts_cancelled_update_as_failed(self) -> None:
+        """A track update cancelled on its own counts as failed and is logged with its exception type."""
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(side_effect=[True, asyncio.CancelledError(), True])
+        error_logger = MockLogger()
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=error_logger,
+            config=create_test_app_config(),
+        )
+        tracks = [
+            _DummyTrackData.create(track_id="success_001", name="Success 1"),
+            _DummyTrackData.create(track_id="cancelled_001", name="Cancelled 1"),
+            _DummyTrackData.create(track_id="success_002", name="Success 2"),
+        ]
+
+        success_count, failed_count = await track_updater.update_album_tracks_bulk_async(
+            tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
+        )
+
+        assert (success_count, failed_count) == (2, 1)
+        assert len(error_logger.error_messages) == 1
+        assert "cancelled_001" in error_logger.error_messages[0]
+        assert "CancelledError" in error_logger.error_messages[0]
+
+    @pytest.mark.asyncio
+    async def test_update_album_tracks_counts_each_successful_update(self) -> None:
+        """The success count is the number of updates that went through, even when a track ID repeats."""
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(return_value=True)
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            config=create_test_app_config(),
+        )
+        tracks = [
+            _DummyTrackData.create(track_id="repeated_001", name="Repeated 1"),
+            _DummyTrackData.create(track_id="repeated_001", name="Repeated 1"),
+        ]
+
+        success_count, failed_count = await track_updater.update_album_tracks_bulk_async(
+            tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
+        )
+
+        assert (success_count, failed_count) == (2, 0)
+        assert mock_track_processor.update_track_async.await_count == 2
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            pytest.param(False, id="update-failed"),
+            pytest.param(asyncio.CancelledError(), id="update-cancelled"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_update_tracks_for_album_records_only_updated_tracks(self, failure: bool | BaseException) -> None:
+        """A track whose update failed stays out of the updated tracks and the change log, and keeps its year."""
+
+        async def update_track(*, track_id: str, **_kwargs: object) -> bool:
+            """Fail the track under test by its ID, so the result does not depend on call order."""
+            if track_id != "failed_001":
+                return True
+            if isinstance(failure, BaseException):
+                raise failure
+            return failure
+
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(side_effect=update_track)
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            config=create_test_app_config(),
+        )
+        failed_track = _DummyTrackData.create(track_id="failed_001", name="Failed 1", year="1999")
+        updated_tracks: list[TrackDict] = []
+        changes_log: list[ChangeLogEntry] = []
+
+        await track_updater.update_tracks_for_album(
+            "Test Artist",
+            "Test Album",
+            # The failed track comes first, so recording the first N tracks by count would record it
+            album_tracks=[failed_track, _DummyTrackData.create(track_id="success_001", name="Success 1", year="1999")],
+            year="2000",
+            updated_tracks=updated_tracks,
+            changes_log=changes_log,
+        )
+
+        assert [track.id for track in updated_tracks] == ["success_001"]
+        assert [entry.track_id for entry in changes_log] == ["success_001"]
+        assert failed_track.year == "1999"

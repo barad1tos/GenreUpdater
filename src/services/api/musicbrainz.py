@@ -547,8 +547,10 @@ class MusicBrainzClient(BaseApiClient):
         for i, result in enumerate(results):
             rg_info = release_fetch_tasks[i][1]
 
-            if isinstance(result, Exception):
-                self.error_logger.warning("Failed to fetch releases for MB RG ID %s: %s", rg_info.get("id"), result)
+            # BaseException, so a cancelled fetch gets the failed-fetch warning instead of passing as an empty response;
+            # the type is logged because gather returns a cancelled task as a CancelledError with an empty message
+            if isinstance(result, BaseException):
+                self.error_logger.warning("Failed to fetch releases for MB RG ID %s: %s: %s", rg_info.get("id"), type(result).__name__, result)
                 processed_results.append((None, rg_info))
                 continue
 

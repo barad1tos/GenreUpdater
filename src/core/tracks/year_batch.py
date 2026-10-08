@@ -314,10 +314,9 @@ class YearBatchProcessor:
                 # Use gather with return_exceptions for resilience
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # Log any exceptions that occurred (skip CancelledError - it's graceful shutdown)
+                # Log every album that failed, a cancelled one included: shutdown cancels this coroutine,
+                # and gather then raises instead of returning, so a CancelledError here is lost work
                 for album_entry, result in zip(batch_slice, results, strict=True):
-                    if isinstance(result, asyncio.CancelledError):
-                        continue
                     if isinstance(result, BaseException):
                         album_key, _ = album_entry
                         artist_name, album_name = album_key

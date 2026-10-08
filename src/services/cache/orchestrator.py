@@ -75,7 +75,8 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         failed_services: list[str] = []
         for (service_name, _), result in zip(service_tasks, results, strict=True):
-            if isinstance(result, Exception):
+            # BaseException, so a cancelled initialization fails startup instead of passing as done
+            if isinstance(result, BaseException):
                 self.logger.error("Failed to initialize %s: %s", LogFormat.entity(service_name), result, exc_info=result)
                 failed_services.append(service_name)
 
@@ -218,7 +219,12 @@ class CacheOrchestrator(CacheServiceProtocol):
             self.api_service.event_manager.emit_event(cache_event)
 
     async def save_all_to_disk(self) -> None:
-        """Save all persistent caches to disk."""
+        """Save all persistent caches to disk.
+
+        Raises:
+            RuntimeError: If any cache was not saved; each failure is logged with its traceback first
+
+        """
         self.logger.info("Saving all caches to disk...")
 
         # Save services that have disk persistence
@@ -230,9 +236,16 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         results = await asyncio.gather(*(task for _, task in save_tasks), return_exceptions=True)
 
+        failed_services: list[str] = []
         for (service_name, _), result in zip(save_tasks, results, strict=True):
-            if isinstance(result, Exception):
+            # BaseException, so a cancelled save is logged instead of lost silently
+            if isinstance(result, BaseException):
+                failed_services.append(service_name)
                 self.logger.error("Failed to save %s to disk: %s", LogFormat.entity(service_name), result, exc_info=result)
+
+        if failed_services:
+            msg = f"Could not save {', '.join(failed_services)} to disk"
+            raise RuntimeError(msg)
 
         self.logger.info("All caches saved to disk")
 
