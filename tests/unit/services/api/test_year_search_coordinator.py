@@ -278,25 +278,6 @@ class TestProcessApiTaskResults:
         results: list[Any] = [[], []]
         self._assert_processed_results_count(coordinator, results, 0)
 
-    def test_logs_failed_provider_with_exception(
-        self,
-        *,
-        coordinator: YearSearchCoordinator,
-        error_logger: logging.Logger,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """A provider that raised in the concurrent search is logged with its exception, so the error log keeps the traceback."""
-        api_error = ValueError("API error")
-
-        with caplog.at_level(logging.WARNING, logger=error_logger.name):
-            coordinator._process_api_task_results([[], api_error], ["musicbrainz", "discogs"], "Artist", "Album")
-
-        error_records = [record for record in caplog.records if record.name == error_logger.name]
-        assert len(error_records) == 1
-        logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
-        assert logged_exception[1] is api_error
-
     @staticmethod
     def _assert_processed_results_count(
         coordinator: YearSearchCoordinator,
@@ -554,6 +535,29 @@ class TestExecuteStandardApiSearch:
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
         # Discogs client should never be called since _get_api_client returned None for it
         assert not hasattr(coordinator, "_discogs_called") or True  # Discogs mock was never invoked
+
+    @pytest.mark.asyncio
+    async def test_logs_failed_provider_with_traceback(
+        self,
+        *,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A provider that raises in the concurrent search reaches the error log with its traceback."""
+        api_error = ValueError("API error")
+        mock_musicbrainz_client.get_scored_releases.side_effect = api_error
+
+        with caplog.at_level(logging.WARNING, logger=error_logger.name):
+            await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
+
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is api_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
 
 class TestScriptOptimizedSearch:

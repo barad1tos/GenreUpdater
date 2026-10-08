@@ -1070,7 +1070,7 @@ class ExternalApiOrchestrator:
             return str(artist_region) if artist_region else None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
-            self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err)
+            self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err, exc_info=context_err)
             return None
 
     async def _fetch_all_api_results(

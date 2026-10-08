@@ -242,7 +242,9 @@ class YearRetriever:
                     min_attempts,
                 )
 
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError) as error:
+            # The error log is a file the console never shows, so the console hears that the year update stopped
+            self.console_logger.warning("Album year update stopped (%s); traceback in the error log", type(error).__name__)
             self.error_logger.exception("Error in the album year processing")
             return False
 

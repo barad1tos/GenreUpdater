@@ -1035,14 +1035,21 @@ class TestProcessAlbumYears:
     @pytest.mark.asyncio
     async def test_handles_exception(
         self,
+        *,
         year_retriever: YearRetriever,
+        logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test returns False when exception occurs."""
+        """Test returns False when exception occurs, and the console says the year update stopped."""
         year_retriever.config.year_retrieval.enabled = True
         object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(side_effect=OSError("Test error")))
 
-        result = await year_retriever.process_album_years([])
+        with caplog.at_level(logging.WARNING, logger=logger.name):
+            result = await year_retriever.process_album_years([])
+
         assert result is False
+        console_warnings = [record.getMessage() for record in caplog.records if record.name == logger.name and record.levelno == logging.WARNING]
+        assert console_warnings == ["Album year update stopped (OSError); traceback in the error log"]
 
     @pytest.mark.asyncio
     async def test_processes_tracks_successfully(

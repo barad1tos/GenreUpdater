@@ -60,8 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When some of an album's track year updates failed, the failed tracks were still recorded in the change log as updated to the new year; only the tracks that were updated are recorded now
 - A cache that failed to save at shutdown was followed by "All caches saved to disk"; shutdown now warns that the cache was not saved and names it
 - A year lookup that failed with an error was logged only with year debugging on, so the album looked like one no API knows; the error log now records the failure with its traceback, and the console says the lookup failed
-- A year provider that failed while searching a non-Latin name was logged only with API debugging on, and a failed provider reached the error log without its traceback; both are now logged with it
-- An album whose year processing failed with an unexpected error showed up only in the error log; the console now says which album failed
+- A year provider that failed while searching a non-Latin name was logged only with API debugging on, and a failed provider or artist lookup reached the error log without its traceback; all of them are now logged with it
+- An album whose year processing failed with an unexpected error, or a year update that stopped on an error, showed up only in the error log; the console now says which album failed or that the update stopped
 - Year-verification queue saves no longer fail with `No such file or directory` on `pending_year_verification.csv.tmp` when several albums are marked at once, and a stale queue snapshot can no longer overwrite a newer one
 - `zip` misalignment in year_search_coordinator: filtered API tasks vs unfiltered api_order
 - Naive `datetime.fromtimestamp()` calls missing timezone in analytics.py

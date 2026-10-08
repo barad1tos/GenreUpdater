@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -280,3 +281,20 @@ class TestExternalApiOrchestratorAllure:
         assert len(lookup_warnings) == 1
         assert "'Artist - Album'" in lookup_warnings[0]
         assert "TimeoutError" in lookup_warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_setup_artist_context_logs_failure_with_traceback(self) -> None:
+        """A failed artist-context fetch keeps its traceback in the error log, and the search goes on without that context."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        error_logger = MagicMock(spec=logging.Logger)
+        orchestrator.error_logger = error_logger
+        context_error = OSError("MusicBrainz unreachable")
+        musicbrainz_client = MagicMock()
+        musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=context_error)
+        orchestrator.musicbrainz_client = musicbrainz_client
+
+        artist_region = await orchestrator._setup_artist_context("artist", "Artist")
+
+        assert artist_region is None
+        error_logger.warning.assert_called_once()
+        assert error_logger.warning.call_args.kwargs["exc_info"] is context_error
