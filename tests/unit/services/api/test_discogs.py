@@ -237,9 +237,12 @@ class TestDiscogsClientAllure:
         mock_cache_service = MagicMock()
         mock_cache_service.get_async = AsyncMock(return_value=None)
         mock_cache_service.set_async = AsyncMock()
-        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=AsyncMock(return_value=None), mock_cache_service=mock_cache_service)
+        failed_request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=failed_request, mock_cache_service=mock_cache_service)
 
         assert await client.get_scored_releases("test artist", "test album", None) == []
+        # The primary search and both fallbacks ran and failed
+        assert failed_request.await_count == 3
         mock_cache_service.set_async.assert_not_called()
 
     @pytest.mark.asyncio
@@ -248,9 +251,11 @@ class TestDiscogsClientAllure:
         mock_cache_service = MagicMock()
         mock_cache_service.get_async = AsyncMock(return_value=None)
         mock_cache_service.set_async = AsyncMock()
-        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=AsyncMock(return_value=None), mock_cache_service=mock_cache_service)
+        failed_request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=failed_request, mock_cache_service=mock_cache_service)
 
         assert await client._fetch_master_release_year(4242) is None
+        failed_request.assert_awaited_once_with("discogs", "https://api.discogs.com/masters/4242", params={})
         mock_cache_service.set_async.assert_not_called()
 
     @staticmethod
@@ -305,6 +310,7 @@ class TestDiscogsClientAllure:
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=master_without_year, mock_cache_service=mock_cache_service)
 
         assert await client._fetch_master_release_year(4242) is None
+        master_without_year.assert_awaited_once_with("discogs", "https://api.discogs.com/masters/4242", params={})
         mock_cache_service.set_async.assert_awaited_once()
         assert mock_cache_service.set_async.call_args.args[:2] == ("discogs_master_4242", "NO_YEAR")
 
