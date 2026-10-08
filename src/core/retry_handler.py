@@ -7,48 +7,17 @@ with intelligent error classification and adaptive delay strategies.
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TypedDict, TypeVar, cast, TYPE_CHECKING
+from typing import TypeVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
+    from collections.abc import Awaitable, Callable
     import logging
 
 
 # Type variable for retry operation return types
 RetryResult = TypeVar("RetryResult")
-
-
-class RetryMetadata(TypedDict, total=False):
-    """Type definition for retry operation metadata.
-
-    Defines the structure of metadata that can be stored
-    in RetryOperationContext for tracking and debugging.
-    """
-
-    # Database operation metadata
-    table: str  # Database table name
-
-    # Timing metadata
-    timestamp: str  # ISO format timestamp
-
-    # Music metadata fields
-    expected_year: str  # Release year as string
-    track_count: str  # Number of tracks as string
-
-    # Generic fields for extensibility
-    operation_type: str  # Type of operation being retried
-    source: str  # Data source identifier
-    reason: str  # Reason for retry or operation
-
-
-def _create_empty_metadata() -> RetryMetadata:
-    """Create an empty RetryMetadata dict for default_factory."""
-    # Two-step cast: dict -> object -> RetryMetadata (TypedDict)
-    # Empty dict is valid for RetryMetadata since all fields are optional (total=False)
-    return cast(RetryMetadata, cast(object, {}))
 
 
 @dataclass
@@ -71,8 +40,7 @@ class RetryPolicy:
 class RetryOperationContext:
     """Context information for retry operations.
 
-    Tracks operation progress, attempt history, and metadata
-    for comprehensive retry operation management.
+    Tracks operation progress and attempt history for one retry loop.
     """
 
     operation_id: str
@@ -80,7 +48,6 @@ class RetryOperationContext:
     start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
     attempt_count: int = 0
     last_error: Exception | None = None
-    metadata: RetryMetadata = field(default_factory=_create_empty_metadata)
 
     @property
     def total_elapsed_seconds(self) -> float:
@@ -211,107 +178,6 @@ class DatabaseRetryHandler:
         final_delay: float = max(0.0, capped_delay + jitter_offset)
 
         return final_delay
-
-    @asynccontextmanager
-    async def async_retry_operation(
-        self,
-        operation_id: str,
-        policy: RetryPolicy | None = None,
-    ) -> AsyncGenerator[RetryOperationContext]:
-        """Async context manager for retry operations with comprehensive tracking.
-
-        Provides retry context with operation tracking, error handling,
-        and automatic retry logic for database operations.
-
-        Args:
-            operation_id: Unique identifier for the operation
-            policy: Retry policy to use (defaults to database_policy)
-
-        Yields:
-            RetryOperationContext: Context for tracking retry progress
-
-        Raises:
-            OSError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-            RuntimeError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-            ValueError: Re-raised when the operation fails with a non-transient error or retries are exhausted
-
-        Example:
-            async with retry_handler.async_retry_operation("db_read") as ctx:
-                ctx.metadata["table"] = "tracks"
-                result = await database_operation()
-
-        """
-        retry_policy: RetryPolicy = policy or self.database_policy
-        context: RetryOperationContext = RetryOperationContext(
-            operation_id=operation_id,
-            policy=retry_policy,
-        )
-
-        self.logger.debug(
-            "Starting retry operation '%s' with policy: max_retries=%d, base_delay=%.2fs",
-            operation_id,
-            retry_policy.max_retries,
-            retry_policy.base_delay_seconds,
-        )
-
-        for attempt in range(retry_policy.max_retries + 1):
-            context.attempt_count = attempt + 1
-
-            try:
-                # Check for total operation timeout
-                if context.has_exceeded_timeout:
-                    self._raise_timeout_error(operation_id, context, retry_policy)
-
-                # Yield context for operation execution
-                yield context
-
-            except (ValueError, RuntimeError, OSError) as error:
-                context.last_error = error
-
-                # Check if this is the last attempt
-                if attempt >= retry_policy.max_retries:
-                    self.logger.exception(
-                        "Operation '%s' failed permanently after %d attempts (%.2fs elapsed)",
-                        operation_id,
-                        attempt + 1,
-                        context.total_elapsed_seconds,
-                    )
-                    raise
-
-                # Check if error is worth retrying
-                if not self.is_transient_error(error):
-                    self.logger.warning(
-                        "Operation '%s' failed with non-transient error: %s",
-                        operation_id,
-                        error,
-                    )
-                    raise
-
-                # Calculate delay for next attempt
-                delay_seconds: float = DatabaseRetryHandler.calculate_delay_seconds(attempt, retry_policy)
-
-                self.logger.warning(
-                    "Operation '%s' failed on attempt %d/%d: %s. Retrying in %.2fs...",
-                    operation_id,
-                    attempt + 1,
-                    retry_policy.max_retries + 1,
-                    error,
-                    delay_seconds,
-                )
-
-                # Wait before retry
-                await asyncio.sleep(delay_seconds)
-
-            else:
-                # If we reach here, operation succeeded
-                self.logger.debug(
-                    "Operation '%s' succeeded on attempt %d/%d (%.2fs elapsed)",
-                    operation_id,
-                    attempt + 1,
-                    retry_policy.max_retries + 1,
-                    context.total_elapsed_seconds,
-                )
-                return
 
     async def execute_with_retry(
         self,

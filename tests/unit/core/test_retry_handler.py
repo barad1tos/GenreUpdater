@@ -216,42 +216,6 @@ class TestCalculateDelaySeconds:
             assert delay >= 0
 
 
-class TestAsyncRetryOperation:
-    """Tests for async retry operation context manager."""
-
-    @pytest.mark.asyncio
-    async def test_successful_operation_no_retry(self, retry_handler: DatabaseRetryHandler) -> None:
-        """Test successful operation doesn't retry."""
-        attempts = 0
-
-        async with retry_handler.async_retry_operation("test_op") as ctx:
-            attempts += 1
-            ctx.metadata["table"] = "tracks"
-            # Operation succeeds
-
-        assert attempts == 1
-        assert ctx.attempt_count == 1
-
-    @pytest.mark.asyncio
-    async def test_non_transient_error_no_retry(self, retry_handler: DatabaseRetryHandler) -> None:
-        """Test non-transient error doesn't retry."""
-        attempts = 0
-        policy = RetryPolicy(max_retries=3, base_delay_seconds=0.01)
-        error_message = "Invalid value"
-
-        async def operation_that_raises() -> None:
-            """Execute operation that raises non-transient error."""
-            nonlocal attempts
-            async with retry_handler.async_retry_operation("test_op", policy) as _:
-                attempts += 1
-                raise ValueError(error_message)
-
-        with pytest.raises(ValueError, match=error_message):
-            await operation_that_raises()
-
-        assert attempts == 1
-
-
 class TestExecuteWithRetry:
     """Tests for execute_with_retry convenience method."""
 
@@ -292,17 +256,3 @@ class TestDatabaseRetryHandlerInit:
         assert "connection refused" in handler._transient_error_patterns
         assert "timeout" in handler._transient_error_patterns
         assert "deadlock" in handler._transient_error_patterns
-
-
-class TestRetryMetadata:
-    """Tests for retry metadata handling."""
-
-    @pytest.mark.asyncio
-    async def test_metadata_preserved(self, retry_handler: DatabaseRetryHandler) -> None:
-        """Test metadata is preserved across attempts."""
-        async with retry_handler.async_retry_operation("test_op") as ctx:
-            ctx.metadata["table"] = "tracks"
-            ctx.metadata["operation_type"] = "insert"
-
-        assert ctx.metadata["table"] == "tracks"
-        assert ctx.metadata["operation_type"] == "insert"
