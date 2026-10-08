@@ -284,9 +284,10 @@ class TestExecuteWithRetry:
         """When every attempt fails, the error of the last allowed attempt is re-raised as it was."""
         last_error = OSError("connection reset")
         operation = AsyncMock(side_effect=[OSError("connection reset"), OSError("connection reset"), last_error])
+        policy = RetryPolicy(max_retries=2, base_delay_seconds=0.0)
 
         with pytest.raises(OSError, match="connection reset") as raised:
-            await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=2, base_delay_seconds=0.0))
+            await retry_handler.execute_with_retry(operation, "test_op", policy)
 
         assert raised.value is last_error
         assert operation.await_count == 3
@@ -302,9 +303,10 @@ class TestExecuteWithRetry:
     async def test_error_propagates_without_retry(self, retry_handler: DatabaseRetryHandler, error: Exception) -> None:
         """A non-transient error, or an exception other than ValueError, RuntimeError and OSError, propagates after one call."""
         operation = AsyncMock(side_effect=error)
+        policy = RetryPolicy(max_retries=2, base_delay_seconds=0.0)
 
         with pytest.raises(type(error), match=str(error)) as raised:
-            await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=2, base_delay_seconds=0.0))
+            await retry_handler.execute_with_retry(operation, "test_op", policy)
 
         assert raised.value is error
         assert operation.await_count == 1
