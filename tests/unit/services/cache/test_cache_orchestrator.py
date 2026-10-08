@@ -83,6 +83,7 @@ class TestCacheOrchestrator:
             await orchestrator.initialize()
 
         logger.error.assert_called_once()
+        assert "AlbumCacheService" in logger.error.call_args.args[1]
         # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
         assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
 
@@ -284,6 +285,7 @@ class TestCacheOrchestrator:
         mock_api.assert_called_once()
         mock_generic.assert_called_once()
         logger.error.assert_called_once()
+        assert "AlbumCacheService" in logger.error.call_args.args[1]
         # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
         assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
         assert call("All caches saved to disk") not in logger.info.call_args_list
@@ -305,7 +307,10 @@ class TestCacheOrchestrator:
         ):
             await orchestrator.save_all_to_disk()
 
-        assert logger.error.call_count == 2
+        logged_services = [error_call.args[1] for error_call in logger.error.call_args_list]
+        assert len(logged_services) == 2
+        assert "AlbumCacheService" in logged_services[0]
+        assert "GenericCacheService" in logged_services[1]
         assert call("All caches saved to disk") not in logger.info.call_args_list
 
     # Backward compatibility tests
