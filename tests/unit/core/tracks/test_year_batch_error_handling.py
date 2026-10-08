@@ -303,13 +303,13 @@ class TestSequentialProcessingErrors:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestCancelledErrorHandling:
-    """CancelledError is silently ignored in concurrent mode (graceful shutdown)."""
+    """An album task cancelled on its own is a failure: shutdown cancels the caller, so gather raises instead of returning."""
 
-    async def test_cancelled_error_not_logged_as_failure(
+    async def test_cancelled_album_logged_as_failure(
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """asyncio.CancelledError is skipped, not logged as album failure."""
+        """A CancelledError result is logged as an album failure, naming its type."""
         processor = create_year_batch_processor()
         processor._process_single_album = AsyncMock(
             side_effect=asyncio.CancelledError(),
@@ -329,7 +329,8 @@ class TestCancelledErrorHandling:
                 changes_log=[],
             )
 
-        assert "Failed to process album" not in caplog.text
+        assert "Failed to process album" in caplog.text
+        assert "CancelledError" in caplog.text
 
     async def test_non_cancelled_exceptions_still_logged(
         self,
@@ -497,15 +498,21 @@ class TestBulkUpdateMixedResults:
         assert successful == 2
         assert failed == 1
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(RuntimeError("unexpected error"), id="RuntimeError"),
+            pytest.param(asyncio.CancelledError(), id="CancelledError"),
+        ],
+    )
     async def test_exception_in_gather_counted_as_failure(
         self,
         caplog: pytest.LogCaptureFixture,
+        error: BaseException,
     ) -> None:
-        """Exception from a track update is counted as a failure."""
+        """A track update that raises or is cancelled counts as a failure and is logged with its type and exception."""
         processor = create_year_batch_processor()
-        processor._track_updater._update_track_with_retry = AsyncMock(
-            side_effect=RuntimeError("unexpected error"),
-        )
+        processor._track_updater._update_track_with_retry = AsyncMock(side_effect=error)
 
         tracks = [create_test_track(name="T1")]
 
@@ -516,6 +523,13 @@ class TestBulkUpdateMixedResults:
                 artist="A",
                 album="B",
             )
+
+        failures = [record for record in caplog.records if record.levelno == logging.ERROR]
+        assert len(failures) == 1
+        assert type(error).__name__ in failures[0].getMessage()
+        logged_exception = failures[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[0] is type(error)
 
         assert successful == 0
         assert failed == 1

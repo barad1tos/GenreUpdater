@@ -473,4 +473,7 @@ class TestFetchReleasesForGroupsExceptionHandling:
 
         assert len(results) == 1
         assert results[0][0] is None
-        assert any("Failed to fetch releases for MB RG ID rg-abc-123" in msg for msg in error_logger.warning_messages)
+        assert len(error_logger.warning_messages) == 1
+        assert "Failed to fetch releases for MB RG ID rg-abc-123" in error_logger.warning_messages[0]
+        # A cancelled fetch comes back with an empty message, so the type is what names the failure
+        assert type(error).__name__ in error_logger.warning_messages[0]

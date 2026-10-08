@@ -302,7 +302,7 @@ class TrackUpdater:
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count results; BaseException, since a cancelled update comes back as CancelledError, which is truthy
+            # BaseException: a cancelled update comes back as a CancelledError, which is truthy and would count as a success
             for index, result in enumerate(results):
                 if isinstance(result, BaseException):
                     failed += 1

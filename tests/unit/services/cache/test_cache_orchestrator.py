@@ -68,8 +68,9 @@ class TestCacheOrchestrator:
     )
     @pytest.mark.asyncio
     async def test_initialize_handles_service_failure(self, error: BaseException) -> None:
-        """Initialization raises RuntimeError when a service fails or its initialization is cancelled."""
-        orchestrator = self.create_orchestrator()
+        """Initialization raises RuntimeError and logs the service when it fails or its initialization is cancelled."""
+        logger = MagicMock(spec=logging.Logger)
+        orchestrator = CacheOrchestrator(create_test_app_config(), logger)
 
         with (
             patch.object(orchestrator.album_service, "initialize", new_callable=AsyncMock, side_effect=error),
@@ -78,6 +79,10 @@ class TestCacheOrchestrator:
             pytest.raises(RuntimeError, match="Cache service initialization failed"),
         ):
             await orchestrator.initialize()
+
+        logger.error.assert_called_once()
+        # A cancelled task comes back from gather as a new CancelledError, so compare the type, not the object
+        assert isinstance(logger.error.call_args.kwargs["exc_info"], type(error))
 
     # Album cache tests
 

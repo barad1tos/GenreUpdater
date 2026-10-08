@@ -397,12 +397,13 @@ class YearSearchCoordinator:
         return all_releases
 
     def _log_api_error(self, api_name: str, log_artist: str, log_album: str, error: BaseException) -> None:
-        """Log API error."""
+        """Log API error with its type, which is all a cancelled search's empty CancelledError carries."""
         self.error_logger.warning(
-            "[%s] Error fetching release for '%s - %s': %s",
+            "[%s] Error fetching release for '%s - %s': %s: %s",
             api_name,
             log_artist,
             log_album,
+            type(error).__name__,
             error,
         )
 

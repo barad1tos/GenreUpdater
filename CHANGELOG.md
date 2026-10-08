@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A track year update, genre batch task, MusicBrainz release fetch, cache initialization or cache save that was cancelled on its own counted as done or vanished without a log; each now counts as a failure and is logged, and a failed track update logs its exception type and traceback
+- A task cancelled on its own while others ran beside it was mishandled: a track year update counted as done; an album's year processing, a MusicBrainz release fetch, a cache initialization or a cache save vanished without a log; and a genre update broke that artist's genre pass. Each now counts as a failure and is logged with its exception type, and a failed track update also logs its traceback
 - Year-verification queue saves no longer fail with `No such file or directory` on `pending_year_verification.csv.tmp` when several albums are marked at once, and a stale queue snapshot can no longer overwrite a newer one
 - `zip` misalignment in year_search_coordinator: filtered API tasks vs unfiltered api_order
 - Naive `datetime.fromtimestamp()` calls missing timezone in analytics.py
