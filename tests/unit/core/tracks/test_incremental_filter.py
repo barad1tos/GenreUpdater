@@ -10,7 +10,7 @@ from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_utils import is_missing_or_unknown_genre, parse_track_date_added
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockLogger
 
 if TYPE_CHECKING:

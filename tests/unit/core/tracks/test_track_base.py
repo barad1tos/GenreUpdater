@@ -10,7 +10,7 @@ import pytest
 
 from core.models.protocols import AnalyticsProtocol
 from core.tracks.track_base import BaseProcessor
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 
 @pytest.fixture

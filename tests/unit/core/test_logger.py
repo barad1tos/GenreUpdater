@@ -35,7 +35,7 @@ from core.logger import (
     try_config_alias_replacement,
     try_home_directory_replacement,
 )
-from tests.factories import (  # sourcery skip: dont-import-test-modules
+from tests.factories import (
     MINIMAL_CONFIG_DATA,
     create_test_app_config,
 )

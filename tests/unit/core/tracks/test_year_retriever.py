@@ -14,7 +14,7 @@ from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_retriever import YearRetriever
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 from tests.mocks.protocol_mocks import (
     MockCacheService,
     MockExternalApiService,

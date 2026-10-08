@@ -14,8 +14,8 @@ import yaml
 from app.cli import CLI
 from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from services.dependency_container import DependencyContainer
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
 # noinspection PyUnusedLocal

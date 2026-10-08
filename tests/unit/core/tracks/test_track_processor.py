@@ -13,7 +13,7 @@ from core.models.validators import SecurityValidator
 from core.tracks.track_processor import TrackProcessor
 from metrics import Analytics
 from metrics.analytics import LoggerContainer
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.protocols import (

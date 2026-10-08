@@ -17,7 +17,7 @@ from services.pending_verification import (
     PendingVerificationService,
     VerificationReason,
 )
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 
 async def initialize_service_without_io(service: PendingVerificationService) -> None:

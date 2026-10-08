@@ -11,8 +11,8 @@ from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
 from core.models.protocols import AnalyticsProtocol
-from tests.factories import create_mock_track_processor, create_test_app_config  # sourcery skip: dont-import-test-modules
-from tests.mocks.csv_mock import MockAnalytics, MockLogger  # sourcery skip: dont-import-test-modules
+from tests.factories import create_mock_track_processor, create_test_app_config
+from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
 class TestYearPipelineIntegration:

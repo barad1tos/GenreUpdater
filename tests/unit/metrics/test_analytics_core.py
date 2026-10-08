@@ -14,7 +14,7 @@ import pytest
 
 from core.analytics_decorator import track_instance_method
 from metrics.analytics import Analytics, CallInfo, LoggerContainer, TimingInfo
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig

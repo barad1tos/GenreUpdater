@@ -5,3 +5,30 @@
 # library_snapshot.json is 14MB (37K tracks) - exceeds 150K char limit
 ignore:
   - tests/fixtures/**
+
+rule_settings:
+  enable:
+    - default
+  # The built-in rule flags every import from the tests package, shared helpers included
+  # (tests.factories, tests.mocks, a conftest); the rules below flag only test modules (test_*.py and
+  # *_test.py, as python_files collects) and test_* names, which pytest collects again where imported
+  disable:
+    - dont-import-test-modules
+
+rules:
+  - id: no-test-module-import-from
+    description: Import shared test helpers, never a test module (test_*.py or *_test.py)
+    pattern: from ${module} import ...
+    condition: module.matches_regex(r"(^|\.)(test_\w*|\w+_test)$")
+    language: python
+  - id: no-test-module-import
+    description: Import shared test helpers, never a test module (test_*.py or *_test.py)
+    pattern: import ${module}
+    condition: module.matches_regex(r"(^|\.)(test_\w*|\w+_test)$")
+    language: python
+  # A *_test name is left alone: python_functions collects only test_*, so it is often a plain helper
+  - id: no-test-module-import-name
+    description: Never import a test_* module or function; pytest collects it again in the importing module
+    pattern: from ${package} import ..., ${name}, ...
+    condition: name.matches_regex(r"^test_\w*$")
+    language: python

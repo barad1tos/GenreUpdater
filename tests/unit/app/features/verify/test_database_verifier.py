@@ -13,7 +13,7 @@ import pytest
 from app.features.verify.database_verifier import DatabaseVerifier
 from core.models.track_models import TrackDict
 from core.models.types import AppleScriptClientProtocol
-from tests.factories import create_test_app_config  # sourcery skip: dont-import-test-modules
+from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
