@@ -79,14 +79,14 @@ class TestGenrePipelineIntegration:
     async def test_genre_pipeline_full_flow(self) -> None:
         """Test complete genre pipeline execution with multiple artists and tracks."""
         tracks_data = [
-            # Artist 1 - Rock tracks (should get Rock genre)
+            # Artist 1 - earliest album (Album A) has no genre, so no track changes
             {"id": "1", "name": "Song 1", "artist": "Rock Artist", "album": "Album A", "genre": "", "date_added": "2024-01-01 10:00:00"},
             {"id": "2", "name": "Song 2", "artist": "Rock Artist", "album": "Album A", "genre": "", "date_added": "2024-01-01 11:00:00"},
             {"id": "3", "name": "Song 3", "artist": "Rock Artist", "album": "Album B", "genre": "Rock", "date_added": "2024-01-02 10:00:00"},
-            # Artist 2 - Pop tracks (should get Pop genre)
+            # Artist 2 - earliest album is Pop, so the empty track 5 becomes Pop
             {"id": "4", "name": "Pop Song 1", "artist": "Pop Artist", "album": "Pop Album", "genre": "Pop", "date_added": "2024-01-03 10:00:00"},
             {"id": "5", "name": "Pop Song 2", "artist": "Pop Artist", "album": "Pop Album", "genre": "", "date_added": "2024-01-03 11:00:00"},
-            # Artist 3 - Mixed genres (should get earliest album genre)
+            # Artist 3 - earliest album is Jazz, so the Blues track 7 becomes Jazz
             {
                 "id": "6",
                 "name": "Jazz Song",
@@ -113,11 +113,9 @@ class TestGenrePipelineIntegration:
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Verify track processor was called for tracks needing updates
-        # Should be called for tracks with empty genres: ids 1, 2, 5
-        # Note: Actual implementation may skip some updates based on logic
-        actual_updates = track_processor.update_track_async.call_count
-        assert actual_updates >= 0, f"Expected some updates, got {actual_updates}"
+        # Each artist takes the genre of its earliest album (determine_dominant_genre_for_artist)
+        updates = {call.kwargs["track_id"]: call.kwargs["new_genre"] for call in track_processor.update_track_async.call_args_list}
+        assert updates == {"5": "Pop", "7": "Jazz"}
 
         # Verify artists were processed (should be 3 unique artists)
         unique_artists = {track.artist for track in tracks}
@@ -154,8 +152,8 @@ class TestGenrePipelineIntegration:
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Should still attempt to process tracks
-        assert track_processor.update_track_async.call_count >= 0
+        # Neither track has a genre, so there is no dominant genre to propagate
+        track_processor.update_track_async.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_cache_usage(self) -> None:
@@ -231,12 +229,10 @@ class TestGenrePipelineIntegration:
         assert isinstance(updated_tracks, list)
         assert isinstance(change_logs, list)
 
-        # Count tracks that needed updates (empty genres)
-        _tracks_needing_updates = len([t for t in tracks if not t.genre])
-        actual_updates = track_processor.update_track_async.call_count
-
-        # Should process all tracks needing updates
-        assert actual_updates >= 0  # At least some processing should occur
+        # Artists 1 and 4 start with a Rock album, so their empty tracks become Rock;
+        # artists 2 and 3 start with an album that has no genre, so theirs stay empty
+        updates = {call.kwargs["track_id"]: call.kwargs["new_genre"] for call in track_processor.update_track_async.call_args_list}
+        assert updates == dict.fromkeys(("2", "3", "5", "17", "18", "20"), "Rock")
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_error_recovery(self) -> None:

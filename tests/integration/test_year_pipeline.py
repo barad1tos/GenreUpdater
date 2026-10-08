@@ -172,9 +172,9 @@ class TestYearPipelineIntegration:
 
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        # Mock successful MusicBrainz response
+        # Mock a definitive MusicBrainz year, shaped like ExternalApiServiceProtocol.get_album_year
         mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90))
+        mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90, {"1969": 90}))
 
         track_processor = create_mock_track_processor()
         year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
@@ -182,12 +182,11 @@ class TestYearPipelineIntegration:
         # Verify external API was called
         mock_external_api.get_album_year.assert_called()
 
-        # Verify results
-        assert isinstance(result, bool)
+        assert result is True
 
-        # Verify tracks were processed
-        call_count = track_processor.update_track_async.call_count
-        assert call_count >= 0  # Should process tracks needing year updates
+        # Every track of the album gets the API year
+        updates = {call.kwargs["track_id"]: call.kwargs["new_year"] for call in track_processor.update_track_async.call_args_list}
+        assert updates == {"1": "1969", "2": "1969", "3": "1969"}
 
     @pytest.mark.asyncio
     async def test_year_pipeline_discogs_fallback(self) -> None:
