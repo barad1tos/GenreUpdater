@@ -8,6 +8,8 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'src/**/*.py'
+      # docs/changelog.md includes it
+      - 'CHANGELOG.md'
   workflow_dispatch:
 
 concurrency:
