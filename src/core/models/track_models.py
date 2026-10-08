@@ -96,7 +96,8 @@ class AppleScriptRetryConfig(BaseModel):
     base_delay_seconds: float = Field(default=1.0, ge=0)
     max_delay_seconds: float = Field(default=10.0, ge=0)
     jitter_range: float = Field(default=0.2, ge=0, le=1)
-    operation_timeout_seconds: float = Field(default=60.0, ge=0)
+    # Zero stops every operation before its first attempt
+    operation_timeout_seconds: float = Field(default=60.0, gt=0)
 
 
 class BatchProcessingConfig(BaseModel):

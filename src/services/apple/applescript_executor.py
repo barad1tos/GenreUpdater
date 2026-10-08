@@ -30,7 +30,7 @@ LOG_PREVIEW_LENGTH = 200  # characters shown when previewing long outputs/stderr
 PROCESS_EXIT_WAIT_SECONDS: float = 0.5  # time to wait for process to exit naturally
 PROCESS_KILL_WAIT_SECONDS: float = 5.0  # time to wait after killing process
 
-# errno codes used to classify transient errors for retry handler
+# errno codes that tag AppleScriptExecutionError with the kind of failure; they show in its message as [Errno N]
 ERRNO_CONNECTION_REFUSED: int = 61  # macOS: ECONNREFUSED (non-zero return code)
 ERRNO_CONNECTION_TIMED_OUT: int = 110  # ETIMEDOUT (script timeout)
 
@@ -38,14 +38,13 @@ ERRNO_CONNECTION_TIMED_OUT: int = 110  # ETIMEDOUT (script timeout)
 class AppleScriptExecutionError(OSError):
     """Exception raised when AppleScript execution fails.
 
-    This exception is used to signal transient errors that may be retried
-    by the DatabaseRetryHandler. It extends OSError to leverage the retry
-    handler's transient error detection based on errno codes.
+    It extends OSError, which DatabaseRetryHandler treats as transient
+    whatever its errno, so every execution failure is retried.
 
     Args:
         message: Error description
         label: Script label for context
-        errno_code: Optional errno code for transient error detection
+        errno_code: Optional errno code naming the kind of failure
 
     """
 
@@ -298,7 +297,7 @@ class AppleScriptExecutor:
 
         except (UnicodeDecodeError, MemoryError, RuntimeError) as e:
             self.error_logger.exception("⊗ %s unexpected error during communicate/wait: %s", label, e)
-            # These are not transient - raise without errno
+            # No errno fits these, but the error is still an OSError, so the retry handler retries it
             raise AppleScriptExecutionError(str(e), label) from e
 
         finally:
