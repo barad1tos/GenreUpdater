@@ -246,8 +246,11 @@ class ApiRequestExecutor:
         cache_key: str,
         result: dict[str, Any] | None,
     ) -> None:
-        """Cache the API response; a failed request (None) is not cached, so the next lookup asks the API again."""
-        if result is None:
+        """Cache the API response; a failed request (None) is not cached, so the next lookup asks the API again.
+
+        An empty body is skipped as well, so a cached {} can only be a failure an earlier version stored.
+        """
+        if not result:
             return
         cache_ttl_seconds = self.cache_ttl_days * 86400
         await self.cache_service.set_async(cache_key, result, ttl=cache_ttl_seconds)

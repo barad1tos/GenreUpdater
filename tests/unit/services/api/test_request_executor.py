@@ -283,6 +283,17 @@ class TestCacheResult:
 
         mock_cache_service.set_async.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_cache_result_skips_empty_body(
+        self,
+        executor: ApiRequestExecutor,
+        mock_cache_service: AsyncMock,
+    ) -> None:
+        """An empty body is not cached either, so a cached {} can only be a failure an earlier version stored."""
+        await executor._cache_result("key", {})
+
+        mock_cache_service.set_async.assert_not_called()
+
 
 class TestFailedRequestCaching:
     """A failed request must not reach the cache, and a {} record from an earlier version must not hide the API."""
@@ -313,7 +324,7 @@ class TestFailedRequestCaching:
         assert list(mock_cache_service.storage.values()) == [answer]
 
     @pytest.mark.asyncio
-    async def test_empty_record_from_earlier_version_heals(
+    async def test_legacy_empty_record_heals(
         self,
         executor: ApiRequestExecutor,
         mock_session: MagicMock,
