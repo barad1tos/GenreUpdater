@@ -873,7 +873,11 @@ class ExternalApiOrchestrator:
                 earliest_track_added_year=earliest_track_added_year,
             )
 
-        except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError):
+        except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError) as error:
+            # The fallback below reaches the caller as an ordinary result, so the console hears about the failure here
+            self.console_logger.warning(
+                "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__
+            )
             return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
         finally:
             self.release_scorer.clear_artist_period_context()

@@ -260,3 +260,23 @@ class TestExternalApiOrchestratorAllure:
         assert len(console_logger.warning_messages) == 1
         assert "'Artist - Album'" in console_logger.warning_messages[0]
         assert "TypeError" in console_logger.warning_messages[0]
+
+    @pytest.mark.asyncio
+    async def test_get_album_year_warns_on_search_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A failure while fetching releases is noted on the console as well as in the error log."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=("artist", "album", "Artist", "Album", None)))
+        monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=TimeoutError("search timed out")))
+
+        result = await orchestrator.get_album_year("Artist", "Album")
+
+        assert result == (None, False, 0, {})
+        error_logger = orchestrator.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert len(error_logger.exception_messages) == 1
+        console_logger = orchestrator.console_logger
+        assert isinstance(console_logger, MockLogger)
+        lookup_warnings = [message for message in console_logger.warning_messages if "Year lookup failed" in message]
+        assert len(lookup_warnings) == 1
+        assert "'Artist - Album'" in lookup_warnings[0]
+        assert "TimeoutError" in lookup_warnings[0]

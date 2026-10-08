@@ -1788,6 +1788,7 @@ class TestDetermineAlbumYearApiFailure:
         logged_exception = failures[0].exc_info
         assert logged_exception is not None
         assert logged_exception[1] is api_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
 
 class TestCheckAlbumPrereleaseSkipDisabled:

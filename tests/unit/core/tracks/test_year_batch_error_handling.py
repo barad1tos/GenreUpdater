@@ -362,6 +362,7 @@ class TestCancelledErrorHandling:
         logged_exception = failure_records[0].exc_info
         assert logged_exception is not None
         assert logged_exception[1] is album_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
 
 # ---------------------------------------------------------------------------
