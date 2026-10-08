@@ -422,6 +422,30 @@ class TestYearRetrieverAllure:
         assert "cancelled_001" in error_logger.error_messages[0]
         assert "CancelledError" in error_logger.error_messages[0]
 
+    @pytest.mark.asyncio
+    async def test_update_album_tracks_counts_each_successful_update(self) -> None:
+        """The success count is the number of updates that went through, even when a track ID repeats."""
+        mock_track_processor = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(return_value=True)
+        track_updater = TrackUpdater(
+            track_processor=mock_track_processor,
+            retry_handler=DatabaseRetryHandler(logger=logging.getLogger("test.retry")),
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            config=create_test_app_config(),
+        )
+        tracks = [
+            _DummyTrackData.create(track_id="repeated_001", name="Repeated 1"),
+            _DummyTrackData.create(track_id="repeated_001", name="Repeated 1"),
+        ]
+
+        success_count, failed_count = await track_updater.update_album_tracks_bulk_async(
+            tracks=tracks, year="2000", artist="Test Artist", album="Test Album"
+        )
+
+        assert (success_count, failed_count) == (2, 0)
+        assert mock_track_processor.update_track_async.await_count == 2
+
     @pytest.mark.parametrize(
         "failure",
         [
