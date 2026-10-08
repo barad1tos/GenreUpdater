@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import urlparse
 
@@ -11,6 +11,9 @@ import pytest
 from services.api.discogs import DiscogsClient, DiscogsRelease
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+
+if TYPE_CHECKING:
+    from core.models.protocols import CacheServiceProtocol
 
 
 class TestDiscogsClientAllure:
@@ -45,7 +48,7 @@ class TestDiscogsClientAllure:
             analytics=MockAnalytics(),
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
-            cache_service=mock_cache_service,
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
             scoring_config=app_config.year_retrieval,
             config=app_config,
         )
@@ -227,6 +230,41 @@ class TestDiscogsClientAllure:
 
         # Verify cache was checked
         mock_cache_service.get_async.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_search_is_not_cached(self) -> None:
+        """A failed search returns [] without caching it, so the next call searches again."""
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock()
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=AsyncMock(return_value=None), mock_cache_service=mock_cache_service)
+
+        assert await client.get_scored_releases("test artist", "test album", None) == []
+        mock_cache_service.set_async.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_master_fetch_is_not_cached(self) -> None:
+        """A failed master request leaves the cache alone, so the next run asks for the master again."""
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock()
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=AsyncMock(return_value=None), mock_cache_service=mock_cache_service)
+
+        assert await client._fetch_master_release_year(4242) is None
+        mock_cache_service.set_async.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_master_without_year_is_cached_as_no_year(self) -> None:
+        """A master that answers without a year is still cached as NO_YEAR."""
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock()
+        master_without_year = AsyncMock(return_value={"id": 4242, "title": "Album"})
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=master_without_year, mock_cache_service=mock_cache_service)
+
+        assert await client._fetch_master_release_year(4242) is None
+        mock_cache_service.set_async.assert_awaited_once()
+        assert mock_cache_service.set_async.call_args.args[:2] == ("discogs_master_4242", "NO_YEAR")
 
     @pytest.mark.asyncio
     async def test_primary_search_success_no_fallback(self) -> None:

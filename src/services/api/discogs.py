@@ -206,18 +206,19 @@ class DiscogsClient(BaseApiClient):
             self.console_logger.debug("[discogs] Fetching master release ID %s", master_id)
 
             master_data = await self._make_api_request("discogs", master_url, params=params)
+            if not master_data:
+                # A failed request says nothing about the master; leave the cache alone so the next run asks again
+                return None
 
-            if master_data:
-                year = master_data.get("year")
-                if isinstance(year, (int, str)):
-                    # Cache for a long time (master years don't change)
-                    cache_ttl = self.cache_ttl_days * 86400
-                    await self.cache_service.set_async(cache_key, year, ttl=cache_ttl)
-                    self.console_logger.debug("[discogs] Master release %s year: %s", master_id, year)
-                    return int(year)
+            cache_ttl = self.cache_ttl_days * 86400
+            year = master_data.get("year")
+            if isinstance(year, (int, str)):
+                # Cache for a long time (master years don't change)
+                await self.cache_service.set_async(cache_key, year, ttl=cache_ttl)
+                self.console_logger.debug("[discogs] Master release %s year: %s", master_id, year)
+                return int(year)
 
             # Cache negative result to avoid repeated API calls
-            cache_ttl = self.cache_ttl_days * 86400
             await self.cache_service.set_async(cache_key, "NO_YEAR", ttl=cache_ttl)
             self.console_logger.debug("[discogs] Master release %s has no year (cached)", master_id)
             return None
@@ -815,7 +816,7 @@ class DiscogsClient(BaseApiClient):
             discogs_response = await self._make_discogs_search_request(artist_norm, album_norm, artist_orig, album_orig)
 
             if discogs_response is None:
-                await self.cache_service.set_async(cache_key, [], ttl=cache_ttl_seconds)
+                # A failed search and an empty one both give None; the executor already caches real answers, so [] here would only keep a failure
                 return []
 
             results = discogs_response.get("results", [])
