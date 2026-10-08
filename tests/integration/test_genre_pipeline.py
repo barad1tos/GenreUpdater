@@ -120,10 +120,12 @@ class TestGenrePipelineIntegration:
 
         assert updated_tracks == []
         assert change_logs == []
-        track_processor.update_track_async.assert_not_called()
-
         # Neither track has a genre, so there is no dominant genre to propagate
         track_processor.update_track_async.assert_not_called()
+        # Skipped, not crashed: the artist gather turns an exception into an error log
+        error_logger = genre_manager.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert error_logger.error_messages == []
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_cache_usage(self) -> None:

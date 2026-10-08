@@ -16,7 +16,7 @@ from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from services.dependency_container import DependencyContainer
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
-from tests.mocks.protocol_mocks import MockExternalApiService
+from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
 
 
 # noinspection PyUnusedLocal
@@ -97,7 +97,6 @@ class TestCLIE2E:
             return "" if "fetch_track_summaries" in script_name else "[]"
 
         mock_deps.ap_client.run_script = AsyncMock(side_effect=smart_run_script)
-        mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         # Cache service mock
         mock_deps.cache_service = MagicMock()
@@ -107,10 +106,7 @@ class TestCLIE2E:
         # External API service: every album resolves to 2020
         mock_deps.external_api_service = MockExternalApiService()
 
-        # Pending verification service mock (accessed via music_updater.deps.pending_verification_service)
-        mock_deps.pending_verification_service = MagicMock()
-        mock_deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
-        mock_deps.pending_verification_service.get_all_pending_albums = AsyncMock(return_value=[])
+        mock_deps.pending_verification_service = MockPendingVerificationService()
 
         # Library snapshot service mock
         mock_deps.library_snapshot_service = MagicMock()

@@ -66,8 +66,6 @@ class TestBatchProcessingE2E:
 
         # AppleScript client mock
         mock_deps.ap_client = MagicMock()
-        mock_deps.ap_client.get_tracks = AsyncMock(return_value=[])
-        mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         async def smart_run_script(script_name: str, *_args: object, **_kwargs: object) -> str:
             """Mock script runner for batch testing."""
@@ -82,7 +80,6 @@ class TestBatchProcessingE2E:
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
         mock_deps.cache_service.set_async = AsyncMock()
         mock_deps.cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        mock_deps.cache_service.cache_album_year = AsyncMock()
         mock_deps.cache_service.store_album_year_in_cache = AsyncMock()
 
         # External API service: no API knows any album
@@ -96,7 +93,6 @@ class TestBatchProcessingE2E:
         mock_deps.library_snapshot_service = MagicMock()
         mock_deps.library_snapshot_service.is_enabled = MagicMock(return_value=False)
         mock_deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=False)
-        mock_deps.library_snapshot_service.get_track_ids_from_snapshot = AsyncMock(return_value=set())
         mock_deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=None)
         mock_deps.library_snapshot_service.save_snapshot = AsyncMock()
         mock_deps.library_snapshot_service.get_library_mtime = AsyncMock(return_value=None)
@@ -490,7 +486,6 @@ class TestBatchProcessorErrorHandling:
 
         mock_deps.ap_client = MagicMock()
         mock_deps.ap_client.run_script = AsyncMock(return_value="")
-        mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
 
         mock_deps.cache_service = MagicMock()
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
@@ -596,8 +591,6 @@ class TestBatchProcessingIntegrationScenarios:
 
         mock_deps.ap_client = MagicMock()
         mock_deps.ap_client.run_script = AsyncMock(return_value="")
-        mock_deps.ap_client.update_track_async = AsyncMock(return_value=True)
-        mock_deps.ap_client.get_tracks = AsyncMock(return_value=[])
 
         mock_deps.cache_service = MagicMock()
         mock_deps.cache_service.get_async = AsyncMock(return_value=None)
