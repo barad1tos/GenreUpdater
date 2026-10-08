@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TypeVar, TYPE_CHECKING
+from typing import NoReturn, TypeVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -96,8 +96,8 @@ class DatabaseRetryHandler:
     def is_transient_error(self, error: Exception) -> bool:
         """Determine if an error is transient and worth retrying.
 
-        Analyzes error type, message content, and errno codes
-        to classify errors as transient (temporary) or permanent.
+        Every OSError, which includes ConnectionError and TimeoutError, counts as
+        transient; any other error does when its message matches a known transient pattern.
 
         Args:
             error: Exception to analyze
@@ -108,20 +108,7 @@ class DatabaseRetryHandler:
         """
         error_message: str = str(error).lower()
 
-        # Connection-related errors are typically transient
-        if isinstance(error, ConnectionError | TimeoutError | OSError):
-            # Check for specific OSError errno codes that indicate transient issues
-            if hasattr(error, "errno"):
-                # Common transient errno codes
-                transient_errnos: set[int] = {
-                    111,  # Connection refused
-                    110,  # Connection timed out
-                    104,  # Connection reset by peer
-                    32,  # Broken pipe
-                    61,  # Connection refused (macOS)
-                }
-                if error.errno in transient_errnos:
-                    return True
+        if isinstance(error, OSError):
             return True
 
         # Check error message for transient patterns
@@ -187,10 +174,11 @@ class DatabaseRetryHandler:
         Retries after a ValueError, RuntimeError or OSError that is_transient_error
         classifies as transient, waiting the backoff delay between attempts; any other
         exception propagates at once. A non-transient error, or any error from the last
-        allowed attempt, is re-raised unchanged. The total timeout is checked only before
-        an attempt starts: past the deadline, TimeoutError replaces the next attempt. An
-        attempt already running is not interrupted, so its result, or an error that ends
-        the loop, comes through unchanged even after the deadline.
+        allowed attempt, is re-raised unchanged; a negative max_retries allows no retry but
+        still runs the operation once. A retry that could only start past the total timeout
+        is replaced by TimeoutError, raised from the last failure without waiting out the
+        backoff. An attempt already running is not interrupted, so its result, or an error
+        that ends the loop, comes through unchanged even after the deadline.
 
         Args:
             operation: Async callable to execute with retry
@@ -202,9 +190,8 @@ class DatabaseRetryHandler:
 
         Raises:
             OSError: If the operation fails with a non-transient error or retries are exhausted
-            RuntimeError: If the operation fails with a non-transient error, retries are exhausted, or the loop completes without a result
+            RuntimeError: If the operation fails with a non-transient error or retries are exhausted
             ValueError: If the operation fails with a non-transient error or retries are exhausted
-            last_error: Re-raised as the last transient error after retries are exhausted
 
         """
         retry_policy: RetryPolicy = policy or self.database_policy
@@ -218,11 +205,12 @@ class DatabaseRetryHandler:
         )
 
         last_error: Exception | None = None
+        attempt = 0
 
-        for attempt in range(retry_policy.max_retries + 1):
+        while True:
             # Check for total operation timeout
             if context.has_exceeded_timeout:
-                self._raise_timeout_error(operation_id, context, retry_policy)
+                self._raise_timeout_error(operation_id, context, retry_policy, last_error)
 
             try:
                 result = await operation()
@@ -260,6 +248,10 @@ class DatabaseRetryHandler:
                 # Calculate delay for next attempt
                 delay_seconds: float = DatabaseRetryHandler.calculate_delay_seconds(attempt, retry_policy)
 
+                # A retry that could only start past the deadline would be replaced by TimeoutError, so do not wait for it
+                if context.total_elapsed_seconds + delay_seconds > retry_policy.operation_timeout_seconds:
+                    self._raise_timeout_error(operation_id, context, retry_policy, error)
+
                 self.logger.warning(
                     "Operation '%s' failed on attempt %d/%d: %s. Retrying in %.2fs...",
                     operation_id,
@@ -271,35 +263,32 @@ class DatabaseRetryHandler:
 
                 # Wait before retry
                 await asyncio.sleep(delay_seconds)
-
-        # Should not reach here, but safety fallback
-        if last_error:
-            raise last_error
-        msg = f"Operation '{operation_id}' failed without error (unexpected state)"
-        raise RuntimeError(msg)
+                attempt += 1
 
     def _raise_timeout_error(
         self,
         operation_id: str,
         context: RetryOperationContext,
         retry_policy: RetryPolicy,
-    ) -> None:
-        """Raise timeout error with proper logging and context.
+        cause: Exception | None,
+    ) -> NoReturn:
+        """Log that the operation ran out of time and raise TimeoutError.
 
         Args:
             operation_id: Unique identifier for the operation
             context: Current retry operation context
             retry_policy: Active retry policy configuration
+            cause: The failure the cancelled retry would have followed, chained as the cause
 
         Raises:
-            timeout_error: Operation exceeded total timeout
+            TimeoutError: Always: the operation exceeded its total timeout
 
         """
-        timeout_error = TimeoutError(f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s")
         self.logger.error(
             "Operation '%s' timed out after %.2fs (max: %.2fs)",
             operation_id,
             context.total_elapsed_seconds,
             retry_policy.operation_timeout_seconds,
         )
-        raise timeout_error
+        msg = f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s"
+        raise TimeoutError(msg) from cause

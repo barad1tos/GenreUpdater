@@ -14,18 +14,16 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from core import core_config
 from core.core_config import (
     REQUIRED_ENV_VARS,
-    _read_and_parse_config,
-    _validate_config_data_type,
-    _validate_config_path,
     format_pydantic_errors,
     load_config,
     resolve_env_vars,
     validate_api_auth,
     validate_required_env_vars,
 )
-from core.models.track_models import ApiAuthConfig, DevelopmentConfig
+from core.models.track_models import ApiAuthConfig, AppleScriptRetryConfig, DevelopmentConfig
 
 if TYPE_CHECKING:
     import pathlib
@@ -100,14 +98,14 @@ class TestValidateConfigPath:
         nonexistent = tmp_path / "nonexistent.yaml"
 
         with pytest.raises(FileNotFoundError, match="Config file not found"):
-            _validate_config_path(str(nonexistent))
+            core_config._validate_config_path(str(nonexistent))
 
     def test_raises_for_directory(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should raise FileNotFoundError if path is a directory."""
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(FileNotFoundError, match="does not point to a file"):
-            _validate_config_path(str(tmp_path))
+            core_config._validate_config_path(str(tmp_path))
 
     def test_raises_for_wrong_extension(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should raise ValueError for non-YAML extension."""
@@ -115,7 +113,7 @@ class TestValidateConfigPath:
         config_file = _create_config_file(tmp_path, "config.txt", "key: value")
 
         with pytest.raises(ValueError, match=r"must have a \.yaml or \.yml extension"):
-            _validate_config_path(str(config_file))
+            core_config._validate_config_path(str(config_file))
 
     def test_accepts_yml_extension(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should accept .yml extension."""
@@ -130,7 +128,7 @@ class TestValidateConfigPath:
         """Assert that config path validation succeeds for given filename."""
         monkeypatch.chdir(tmp_path)
         config_file = _create_config_file(tmp_path, filename, "key: value")
-        result = _validate_config_path(str(config_file))
+        result = core_config._validate_config_path(str(config_file))
         assert result == config_file.resolve()
 
 
@@ -141,7 +139,7 @@ class TestReadAndParseConfig:
         """Should parse valid YAML file."""
         config_file = _create_config_file(tmp_path, "config.yaml", "database:\n  host: localhost\n  port: 5432\n")
 
-        result = _read_and_parse_config(config_file)
+        result = core_config._read_and_parse_config(config_file)
         assert isinstance(result, dict)
         assert result["database"]["host"] == "localhost"
         assert result["database"]["port"] == 5432
@@ -153,7 +151,7 @@ class TestReadAndParseConfig:
         config_file.write_text("x" * (1024 * 1024 + 1))
 
         with pytest.raises(ValueError, match="too large"):
-            _read_and_parse_config(config_file)
+            core_config._read_and_parse_config(config_file)
 
 
 class TestValidateRequiredEnvVars:
@@ -191,23 +189,23 @@ class TestValidateConfigDataType:
     def test_accepts_dict(self) -> None:
         """Should return dict unchanged."""
         data: dict[str, Any] = {"key": "value"}
-        result = _validate_config_data_type(data)
+        result = core_config._validate_config_data_type(data)
         assert result == data
 
     def test_raises_for_list(self) -> None:
         """Should raise TypeError for list."""
         with pytest.raises(TypeError, match="not a dictionary"):
-            _validate_config_data_type(["item1", "item2"])
+            core_config._validate_config_data_type(["item1", "item2"])
 
     def test_raises_for_string(self) -> None:
         """Should raise TypeError for string."""
         with pytest.raises(TypeError, match="not a dictionary"):
-            _validate_config_data_type("string value")
+            core_config._validate_config_data_type("string value")
 
     def test_raises_for_none(self) -> None:
         """Should raise TypeError for None."""
         with pytest.raises(TypeError, match="not a dictionary"):
-            _validate_config_data_type(None)
+            core_config._validate_config_data_type(None)
 
 
 class TestFormatPydanticErrors:
@@ -352,6 +350,20 @@ class TestDevelopmentConfigTestArtists:
         """Should raise TypeError when tuple contains non-string."""
         with pytest.raises(TypeError, match=r"test_artists\[0\] must be str"):
             DevelopmentConfig.model_validate({"test_artists": (None, "Artist")})
+
+
+class TestAppleScriptRetryConfig:
+    """Tests for the AppleScript retry settings."""
+
+    def test_rejects_zero_operation_timeout(self) -> None:
+        """A zero total timeout would end every operation before its first retry, so the config rejects it."""
+        with pytest.raises(ValidationError, match="operation_timeout_seconds"):
+            AppleScriptRetryConfig.model_validate({"operation_timeout_seconds": 0})
+
+    def test_accepts_positive_operation_timeout(self) -> None:
+        """A positive total timeout loads as given."""
+        config = AppleScriptRetryConfig.model_validate({"operation_timeout_seconds": 0.5})
+        assert config.operation_timeout_seconds == 0.5
 
 
 class TestLoadConfigDoesNotLogSecrets:

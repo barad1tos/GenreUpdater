@@ -311,31 +311,52 @@ class TestExecuteWithRetry:
         assert raised.value is error
         assert operation.await_count == 1
 
+    @pytest.mark.parametrize(
+        "elapsed_at_failure",
+        [
+            pytest.param(11.0, id="deadline-passed"),
+            pytest.param(9.5, id="backoff-would-pass-deadline"),
+        ],
+    )
     @pytest.mark.asyncio
     async def test_timeout_replaces_next_attempt(
         self,
+        *,
         retry_handler: DatabaseRetryHandler,
         clock: SteppingClock,
         monkeypatch: pytest.MonkeyPatch,
+        elapsed_at_failure: float,
     ) -> None:
-        """Once the deadline has passed, TimeoutError is raised instead of starting the next attempt."""
+        """When the next attempt could only start past the deadline, TimeoutError is raised at once, caused by the last failure."""
         sleep = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", sleep)
+        error = OSError("connection reset")
 
-        async def slow_transient_failure() -> str:
-            """Fail transiently after the deadline has passed."""
-            clock.advance(11)
-            raise OSError("connection reset")
+        async def transient_failure() -> str:
+            """Fail transiently once the given time has passed."""
+            clock.advance(elapsed_at_failure)
+            raise error
 
-        operation = AsyncMock(side_effect=slow_transient_failure)
-        policy = RetryPolicy(max_retries=2, operation_timeout_seconds=10.0)
+        operation = AsyncMock(side_effect=transient_failure)
+        # A one-second backoff without jitter, so 9.5s plus the backoff ends past the 10s deadline
+        policy = RetryPolicy(max_retries=2, base_delay_seconds=1.0, jitter_range=0.0, operation_timeout_seconds=10.0)
 
-        with pytest.raises(TimeoutError, match="exceeded total timeout"):
+        with pytest.raises(TimeoutError, match="exceeded total timeout") as raised:
             await retry_handler.execute_with_retry(operation, "test_op", policy)
 
+        assert raised.value.__cause__ is error
         assert operation.await_count == 1
-        # Only the backoff after the first failure: the handler never retries its own TimeoutError
-        sleep.assert_awaited_once()
+        sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_negative_max_retries_runs_the_operation_once(self, retry_handler: DatabaseRetryHandler) -> None:
+        """A negative retry count means no retries, not no attempt: the operation still runs once."""
+        operation = AsyncMock(return_value="success")
+
+        result = await retry_handler.execute_with_retry(operation, "test_op", RetryPolicy(max_retries=-1))
+
+        assert result == "success"
+        operation.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_running_attempt_keeps_result_after_deadline(self, retry_handler: DatabaseRetryHandler, clock: SteppingClock) -> None:
