@@ -30,7 +30,7 @@ import aiohttp
 import certifi
 
 from core.debug_utils import debug
-from core.logger import LogFormat
+from core.logger import PLAIN_TEXT, LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
@@ -838,9 +838,12 @@ class ExternalApiOrchestrator:
             inputs = await self._initialize_year_search(artist, album, current_library_year)
             if not inputs:
                 return None, False, 0, {}
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            if debug.year:
-                self.error_logger.exception("Error in get_album_year initialization: %s", e)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            # Logged whatever the debug flags: the caller only sees an album without a year
+            self.error_logger.exception("Year search setup failed for '%s - %s'", artist, album)
+            self.console_logger.warning(
+                "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
+            )
             return None, False, 0, {}
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
@@ -870,7 +873,11 @@ class ExternalApiOrchestrator:
                 earliest_track_added_year=earliest_track_added_year,
             )
 
-        except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError):
+        except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError) as error:
+            # The fallback below reaches the caller as an ordinary result, so the console hears about the failure here
+            self.console_logger.warning(
+                "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__, extra=PLAIN_TEXT
+            )
             return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
         finally:
             self.release_scorer.clear_artist_period_context()
@@ -1063,7 +1070,7 @@ class ExternalApiOrchestrator:
             return str(artist_region) if artist_region else None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
-            self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err)
+            self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err, exc_info=context_err)
             return None
 
     async def _fetch_all_api_results(

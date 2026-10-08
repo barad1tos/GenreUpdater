@@ -6,6 +6,7 @@ extracted during cognitive complexity refactoring.
 
 from __future__ import annotations
 
+import io
 import logging
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -17,6 +18,7 @@ from core.models.protocols import (
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
 )
+from core.debug_utils import DebugConfig
 from core.models.types import TrackDict
 from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import (
@@ -308,44 +310,61 @@ class TestFetchFromApi:
         # Should NOT cache rejected year
         cache_service.store_album_year_in_cache.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(RuntimeError("API error"), id="RuntimeError"),
+            pytest.param(OSError("Network error"), id="OSError"),
+            pytest.param(ValueError("Invalid data"), id="ValueError"),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_handles_api_exception_gracefully(self) -> None:
-        """Should return None when API raises exception."""
+    async def test_api_failure_returns_none_and_is_logged(
+        self,
+        error: Exception,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An API failure yields no year; the error log gets its traceback and the console a one-line warning, even with year debugging off."""
+        # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
+        year_debugging_off = DebugConfig()
+        year_debugging_off.year = False
+        monkeypatch.setattr("core.tracks.year_determination.debug", year_debugging_off)
         external_api = _create_mock_external_api()
-        external_api.get_album_year = AsyncMock(side_effect=RuntimeError("API error"))
-
+        external_api.get_album_year = AsyncMock(side_effect=error)
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track()]
 
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
+        with caplog.at_level(logging.WARNING):
+            result = await determinator._fetch_from_api("Artist", "Album", [_create_track()], None)
 
         assert result is None
+        error_records = [record for record in caplog.records if record.name == "test.error"]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
+        assert "'Artist - Album'" in error_records[0].getMessage()
+        console_records = [record for record in caplog.records if record.name == "test.console"]
+        assert [(record.levelno, record.exc_info) for record in console_records] == [(logging.WARNING, None)]
+        assert type(error).__name__ in console_records[0].getMessage()
 
     @pytest.mark.asyncio
-    async def test_handles_os_error_gracefully(self) -> None:
-        """Should return None when API raises OSError."""
+    async def test_api_failure_console_line_prints_names_verbatim(
+        self,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+    ) -> None:
+        """Names Rich would read as markup appear as they are, and the failed lookup still returns no year."""
+        console_logger, console_output = rich_console_logger
         external_api = _create_mock_external_api()
         external_api.get_album_year = AsyncMock(side_effect=OSError("Network error"))
-
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track()]
+        determinator.console_logger = console_logger
 
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
+        result = await determinator._fetch_from_api("Artist [live]", "Mixes [/edit]", [_create_track()], None)
 
         assert result is None
-
-    @pytest.mark.asyncio
-    async def test_handles_value_error_gracefully(self) -> None:
-        """Should return None when API raises ValueError."""
-        external_api = _create_mock_external_api()
-        external_api.get_album_year = AsyncMock(side_effect=ValueError("Invalid data"))
-
-        determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track()]
-
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
-
-        assert result is None
+        assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
 
     @pytest.mark.asyncio
     async def test_passes_dominant_year_to_api(self) -> None:

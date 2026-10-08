@@ -7,6 +7,7 @@ should continue processing remaining albums and report failures gracefully.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
@@ -336,11 +337,10 @@ class TestCancelledErrorHandling:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Non-CancelledError exceptions are still logged as failures."""
+        """Non-CancelledError exceptions are still logged as failures, with their traceback."""
         processor = create_year_batch_processor()
-        processor._process_single_album = AsyncMock(
-            side_effect=ValueError("real error"),
-        )
+        album_error = ValueError("real error")
+        processor._process_single_album = AsyncMock(side_effect=album_error)
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
             (("Artist", "Album"), [create_test_track()]),
@@ -358,6 +358,54 @@ class TestCancelledErrorHandling:
 
         assert "Failed to process album" in caplog.text
         assert "real error" in caplog.text
+        failure_records = [record for record in caplog.records if "Failed to process album" in record.getMessage()]
+        assert len(failure_records) == 1
+        logged_exception = failure_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is album_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
+        # The error log is a file the console never shows, so the console gets its own line
+        console_warnings = [record for record in caplog.records if record.name == "test.console"]
+        assert [record.getMessage() for record in console_warnings] == [
+            "Year processing failed for 'Artist - Album' (ValueError); traceback in the error log"
+        ]
+        assert console_warnings[0].exc_info is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestFailedAlbumConsoleLine:
+    """The console line for a failed album shows the album's name as it is."""
+
+    async def test_album_names_with_markup_print_verbatim(
+        self,
+        *,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Names Rich would read as markup neither stop the batch nor cost an album its error-log record."""
+        console_logger, console_output = rich_console_logger
+        processor = create_year_batch_processor(console_logger=console_logger)
+        processor._process_single_album = AsyncMock(side_effect=ValueError("real error"))
+        album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
+            (("Artist", "Mixes [/edit]"), [create_test_track()]),
+            (("Artist", "Album [live]"), [create_test_track()]),
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            await processor._process_batches_concurrently(
+                album_items=album_items,
+                batch_size=10,
+                total_albums=2,
+                concurrency_limit=1,
+                updated_tracks=[],
+                changes_log=[],
+            )
+
+        printed = console_output.getvalue()
+        assert "'Artist - Mixes [/edit]'" in printed
+        assert "'Artist - Album [live]'" in printed
+        assert len([record for record in caplog.records if "Failed to process album" in record.getMessage()]) == 2
 
 
 # ---------------------------------------------------------------------------

@@ -273,6 +273,8 @@ class YearSearchCoordinator:
                 return results
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
+            # Logged whatever the debug flags: the search goes on as if this provider found nothing
+            self._log_api_error(api_name, artist_norm, album_norm, e)
             if debug.api:
                 self.console_logger.warning("%s failed for %s: %s", api_name, script_type.value, e)
 
@@ -405,6 +407,7 @@ class YearSearchCoordinator:
             log_album,
             type(error).__name__,
             error,
+            exc_info=error,
         )
 
     def _log_empty_api_result(self, api_name: str, log_artist: str, log_album: str) -> None:

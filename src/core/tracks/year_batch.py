@@ -23,7 +23,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from core.logger import get_shared_console
+from core.logger import PLAIN_TEXT, get_shared_console
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
@@ -329,6 +329,15 @@ class YearBatchProcessor:
                             force,
                             type(result).__name__,
                             result,
+                            exc_info=result,
+                        )
+                        # The error log is a file the console never shows, so the console hears about the album here
+                        self.console_logger.warning(
+                            "Year processing failed for '%s - %s' (%s); traceback in the error log",
+                            artist_name,
+                            album_name,
+                            type(result).__name__,
+                            extra=PLAIN_TEXT,
                         )
 
     # Album processing pipeline

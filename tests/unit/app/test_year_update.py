@@ -512,15 +512,22 @@ class TestUpdateAllYearsWithLogs:
     @pytest.mark.asyncio
     async def test_returns_error_entry_on_exception(
         self,
+        *,
         service: YearUpdateService,
         mock_year_retriever: MagicMock,
         sample_tracks: list[TrackDict],
+        console_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Should return error entry on exception."""
+        """Should return error entry on exception, and say on the console that the year update stopped."""
         mock_year_retriever.get_album_years_with_logs = AsyncMock(side_effect=RuntimeError("API failed"))
 
-        result = await service.update_all_years_with_logs(tracks=sample_tracks, force=False)
+        with caplog.at_level(logging.WARNING):
+            result = await service.update_all_years_with_logs(tracks=sample_tracks, force=False)
 
+        console_warnings = [record for record in caplog.records if record.name == console_logger.name and record.levelno == logging.WARNING]
+        assert [record.getMessage() for record in console_warnings] == ["Album year update stopped (RuntimeError); traceback in the error log"]
+        assert console_warnings[0].exc_info is None
         assert len(result) == 1
         assert result[0].change_type == "year_update_error"
         assert result[0].artist == "ERROR"
