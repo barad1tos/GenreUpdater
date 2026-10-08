@@ -13,6 +13,12 @@ from core.tracks.year_retriever import YearRetriever
 from core.models.protocols import AnalyticsProtocol
 from tests.factories import create_mock_track_processor, create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
+from tests.mocks.protocol_mocks import MockExternalApiService
+
+
+def _written_years(track_processor: AsyncMock) -> list[tuple[str, str]]:
+    """Return every (track_id, new_year) update in a stable order, duplicates included."""
+    return sorted((call.kwargs["track_id"], call.kwargs["new_year"]) for call in track_processor.update_track_async.call_args_list)
 
 
 class TestYearPipelineIntegration:
@@ -47,7 +53,7 @@ class TestYearPipelineIntegration:
     @staticmethod
     def create_year_retriever(
         *,
-        mock_external_api: AsyncMock,
+        mock_external_api: MockExternalApiService,
         mock_track_processor: AsyncMock | None = None,
         mock_cache_service: MagicMock | None = None,
         mock_pending_verification: MagicMock | None = None,
@@ -93,6 +99,7 @@ class TestYearPipelineIntegration:
                     "adaptive_delay": False,
                     "cache_ttl_days": 30,
                     "pending_verification_interval_days": 30,
+                    "prerelease_handling": "process_editable",
                 },
                 "logic": {
                     "min_valid_year": 1900,
@@ -134,7 +141,7 @@ class TestYearPipelineIntegration:
         return YearRetriever(
             track_processor=mock_track_processor,
             cache_service=cast(Any, mock_cache_service),
-            external_api=cast(Any, mock_external_api),
+            external_api=mock_external_api,
             pending_verification=cast(Any, mock_pending_verification),
             retry_handler=retry_handler,
             console_logger=MockLogger(),
@@ -165,34 +172,28 @@ class TestYearPipelineIntegration:
 
     @pytest.mark.asyncio
     async def test_year_pipeline_musicbrainz_primary(self) -> None:
-        """Test MusicBrainz as primary source for year retrieval."""
+        """A definitive API year fills every track of the album."""
         tracks_data = [
             {"id": "1", "name": "Song 1", "artist": "The Beatles", "album": "Abbey Road", "year": "", "date_added": "2024-01-01 10:00:00"},
             {"id": "2", "name": "Song 2", "artist": "The Beatles", "album": "Abbey Road", "year": "", "date_added": "2024-01-01 11:00:00"},
             {"id": "3", "name": "Song 3", "artist": "The Beatles", "album": "Abbey Road", "year": "", "date_added": "2024-01-01 12:00:00"},
         ]
-
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        # Mock a definitive MusicBrainz year, shaped like ExternalApiServiceProtocol.get_album_year
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("1969", True, 90, {"1969": 90}))
-
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("1969", True, 90, {"1969": 90})
         track_processor = create_mock_track_processor()
-        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
+
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
         result = await year_retriever.process_album_years(tracks)
-        # Verify external API was called
-        mock_external_api.get_album_year.assert_called()
 
         assert result is True
-
-        # Every track of the album gets the API year
-        updates = {call.kwargs["track_id"]: call.kwargs["new_year"] for call in track_processor.update_track_async.call_args_list}
-        assert updates == {"1": "1969", "2": "1969", "3": "1969"}
+        assert len(external_api.get_album_year_calls) == 1
+        assert _written_years(track_processor) == [("1", "1969"), ("2", "1969"), ("3", "1969")]
 
     @pytest.mark.asyncio
-    async def test_year_pipeline_discogs_fallback(self) -> None:
-        """The retriever applies the year the API returns, whichever source the orchestrator fell back to."""
+    async def test_year_pipeline_applies_tentative_year(self) -> None:
+        """A non-definitive API year still fills an album whose tracks have no year."""
         tracks_data = [
             {"id": "1", "name": "Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 10:00:00"},
             {
@@ -206,18 +207,17 @@ class TestYearPipelineIntegration:
         ]
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        # MusicBrainz -> Discogs fallback happens inside one get_album_year call; it returns the Discogs year
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("2018", True, 80, {"2018": 80}))
+        # The score resolver marks a single older candidate scoring below 85 as not definitive
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2018", False, 80, {"2018": 80})
         track_processor = create_mock_track_processor()
 
-        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        mock_external_api.get_album_year.assert_awaited_once()
-        updates = {call.kwargs["track_id"]: call.kwargs["new_year"] for call in track_processor.update_track_async.call_args_list}
-        assert updates == {"1": "2018", "2": "2018"}
+        assert len(external_api.get_album_year_calls) == 1
+        assert _written_years(track_processor) == [("1", "2018"), ("2", "2018")]
 
     @pytest.mark.asyncio
     async def test_year_pipeline_no_year_found(self) -> None:
@@ -242,16 +242,16 @@ class TestYearPipelineIntegration:
         ]
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
         track_processor = create_mock_track_processor()
 
-        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=mock_external_api)
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        mock_external_api.get_album_year.assert_awaited_once()
-        track_processor.update_track_async.assert_not_called()
+        assert len(external_api.get_album_year_calls) == 1
+        assert _written_years(track_processor) == []
 
     @pytest.mark.asyncio
     async def test_year_pipeline_prerelease_handling(self) -> None:
@@ -287,21 +287,20 @@ class TestYearPipelineIntegration:
         ]
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("2024", True, 85, {"2024": 85}))
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2024", True, 85, {"2024": 85})
         track_processor = create_mock_track_processor()
         pending_verification = TestYearPipelineIntegration.create_pending_verification()
 
         year_retriever = TestYearPipelineIntegration.create_year_retriever(
             mock_track_processor=track_processor,
-            mock_external_api=mock_external_api,
+            mock_external_api=external_api,
             mock_pending_verification=pending_verification,
         )
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        updates = {call.kwargs["track_id"]: call.kwargs["new_year"] for call in track_processor.update_track_async.call_args_list}
-        assert updates == {"3": "2024"}
+        assert _written_years(track_processor) == [("3", "2024")]
         pending_verification.mark_for_verification.assert_awaited_once()
         recheck = pending_verification.mark_for_verification.await_args
         assert recheck is not None
@@ -309,7 +308,7 @@ class TestYearPipelineIntegration:
         assert recheck.kwargs["reason"] == "prerelease"
 
     @pytest.mark.asyncio
-    async def test_year_pipeline_verification_needed(self) -> None:
+    async def test_year_pipeline_unifies_conflicting_years(self) -> None:
         """A definitive API year replaces conflicting track years across the album."""
         tracks_data = [
             {
@@ -339,21 +338,20 @@ class TestYearPipelineIntegration:
         ]
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 85, {"2020": 85}))
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2020", True, 85, {"2020": 85})
         track_processor = create_mock_track_processor()
         pending_verification = TestYearPipelineIntegration.create_pending_verification()
 
         year_retriever = TestYearPipelineIntegration.create_year_retriever(
             mock_track_processor=track_processor,
-            mock_external_api=mock_external_api,
+            mock_external_api=external_api,
             mock_pending_verification=pending_verification,
         )
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        mock_external_api.get_album_year.assert_awaited_once()
+        assert len(external_api.get_album_year_calls) == 1
         # Track 2 already has 2020; the other two move to it, and nothing needs a manual recheck
-        updates = {call.kwargs["track_id"]: call.kwargs["new_year"] for call in track_processor.update_track_async.call_args_list}
-        assert updates == {"1": "2020", "3": "2020"}
+        assert _written_years(track_processor) == [("1", "2020"), ("3", "2020")]
         pending_verification.mark_for_verification.assert_not_called()
