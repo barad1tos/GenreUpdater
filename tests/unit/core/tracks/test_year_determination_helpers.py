@@ -6,6 +6,7 @@ extracted during cognitive complexity refactoring.
 
 from __future__ import annotations
 
+import io
 import logging
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -347,6 +348,23 @@ class TestFetchFromApi:
         console_records = [record for record in caplog.records if record.name == "test.console"]
         assert [(record.levelno, record.exc_info) for record in console_records] == [(logging.WARNING, None)]
         assert type(error).__name__ in console_records[0].getMessage()
+
+    @pytest.mark.asyncio
+    async def test_api_failure_console_line_prints_names_verbatim(
+        self,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+    ) -> None:
+        """Names Rich would read as markup appear as they are, and the failed lookup still returns no year."""
+        console_logger, console_output = rich_console_logger
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(side_effect=OSError("Network error"))
+        determinator = _create_year_determinator(external_api=external_api)
+        determinator.console_logger = console_logger
+
+        result = await determinator._fetch_from_api("Artist [live]", "Mixes [/edit]", [_create_track()], None)
+
+        assert result is None
+        assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
 
     @pytest.mark.asyncio
     async def test_passes_dominant_year_to_api(self) -> None:

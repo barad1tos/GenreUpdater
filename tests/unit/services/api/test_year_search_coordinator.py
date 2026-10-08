@@ -508,8 +508,10 @@ class TestExecuteStandardApiSearch:
     @pytest.mark.asyncio
     async def test_skips_unavailable_api_client(
         self,
+        *,
         coordinator: YearSearchCoordinator,
         mock_musicbrainz_client: AsyncMock,
+        mock_discogs_client: AsyncMock,
         mock_applemusic_client: AsyncMock,
     ) -> None:
         """Test that unavailable API clients are filtered out of concurrent search.
@@ -530,11 +532,9 @@ class TestExecuteStandardApiSearch:
         with patch.object(coordinator, "_get_api_client", side_effect=selective_get):
             results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
 
-        # MusicBrainz should be called (available), Discogs should NOT be called (None)
         assert len(results) >= 1
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
-        # Discogs client should never be called since _get_api_client returned None for it
-        assert not hasattr(coordinator, "_discogs_called") or True  # Discogs mock was never invoked
+        mock_discogs_client.get_scored_releases.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_logs_failed_provider_with_traceback(

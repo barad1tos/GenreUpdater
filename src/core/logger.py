@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 # Explicit exports
 __all__ = [
     "LEVEL_ABBREV",
+    "PLAIN_TEXT",
     "CompactFormatter",
     "LogFormat",
     "Loggable",
@@ -119,6 +120,10 @@ LEVEL_ABBREV = {
     "ERROR": "E",
     "CRITICAL": "C",
 }
+
+# Pass as `extra=` to a console message that carries library text, such as artist or album names:
+# the console renders Rich markup, so "[live]" would vanish and "[/edit]" would raise MarkupError
+PLAIN_TEXT = {"markup": False}
 
 
 class LogFormat:

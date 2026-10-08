@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from core.debug_utils import debug
+from core.logger import PLAIN_TEXT
 from core.models.track_status import is_prerelease_status
 from core.models.validators import is_empty_year, is_valid_year
 
@@ -147,13 +148,15 @@ class YearDeterminator:
             )
         except (OSError, ValueError, RuntimeError) as error:
             # The caller treats None like an album no API knows, so only these logs show the lookup failed
-            self.console_logger.warning("Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__)
             self.error_logger.exception(
                 "Year lookup failed for '%s - %s' (library year %s, earliest track added %s)",
                 artist,
                 album,
                 dominant_year,
                 earliest_added,
+            )
+            self.console_logger.warning(
+                "Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
             return None
 

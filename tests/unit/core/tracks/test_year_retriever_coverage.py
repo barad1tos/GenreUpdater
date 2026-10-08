@@ -1038,18 +1038,27 @@ class TestProcessAlbumYears:
         *,
         year_retriever: YearRetriever,
         logger: logging.Logger,
+        error_logger: logging.Logger,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test returns False when exception occurs, and the console says the year update stopped."""
+        """Test returns False when exception occurs; the console says the update stopped and the error log keeps the traceback."""
         year_retriever.config.year_retrieval.enabled = True
-        object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(side_effect=OSError("Test error")))
+        update_error = OSError("Test error")
+        object.__setattr__(year_retriever, "_update_album_years_logic", AsyncMock(side_effect=update_error))
 
-        with caplog.at_level(logging.WARNING, logger=logger.name):
+        with caplog.at_level(logging.WARNING):
             result = await year_retriever.process_album_years([])
 
         assert result is False
-        console_warnings = [record.getMessage() for record in caplog.records if record.name == logger.name and record.levelno == logging.WARNING]
-        assert console_warnings == ["Album year update stopped (OSError); traceback in the error log"]
+        console_warnings = [record for record in caplog.records if record.name == logger.name and record.levelno == logging.WARNING]
+        assert [record.getMessage() for record in console_warnings] == ["Album year update stopped (OSError); traceback in the error log"]
+        assert console_warnings[0].exc_info is None
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is update_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
     @pytest.mark.asyncio
     async def test_processes_tracks_successfully(

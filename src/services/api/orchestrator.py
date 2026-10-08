@@ -30,7 +30,7 @@ import aiohttp
 import certifi
 
 from core.debug_utils import debug
-from core.logger import LogFormat
+from core.logger import PLAIN_TEXT, LogFormat
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
@@ -840,10 +840,10 @@ class ExternalApiOrchestrator:
                 return None, False, 0, {}
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
             # Logged whatever the debug flags: the caller only sees an album without a year
-            self.console_logger.warning(
-                "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__
-            )
             self.error_logger.exception("Year search setup failed for '%s - %s'", artist, album)
+            self.console_logger.warning(
+                "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
+            )
             return None, False, 0, {}
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
@@ -876,7 +876,7 @@ class ExternalApiOrchestrator:
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError) as error:
             # The fallback below reaches the caller as an ordinary result, so the console hears about the failure here
             self.console_logger.warning(
-                "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__
+                "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__, extra=PLAIN_TEXT
             )
             return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
         finally:

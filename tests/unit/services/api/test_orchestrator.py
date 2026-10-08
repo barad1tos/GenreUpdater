@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
@@ -283,18 +284,65 @@ class TestExternalApiOrchestratorAllure:
         assert "TimeoutError" in lookup_warnings[0]
 
     @pytest.mark.asyncio
-    async def test_setup_artist_context_logs_failure_with_traceback(self) -> None:
-        """A failed artist-context fetch keeps its traceback in the error log, and the search goes on without that context."""
+    async def test_setup_failure_console_line_prints_names_verbatim(
+        self,
+        *,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Names Rich would read as markup appear as they are when the year search setup fails."""
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
-        error_logger = MagicMock(spec=logging.Logger)
+        console_logger, console_output = rich_console_logger
+        orchestrator.console_logger = console_logger
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(side_effect=TypeError("unexpected artist data")))
+
+        result = await orchestrator.get_album_year("Artist [live]", "Mixes [/edit]")
+
+        assert result == (None, False, 0, {})
+        assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
+
+    @pytest.mark.asyncio
+    async def test_search_failure_console_line_prints_names_verbatim(
+        self,
+        *,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Names Rich would read as markup appear as they are when the year search fails."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        console_logger, console_output = rich_console_logger
+        orchestrator.console_logger = console_logger
+        search_inputs = ("artist", "mixes", "Artist [live]", "Mixes [/edit]", None)
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=search_inputs))
+        monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=TimeoutError("search timed out")))
+
+        result = await orchestrator.get_album_year("Artist [live]", "Mixes [/edit]")
+
+        assert result == (None, False, 0, {})
+        assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
+
+    @pytest.mark.asyncio
+    async def test_setup_artist_context_logs_failure_with_traceback(
+        self,
+        *,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failed artist-context fetch returns no region and keeps its traceback in the error log."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
         orchestrator.error_logger = error_logger
         context_error = OSError("MusicBrainz unreachable")
         musicbrainz_client = MagicMock()
         musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=context_error)
         orchestrator.musicbrainz_client = musicbrainz_client
 
-        artist_region = await orchestrator._setup_artist_context("artist", "Artist")
+        with caplog.at_level(logging.WARNING, logger=error_logger.name):
+            artist_region = await orchestrator._setup_artist_context("artist", "Artist")
 
         assert artist_region is None
-        error_logger.warning.assert_called_once()
-        assert error_logger.warning.call_args.kwargs["exc_info"] is context_error
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is context_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception

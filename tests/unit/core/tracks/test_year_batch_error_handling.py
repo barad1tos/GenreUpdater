@@ -7,6 +7,7 @@ should continue processing remaining albums and report failures gracefully.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
@@ -369,6 +370,42 @@ class TestCancelledErrorHandling:
             "Year processing failed for 'Artist - Album' (ValueError); traceback in the error log"
         ]
         assert console_warnings[0].exc_info is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestFailedAlbumConsoleLine:
+    """The console line for a failed album shows the album's name as it is."""
+
+    async def test_album_names_with_markup_print_verbatim(
+        self,
+        *,
+        rich_console_logger: tuple[logging.Logger, io.StringIO],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Names Rich would read as markup neither stop the batch nor cost an album its error-log record."""
+        console_logger, console_output = rich_console_logger
+        processor = create_year_batch_processor(console_logger=console_logger)
+        processor._process_single_album = AsyncMock(side_effect=ValueError("real error"))
+        album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
+            (("Artist", "Mixes [/edit]"), [create_test_track()]),
+            (("Artist", "Album [live]"), [create_test_track()]),
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            await processor._process_batches_concurrently(
+                album_items=album_items,
+                batch_size=10,
+                total_albums=2,
+                concurrency_limit=1,
+                updated_tracks=[],
+                changes_log=[],
+            )
+
+        printed = console_output.getvalue()
+        assert "'Artist - Mixes [/edit]'" in printed
+        assert "'Artist - Album [live]'" in printed
+        assert len([record for record in caplog.records if "Failed to process album" in record.getMessage()]) == 2
 
 
 # ---------------------------------------------------------------------------

@@ -451,6 +451,8 @@ class YearUpdateService:
                 "Step 4 year retrieval failed: %s",
                 type(e).__name__,
             )
+            # The error log is a file the console never shows, so the console hears that the year update stopped
+            self._console_logger.warning("Album year update stopped (%s); traceback in the error log", type(e).__name__)
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
             changes_log.append(
