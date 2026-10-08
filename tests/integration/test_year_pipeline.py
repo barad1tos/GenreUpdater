@@ -13,12 +13,23 @@ from core.tracks.year_retriever import YearRetriever
 from core.models.protocols import AnalyticsProtocol
 from tests.factories import create_mock_track_processor, create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
-from tests.mocks.protocol_mocks import MockExternalApiService
+from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
 
 
 def _written_years(track_processor: AsyncMock) -> list[tuple[str, str]]:
-    """Return every (track_id, new_year) update in a stable order, duplicates included."""
+    """Return the (track_id, new_year) of every update_track_async call, sorted; duplicates stay so a double write fails."""
     return sorted((call.kwargs["track_id"], call.kwargs["new_year"]) for call in track_processor.update_track_async.call_args_list)
+
+
+def _failures_logged(year_retriever: YearRetriever) -> list[str]:
+    """Return what the retriever logged at warning level or above.
+
+    The year batch logs an album that raised as a warning and carries on, so this is
+    where a crash shows up while process_album_years still returns True.
+    """
+    error_logger = year_retriever.error_logger
+    assert isinstance(error_logger, MockLogger)
+    return [*error_logger.warning_messages, *error_logger.error_messages, *error_logger.exception_messages, *error_logger.critical_messages]
 
 
 class TestYearPipelineIntegration:
@@ -39,24 +50,12 @@ class TestYearPipelineIntegration:
         return DatabaseRetryHandler(logger=logging.getLogger("test"), default_policy=policy)
 
     @staticmethod
-    def create_pending_verification() -> MagicMock:
-        """Create a pending-verification stand-in with nothing pending."""
-        pending_verification = MagicMock()
-        pending_verification.add_track = MagicMock()
-        pending_verification.get_pending_tracks = MagicMock(return_value=[])
-        pending_verification.mark_for_verification = AsyncMock()
-        pending_verification.generate_problematic_albums_report = AsyncMock(return_value=0)
-        pending_verification.get_entry = AsyncMock(return_value=None)
-        pending_verification.is_verification_needed = AsyncMock(return_value=False)
-        return pending_verification
-
-    @staticmethod
     def create_year_retriever(
         *,
         mock_external_api: MockExternalApiService,
         mock_track_processor: AsyncMock | None = None,
         mock_cache_service: MagicMock | None = None,
-        mock_pending_verification: MagicMock | None = None,
+        mock_pending_verification: MockPendingVerificationService | None = None,
         dry_run: bool = False,
         retry_handler: DatabaseRetryHandler | None = None,
     ) -> YearRetriever:
@@ -74,7 +73,7 @@ class TestYearPipelineIntegration:
             mock_cache_service.store_album_year_in_cache = AsyncMock()
 
         if mock_pending_verification is None:
-            mock_pending_verification = TestYearPipelineIntegration.create_pending_verification()
+            mock_pending_verification = MockPendingVerificationService()
 
         if retry_handler is None:
             retry_handler = TestYearPipelineIntegration._create_retry_handler()
@@ -142,7 +141,7 @@ class TestYearPipelineIntegration:
             track_processor=mock_track_processor,
             cache_service=cast(Any, mock_cache_service),
             external_api=mock_external_api,
-            pending_verification=cast(Any, mock_pending_verification),
+            pending_verification=mock_pending_verification,
             retry_handler=retry_handler,
             console_logger=MockLogger(),
             error_logger=MockLogger(),
@@ -171,7 +170,7 @@ class TestYearPipelineIntegration:
         return tracks
 
     @pytest.mark.asyncio
-    async def test_year_pipeline_musicbrainz_primary(self) -> None:
+    async def test_year_pipeline_applies_definitive_year(self) -> None:
         """A definitive API year fills every track of the album."""
         tracks_data = [
             {"id": "1", "name": "Song 1", "artist": "The Beatles", "album": "Abbey Road", "year": "", "date_added": "2024-01-01 10:00:00"},
@@ -188,8 +187,10 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert len(external_api.get_album_year_calls) == 1
+        # (artist, album, current library year, year the earliest track was added)
+        assert external_api.get_album_year_calls == [("The Beatles", "Abbey Road", None, 2024)]
         assert _written_years(track_processor) == [("1", "1969"), ("2", "1969"), ("3", "1969")]
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_year_pipeline_applies_tentative_year(self) -> None:
@@ -207,17 +208,58 @@ class TestYearPipelineIntegration:
         ]
         tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
 
-        # The score resolver marks a single older candidate scoring below 85 as not definitive
+        # YearScoreResolver returns this for a lone candidate over 3 years old scoring under MIN_CONFIDENT_SCORE_THRESHOLD (85)
         external_api = MockExternalApiService()
         external_api.get_album_year_response = ("2018", False, 80, {"2018": 80})
         track_processor = create_mock_track_processor()
+        pending_verification = MockPendingVerificationService()
 
-        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(
+            mock_track_processor=track_processor,
+            mock_external_api=external_api,
+            mock_pending_verification=pending_verification,
+        )
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert len(external_api.get_album_year_calls) == 1
+        assert external_api.get_album_year_calls == [("Rare Artist", "Rare Album", None, 2024)]
         assert _written_years(track_processor) == [("1", "2018"), ("2", "2018")]
+        assert pending_verification.marked_albums == []
+        assert _failures_logged(year_retriever) == []
+
+    @pytest.mark.asyncio
+    async def test_year_pipeline_defers_low_confidence_year(self) -> None:
+        """A non-definitive year under min_confidence_for_new_year is not written; the album is queued for a recheck instead."""
+        tracks_data = [
+            {"id": "1", "name": "Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 10:00:00"},
+            {"id": "2", "name": "Another Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 11:00:00"},
+        ]
+        tracks = TestYearPipelineIntegration.create_test_tracks(tracks_data)
+
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2018", False, 20, {"2018": 20})
+        track_processor = create_mock_track_processor()
+        pending_verification = MockPendingVerificationService()
+
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(
+            mock_track_processor=track_processor,
+            mock_external_api=external_api,
+            mock_pending_verification=pending_verification,
+        )
+        result = await year_retriever.process_album_years(tracks)
+
+        assert result is True
+        assert _written_years(track_processor) == []
+        assert pending_verification.marked_albums == [
+            (
+                "Rare Artist",
+                "Rare Album",
+                "very_low_confidence_no_existing",
+                {"proposed_year": "2018", "confidence_score": 20, "threshold": 30},
+                None,
+            ),
+        ]
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_year_pipeline_no_year_found(self) -> None:
@@ -250,12 +292,13 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert len(external_api.get_album_year_calls) == 1
+        assert external_api.get_album_year_calls == [("Unknown Artist", "Unknown Album", None, 2024)]
         assert _written_years(track_processor) == []
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_year_pipeline_prerelease_handling(self) -> None:
-        """Prerelease tracks stay read-only: only the subscription track gets the year, and the album is queued for a recheck."""
+        """Prerelease tracks are read-only, so only the subscription track gets the year, and the album is queued for a recheck."""
         tracks_data = [
             {
                 "id": "1",
@@ -290,7 +333,7 @@ class TestYearPipelineIntegration:
         external_api = MockExternalApiService()
         external_api.get_album_year_response = ("2024", True, 85, {"2024": 85})
         track_processor = create_mock_track_processor()
-        pending_verification = TestYearPipelineIntegration.create_pending_verification()
+        pending_verification = MockPendingVerificationService()
 
         year_retriever = TestYearPipelineIntegration.create_year_retriever(
             mock_track_processor=track_processor,
@@ -300,12 +343,18 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
+        assert external_api.get_album_year_calls == [("Test Artist", "Preview Album", None, 2024)]
         assert _written_years(track_processor) == [("3", "2024")]
-        pending_verification.mark_for_verification.assert_awaited_once()
-        recheck = pending_verification.mark_for_verification.await_args
-        assert recheck is not None
-        assert recheck.args == ("Test Artist", "Preview Album")
-        assert recheck.kwargs["reason"] == "prerelease"
+        assert pending_verification.marked_albums == [
+            (
+                "Test Artist",
+                "Preview Album",
+                "prerelease",
+                {"track_count": "3", "prerelease_count": "2", "editable_count": "1", "mixed_album": "true"},
+                30,
+            ),
+        ]
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_year_pipeline_unifies_conflicting_years(self) -> None:
@@ -341,7 +390,7 @@ class TestYearPipelineIntegration:
         external_api = MockExternalApiService()
         external_api.get_album_year_response = ("2020", True, 85, {"2020": 85})
         track_processor = create_mock_track_processor()
-        pending_verification = TestYearPipelineIntegration.create_pending_verification()
+        pending_verification = MockPendingVerificationService()
 
         year_retriever = TestYearPipelineIntegration.create_year_retriever(
             mock_track_processor=track_processor,
@@ -351,7 +400,9 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert len(external_api.get_album_year_calls) == 1
-        # Track 2 already has 2020; the other two move to it, and nothing needs a manual recheck
+        # Only the album is pinned: the library year sent with it comes from a tie-break between 2019, 2020 and 2021
+        assert [call[:2] for call in external_api.get_album_year_calls] == [("Complex Artist", "Complex Album")]
+        # Track 2 already has 2020; the other two move to it, and nothing is queued for a recheck
         assert _written_years(track_processor) == [("1", "2020"), ("3", "2020")]
-        pending_verification.mark_for_verification.assert_not_called()
+        assert pending_verification.marked_albums == []
+        assert _failures_logged(year_retriever) == []
