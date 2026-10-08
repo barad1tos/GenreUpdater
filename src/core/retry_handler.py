@@ -190,9 +190,10 @@ class DatabaseRetryHandler:
         Retries after a ValueError, RuntimeError or OSError that is_transient_error
         classifies as transient, waiting the backoff delay between attempts; any other
         exception propagates at once. A non-transient error or a failed last attempt
-        ends the loop with that error. The total timeout is checked before each attempt,
-        so once it has passed no new attempt starts and TimeoutError is raised; a result
-        that arrives after the deadline is still returned.
+        ends the loop with that error. The total timeout is checked only before an
+        attempt starts: past the deadline, TimeoutError replaces the next attempt. An
+        attempt already running is not interrupted, so its result, or an error that ends
+        the loop, comes through unchanged even after the deadline.
 
         Args:
             operation: Async callable to execute with retry
