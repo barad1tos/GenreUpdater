@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.debug_utils import DebugConfig
 from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
@@ -236,3 +237,21 @@ class TestExternalApiOrchestratorAllure:
         assert isinstance(orchestrator.rate_limiters, dict)
         assert "musicbrainz" in orchestrator.rate_limiters
         assert "discogs" in orchestrator.rate_limiters
+
+    @pytest.mark.asyncio
+    async def test_get_album_year_logs_search_setup_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A failure while preparing the year search returns no year and is logged even with year debugging off."""
+        # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
+        year_debugging_off = DebugConfig()
+        year_debugging_off.year = False
+        monkeypatch.setattr("services.api.orchestrator.debug", year_debugging_off)
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(side_effect=TypeError("unexpected artist data")))
+
+        result = await orchestrator.get_album_year("Artist", "Album")
+
+        assert result == (None, False, 0, {})
+        error_logger = orchestrator.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert len(error_logger.exception_messages) == 1
+        assert "'Artist - Album'" in error_logger.exception_messages[0]

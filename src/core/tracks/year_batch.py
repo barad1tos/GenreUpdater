@@ -329,6 +329,7 @@ class YearBatchProcessor:
                             force,
                             type(result).__name__,
                             result,
+                            exc_info=result,
                         )
 
     # Album processing pipeline

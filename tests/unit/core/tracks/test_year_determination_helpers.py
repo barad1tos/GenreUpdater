@@ -324,8 +324,8 @@ class TestFetchFromApi:
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """An API failure leaves the album without a year, and its traceback is logged even with year debugging off."""
-        # A separate config, since DEBUG_YEAR in the environment can switch the shared one on
+        """An API failure yields no year; the error log gets its traceback and the console a one-line warning, even with year debugging off."""
+        # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
         year_debugging_off = DebugConfig()
         year_debugging_off.year = False
         monkeypatch.setattr("core.tracks.year_determination.debug", year_debugging_off)
@@ -333,16 +333,19 @@ class TestFetchFromApi:
         external_api.get_album_year = AsyncMock(side_effect=error)
         determinator = _create_year_determinator(external_api=external_api)
 
-        with caplog.at_level(logging.ERROR, logger="test.error"):
+        with caplog.at_level(logging.WARNING):
             result = await determinator._fetch_from_api("Artist", "Album", [_create_track()], None)
 
         assert result is None
-        failures = [record for record in caplog.records if record.name == "test.error"]
-        assert len(failures) == 1
-        logged_exception = failures[0].exc_info
+        error_records = [record for record in caplog.records if record.name == "test.error"]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
         assert logged_exception is not None
         assert logged_exception[1] is error
-        assert "artist=Artist, album=Album" in failures[0].getMessage()
+        assert "'Artist - Album'" in error_records[0].getMessage()
+        console_records = [record for record in caplog.records if record.name == "test.console"]
+        assert [(record.levelno, record.exc_info) for record in console_records] == [(logging.WARNING, None)]
+        assert type(error).__name__ in console_records[0].getMessage()
 
     @pytest.mark.asyncio
     async def test_passes_dominant_year_to_api(self) -> None:

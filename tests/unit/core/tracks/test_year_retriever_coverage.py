@@ -18,9 +18,7 @@ from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.track_updater import TrackUpdater
 from core.models.protocols import AnalyticsProtocol
-from core.tracks.year_consistency import (
-    _is_reasonable_year as is_reasonable_year,
-)
+from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
 
@@ -291,7 +289,7 @@ class TestIsReasonableYear:
     )
     def test_is_reasonable_year(self, year: Any, expected: bool) -> None:
         """Test _is_reasonable_year function."""
-        result = is_reasonable_year(year)
+        result = year_consistency_module._is_reasonable_year(year)
         assert result == expected
 
     @pytest.mark.parametrize(
@@ -302,7 +300,7 @@ class TestIsReasonableYear:
         """Pin the clock _is_reasonable_year reads, so the test and the check always agree on the current year."""
         pinned_now = datetime(2026, 6, 1, tzinfo=UTC)
         monkeypatch.setattr("core.tracks.year_consistency.datetime", SimpleNamespace(now=lambda **_kwargs: pinned_now))
-        assert is_reasonable_year(str(pinned_now.year + years_ahead)) is expected
+        assert year_consistency_module._is_reasonable_year(str(pinned_now.year + years_ahead)) is expected
 
 
 class TestUpdateAlbumTracksBulkAsync:
@@ -1752,31 +1750,44 @@ class TestDebugLoggingBranches:
         finally:
             debug_utils.debug.year = original_year
 
+
+class TestDetermineAlbumYearApiFailure:
+    """Tests for an API failure reaching determine_album_year."""
+
     @pytest.mark.asyncio
-    async def test_determine_album_year_logs_on_api_exception_with_debug(
+    async def test_determine_album_year_logs_api_failure(
         self,
+        *,
         year_retriever: YearRetriever,
         mock_cache_service: AsyncMock,
         mock_external_api: AsyncMock,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test _determine_album_year logs exception details when debug.year is True."""
-        # Enable debug mode
-        original_year = debug_utils.debug.year
-        debug_utils.debug.year = True
+        """An API failure returns no year and leaves its traceback in the error log, with year debugging off."""
+        # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
+        year_debugging_off = debug_utils.DebugConfig()
+        year_debugging_off.year = False
+        monkeypatch.setattr("core.tracks.year_determination.debug", year_debugging_off)
+        tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
+        mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
+        api_error = ValueError("API error")
+        mock_external_api.get_album_year.side_effect = api_error
 
-        try:
-            tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
-            mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-            mock_external_api.get_album_year.side_effect = ValueError("API error")
+        with (
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
+            caplog.at_level(logging.ERROR, logger=error_logger.name),
+        ):
+            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
 
-            with (
-                unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
-                unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-            ):
-                result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-                assert result is None
-        finally:
-            debug_utils.debug.year = original_year
+        assert result is None
+        failures = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(failures) == 1
+        logged_exception = failures[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is api_error
 
 
 class TestCheckAlbumPrereleaseSkipDisabled:

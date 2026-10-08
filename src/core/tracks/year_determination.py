@@ -145,9 +145,16 @@ class YearDeterminator:
                 current_library_year=dominant_year,
                 earliest_track_added_year=earliest_added,
             )
-        except (OSError, ValueError, RuntimeError):
-            # The album carries on without a year, so this log is the only trace of the failure
-            self.error_logger.exception("get_album_year failed for artist=%s, album=%s", artist, album)
+        except (OSError, ValueError, RuntimeError) as error:
+            # The caller treats None like an album no API knows, so only these logs show the lookup failed
+            self.console_logger.warning("Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__)
+            self.error_logger.exception(
+                "Year lookup failed for '%s - %s' (library year %s, earliest track added %s)",
+                artist,
+                album,
+                dominant_year,
+                earliest_added,
+            )
             return None
 
         if not year_result:

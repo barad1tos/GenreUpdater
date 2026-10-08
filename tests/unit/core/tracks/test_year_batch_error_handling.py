@@ -336,11 +336,10 @@ class TestCancelledErrorHandling:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Non-CancelledError exceptions are still logged as failures."""
+        """Non-CancelledError exceptions are still logged as failures, with their traceback."""
         processor = create_year_batch_processor()
-        processor._process_single_album = AsyncMock(
-            side_effect=ValueError("real error"),
-        )
+        album_error = ValueError("real error")
+        processor._process_single_album = AsyncMock(side_effect=album_error)
 
         album_items: list[tuple[tuple[str, str], list[TrackDict]]] = [
             (("Artist", "Album"), [create_test_track()]),
@@ -358,6 +357,11 @@ class TestCancelledErrorHandling:
 
         assert "Failed to process album" in caplog.text
         assert "real error" in caplog.text
+        failure_records = [record for record in caplog.records if "Failed to process album" in record.getMessage()]
+        assert len(failure_records) == 1
+        logged_exception = failure_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is album_error
 
 
 # ---------------------------------------------------------------------------

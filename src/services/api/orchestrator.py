@@ -838,9 +838,9 @@ class ExternalApiOrchestrator:
             inputs = await self._initialize_year_search(artist, album, current_library_year)
             if not inputs:
                 return None, False, 0, {}
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            if debug.year:
-                self.error_logger.exception("Error in get_album_year initialization: %s", e)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            # Logged whatever the debug flags: the caller only sees an album without a year
+            self.error_logger.exception("Year search setup failed for '%s - %s'", artist, album)
             return None, False, 0, {}
 
         artist_norm, album_norm, log_artist, log_album, artist_region = inputs
