@@ -145,15 +145,9 @@ class YearDeterminator:
                 current_library_year=dominant_year,
                 earliest_track_added_year=earliest_added,
             )
-        except (OSError, ValueError, RuntimeError) as e:
-            if debug.year:
-                self.console_logger.exception(
-                    "Exception in get_album_year for artist=%s, album=%s: %s",
-                    artist,
-                    album,
-                    e,
-                )
-                self.error_logger.exception("Full exception details for artist=%s, album=%s:", artist, album)
+        except (OSError, ValueError, RuntimeError):
+            # The album carries on without a year, so this log is the only trace of the failure
+            self.error_logger.exception("get_album_year failed for artist=%s, album=%s", artist, album)
             return None
 
         if not year_result:
