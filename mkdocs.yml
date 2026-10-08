@@ -57,6 +57,9 @@ plugins:
       type: timeago
       enable_git_follow: false
       strict: false
+      # changelog.md only includes CHANGELOG.md, so git would date that page by the wrapper file, not by its entries
+      exclude:
+        - changelog.md
   - mkdocstrings:
       default_handler: python
       handlers:
