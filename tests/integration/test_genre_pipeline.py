@@ -236,17 +236,23 @@ class TestGenrePipelineIntegration:
 
     @pytest.mark.asyncio
     async def test_genre_pipeline_error_recovery(self) -> None:
-        """Test error recovery mechanisms in genre pipeline."""
+        """A failed track update is logged and does not stop the other artists' updates."""
         tracks_data = [
+            # Each artist's earliest track carries the genre that its later empty-genre track receives
+            {"id": "10", "name": "Good Opener", "artist": "Good Artist", "album": "Good Album", "genre": "Rock", "date_added": "2024-01-01 09:00:00"},
             {"id": "1", "name": "Good Song", "artist": "Good Artist", "album": "Good Album", "genre": "", "date_added": "2024-01-01 10:00:00"},
+            {"id": "20", "name": "Bad Opener", "artist": "Bad Artist", "album": "Bad Album", "genre": "Pop", "date_added": "2024-01-01 10:30:00"},
+            {"id": "2", "name": "Failing Song", "artist": "Bad Artist", "album": "Bad Album", "genre": "", "date_added": "2024-01-01 10:45:00"},
+            # A track without an ID fails validation and is never sent for update
+            {"id": "", "name": "Bad Song", "artist": "Bad Artist", "album": "Bad Album", "genre": "", "date_added": "2024-01-01 11:00:00"},
             {
-                "id": "",
-                "name": "Bad Song",
-                "artist": "Bad Artist",
-                "album": "Bad Album",
-                "genre": "",
-                "date_added": "2024-01-01 11:00:00",
-            },  # Empty ID
+                "id": "30",
+                "name": "Another Opener",
+                "artist": "Another Artist",
+                "album": "Another Album",
+                "genre": "Jazz",
+                "date_added": "2024-01-01 11:30:00",
+            },
             {
                 "id": "3",
                 "name": "Another Good Song",
@@ -256,28 +262,25 @@ class TestGenrePipelineIntegration:
                 "date_added": "2024-01-01 12:00:00",
             },
         ]
-
         tracks = TestGenrePipelineIntegration.create_test_tracks(tracks_data)
 
-        # Mock track processor to simulate some errors
+        async def update_track(*, track_id: str, **_kwargs: object) -> bool:
+            """Fail the update of track 2 and accept every other track."""
+            if track_id == "2":
+                raise RuntimeError("Simulated update error")
+            return True
+
         mock_track_processor = AsyncMock()
-        # First call succeeds, second fails, third succeeds
-        mock_track_processor.update_track_async.side_effect = [
-            True,  # Success
-            Exception("Simulated update error"),  # Error
-            True,  # Success
-        ]
+        mock_track_processor.update_track_async.side_effect = update_track
 
         genre_manager = TestGenrePipelineIntegration.create_genre_manager(mock_track_processor, None, False)
         updated_tracks, change_logs = await genre_manager.update_genres_by_artist_async(tracks)
-        # Pipeline should continue despite errors
-        assert isinstance(updated_tracks, list)
-        assert isinstance(change_logs, list)
 
-        # Should have attempted to process tracks
-        call_count = mock_track_processor.update_track_async.call_count
-        assert call_count >= 0
+        attempted = {call.kwargs["track_id"] for call in mock_track_processor.update_track_async.call_args_list}
+        assert attempted == {"1", "2", "3"}
+        assert {track.id: track.genre for track in updated_tracks} == {"1": "Rock", "3": "Jazz"}
+        assert {log.track_id for log in change_logs} == {"1", "3"}
 
-        # Error logger should have recorded any errors
-        if error_messages := getattr(genre_manager.error_logger, "error_messages", []):
-            _error_count = len(error_messages)
+        error_logger = genre_manager.error_logger
+        assert isinstance(error_logger, MockLogger)
+        assert any("Simulated update error" in message for message in error_logger.error_messages)
