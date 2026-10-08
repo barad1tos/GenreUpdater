@@ -321,6 +321,13 @@ class YearBatchProcessor:
                         album_key, _ = album_entry
                         artist_name, album_name = album_key
                         album_key, album_tracks = album_entry
+                        # The error log is a file the console never shows, so the console hears about the album here
+                        self.console_logger.warning(
+                            "Year processing failed for '%s - %s' (%s); traceback in the error log",
+                            artist_name,
+                            album_name,
+                            type(result).__name__,
+                        )
                         self.error_logger.warning(
                             "Failed to process album %s/%s (%d tracks, force=%s): %s: %s",
                             artist_name,

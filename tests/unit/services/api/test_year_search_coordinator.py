@@ -278,6 +278,25 @@ class TestProcessApiTaskResults:
         results: list[Any] = [[], []]
         self._assert_processed_results_count(coordinator, results, 0)
 
+    def test_logs_failed_provider_with_exception(
+        self,
+        *,
+        coordinator: YearSearchCoordinator,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A provider that raised in the concurrent search is logged with its exception, so the error log keeps the traceback."""
+        api_error = ValueError("API error")
+
+        with caplog.at_level(logging.WARNING, logger=error_logger.name):
+            coordinator._process_api_task_results([[], api_error], ["musicbrainz", "discogs"], "Artist", "Album")
+
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is api_error
+
     @staticmethod
     def _assert_processed_results_count(
         coordinator: YearSearchCoordinator,
@@ -381,6 +400,32 @@ class TestTrySingleApi:
         )
 
         assert results is None
+
+    @pytest.mark.asyncio
+    async def test_logs_api_exception_with_traceback(
+        self,
+        *,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        error_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A provider that raises in the script search reaches the error log with its traceback, with API debugging off."""
+        api_error = ValueError("API error")
+        mock_musicbrainz_client.get_scored_releases.side_effect = api_error
+
+        with caplog.at_level(logging.WARNING, logger=error_logger.name), patch("services.api.year_search_coordinator.debug") as mock_debug:
+            mock_debug.api = False
+            await coordinator._try_single_api(
+                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.CYRILLIC, is_fallback=False
+            )
+
+        error_records = [record for record in caplog.records if record.name == error_logger.name]
+        assert len(error_records) == 1
+        logged_exception = error_records[0].exc_info
+        assert logged_exception is not None
+        assert logged_exception[1] is api_error
+        assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
 
 class TestTryApiList:
@@ -499,9 +544,7 @@ class TestExecuteStandardApiSearch:
 
         def selective_get(api_name: str) -> Any:
             """Return no Discogs client, and the real client for every other API."""
-            if api_name == "discogs":
-                return None
-            return original_get(api_name)
+            return None if api_name == "discogs" else original_get(api_name)
 
         with patch.object(coordinator, "_get_api_client", side_effect=selective_get):
             results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
