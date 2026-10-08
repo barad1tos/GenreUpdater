@@ -175,10 +175,11 @@ class DatabaseRetryHandler:
         classifies as transient, waiting the backoff delay between attempts; any other
         exception propagates at once. A non-transient error, or any error from the last
         allowed attempt, is re-raised unchanged; a negative max_retries allows no retry but
-        still runs the operation once. A retry that could only start past the total timeout
-        is replaced by TimeoutError, raised from the last failure without waiting out the
-        backoff. An attempt already running is not interrupted, so its result, or an error
-        that ends the loop, comes through unchanged even after the deadline.
+        still runs the operation once. When no retry can start within the total timeout,
+        TimeoutError, raised from the last failure, takes its place: at once if the backoff
+        would end past the deadline, or after a backoff that ran late. An attempt already
+        running is not interrupted, so its result, or an error that ends the loop, comes
+        through unchanged even after the deadline.
 
         Args:
             operation: Async callable to execute with retry
@@ -189,7 +190,7 @@ class DatabaseRetryHandler:
             Result from successful operation execution
 
         Raises:
-            OSError: If the operation fails with a non-transient error or retries are exhausted
+            OSError: If the last allowed attempt fails with it, or, as TimeoutError, when no retry can start within the total timeout
             RuntimeError: If the operation fails with a non-transient error or retries are exhausted
             ValueError: If the operation fails with a non-transient error or retries are exhausted
 
@@ -272,23 +273,24 @@ class DatabaseRetryHandler:
         retry_policy: RetryPolicy,
         cause: Exception | None,
     ) -> NoReturn:
-        """Log that the operation ran out of time and raise TimeoutError.
+        """Log that no attempt fits in the total timeout and raise TimeoutError.
 
         Args:
             operation_id: Unique identifier for the operation
             context: Current retry operation context
             retry_policy: Active retry policy configuration
-            cause: The failure the cancelled retry would have followed, chained as the cause
+            cause: The last failure, chained as the cause and named in the log, since a caller may drop the TimeoutError
 
         Raises:
-            TimeoutError: Always: the operation exceeded its total timeout
+            TimeoutError: Always: no attempt can start within the total timeout
 
         """
         self.logger.error(
-            "Operation '%s' timed out after %.2fs (max: %.2fs)",
+            "Operation '%s' stopped after %.2fs: no attempt can start within its %.2fs total timeout (last failure: %r)",
             operation_id,
             context.total_elapsed_seconds,
             retry_policy.operation_timeout_seconds,
+            cause,
         )
-        msg = f"Operation '{operation_id}' exceeded total timeout of {retry_policy.operation_timeout_seconds}s"
+        msg = f"Operation '{operation_id}' has no time left for an attempt within its total timeout of {retry_policy.operation_timeout_seconds}s"
         raise TimeoutError(msg) from cause
