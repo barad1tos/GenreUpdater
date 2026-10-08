@@ -1,7 +1,7 @@
 """Database retry handler with exponential backoff and transient error detection.
 
-This module provides sophisticated retry mechanisms for database operations
-with intelligent error classification and adaptive delay strategies.
+This module retries async operations with exponential backoff,
+classifying errors so that only transient ones are retried.
 """
 
 from __future__ import annotations
@@ -63,8 +63,8 @@ class RetryOperationContext:
 class DatabaseRetryHandler:
     """Advanced retry handler for database operations with intelligent error detection.
 
-    Provides exponential backoff with jitter, transient error classification,
-    and comprehensive retry context management for reliable database operations.
+    Provides exponential backoff with jitter and transient error classification;
+    execute_with_retry runs an operation through that retry loop.
 
     Args:
         logger: Logger instance for retry operation tracking
@@ -187,7 +187,9 @@ class DatabaseRetryHandler:
     ) -> RetryResult:
         """Execute operation with retry logic.
 
-        Implements retry loop directly for reliable async operation retry.
+        Calls the operation again after each transient error, waiting the backoff delay
+        between attempts. A non-transient error, the last allowed attempt failing, or the
+        total timeout passing ends the loop with an error.
 
         Args:
             operation: Async callable to execute with retry

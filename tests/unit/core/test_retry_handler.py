@@ -217,7 +217,7 @@ class TestCalculateDelaySeconds:
 
 
 class TestExecuteWithRetry:
-    """Tests for execute_with_retry convenience method."""
+    """Tests for execute_with_retry, the handler's retry API."""
 
     @pytest.mark.asyncio
     async def test_successful_execution(self, retry_handler: DatabaseRetryHandler) -> None:
