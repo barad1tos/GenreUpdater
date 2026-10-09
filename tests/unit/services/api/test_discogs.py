@@ -233,16 +233,32 @@ class TestDiscogsClientAllure:
         mock_cache_service.get_async.assert_called()
 
     @pytest.mark.asyncio
-    async def test_scored_list_cache_is_per_artist_context(self) -> None:
-        """Scores depend on the artist context, so a lookup with another context never reads a list scored for the first."""
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            pytest.param(
+                ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014}),
+                ArtistContext(region="GB", period={"start_year": 1990, "end_year": 2014}),
+                id="period-start",
+            ),
+            pytest.param(
+                ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014}),
+                ArtistContext(region="GB", period={"start_year": 1965, "end_year": None}),
+                id="period-end",
+            ),
+            pytest.param(ArtistContext(region="GB"), ArtistContext(region="US"), id="region"),
+        ],
+    )
+    async def test_scored_list_cache_is_per_artist_context(self, first: ArtistContext, second: ArtistContext) -> None:
+        """Scores depend on the region and the period, so a lookup differing in either never reads a list scored for the other."""
         mock_cache_service = MagicMock()
         mock_cache_service.get_async = AsyncMock(return_value=None)
         mock_cache_service.set_async = AsyncMock()
         mock_api_request = AsyncMock(return_value=TestDiscogsClientAllure.create_mock_discogs_response())
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request, mock_cache_service=mock_cache_service)
 
-        await client.get_scored_releases("test artist", "test album", ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014}))
-        await client.get_scored_releases("test artist", "test album", ArtistContext())
+        await client.get_scored_releases("test artist", "test album", first)
+        await client.get_scored_releases("test artist", "test album", second)
 
         list_keys = [call.args[0] for call in mock_cache_service.get_async.await_args_list if str(call.args[0]).startswith("discogs_test")]
         assert len(list_keys) == 2
