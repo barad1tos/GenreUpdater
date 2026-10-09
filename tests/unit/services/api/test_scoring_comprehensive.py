@@ -799,3 +799,28 @@ class TestExtractRgFirstYearDebugLog:
         assert result is None
         mock_logger.debug.assert_called_once()
         assert "Failed to extract RG first year" in mock_logger.debug.call_args[0][0]
+
+
+class TestCountryScore:
+    """The major-market bonus belongs to the release's country, whatever is known about the artist."""
+
+    @pytest.mark.parametrize("artist_region", [None, "", "SE"])
+    def test_major_market_bonus_without_matching_region(self, artist_region: str | None) -> None:
+        """A US release earns the major-market bonus when the artist's region is unknown or elsewhere."""
+        scorer = ReleaseScorer()
+        components: list[str] = []
+
+        bonus = scorer._calculate_country_score({"country": "US"}, artist_region, components)
+
+        assert bonus == scorer.scoring_config.country_major_market_bonus
+        assert components == ["Country Major Market (US): +5"]
+
+    def test_artist_region_match_outranks_major_market(self) -> None:
+        """A release from the artist's own country earns the artist-region bonus instead."""
+        scorer = ReleaseScorer()
+
+        assert scorer._calculate_country_score({"country": "GB"}, "UK", []) == scorer.scoring_config.country_artist_match_bonus
+
+    def test_release_without_country_scores_nothing(self) -> None:
+        """No release country, no country bonus."""
+        assert ReleaseScorer()._calculate_country_score({"country": None}, "US", []) == 0

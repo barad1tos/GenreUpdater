@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.musicbrainz import MusicBrainzClient
+from services.api.year_scoring import ReleaseScorer
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -181,7 +182,72 @@ class TestMusicBrainzClientAllure:
         mock_api_request = AsyncMock(return_value=artist_response)
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=mock_api_request)
         region = await client.get_artist_region("Test Artist")
-        assert region == "United States"
+        # Release countries are ISO codes, so the region must be one too for the scorer to compare them
+        assert region == "US"
+
+    @pytest.mark.asyncio
+    async def test_get_artist_region_falls_back_to_area_code(self) -> None:
+        """An artist without a country takes the ISO code of its area."""
+        artist_response = TestMusicBrainzClientAllure.create_mock_artist_response()
+        del artist_response["artists"][0]["country"]
+        artist_response["artists"][0]["area"]["iso-3166-1-codes"] = ["GB"]
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=artist_response))
+
+        assert await client.get_artist_region("Test Artist") == "GB"
+
+    @pytest.mark.asyncio
+    async def test_get_artist_region_without_code_is_unknown(self) -> None:
+        """An area name alone never matches a release country, so the region stays unknown."""
+        artist_response = TestMusicBrainzClientAllure.create_mock_artist_response()
+        del artist_response["artists"][0]["country"]
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=artist_response))
+
+        assert await client.get_artist_region("Test Artist") is None
+
+    @staticmethod
+    def create_scoring_client() -> MusicBrainzClient:
+        """Create a client that scores with the real ReleaseScorer, the way the orchestrator wires it."""
+        scorer = ReleaseScorer()
+
+        def score_release(release: dict[str, Any], artist_norm: str, album_norm: str, artist_region: str | None, source: str = "unknown") -> int:
+            """Score a release with the real scorer."""
+            return int(scorer.score_original_release(release, artist_norm, album_norm, artist_region=artist_region, source=source))
+
+        return TestMusicBrainzClientAllure.create_musicbrainz_client(mock_score_release=MagicMock(side_effect=score_release))
+
+    @staticmethod
+    def create_release_group_result() -> tuple[dict[str, Any], dict[str, Any]]:
+        """Create the (releases response, release group) pair the client scores for 'The Beatles - Abbey Road'."""
+        release_group = {"id": "rg-1", "title": "Abbey Road", "primary-type": "Album", "first-release-date": "1969-09-26"}
+        credit = [{"name": "The Beatles", "artist": {"name": "The Beatles"}}]
+        releases = {
+            "releases": [
+                {"id": "r-1", "title": "Abbey Road", "status": "Official", "date": "1969-09-26", "country": "GB", "artist-credit": credit},
+                {"id": "r-2", "title": "Abbey Road", "status": "Official", "date": "2019-09-27", "country": "US", "artist-credit": credit},
+            ]
+        }
+        return releases, release_group
+
+    def test_releases_reach_the_scorer_with_their_year(self) -> None:
+        """MusicBrainz releases are scored on the release group's first year, so the real scorer keeps them."""
+        client = TestMusicBrainzClientAllure.create_scoring_client()
+
+        scored = client._process_and_score_releases([TestMusicBrainzClientAllure.create_release_group_result()], "the beatles", "abbey road", None)
+
+        assert [release["year"] for release in scored] == ["1969", "1969"]
+        assert all(release["score"] > 0 for release in scored)
+
+    def test_artist_region_matches_release_country(self) -> None:
+        """A release from the artist's country scores higher once the region is an ISO code."""
+        client = TestMusicBrainzClientAllure.create_scoring_client()
+        release_group_result = TestMusicBrainzClientAllure.create_release_group_result()
+
+        without_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", None)
+        with_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", "GB")
+
+        assert with_region[0]["score"] > without_region[0]["score"]
+        # The British pressing now outscores the American one, which only gets the major-market bonus
+        assert with_region[0]["score"] > with_region[1]["score"]
 
     @pytest.mark.asyncio
     async def test_get_artist_activity_period(self) -> None:

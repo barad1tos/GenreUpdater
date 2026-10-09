@@ -348,7 +348,7 @@ class MusicBrainzClient(BaseApiClient):
             artist_norm: Normalized artist name
 
         Returns:
-            Region/country name or None if not found
+            ISO 3166-1 country code, or None if MusicBrainz gives none
 
         """
         artist_info = await self.get_artist_info(artist_norm)
@@ -356,11 +356,13 @@ class MusicBrainzClient(BaseApiClient):
         if not artist_info:
             return None
 
-        # Try different area fields
+        # Release countries are ISO codes, so only a code lets the scorer match them; an area name never would
+        if country := artist_info.get("country"):
+            return cast("str", country)
         for area_field in ["area", "begin-area", "end-area"]:
             area = artist_info.get(area_field)
-            if area and area.get("name"):
-                return cast("str", area["name"])
+            if area and (codes := area.get("iso-3166-1-codes")):
+                return cast("str", codes[0])
 
         return None
 
@@ -602,9 +604,12 @@ class MusicBrainzClient(BaseApiClient):
                 # Try release first, then fall back to release group
                 artist_name = self._extract_artist_from_credit(release) or self._extract_artist_from_credit(rg_info)
 
-                # Combine release and release group info for scoring
-                # Add 'artist' field so scoring function can match artist names
-                release_to_score: MBApiData = {**release, "release_group": rg_info, "artist": artist_name}
+                # Score the release as the scorer reads it, the way Discogs does: the ScoredRelease fields, the credited
+                # artist for name matching, and the group's first date for the release-group match
+                release_info = self._create_scored_release(release, rg_info, 0.0, artist_norm)
+                release_to_score: MBApiData = {**release_info, "artist": artist_name}
+                if rg_first_date := rg_info.get("first-release-date"):
+                    release_to_score["releasegroup_first_date"] = rg_first_date
 
                 score = self._score_original_release(
                     release_to_score,
@@ -615,7 +620,7 @@ class MusicBrainzClient(BaseApiClient):
                 )
 
                 if score > 0:
-                    release_info = self._create_scored_release(release, rg_info, score, artist_norm)
+                    release_info["score"] = score
                     scored_releases.append(release_info)
 
         return scored_releases
@@ -801,9 +806,7 @@ class MusicBrainzClient(BaseApiClient):
         for info in label_info:
             if not isinstance(info, dict):
                 continue
-            # Access using dict key since API returns with dash, not underscore
-            catalog: Any = info.get("catalog-number")
-            if catalog:
+            if catalog := info.get("catalog-number"):
                 return str(catalog)
 
         return None
