@@ -753,10 +753,11 @@ class ReleaseScorer:
         release_country = country_aliases.get(release_country, release_country)
         artist_region_normalized = country_aliases.get(artist_region_normalized, artist_region_normalized)
 
-        if not artist_region_normalized or not release_country:
+        if not release_country:
             return 0
 
-        if release_country == artist_region_normalized:
+        # The major-market bonus depends on the release alone, so an unknown artist region only rules out the match
+        if artist_region_normalized and release_country == artist_region_normalized:
             bonus = cfg.country_artist_match_bonus
             score_components.append(f"Country Matches Artist Region ({artist_region_normalized.upper()}): +{bonus}")
             return bonus
