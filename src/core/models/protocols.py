@@ -16,10 +16,8 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Literal,
     Protocol,
     TypeVar,
-    overload,
     runtime_checkable,
 )
 
@@ -99,20 +97,6 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
-    @overload
-    async def get_async(
-        self,
-        key_data: Literal["ALL"],
-        compute_func: None = None,
-    ) -> list[TrackDict]: ...
-
-    @overload
-    async def get_async(
-        self,
-        key_data: CacheableKey,
-        compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
-    ) -> CacheableValue: ...
-
     async def get_async(
         self,
         key_data: CacheableKey,
@@ -121,7 +105,7 @@ class CacheServiceProtocol(Protocol):
         """Get a value from cache, optionally computing it if not present.
 
         Args:
-            key_data: Key for the cached value ("ALL" for all tracks)
+            key_data: Key for the cached value
             compute_func: Optional compute function to calculate value if not cached
 
         Returns:

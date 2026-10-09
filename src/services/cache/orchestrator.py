@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from core.logger import LogFormat
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
@@ -50,9 +50,9 @@ class CacheOrchestrator(CacheServiceProtocol):
         self.config_manager = None
 
         # Initialize specialized services
-        self.album_service = AlbumCacheService(config, logger)
-        self.api_service = ApiCacheService(config, logger)
-        self.generic_service = GenericCacheService(config, logger)
+        self.album_service: AlbumCacheService = AlbumCacheService(config, logger)
+        self.api_service: ApiCacheService = ApiCacheService(config, logger)
+        self.generic_service: GenericCacheService = GenericCacheService(config, logger)
 
         # Service mapping for routing
         self._services = {
@@ -114,20 +114,6 @@ class CacheOrchestrator(CacheServiceProtocol):
 
     # Generic Cache API
 
-    @overload
-    async def get_async(
-        self,
-        key_data: Literal["ALL"],
-        compute_func: None = None,
-    ) -> list[TrackDict]: ...
-
-    @overload
-    async def get_async(
-        self,
-        key_data: CacheableKey,
-        compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
-    ) -> CacheableValue: ...
-
     async def get_async(
         self,
         key_data: CacheableKey,
@@ -136,7 +122,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Asynchronous get with optional compute function.
 
         Args:
-            key_data: Cache key or "ALL" for all entries
+            key_data: Cache key
             compute_func: Optional compute function to calculate value if not cached
 
         Returns:
