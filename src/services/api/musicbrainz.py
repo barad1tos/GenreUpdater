@@ -32,6 +32,24 @@ MUSICBRAINZ_BASE_URL: str = "https://musicbrainz.org/ws/2"
 
 
 # MusicBrainz Type Definitions
+
+
+def _require_list(response: dict[str, Any] | None, field: str, url: str) -> None:
+    """Check that a MusicBrainz answer carries its list, which MusicBrainz always sends, empty when nothing matched.
+
+    Args:
+        response: The parsed answer, or None when MusicBrainz has no such resource (HTTP 404)
+        field: The list the answer must carry
+        url: The request URL, for the error
+
+    Raises:
+        ApiRequestError: The answer has no such list, so it is not an answer to the query
+    """
+    if response is not None and not isinstance(response.get(field), list):
+        api_name, reason = "musicbrainz", f'answer without a "{field}" list'
+        raise ApiRequestError(api_name, url, reason)
+
+
 class LifeSpan(TypedDict, total=False):
     """Type definition for artist life span data from MusicBrainz."""
 
@@ -451,6 +469,7 @@ class MusicBrainzClient(BaseApiClient):
         self.console_logger.debug("[musicbrainz] Attempt %s URL: %s", attempt_num, url)
 
         rg_data = await self._make_api_request("musicbrainz", base_url, params=params)
+        _require_list(rg_data, "release-groups", url)
 
         if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
             self.console_logger.debug("[musicbrainz] Attempt %s successful. Found %s release groups.", attempt_num, len(rg_data["release-groups"]))
@@ -479,6 +498,7 @@ class MusicBrainzClient(BaseApiClient):
         params = {"fmt": "json", "limit": "10", "query": query}
 
         rg_data = await self._make_api_request("musicbrainz", base_search_url, params=params)
+        _require_list(rg_data, "release-groups", f"{base_search_url}?{urllib.parse.urlencode(params)}")
 
         if rg_data and rg_data.get("count", 0) > 0 and rg_data.get("release-groups"):
             filtered_rgs = self._filter_release_groups_by_artist(rg_data["release-groups"], artist_norm)
@@ -561,9 +581,11 @@ class MusicBrainzClient(BaseApiClient):
         processed_results: list[tuple[MBApiData | None, MBApiData]] = []
         for i, result in enumerate(results):
             rg_info = release_fetch_tasks[i][1]
-            if isinstance(result, BaseException) or not result or not isinstance(result, dict) or "releases" not in result:
+            if not isinstance(result, dict):
+                # No such release group (HTTP 404); an exception from the gather already raised above
                 processed_results.append((None, rg_info))
                 continue
+            _require_list(result, "releases", f"{MUSICBRAINZ_BASE_URL}/release/?release-group={rg_info.get('id')}")
 
             processed_results.append((result, rg_info))
 

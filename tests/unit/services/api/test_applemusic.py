@@ -1167,3 +1167,25 @@ class TestRecordsAndScoring:
 
         with pytest.raises(ValueError, match="bad payload"):
             await client.fetch_release_records("artist", "album")
+
+
+class TestMalformedAnswers:
+    """iTunes answers an empty search with an empty list, so a body without the list is a failure, not "nothing found"."""
+
+    @pytest.mark.asyncio
+    async def test_search_without_results_fails(self, client: AppleMusicClient, mock_api_request_func: AsyncMock) -> None:
+        """A search body missing "results" fails the lookup instead of being cached as empty."""
+        mock_api_request_func.return_value = {"resultCount": 0}
+
+        with pytest.raises(ApiRequestError):
+            await client.fetch_release_records("artist", "album")
+
+    @pytest.mark.asyncio
+    async def test_lookup_fallback_requires_results(self, client: AppleMusicClient, mock_api_request_func: AsyncMock) -> None:
+        """The artist search and the album lookup of the fallback reject an answer without a results list."""
+        mock_api_request_func.return_value = {"resultCount": 0}
+
+        with pytest.raises(ApiRequestError):
+            await client._find_artist_id("artist")
+        with pytest.raises(ApiRequestError):
+            await client._lookup_artist_albums(1)

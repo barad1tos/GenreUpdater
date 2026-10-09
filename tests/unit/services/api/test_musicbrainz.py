@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.api.musicbrainz import MusicBrainzClient
+from services.api.musicbrainz import MUSICBRAINZ_BASE_URL, MusicBrainzClient
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext, ReleaseScorer
 from tests.mocks.csv_mock import MockLogger
@@ -618,3 +618,35 @@ class TestRecordsAndScoring:
 
         with pytest.raises(ValueError, match="bad payload"):
             await client.fetch_release_records("artist", "album")
+
+
+class TestMalformedAnswers:
+    """MusicBrainz answers an empty search with an empty list, so a body without the list is a failure, not "nothing found"."""
+
+    @pytest.mark.asyncio
+    async def test_search_without_release_groups_fails(self) -> None:
+        """A search body missing "release-groups" fails the lookup instead of being cached as empty."""
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value={"count": 0}))
+
+        with pytest.raises(ApiRequestError):
+            await client.fetch_release_records("artist", "album")
+
+    @pytest.mark.asyncio
+    async def test_each_search_requires_its_list(self) -> None:
+        """The fielded search, the fallback search and the release fetch each reject an answer without their list."""
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value={"count": 0}))
+
+        with pytest.raises(ApiRequestError):
+            await client._fielded_release_group_search(f"{MUSICBRAINZ_BASE_URL}/release-group/", "artist", "album", 1)
+        with pytest.raises(ApiRequestError):
+            await client._search_release_groups('"album"', "artist", 2)
+        with pytest.raises(ApiRequestError):
+            await client._fetch_releases_for_groups([{"id": "rg-1", "title": "Album"}])
+
+    @pytest.mark.asyncio
+    async def test_empty_search_is_nothing_found(self) -> None:
+        """The empty answer MusicBrainz really sends reads as "nothing found"."""
+        empty = {"count": 0, "offset": 0, "release-groups": []}
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=empty))
+
+        assert await client.fetch_release_records("artist", "album") == []

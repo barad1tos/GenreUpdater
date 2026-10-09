@@ -569,3 +569,18 @@ class TestCacheFileShape:
 
         assert "successful_policy" not in stats
         assert stats["not_found_policy"] > 0
+
+
+class TestSaveCleanup:
+    """A save that fails on the disk leaves no temporary file behind."""
+
+    @pytest.mark.asyncio
+    async def test_failed_replace_removes_the_temporary_file(self, tmp_path: Path) -> None:
+        """An OSError while swapping the file in still removes the temporary copy."""
+        service = ApiCacheService(create_test_app_config(logs_base_dir=str(tmp_path)), MagicMock())
+        await service.set_cached_result("artist", "album", source="discogs", records=[{"year": "1999"}])
+
+        with patch("services.cache.api_cache.Path.replace", side_effect=OSError("read-only file system")), pytest.raises(OSError):
+            await service.save_to_disk()
+
+        assert not list(tmp_path.rglob("*.tmp"))

@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from typing import Any, TYPE_CHECKING
 
 from core.models.normalization import normalize_for_matching
+from services.api.request_executor import ApiRequestError
 
 if TYPE_CHECKING:
     from services.api.api_base import ScoredRelease
@@ -34,6 +35,26 @@ ITUNES_BASE_URL: str = "https://itunes.apple.com"
 VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")
 
 _logger = logging.getLogger(__name__)
+
+
+def _results_of(response: dict[str, Any], url: str) -> list[dict[str, Any]]:
+    """Return the results list of an iTunes answer, which iTunes always sends, empty when nothing matched.
+
+    Args:
+        response: The parsed answer
+        url: The request URL, for the error
+
+    Returns:
+        The results list
+
+    Raises:
+        ApiRequestError: The answer has no results list, so it is not an answer to the query
+    """
+    results = response.get("results")
+    if not isinstance(results, list):
+        api_name, reason = "itunes", "answer without a results list"
+        raise ApiRequestError(api_name, url, reason)
+    return results
 
 
 class AppleMusicClient:
@@ -114,7 +135,7 @@ class AppleMusicClient:
         )
 
         # Search results, else the artist's albums from the lookup fallback
-        results = (response_data.get("results", []) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
+        results = (_results_of(response_data, self.base_url) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
         if not results:
             self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
             return []
@@ -442,7 +463,7 @@ class AppleMusicClient:
             self.console_logger.debug("[itunes] No response finding artist ID for: '%s'", artist_norm)
             return None
 
-        results = response_data.get("results", [])
+        results = _results_of(response_data, self.base_url)
         for result in results:
             result_artist = normalize_for_matching(result.get("artistName", ""))
             # Exact match only - no substring matching to avoid cross-artist pollution
@@ -493,7 +514,7 @@ class AppleMusicClient:
             return []
 
         # First result is artist info, rest are albums (wrapperType == "collection")
-        results = response_data.get("results", [])
+        results = _results_of(response_data, lookup_url)
         albums = [r for r in results if r.get("wrapperType") == "collection"]
 
         self.console_logger.debug(

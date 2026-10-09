@@ -603,6 +603,7 @@ class DiscogsClient(BaseApiClient):
         *,
         detail_fetch_count: int,
         detail_fetch_limit: int,
+        master_years: dict[int, int | None],
     ) -> tuple[dict[str, Any] | None, int]:
         """Turn one Discogs search result into a release record.
 
@@ -611,6 +612,7 @@ class DiscogsClient(BaseApiClient):
             artist_norm: Normalized artist name
             detail_fetch_count: Current number of detail fetches performed
             detail_fetch_limit: Maximum number of detail fetches allowed
+            master_years: Master years this search already fetched, by master ID; filled in here
 
         Returns:
             Tuple of (release record or None, updated_detail_fetch_count)
@@ -628,10 +630,15 @@ class DiscogsClient(BaseApiClient):
         if not self._is_valid_year(year_str):
             return None, updated_detail_fetch_count
 
-        # The master release year, analogous to the MusicBrainz release-group first date. Discogs gives master_id 0 to a
-        # release outside any master; pressings sharing a master repeat one URL, which the request cache answers
+        # The master release year, analogous to the MusicBrainz release-group first date; Discogs gives master_id 0 to a
+        # release outside any master
         master_id = item.get("master_id")
-        master_year = await self._fetch_master_release_year(master_id) if master_id else None
+        master_year: int | None = None
+        if master_id:
+            # Pressings share their master; a missing one (HTTP 404) is not in the request cache, so ask once per search
+            if master_id not in master_years:
+                master_years[master_id] = await self._fetch_master_release_year(master_id)
+            master_year = master_years[master_id]
 
         record = self._build_release_record(item, artist_norm, year_str=year_str, master_year=master_year)
         return record, updated_detail_fetch_count
@@ -654,6 +661,7 @@ class DiscogsClient(BaseApiClient):
         records: list[dict[str, Any]] = []
         detail_fetch_count = 0
         detail_fetch_limit = 10
+        master_years: dict[int, int | None] = {}
 
         for item in results:
             record, detail_fetch_count = await self._process_single_discogs_item(
@@ -661,6 +669,7 @@ class DiscogsClient(BaseApiClient):
                 artist_norm,
                 detail_fetch_count=detail_fetch_count,
                 detail_fetch_limit=detail_fetch_limit,
+                master_years=master_years,
             )
             if record:
                 records.append(record)

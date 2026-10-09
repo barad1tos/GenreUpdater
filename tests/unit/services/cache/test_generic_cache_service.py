@@ -442,3 +442,27 @@ class TestGenericCacheService:
 
         finally:
             await service.stop_cleanup_task()
+
+
+class TestLongestTtl:
+    """The load-time bound follows the configured request cache TTL when that is longer than a year."""
+
+    @pytest.mark.asyncio
+    async def test_configured_ttl_above_a_year_is_kept(self, tmp_path: Path) -> None:
+        """With a two-year negative TTL, an entry due in eighteen months was written legitimately and stays."""
+        now = time.time()
+        cache_path = tmp_path / "generic_cache.json"
+        payload = {UnifiedHashService.hash_generic_key("answer"): {"value": {"results": []}, "expires_at": now + 548 * 86400}}
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        config = create_test_app_config(
+            max_generic_entries=100, caching={**create_test_app_config().caching.model_dump(), "negative_result_ttl": 2 * 365 * 86400}
+        )
+
+        service = TestGenericCacheService.create_service(config)
+        service.cache_file = cache_path
+        await service.initialize()
+
+        try:
+            assert service.get("answer") == {"results": []}
+        finally:
+            await service.stop_cleanup_task()

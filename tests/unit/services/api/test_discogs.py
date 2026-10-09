@@ -426,6 +426,7 @@ class TestDiscogsClientAllure:
             "target artist",
             detail_fetch_count=0,
             detail_fetch_limit=10,
+            master_years={},
         )
 
         assert scored is None
@@ -524,5 +525,20 @@ class TestRecordsAndScoring:
             records = await client.fetch_release_records("test artist", "test album")
         with patch.object(client, "_get_reissue_keywords", return_value=["remaster"]):
             client.score_records(records, "test artist", "test album", ArtistContext())
+        with patch.object(client, "_get_reissue_keywords", return_value=[]):
+            client.score_records(records, "test artist", "test album", ArtistContext())
 
         assert seen[0].get("is_reissue") is True
+        assert "is_reissue" not in seen[1]
+
+    @pytest.mark.asyncio
+    async def test_missing_master_is_requested_once_per_search(self) -> None:
+        """Pressings sharing a master Discogs does not have ask for it once per search: a 404 is not in the request cache."""
+        request = AsyncMock(return_value=None)
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=request)
+        pressings = [TestDiscogsClientAllure.create_pressing(release_id, master_id=654321) for release_id in (1, 2, 3)]
+
+        records = await client._process_discogs_results(pressings, "test artist")
+
+        assert len(records) == 3
+        assert [call.args[1] for call in request.call_args_list] == ["https://api.discogs.com/masters/654321"]

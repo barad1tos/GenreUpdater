@@ -302,13 +302,13 @@ class ApiCacheService:
                 # previous file whole: found records are kept for good and live only here
                 with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(self.api_cache_file.parent), suffix=".tmp", delete=False) as tmp_file:
                     temp_path = Path(tmp_file.name)
-                    try:
-                        json.dump(cache_data, tmp_file, indent=2, ensure_ascii=False)
-                    except (TypeError, ValueError):
-                        tmp_file.close()
-                        temp_path.unlink(missing_ok=True)
-                        raise
-                temp_path.replace(self.api_cache_file)
+                try:
+                    with temp_path.open("w", encoding="utf-8") as temp_file:
+                        json.dump(cache_data, temp_file, indent=2, ensure_ascii=False)
+                    temp_path.replace(self.api_cache_file)
+                except (OSError, TypeError, ValueError):
+                    temp_path.unlink(missing_ok=True)
+                    raise
 
                 self.logger.info("API cache saved to %s (%d entries)", self.api_cache_file, len(cache_data))
 
