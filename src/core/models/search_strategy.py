@@ -78,18 +78,34 @@ def _get_patterns(config: AppConfig) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(soundtrack_list), frozenset(various_list)
 
 
-def _is_soundtrack(album: str, patterns: frozenset[str]) -> str | None:
-    """Check if album matches soundtrack patterns. Returns matched pattern.
+# Separators between a movie title and its soundtrack label: "Title (Original Soundtrack)", "Title - OST", "Title: Music from..."
+_TITLE_SEPARATOR: Final[re.Pattern[str]] = re.compile(r"\s*(?:[([:]|\s[-\u2013\u2014]\s)")
 
-    Uses simple substring matching (not word-boundary regex) because:
-    - Soundtrack patterns are distinctive enough to avoid false positives
-    - Simpler matching handles variations like "original-score" naturally
+
+def _find_soundtrack(album: str, patterns: frozenset[str]) -> tuple[str, int] | None:
+    """Find the soundtrack pattern that occurs first in the album, as whole words.
+
+    Args:
+        album: Album name
+        patterns: Soundtrack patterns
+
+    Returns:
+        The matched pattern and where it starts, or None
     """
-    album_lower = album.lower()
-    return next(
-        (pattern for pattern in patterns if pattern.lower() in album_lower),
-        None,
-    )
+    first: tuple[int, str] | None = None
+    for pattern in patterns:
+        found = re.search(rf"\b{re.escape(pattern)}s?\b", album, re.IGNORECASE)
+        if found and (first is None or (found.start(), pattern) < first):
+            first = (found.start(), pattern)
+    return None if first is None else (first[1], first[0])
+
+
+def _movie_title(album: str, label_start: int) -> str:
+    """Return the movie title: the album text before the last separator that precedes the soundtrack label."""
+    prefix = album[:label_start]
+    if separators := list(_TITLE_SEPARATOR.finditer(prefix)):
+        prefix = prefix[: separators[-1].start()]
+    return prefix.strip()
 
 
 def _is_various_artists(artist: str, patterns: frozenset[str]) -> bool:
@@ -135,10 +151,9 @@ def detect_search_strategy(
     soundtrack_patterns, various_patterns = _get_patterns(config)
 
     # 1. Check for soundtrack
-    if pattern := _is_soundtrack(album, soundtrack_patterns):
-        album_lower = album.lower()
-        idx = album_lower.find(pattern.lower())
-        if idx > 0 and (movie_name := album[:idx].strip().rstrip("([-\u2013\u2014")):
+    if soundtrack := _find_soundtrack(album, soundtrack_patterns):
+        pattern, label_start = soundtrack
+        if movie_name := _movie_title(album, label_start):
             return SearchStrategyInfo(
                 strategy=SearchStrategy.SOUNDTRACK,
                 detected_pattern=pattern,

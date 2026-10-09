@@ -143,3 +143,30 @@ class TestEdgeCases:
         """Soundtrack takes priority over Various Artists."""
         info = detect_search_strategy("Various Artists", "Movie Soundtrack", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
+
+
+class TestSoundtrackTitle:
+    """The movie title is the text before the soundtrack label, whichever pattern matches first."""
+
+    @pytest.fixture
+    def config(self) -> AppConfig:
+        return create_test_app_config()
+
+    @pytest.mark.parametrize(
+        ("album", "title"),
+        [
+            ("Inception (Original Motion Picture Soundtrack)", "Inception"),
+            ("Inception - Original Motion Picture Soundtrack", "Inception"),
+            ("Inception (Music from the Motion Picture)", "Inception"),
+            ("Harry Potter: Original Motion Picture Soundtrack", "Harry Potter"),
+            ("Star Wars: Episode IV - A New Hope (Original Soundtrack)", "Star Wars: Episode IV - A New Hope"),
+            ("Interstellar OST", "Interstellar"),
+        ],
+    )
+    def test_title_is_cut_before_the_label(self, config: AppConfig, album: str, title: str) -> None:
+        info = detect_search_strategy("Hans Zimmer", album, config)
+        assert (info.modified_artist, info.modified_album) == (title, title)
+
+    @pytest.mark.parametrize("album", ["Ghost Stories", "Lost Highway", "Frost"])
+    def test_a_pattern_inside_a_word_is_not_a_soundtrack(self, config: AppConfig, album: str) -> None:
+        assert detect_search_strategy("Artist", album, config).strategy is SearchStrategy.NORMAL
