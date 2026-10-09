@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.api.musicbrainz import MusicBrainzClient
+from services.api.musicbrainz import MUSICBRAINZ_BASE_URL, MusicBrainzClient
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext, ReleaseScorer
 from tests.mocks.csv_mock import MockLogger
@@ -233,9 +233,8 @@ class TestMusicBrainzClientAllure:
         """MusicBrainz releases are scored on the release group's first year, so the real scorer keeps them."""
         client = TestMusicBrainzClientAllure.create_scoring_client()
 
-        scored = client._process_and_score_releases(
-            [TestMusicBrainzClientAllure.create_release_group_result()], "the beatles", "abbey road", ArtistContext()
-        )
+        records = client._build_release_records([TestMusicBrainzClientAllure.create_release_group_result()])
+        scored = client.score_records(records, "the beatles", "abbey road", ArtistContext())
 
         assert [release["year"] for release in scored] == ["1969", "1969"]
         assert all(release["score"] > 0 for release in scored)
@@ -243,10 +242,10 @@ class TestMusicBrainzClientAllure:
     def test_artist_region_matches_release_country(self) -> None:
         """A release from the artist's country scores higher once the region is an ISO code."""
         client = TestMusicBrainzClientAllure.create_scoring_client()
-        release_group_result = TestMusicBrainzClientAllure.create_release_group_result()
+        records = client._build_release_records([TestMusicBrainzClientAllure.create_release_group_result()])
 
-        without_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", ArtistContext())
-        with_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", ArtistContext(region="GB"))
+        without_region = client.score_records(records, "the beatles", "abbey road", ArtistContext())
+        with_region = client.score_records(records, "the beatles", "abbey road", ArtistContext(region="GB"))
 
         assert with_region[0]["score"] > without_region[0]["score"]
         # The British pressing now outscores the American one, which only gets the major-market bonus
@@ -406,11 +405,11 @@ class TestMusicBrainzArtistMatching:
 
 
 class TestRetrieveAndScoreReleasesErrorHandling:
-    """Tests for retrieve_and_score_releases exception handling."""
+    """An error while building records fails the lookup instead of reading as "nothing found"."""
 
     @pytest.mark.asyncio
-    async def test_index_error_in_scoring_returns_empty(self) -> None:
-        """Should return empty list when scoring raises IndexError."""
+    async def test_index_error_in_records_propagates(self) -> None:
+        """An IndexError while building records reaches the caller, which counts the provider as failed."""
         mock_api_request = AsyncMock(return_value={"release-groups": [{"id": "rg1"}]})
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(
             mock_api_request=mock_api_request,
@@ -419,11 +418,10 @@ class TestRetrieveAndScoreReleasesErrorHandling:
         with (
             patch.object(client, "_perform_primary_search", new_callable=AsyncMock, return_value=[{"id": "rg1"}]),
             patch.object(client, "_fetch_releases_for_groups", new_callable=AsyncMock, return_value=[{}]),
-            patch.object(client, "_process_and_score_releases", side_effect=IndexError("list index out of range")),
+            patch.object(client, "_build_release_records", side_effect=IndexError("list index out of range")),
+            pytest.raises(IndexError),
         ):
-            result = await client.get_scored_releases("artist", "album", ArtistContext())
-
-        assert result == []
+            await client.get_scored_releases("artist", "album", ArtistContext())
 
 
 class TestGetArtistInfoExceptionHandler:
@@ -571,3 +569,84 @@ class TestRequestFailurePropagation:
 
         with pytest.raises(ApiRequestError):
             await client.get_scored_releases("artist", "album", ArtistContext())
+
+
+class TestRecordsAndScoring:
+    """MusicBrainz fetches release records without the artist context and scores them with it."""
+
+    @staticmethod
+    def create_search_and_releases() -> AsyncMock:
+        """Answer the release-group search, then the releases of that group."""
+        releases, release_group = TestMusicBrainzClientAllure.create_release_group_result()
+        credit = [{"name": "The Beatles", "artist": {"name": "The Beatles"}}]
+        search = {"count": 1, "release-groups": [{**release_group, "artist-credit": credit}]}
+        return AsyncMock(side_effect=[search, releases])
+
+    @pytest.mark.asyncio
+    async def test_records_score_with_each_context_without_a_new_request(self) -> None:
+        """One fetch serves any artist context: scoring asks MusicBrainz nothing and still follows the region."""
+        client = TestMusicBrainzClientAllure.create_scoring_client()
+        request = self.create_search_and_releases()
+        client._make_api_request = request
+
+        records = await client.fetch_release_records("the beatles", "abbey road")
+        requests_made = request.await_count
+        with_region = client.score_records(records, "the beatles", "abbey road", ArtistContext(region="GB"))
+        without_region = client.score_records(records, "the beatles", "abbey road", ArtistContext())
+
+        assert request.await_count == requests_made
+        assert with_region[0]["score"] > without_region[0]["score"]
+        assert [release["artist"] for release in with_region] == ["the beatles", "the beatles"]
+        assert all("releasegroup_first_date" not in release for release in with_region)
+
+    @pytest.mark.asyncio
+    async def test_scored_releases_match_records_then_scores(self) -> None:
+        """get_scored_releases is the fetched records scored with the given context."""
+        client = TestMusicBrainzClientAllure.create_scoring_client()
+        client._make_api_request = self.create_search_and_releases()
+        records = await client.fetch_release_records("the beatles", "abbey road")
+        client._make_api_request = self.create_search_and_releases()
+
+        scored = await client.get_scored_releases("the beatles", "abbey road", ArtistContext(region="GB"))
+
+        assert scored == client.score_records(records, "the beatles", "abbey road", ArtistContext(region="GB"))
+
+    @pytest.mark.asyncio
+    async def test_broken_fetch_propagates(self) -> None:
+        """An error while fetching is a failed provider, not an album MusicBrainz does not know."""
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(side_effect=ValueError("bad payload")))
+
+        with pytest.raises(ValueError, match="bad payload"):
+            await client.fetch_release_records("artist", "album")
+
+
+class TestMalformedAnswers:
+    """MusicBrainz answers an empty search with an empty list, so a body without the list is a failure, not "nothing found"."""
+
+    @pytest.mark.asyncio
+    async def test_search_without_release_groups_fails(self) -> None:
+        """A search body missing "release-groups" fails the lookup instead of being cached as empty."""
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value={"count": 0}))
+
+        with pytest.raises(ApiRequestError):
+            await client.fetch_release_records("artist", "album")
+
+    @pytest.mark.asyncio
+    async def test_each_search_requires_its_list(self) -> None:
+        """The fielded search, the fallback search and the release fetch each reject an answer without their list."""
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value={"count": 0}))
+
+        with pytest.raises(ApiRequestError):
+            await client._fielded_release_group_search(f"{MUSICBRAINZ_BASE_URL}/release-group/", "artist", "album", 1)
+        with pytest.raises(ApiRequestError):
+            await client._search_release_groups('"album"', "artist", 2)
+        with pytest.raises(ApiRequestError):
+            await client._fetch_releases_for_groups([{"id": "rg-1", "title": "Album"}])
+
+    @pytest.mark.asyncio
+    async def test_empty_search_is_nothing_found(self) -> None:
+        """The empty answer MusicBrainz really sends reads as "nothing found"."""
+        empty = {"count": 0, "offset": 0, "release-groups": []}
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=empty))
+
+        assert await client.fetch_release_records("artist", "album") == []

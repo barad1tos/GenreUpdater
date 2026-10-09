@@ -28,9 +28,8 @@ class CacheContentType(Enum):
 
     TRACK_METADATA = "track_metadata"  # Media library tracks - persistent until removed
     SUCCESSFUL_API_METADATA = "successful_api_metadata"  # API successful responses - persistent
-    FAILED_API_LOOKUP = "failed_api_lookup"  # Failed API calls - short retry TTL
     ALBUM_YEAR = "album_year"  # Album release years - semi-permanent
-    NEGATIVE_RESULT = "negative_result"  # Failed lookups - long-term caching
+    NEGATIVE_RESULT = "negative_result"  # Answered lookups that found nothing - expire to be re-checked
     GENERIC = "generic"  # General purpose cache - medium TTL
 
 
@@ -110,7 +109,6 @@ class SmartCacheConfig:
         Defines TTL and invalidation strategies optimized for each content type:
         - TRACK_METADATA: Infinite TTL, event-driven invalidation
         - SUCCESSFUL_API_METADATA: Infinite TTL, event-driven invalidation
-        - FAILED_API_LOOKUP: 1 hour TTL for retry opportunities
         - ALBUM_YEAR: 30 days TTL, hybrid invalidation
         - NEGATIVE_RESULT: Configurable TTL (default 30 days)
         - GENERIC: 5 minutes TTL for safety
@@ -134,13 +132,6 @@ class SmartCacheConfig:
                 max_size_mb=30,
                 description="API metadata - persistent until track removed (immutable data)",
             ),
-            CacheContentType.FAILED_API_LOOKUP: CachePolicy(
-                content_type=CacheContentType.FAILED_API_LOOKUP,
-                ttl_seconds=1 * self.HOUR,  # Retry failed lookups after 1 hour
-                invalidation_strategy=InvalidationStrategy.TIME_BASED,
-                max_size_mb=5,
-                description="Failed API lookups - short TTL for retry opportunities",
-            ),
             CacheContentType.ALBUM_YEAR: CachePolicy(
                 content_type=CacheContentType.ALBUM_YEAR,
                 ttl_seconds=self.MONTH,
@@ -153,7 +144,7 @@ class SmartCacheConfig:
                 ttl_seconds=self._get_negative_result_ttl(),
                 invalidation_strategy=InvalidationStrategy.TIME_BASED,
                 max_size_mb=10,
-                description="Failed lookups - long-term cache to avoid repeated failures",
+                description="Answered lookups that found nothing - re-checked once the TTL runs out",
             ),
             CacheContentType.GENERIC: CachePolicy(
                 content_type=CacheContentType.GENERIC,

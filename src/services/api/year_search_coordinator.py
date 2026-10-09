@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Coroutine
 
+    from core.models.protocols import CacheServiceProtocol
     from core.models.track_models import AppConfig
     from services.api.api_base import ScoredRelease
     from services.api.applemusic import AppleMusicClient
@@ -29,16 +30,29 @@ if TYPE_CHECKING:
 
 
 class _ReleaseSource(Protocol):
-    """A provider client that scores its releases against one search's artist context."""
+    """A provider client that fetches release records for an album and scores them against one search's artist context."""
 
-    async def get_scored_releases(self, artist_norm: str, album_norm: str, artist_context: ArtistContext) -> list[ScoredRelease]:
-        """Get scored releases for the album."""
+    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[dict[str, Any]]:
+        """Fetch the provider's release records for the album, without the artist context."""
+        ...
+
+    def score_records(
+        self,
+        records: list[dict[str, Any]],
+        artist_norm: str,
+        album_norm: str,
+        artist_context: ArtistContext,
+    ) -> list[ScoredRelease]:
+        """Score release records with the search's artist context."""
         ...
 
 
 # Discogs answering these has refused its token; asking it again this run would get the same answer. Only Discogs sends a
 # credential: from iTunes (which throttles with 403) or MusicBrainz these statuses are ordinary failures
 _REJECTED_TOKEN = frozenset({401, 403})
+
+# Two names reach the Apple Music client; its cached records are stored under one
+_CACHE_SOURCES = {"applemusic": "itunes"}
 
 
 @dataclass(slots=True)
@@ -65,6 +79,7 @@ class YearSearchCoordinator:
         discogs_client: Discogs API client
         applemusic_client: Apple Music API client
         release_scorer: Release scoring service
+        cache_service: Cache holding each provider's release records per album
         max_concurrent_api_calls: Maximum concurrent API requests (default 50).
             Prevents socket exhaustion on large libraries.
         discogs_enabled: Whether Discogs has a token; without one it is not queried, which is not a failure
@@ -82,6 +97,7 @@ class YearSearchCoordinator:
         discogs_client: DiscogsClient,
         applemusic_client: AppleMusicClient,
         release_scorer: ReleaseScorer,
+        cache_service: CacheServiceProtocol,
         max_concurrent_api_calls: int = 50,
         discogs_enabled: bool = True,
     ) -> None:
@@ -93,6 +109,7 @@ class YearSearchCoordinator:
         self.discogs_client = discogs_client
         self.applemusic_client = applemusic_client
         self.release_scorer = release_scorer
+        self.cache_service = cache_service
         self.discogs_enabled = discogs_enabled
         # Set when Discogs rejects its token: inactive for the rest of the run, like Discogs without a token
         self._discogs_rejected = False
@@ -296,7 +313,7 @@ class YearSearchCoordinator:
 
             if debug.api:
                 self.console_logger.info("Trying %s for %s text", api_name, script_type.value)
-            results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, artist_norm, album_norm, artist_context)
+            results = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_context)
 
             if results:
                 if debug.api:
@@ -322,26 +339,52 @@ class YearSearchCoordinator:
     async def _call_api_with_proper_params(
         self,
         api_client: _ReleaseSource,
+        api_name: str,
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Ask one provider for scored releases, holding the semaphore that limits concurrent API requests."""
+        """Score one provider's release records for the album, fetching them only when the result cache has none.
+
+        The records are cached per provider and album, found ones for good and an empty answer until the negative TTL
+        runs out; a failed fetch stores nothing. The fetch holds the semaphore that limits concurrent API requests, and
+        the score uses this search's artist context, so a cached answer never carries another search's context.
+
+        Args:
+            api_client: The provider client
+            api_name: The provider's name, as the coordinator lists it
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_context: Region and activity period of the artist, used in scoring
+
+        Returns:
+            The provider's releases with a positive score
+
+        Raises:
+            ApiRequestError: The provider could not be asked; nothing is cached for it
+        """
+        source = _CACHE_SOURCES.get(api_name, api_name)
         is_discogs = api_client is self.discogs_client
         async with self._api_semaphore:
             if is_discogs and self._discogs_rejected:
                 # Queued before the token was rejected; sending it now would only be refused again
                 return []
-            try:
-                return await api_client.get_scored_releases(artist_norm, album_norm, artist_context)
-            except ApiRequestError as error:
-                # Switch Discogs off here, not when the search ends, so calls queued by other searches are not sent
-                if is_discogs and error.status in _REJECTED_TOKEN and not self._discogs_rejected:
-                    self._discogs_rejected = True
-                    self.console_logger.warning(
-                        "discogs rejected the token (HTTP %d); it is not queried again this run, so check discogs_token", error.status
-                    )
-                raise
+            cached = await self.cache_service.get_cached_api_result(artist_norm, album_norm, source)
+            if cached is not None and cached.api_response is not None:
+                records: list[dict[str, Any]] = cached.api_response["records"]
+            else:
+                try:
+                    records = await api_client.fetch_release_records(artist_norm, album_norm)
+                except ApiRequestError as error:
+                    # Switch Discogs off here, not when the search ends, so calls queued by other searches are not sent
+                    if is_discogs and error.status in _REJECTED_TOKEN and not self._discogs_rejected:
+                        self._discogs_rejected = True
+                        self.console_logger.warning(
+                            "discogs rejected the token (HTTP %d); it is not queried again this run, so check discogs_token", error.status
+                        )
+                    raise
+                await self.cache_service.set_cached_api_result(artist_norm, album_norm, source=source, records=records)
+        return api_client.score_records(records, artist_norm, album_norm, artist_context)
 
     @staticmethod
     def _record_failure(api_name: str, error: BaseException, tally: ProviderTally) -> None:
@@ -380,7 +423,7 @@ class YearSearchCoordinator:
             if api_client := self._get_api_client(api_name):
                 active_api_names.append(api_name)
                 api_tasks.append(
-                    self._call_api_with_proper_params(api_client, artist_norm, album_norm, artist_context),
+                    self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_context),
                 )
 
         # Execute all API calls concurrently

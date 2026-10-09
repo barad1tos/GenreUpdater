@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,6 +12,9 @@ import pytest
 from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
+
+if TYPE_CHECKING:
+    from services.api.api_base import ScoredRelease
 
 
 @pytest.fixture
@@ -324,12 +328,11 @@ class TestGetScoredReleases:
         client: AppleMusicClient,
         mock_api_request_func: AsyncMock,
     ) -> None:
-        """Test handles API error gracefully."""
+        """A broken request fails the lookup instead of reading as "nothing found"."""
         mock_api_request_func.side_effect = OSError("Connection error")
 
-        result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
-
-        assert result == []
+        with pytest.raises(OSError, match="Connection error"):
+            await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
     @pytest.mark.asyncio
     async def test_skips_results_without_year(
@@ -380,7 +383,22 @@ class TestGetScoredReleases:
 
 
 class TestProcessItunesResult:
-    """Tests for _process_itunes_result method."""
+    """Tests for turning one iTunes result into a scored release."""
+
+    @staticmethod
+    def score_one(
+        client: AppleMusicClient,
+        result: dict[str, Any],
+        artist_norm: str,
+        album_norm: str,
+        artist_context: ArtistContext,
+    ) -> ScoredRelease | None:
+        """Build one record from an iTunes result and score it, the way a lookup does."""
+        record = client._build_release_record(result)
+        if record is None:
+            return None
+        scored = client.score_records([record], artist_norm, album_norm, artist_context)
+        return scored[0] if scored else None
 
     def test_process_valid_result(
         self,
@@ -391,7 +409,8 @@ class TestProcessItunesResult:
         """Test processing a valid iTunes result."""
         mock_score_func.return_value = 90.0
 
-        result = client._process_itunes_result(
+        result = TestProcessItunesResult.score_one(
+            client,
             sample_itunes_result,
             "pink floyd",
             "dark side",
@@ -416,7 +435,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -430,7 +449,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -445,7 +464,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -460,7 +479,7 @@ class TestProcessItunesResult:
             "releaseDate": "invalid-date",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -475,7 +494,7 @@ class TestProcessItunesResult:
             "releaseDate": "20-01-01T00:00:00Z",  # Year too short
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -484,7 +503,7 @@ class TestProcessItunesResult:
         client: AppleMusicClient,
         mock_score_func: MagicMock,
     ) -> None:
-        """Test handles scoring function errors."""
+        """A scoring error fails the lookup instead of dropping the release."""
         mock_score_func.side_effect = ValueError("Scoring error")
         result_data = {
             "artistName": "Artist",
@@ -492,9 +511,8 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
-
-        assert result is None
+        with pytest.raises(ValueError, match="Scoring error"):
+            TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
     def test_includes_optional_fields(
         self,
@@ -505,7 +523,8 @@ class TestProcessItunesResult:
         """Test includes optional fields when present."""
         mock_score_func.return_value = 85.0
 
-        result = client._process_itunes_result(
+        result = TestProcessItunesResult.score_one(
+            client,
             sample_itunes_result,
             "pink floyd",
             "dark side",
@@ -530,7 +549,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["catalog_number"] is None
@@ -539,26 +558,6 @@ class TestProcessItunesResult:
 
 class TestReissueDetectionEdgeCases:
     """Tests for reissue detection with edge-case year values."""
-
-    @pytest.mark.asyncio
-    async def test_unparseable_release_year_skips_reissue_penalty(
-        self,
-        client: AppleMusicClient,
-        mock_api_request_func: AsyncMock,
-        mock_score_func: MagicMock,
-        sample_itunes_result: dict[str, Any],
-    ) -> None:
-        """Unparseable release year should not crash, just skip reissue penalty."""
-        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
-        mock_score_func.return_value = 75.0
-
-        # Mock _parse_release_year to return a non-integer string
-        with patch.object(client, "_parse_release_year", return_value="N/A"):
-            result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
-
-        # Should still produce a result (is_reissue stays False, key not added)
-        assert len(result) == 1
-        assert "is_reissue" not in result[0]
 
 
 class TestParseReleaseYear:
@@ -680,7 +679,7 @@ class TestEdgeCases:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["artist"] == "Artist"
@@ -697,7 +696,7 @@ class TestEdgeCases:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -721,12 +720,11 @@ class TestEdgeCases:
         client: AppleMusicClient,
         mock_api_request_func: AsyncMock,
     ) -> None:
-        """Test handles RuntimeError."""
+        """A RuntimeError fails the lookup."""
         mock_api_request_func.side_effect = RuntimeError("Runtime error")
 
-        result = await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
-
-        assert result == []
+        with pytest.raises(RuntimeError, match="Runtime error"):
+            await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
 
     @pytest.mark.asyncio
     async def test_handles_value_error(
@@ -734,12 +732,11 @@ class TestEdgeCases:
         client: AppleMusicClient,
         mock_api_request_func: AsyncMock,
     ) -> None:
-        """Test handles ValueError."""
+        """A ValueError fails the lookup."""
         mock_api_request_func.side_effect = ValueError("Value error")
 
-        result = await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
-
-        assert result == []
+        with pytest.raises(ValueError, match="Value error"):
+            await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
 
 
 class TestGetArtistStartYear:
@@ -917,7 +914,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -934,7 +931,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -951,7 +948,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["score"] == 50.0
@@ -969,7 +966,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
+        result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["score"] == 0.01
@@ -1084,36 +1081,19 @@ class TestExtractYearDebugLog:
         assert "Failed to parse year from release_date" in mock_logger.debug.call_args[0][0]
 
 
-class TestProcessApiResultsUnexpectedError:
-    """Cover the except (AttributeError, IndexError, RuntimeError) branch in _process_api_results."""
+class TestUnreadableResults:
+    """A result iTunes sends in an unexpected shape is skipped, and the other results still become records."""
 
-    def test_attribute_error_in_process_itunes_result_is_logged(
-        self,
-        client: AppleMusicClient,
-    ) -> None:
-        """AttributeError from _process_itunes_result is caught and logged via error_logger.exception."""
+    def test_unreadable_result_is_skipped_with_a_warning(self, client: AppleMusicClient, sample_itunes_result: dict[str, Any]) -> None:
+        """A result whose artist name is not text is skipped and named in the error log."""
         mock_error_logger = MagicMock(spec=logging.Logger)
         client.error_logger = mock_error_logger
 
-        fake_result = {"artistName": "Artist", "collectionName": "Album", "releaseDate": "2020-01-01"}
+        records = client._build_release_records([{**sample_itunes_result, "artistName": 123}, sample_itunes_result], "pink floyd dark side")
 
-        with patch.object(
-            client,
-            "_process_itunes_result",
-            side_effect=AttributeError("simulated attribute error"),
-        ):
-            scored = client._process_api_results(
-                results=[fake_result],
-                artist_norm="artist",
-                album_norm="album",
-                search_term="artist album",
-                artist_context=ArtistContext(),
-            )
-
-        assert scored == []
-        mock_error_logger.exception.assert_called_once()
-        log_msg = mock_error_logger.exception.call_args[0][0]
-        assert "Unexpected error" in log_msg
+        assert [record["title"] for record in records] == [sample_itunes_result["collectionName"]]
+        mock_error_logger.warning.assert_called_once()
+        assert "Skipping unreadable result" in mock_error_logger.warning.call_args[0][0]
 
 
 class TestRequestFailurePropagation:
@@ -1126,3 +1106,86 @@ class TestRequestFailurePropagation:
 
         with pytest.raises(ApiRequestError):
             await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
+
+
+class TestRecordsAndScoring:
+    """iTunes fetches release records without the artist context or the clock, and scores them with both."""
+
+    @staticmethod
+    def create_client(score_release: MagicMock, response: dict[str, Any]) -> tuple[AppleMusicClient, AsyncMock]:
+        """Create a client answering one search."""
+        request = AsyncMock(return_value=response)
+        client = AppleMusicClient(
+            console_logger=logging.getLogger("test.itunes.console"),
+            error_logger=logging.getLogger("test.itunes.error"),
+            make_api_request_func=request,
+            score_release_func=score_release,
+        )
+        return client, request
+
+    @pytest.mark.asyncio
+    async def test_records_score_with_each_context_without_a_new_request(self, sample_itunes_result: dict[str, Any]) -> None:
+        """One fetch serves any artist context: scoring asks iTunes nothing and still follows the context."""
+
+        def score_release(release: dict[str, Any], artist_norm: str, album_norm: str, artist_context: ArtistContext, source: str) -> int:
+            """Score higher when the artist region is known."""
+            del release, artist_norm, album_norm, source
+            return 80 if artist_context.region else 60
+
+        client, request = self.create_client(MagicMock(side_effect=score_release), {"results": [sample_itunes_result]})
+
+        records = await client.fetch_release_records("pink floyd", "the dark side of the moon")
+        requests_made = request.await_count
+        with_region = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext(region="gb"))
+        without_region = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
+
+        assert request.await_count == requests_made
+        assert [release["score"] for release in with_region] == [80]
+        assert [release["score"] for release in without_region] == [60]
+
+    @pytest.mark.asyncio
+    async def test_reissue_flag_follows_the_scoring_year(self, sample_itunes_result: dict[str, Any]) -> None:
+        """A record fetched one year is a reissue only while its year is recent at scoring time."""
+        score_release = MagicMock(return_value=50)
+        client, _ = self.create_client(score_release, {"results": [{**sample_itunes_result, "releaseDate": "2025-05-01T00:00:00Z"}]})
+        records = await client.fetch_release_records("pink floyd", "the dark side of the moon")
+
+        with patch("services.api.applemusic.datetime") as clock:
+            clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
+            recent = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
+            clock.now.return_value = datetime(2030, 1, 1, tzinfo=UTC)
+            later = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
+
+        assert recent[0].get("is_reissue") is True
+        assert "is_reissue" not in later[0]
+
+    @pytest.mark.asyncio
+    async def test_broken_fetch_propagates(self) -> None:
+        """An error while fetching is a failed provider, not an album iTunes does not know."""
+        client, _ = self.create_client(MagicMock(return_value=50), {})
+        client.make_api_request_func = AsyncMock(side_effect=ValueError("bad payload"))
+
+        with pytest.raises(ValueError, match="bad payload"):
+            await client.fetch_release_records("artist", "album")
+
+
+class TestMalformedAnswers:
+    """iTunes answers an empty search with an empty list, so a body without the list is a failure, not "nothing found"."""
+
+    @pytest.mark.asyncio
+    async def test_search_without_results_fails(self, client: AppleMusicClient, mock_api_request_func: AsyncMock) -> None:
+        """A search body missing "results" fails the lookup instead of being cached as empty."""
+        mock_api_request_func.return_value = {"resultCount": 0}
+
+        with pytest.raises(ApiRequestError):
+            await client.fetch_release_records("artist", "album")
+
+    @pytest.mark.asyncio
+    async def test_lookup_fallback_requires_results(self, client: AppleMusicClient, mock_api_request_func: AsyncMock) -> None:
+        """The artist search and the album lookup of the fallback reject an answer without a results list."""
+        mock_api_request_func.return_value = {"resultCount": 0}
+
+        with pytest.raises(ApiRequestError):
+            await client._find_artist_id("artist")
+        with pytest.raises(ApiRequestError):
+            await client._lookup_artist_albums(1)

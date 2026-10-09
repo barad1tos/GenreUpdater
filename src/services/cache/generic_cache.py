@@ -26,6 +26,12 @@ else:  # pragma: no cover - runtime-only aliasing for type hints
     CacheableValue = Any
 
 
+# No writer keeps a generic entry longer than a year (artist start years) or the configured request cache TTL; an entry
+# due to outlive both was written by the request cache's former 100-year TTL and would otherwise stay unread on disk
+# until the LRU limit is reached
+_LONGEST_TTL_SECONDS = 366 * 24 * 60 * 60
+
+
 class GenericCacheService:
     """Generic in-memory cache service with TTL support and automatic cleanup.
 
@@ -37,6 +43,8 @@ class GenericCacheService:
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         self.config = config
+        # The request cache may be configured to keep answers longer than any other writer does
+        self._longest_ttl = max(_LONGEST_TTL_SECONDS, int(config.caching.negative_result_ttl))
         self.logger = logger or logging.getLogger(__name__)
         self.cache_config = SmartCacheConfig(config)
 
@@ -372,7 +380,7 @@ class GenericCacheService:
                 if not isinstance(expires_at, (int, float)):
                     continue
                 expires_at_float = float(expires_at)
-                if expires_at_float <= now:
+                if expires_at_float <= now or expires_at_float - now > self._longest_ttl:
                     continue
                 restored[key] = (self._restore_value_from_disk(value), expires_at_float)
             return restored

@@ -106,7 +106,7 @@ class ApiRequestExecutor:
         error_logger: Logger for errors/warnings
         user_agent: User-Agent header for requests
         discogs_token: Discogs API authentication token
-        cache_ttl_days: How long to cache API responses (days)
+        cache_ttl_seconds: How long to keep a provider's answer; an empty one is asked again once it runs out
         default_max_retries: Default retry count for failed requests
         default_retry_delay: Base delay between retries (seconds)
 
@@ -121,7 +121,7 @@ class ApiRequestExecutor:
         error_logger: logging.Logger,
         user_agent: str,
         discogs_token: str | None,
-        cache_ttl_days: int,
+        cache_ttl_seconds: int,
         default_max_retries: int,
         default_retry_delay: float,
     ) -> None:
@@ -131,7 +131,7 @@ class ApiRequestExecutor:
         self.error_logger = error_logger
         self.user_agent = user_agent
         self.discogs_token = discogs_token
-        self.cache_ttl_days = cache_ttl_days
+        self.cache_ttl_seconds = cache_ttl_seconds
         self.default_max_retries = default_max_retries
         self.default_retry_delay = default_retry_delay
 
@@ -245,7 +245,8 @@ class ApiRequestExecutor:
         Uses SHA-256 via UnifiedHashService instead of Python's built-in hash()
         to ensure cache keys remain stable across interpreter restarts.
         Python's hash() is randomized per-process (PYTHONHASHSEED) which would
-        cause cache misses after every restart.
+        cause cache misses after every restart. Answers stored under the earlier "api_request_" prefix were kept until
+        2126, empty ones included; the new prefix leaves them unread, and the cache evicts them as it fills.
         """
         cache_key_data = {
             "type": "api_request",
@@ -253,7 +254,7 @@ class ApiRequestExecutor:
             "url": url,
             "params": sorted((params or {}).items()),
         }
-        return f"api_request_{api_name}_{UnifiedHashService.hash_generic_key(cache_key_data)}"
+        return f"api_response_{api_name}_{UnifiedHashService.hash_generic_key(cache_key_data)}"
 
     async def _check_cache(
         self,
@@ -306,8 +307,7 @@ class ApiRequestExecutor:
         """
         if not result:
             return
-        cache_ttl_seconds = self.cache_ttl_days * 86400
-        await self.cache_service.set_async(cache_key, result, ttl=cache_ttl_seconds)
+        await self.cache_service.set_async(cache_key, result, ttl=self.cache_ttl_seconds)
 
     def _prepare_request(
         self,

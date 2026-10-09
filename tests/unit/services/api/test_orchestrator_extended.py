@@ -40,7 +40,6 @@ def mock_config() -> AppConfig:
                 "batch_size": 10,
                 "delay_between_batches": 60,
                 "adaptive_delay": False,
-                "cache_ttl_days": 30,
                 "skip_prerelease": True,
                 "future_year_threshold": 1,
                 "prerelease_recheck_days": 30,

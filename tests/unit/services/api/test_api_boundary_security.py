@@ -9,7 +9,6 @@ the clients can construct requests without crashing, not that the encoding is co
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,10 +18,6 @@ from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
 from services.api.year_scoring import ArtistContext
 from tests.factories import create_test_app_config
-from tests.mocks.protocol_mocks import MockCacheService
-
-if TYPE_CHECKING:
-    from core.models.protocols import CacheServiceProtocol
 
 
 @pytest.mark.unit
@@ -182,8 +177,6 @@ class TestDiscogsInputBoundary:
 
         score_release_func = MagicMock(return_value=0.0)
 
-        cache_service: CacheServiceProtocol = MockCacheService()
-
         discogs_auth = "fake_value_for_testing"
         test_config = create_test_app_config()
         return DiscogsClient(
@@ -193,7 +186,6 @@ class TestDiscogsInputBoundary:
             analytics=analytics,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
-            cache_service=cache_service,
             scoring_config=test_config.year_retrieval,
             config=test_config,
         )

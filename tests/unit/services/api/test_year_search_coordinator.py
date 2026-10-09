@@ -16,6 +16,7 @@ from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import ProviderTally, YearSearchCoordinator
 from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import MockCacheService
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -25,7 +26,9 @@ if TYPE_CHECKING:
 def mock_musicbrainz_client() -> AsyncMock:
     """Create mock MusicBrainz client."""
     client = AsyncMock()
-    client.get_scored_releases = AsyncMock(return_value=[])
+    client.fetch_release_records = AsyncMock(return_value=[])
+    # Scoring returns the records as they are, so a test's records are the releases it gets back
+    client.score_records = MagicMock(side_effect=lambda records, *_args: records)
     return client
 
 
@@ -33,7 +36,9 @@ def mock_musicbrainz_client() -> AsyncMock:
 def mock_discogs_client() -> AsyncMock:
     """Create mock Discogs client."""
     client = AsyncMock()
-    client.get_scored_releases = AsyncMock(return_value=[])
+    client.fetch_release_records = AsyncMock(return_value=[])
+    # Scoring returns the records as they are, so a test's records are the releases it gets back
+    client.score_records = MagicMock(side_effect=lambda records, *_args: records)
     return client
 
 
@@ -41,7 +46,9 @@ def mock_discogs_client() -> AsyncMock:
 def mock_applemusic_client() -> AsyncMock:
     """Create mock Apple Music client."""
     client = AsyncMock()
-    client.get_scored_releases = AsyncMock(return_value=[])
+    client.fetch_release_records = AsyncMock(return_value=[])
+    # Scoring returns the records as they are, so a test's records are the releases it gets back
+    client.score_records = MagicMock(side_effect=lambda records, *_args: records)
     return client
 
 
@@ -92,6 +99,7 @@ def coordinator(
         discogs_client=mock_discogs_client,
         applemusic_client=mock_applemusic_client,
         release_scorer=mock_release_scorer,
+        cache_service=MockCacheService(),
     )
 
 
@@ -119,6 +127,7 @@ def coordinator_factory(
             discogs_client=mock_discogs_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
+            cache_service=MockCacheService(),
             discogs_enabled=discogs_enabled,
         )
 
@@ -149,6 +158,7 @@ class TestInitialization:
             discogs_client=mock_discogs_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
+            cache_service=MockCacheService(),
         )
 
         assert coordinator.preferred_api == "discogs"
@@ -212,6 +222,7 @@ class TestApplyPreferredOrder:
             discogs_client=mock_discogs_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
+            cache_service=MockCacheService(),
         )
         self._assert_preferred_order_unchanged(test_coordinator, ["discogs", "musicbrainz"])
 
@@ -339,8 +350,8 @@ class TestFetchAllApiResults:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test returns empty list when no APIs have results."""
-        mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = []
+        mock_discogs_client.fetch_release_records.return_value = []
 
         results = await coordinator.fetch_all_api_results("pink floyd", "dark side", ArtistContext(), "Pink Floyd", "Dark Side")
 
@@ -354,8 +365,8 @@ class TestFetchAllApiResults:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test combines results from multiple APIs."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
-        mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 90}]
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_discogs_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 90}]
 
         results = await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
 
@@ -372,12 +383,12 @@ class TestFetchAllApiResults:
         """Each provider receives the lookup's own artist context, so its releases score against that artist."""
         artist_context = ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014})
         for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
-            client.get_scored_releases.return_value = [{"title": "Album", "year": "1973", "score": 85}]
+            client.fetch_release_records.return_value = [{"title": "Album", "year": "1973", "score": 85}]
 
         await coordinator.fetch_all_api_results("pink floyd", "dark side", artist_context, "Pink Floyd", "Dark Side")
 
         for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
-            assert client.get_scored_releases.await_args.args[2] is artist_context
+            assert client.score_records.call_args.args[3] is artist_context
 
     @pytest.mark.asyncio
     async def test_script_search_scores_with_the_search_context(
@@ -387,11 +398,11 @@ class TestFetchAllApiResults:
     ) -> None:
         """The non-Latin search hands the lookup's context to the provider it tries first."""
         artist_context = ArtistContext(region="JP", period={"start_year": 1990, "end_year": None})
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "アルバム", "year": "1995", "score": 85}]
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "アルバム", "year": "1995", "score": 85}]
 
         await coordinator.fetch_all_api_results("ドリカム", "アルバム", artist_context, "ドリカム", "アルバム")
 
-        assert mock_musicbrainz_client.get_scored_releases.await_args.args[2] is artist_context
+        assert mock_musicbrainz_client.score_records.call_args.args[3] is artist_context
 
 
 class TestTrySingleApi:
@@ -404,7 +415,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client: AsyncMock,
     ) -> None:
         """Test returns results on successful API call."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_single_api(
             "musicbrainz",
@@ -441,7 +452,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client: AsyncMock,
     ) -> None:
         """Test returns None when API returns empty results."""
-        mock_musicbrainz_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = []
 
         results = await coordinator._try_single_api(
             "musicbrainz",
@@ -462,7 +473,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client: AsyncMock,
     ) -> None:
         """A provider exception yields no results and marks the search as having a failed provider."""
-        mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("API error")
+        mock_musicbrainz_client.fetch_release_records.side_effect = ValueError("API error")
         tally = ProviderTally()
 
         results = await coordinator._try_single_api(
@@ -489,7 +500,7 @@ class TestTrySingleApi:
     ) -> None:
         """A provider that raises in the script search reaches the error log with its traceback, with API debugging off."""
         api_error = ValueError("API error")
-        mock_musicbrainz_client.get_scored_releases.side_effect = api_error
+        mock_musicbrainz_client.fetch_release_records.side_effect = api_error
 
         with caplog.at_level(logging.WARNING, logger=error_logger.name), patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = False
@@ -522,8 +533,8 @@ class TestTryApiList:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test returns first successful result."""
-        mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_musicbrainz_client.fetch_release_records.return_value = []
+        mock_discogs_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_api_list(
             ["musicbrainz", "discogs"],
@@ -546,8 +557,8 @@ class TestTryApiList:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test returns None when all APIs fail."""
-        mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = []
+        mock_discogs_client.fetch_release_records.return_value = []
 
         results = await coordinator._try_api_list(
             ["musicbrainz", "discogs"],
@@ -610,14 +621,14 @@ class TestExecuteStandardApiSearch:
         mock_applemusic_client: AsyncMock,
     ) -> None:
         """Test executes all APIs."""
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
-        mock_discogs_client.get_scored_releases.return_value = []
-        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_discogs_client.fetch_release_records.return_value = []
+        mock_applemusic_client.fetch_release_records.return_value = []
 
         results = await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album", tally=ProviderTally())
 
         assert len(results) >= 1
-        mock_musicbrainz_client.get_scored_releases.assert_called_once()
+        mock_musicbrainz_client.fetch_release_records.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_skips_unavailable_api_client(
@@ -633,8 +644,8 @@ class TestExecuteStandardApiSearch:
         When _get_api_client returns None for one provider (discogs),
         only the remaining providers should have tasks created.
         """
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
-        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "Album", "year": "2020", "score": 85}]
+        mock_applemusic_client.fetch_release_records.return_value = []
 
         # Patch _get_api_client to return None for discogs
         original_get = coordinator._get_api_client
@@ -647,8 +658,8 @@ class TestExecuteStandardApiSearch:
             results = await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album", tally=ProviderTally())
 
         assert len(results) >= 1
-        mock_musicbrainz_client.get_scored_releases.assert_called_once()
-        mock_discogs_client.get_scored_releases.assert_not_called()
+        mock_musicbrainz_client.fetch_release_records.assert_called_once()
+        mock_discogs_client.fetch_release_records.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_logs_failed_provider_with_traceback(
@@ -661,7 +672,7 @@ class TestExecuteStandardApiSearch:
     ) -> None:
         """A provider that raises in the concurrent search reaches the error log with its traceback."""
         api_error = ValueError("API error")
-        mock_musicbrainz_client.get_scored_releases.side_effect = api_error
+        mock_musicbrainz_client.fetch_release_records.side_effect = api_error
 
         with caplog.at_level(logging.WARNING, logger=error_logger.name):
             await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album", tally=ProviderTally())
@@ -684,7 +695,7 @@ class TestScriptOptimizedSearch:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Test uses script-optimized search for Cyrillic."""
-        mock_discogs_client.get_scored_releases.return_value = [{"title": "Альбом", "year": "2020", "score": 85}]
+        mock_discogs_client.fetch_release_records.return_value = [{"title": "Альбом", "year": "2020", "score": 85}]
 
         results = await coordinator.fetch_all_api_results(
             "московский исполнитель",
@@ -722,6 +733,7 @@ class TestDebugApiLogging:
             discogs_client=mock_discogs_client,
             applemusic_client=mock_applemusic_client,
             release_scorer=mock_release_scorer,
+            cache_service=MockCacheService(),
         )
         return coordinator, mock_console, mock_error
 
@@ -733,7 +745,7 @@ class TestDebugApiLogging:
         debug_coordinator,
     ) -> None:
         coordinator, mock_console, _ = debug_coordinator
-        mock_discogs_client.get_scored_releases.return_value = [{"title": "A", "year": "2020", "score": 90}]
+        mock_discogs_client.fetch_release_records.return_value = [{"title": "A", "year": "2020", "score": 90}]
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
@@ -752,9 +764,9 @@ class TestDebugApiLogging:
     ) -> None:
         coordinator, mock_console, _ = debug_coordinator
         # All APIs return empty to trigger fallback log
-        mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.return_value = []
-        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.return_value = []
+        mock_discogs_client.fetch_release_records.return_value = []
+        mock_applemusic_client.fetch_release_records.return_value = []
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
@@ -793,7 +805,7 @@ class TestDebugApiLogging:
         debug_coordinator,
     ) -> None:
         coordinator, mock_console, _ = debug_coordinator
-        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "A", "year": "2020", "score": 85}]
+        mock_musicbrainz_client.fetch_release_records.return_value = [{"title": "A", "year": "2020", "score": 85}]
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
@@ -817,7 +829,7 @@ class TestDebugApiLogging:
         debug_coordinator,
     ) -> None:
         coordinator, mock_console, _ = debug_coordinator
-        mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("api boom")
+        mock_musicbrainz_client.fetch_release_records.side_effect = ValueError("api boom")
 
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
@@ -851,9 +863,9 @@ class TestProviderOutcomes:
         mock_applemusic_client: AsyncMock,
     ) -> None:
         """One failed provider and empty answers elsewhere say nothing about the album."""
-        mock_musicbrainz_client.get_scored_releases.side_effect = ApiRequestError("musicbrainz", "u", "failed")
-        mock_discogs_client.get_scored_releases.return_value = []
-        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.side_effect = ApiRequestError("musicbrainz", "u", "failed")
+        mock_discogs_client.fetch_release_records.return_value = []
+        mock_applemusic_client.fetch_release_records.return_value = []
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
@@ -867,9 +879,9 @@ class TestProviderOutcomes:
         mock_applemusic_client: AsyncMock,
     ) -> None:
         """Releases from one provider are used even when another failed."""
-        mock_musicbrainz_client.get_scored_releases.side_effect = ApiRequestError("musicbrainz", "u", "failed")
-        mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "1999", "score": 80}]
-        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_musicbrainz_client.fetch_release_records.side_effect = ApiRequestError("musicbrainz", "u", "failed")
+        mock_discogs_client.fetch_release_records.return_value = [{"title": "Album", "year": "1999", "score": 80}]
+        mock_applemusic_client.fetch_release_records.return_value = []
 
         assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
 
@@ -883,7 +895,7 @@ class TestProviderOutcomes:
     ) -> None:
         """Empty answers from every provider are a real "nothing found"."""
         for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
-            client.get_scored_releases.return_value = []
+            client.fetch_release_records.return_value = []
 
         assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album") == []
 
@@ -897,7 +909,7 @@ class TestProviderOutcomes:
     ) -> None:
         """Failures in the script-optimized phase count toward an unavailable lookup."""
         for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
-            client.get_scored_releases.side_effect = ApiRequestError("p", "u", "failed")
+            client.fetch_release_records.side_effect = ApiRequestError("p", "u", "failed")
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("ドリカム", "アルバム", ArtistContext(), "ドリカム", "アルバム")
@@ -909,7 +921,7 @@ class TestProviderOutcomes:
         mock_musicbrainz_client: AsyncMock,
     ) -> None:
         """A provider that failed only in the script-optimized phase still leaves the lookup unknown."""
-        mock_musicbrainz_client.get_scored_releases.side_effect = [ApiRequestError("musicbrainz", "u", "failed"), [], []]
+        mock_musicbrainz_client.fetch_release_records.side_effect = [ApiRequestError("musicbrainz", "u", "failed"), [], []]
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("ドリカム", "アルバム", ArtistContext(), "ドリカム", "アルバム")
@@ -924,7 +936,7 @@ class TestProviderOutcomes:
         coordinator = coordinator_factory(discogs_enabled=False)
 
         assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album") == []
-        mock_discogs_client.get_scored_releases.assert_not_called()
+        mock_discogs_client.fetch_release_records.assert_not_called()
 
 
 class TestRejectedCredentials:
@@ -943,15 +955,15 @@ class TestRejectedCredentials:
         status: int,
     ) -> None:
         """Empty answers elsewhere stay "nothing found", the rejection is named once, and the provider is not asked again."""
-        mock_musicbrainz_client.get_scored_releases.return_value = []
-        mock_applemusic_client.get_scored_releases.return_value = []
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", f"HTTP {status}", status=status)
+        mock_musicbrainz_client.fetch_release_records.return_value = []
+        mock_applemusic_client.fetch_release_records.return_value = []
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", f"HTTP {status}", status=status)
 
         with caplog.at_level(logging.WARNING):
             assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album") == []
             assert await coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record") == []
 
-        assert mock_discogs_client.get_scored_releases.await_count == 1
+        assert mock_discogs_client.fetch_release_records.await_count == 1
         assert len([record for record in caplog.records if f"rejected the token (HTTP {status})" in record.getMessage()]) == 1
 
     @pytest.mark.asyncio
@@ -961,7 +973,7 @@ class TestRejectedCredentials:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """Only a credentials rejection switches a provider off; a server error leaves the lookup unknown."""
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 500", status=500)
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", "HTTP 500", status=500)
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
@@ -976,14 +988,14 @@ class TestRejectedCredentials:
         status: int,
     ) -> None:
         """iTunes sends no credential, so its 401/403 (Apple throttles with 403) is a failure, not a rejected token."""
-        mock_applemusic_client.get_scored_releases.side_effect = ApiRequestError("itunes", "u", f"HTTP {status}", status=status)
+        mock_applemusic_client.fetch_release_records.side_effect = ApiRequestError("itunes", "u", f"HTTP {status}", status=status)
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record")
 
-        assert mock_applemusic_client.get_scored_releases.await_count == 2
+        assert mock_applemusic_client.fetch_release_records.await_count == 2
 
     @pytest.mark.asyncio
     async def test_rejection_in_the_script_search_switches_discogs_off(
@@ -992,10 +1004,10 @@ class TestRejectedCredentials:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """A rejected token met in the script-optimized phase is not a failure, and the standard phase skips Discogs."""
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
 
         assert await coordinator.fetch_all_api_results("ドリカム", "アルバム", ArtistContext(), "ドリカム", "アルバム") == []
-        assert mock_discogs_client.get_scored_releases.await_count == 1
+        assert mock_discogs_client.fetch_release_records.await_count == 1
 
     @pytest.mark.asyncio
     async def test_concurrent_rejections_are_named_once(
@@ -1005,7 +1017,7 @@ class TestRejectedCredentials:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Two searches that meet the rejection at once neither fail nor repeat the warning."""
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
 
         with caplog.at_level(logging.WARNING):
             results = await asyncio.gather(
@@ -1023,11 +1035,11 @@ class TestRejectedCredentials:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """A Discogs request that waited on the semaphore while its token was rejected is not sent."""
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
         await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
 
-        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "other", "record", ArtistContext()) == []
-        assert mock_discogs_client.get_scored_releases.await_count == 1
+        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "discogs", "other", "record", ArtistContext()) == []
+        assert mock_discogs_client.fetch_release_records.await_count == 1
 
     @pytest.mark.asyncio
     async def test_rejection_takes_effect_before_the_search_finishes(
@@ -1036,10 +1048,103 @@ class TestRejectedCredentials:
         mock_discogs_client: AsyncMock,
     ) -> None:
         """The first rejected Discogs call switches Discogs off at once, so calls queued by other searches are not sent."""
-        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+        mock_discogs_client.fetch_release_records.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
 
         with pytest.raises(ApiRequestError):
-            await coordinator._call_api_with_proper_params(coordinator.discogs_client, "artist", "album", ArtistContext())
+            await coordinator._call_api_with_proper_params(coordinator.discogs_client, "discogs", "artist", "album", ArtistContext())
 
-        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "other", "record", ArtistContext()) == []
-        assert mock_discogs_client.get_scored_releases.await_count == 1
+        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "discogs", "other", "record", ArtistContext()) == []
+        assert mock_discogs_client.fetch_release_records.await_count == 1
+
+
+class TestProviderResultCache:
+    """Each provider's records are cached per album and scored with the search's artist context on read."""
+
+    @staticmethod
+    def create_client(records: list[dict[str, Any]] | Exception) -> MagicMock:
+        """Create a client that answers with records (or fails) and scores them by the artist region."""
+        client = MagicMock()
+        client.fetch_release_records = AsyncMock(side_effect=records) if isinstance(records, Exception) else AsyncMock(return_value=records)
+
+        def score_records(found: list[dict[str, Any]], artist_norm: str, album_norm: str, artist_context: ArtistContext) -> list[dict[str, Any]]:
+            """Score every record higher when the artist region is known."""
+            del artist_norm, album_norm
+            return [{**record, "score": 80 if artist_context.region else 60} for record in found]
+
+        client.score_records = MagicMock(side_effect=score_records)
+        return client
+
+    @staticmethod
+    def create_coordinator(
+        default_config: AppConfig,
+        cache: MockCacheService,
+        *,
+        musicbrainz: MagicMock,
+        discogs: MagicMock,
+        itunes: MagicMock,
+    ) -> YearSearchCoordinator:
+        """Create a coordinator over the given clients and result cache."""
+        return YearSearchCoordinator(
+            console_logger=logging.getLogger("test.result_cache.console"),
+            error_logger=logging.getLogger("test.result_cache.error"),
+            config=default_config,
+            preferred_api="musicbrainz",
+            musicbrainz_client=musicbrainz,
+            discogs_client=discogs,
+            applemusic_client=itunes,
+            release_scorer=MagicMock(),
+            cache_service=cache,
+        )
+
+    @pytest.mark.asyncio
+    async def test_one_fetch_is_scored_with_each_context(self, default_config: AppConfig) -> None:
+        """A second search of the album reuses the cached records and scores them with its own context."""
+        musicbrainz = self.create_client([{"title": "Album", "year": "1999"}])
+        coordinator = self.create_coordinator(
+            default_config, MockCacheService(), musicbrainz=musicbrainz, discogs=self.create_client([]), itunes=self.create_client([])
+        )
+
+        first = await coordinator.fetch_all_api_results("artist", "album", ArtistContext(region="gb"), "Artist", "Album")
+        second = await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+
+        assert musicbrainz.fetch_release_records.await_count == 1
+        assert [release["score"] for release in first] == [80]
+        assert [release["score"] for release in second] == [60]
+
+    @pytest.mark.asyncio
+    async def test_answers_are_cached_and_failures_are_not(self, default_config: AppConfig) -> None:
+        """Found and empty answers are stored per provider; a failed provider stores nothing."""
+        cache = MockCacheService()
+        coordinator = self.create_coordinator(
+            default_config,
+            cache,
+            musicbrainz=self.create_client([{"title": "Album", "year": "1999"}]),
+            discogs=self.create_client([]),
+            itunes=self.create_client(ApiRequestError("itunes", "u", "HTTP 503", status=503)),
+        )
+
+        await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+
+        musicbrainz_entry = await cache.get_cached_api_result("artist", "album", "musicbrainz")
+        discogs_entry = await cache.get_cached_api_result("artist", "album", "discogs")
+        assert musicbrainz_entry is not None
+        assert musicbrainz_entry.api_response == {"records": [{"title": "Album", "year": "1999"}]}
+        assert discogs_entry is not None
+        assert discogs_entry.api_response == {"records": []}
+        assert await cache.get_cached_api_result("artist", "album", "itunes") is None
+
+    @pytest.mark.asyncio
+    async def test_rejected_token_caches_nothing(self, default_config: AppConfig) -> None:
+        """A Discogs token rejection is not an answer, so the result cache keeps nothing for Discogs."""
+        cache = MockCacheService()
+        coordinator = self.create_coordinator(
+            default_config,
+            cache,
+            musicbrainz=self.create_client([]),
+            discogs=self.create_client(ApiRequestError("discogs", "u", "HTTP 401", status=401)),
+            itunes=self.create_client([]),
+        )
+
+        await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+
+        assert await cache.get_cached_api_result("artist", "album", "discogs") is None

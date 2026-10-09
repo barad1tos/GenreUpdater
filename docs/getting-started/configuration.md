@@ -90,7 +90,6 @@ year_retrieval:
 
   processing:
     batch_size: 25
-    cache_ttl_days: 36500  # ~100 years (permanent)
 
 # ═══════════════════════════════════════════════════════════════
 # ANALYTICS & LOGGING

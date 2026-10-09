@@ -76,7 +76,7 @@ def executor(
         error_logger=error_logger,
         user_agent="TestAgent/1.0",
         discogs_token=TEST_API_TOKEN,
-        cache_ttl_days=1,
+        cache_ttl_seconds=86400,
         default_max_retries=3,
         default_retry_delay=0.01,
     )
@@ -110,14 +110,14 @@ class TestInitialization:
             error_logger=error_logger,
             user_agent="TestAgent/1.0",
             discogs_token=TEST_API_TOKEN,
-            cache_ttl_days=7,
+            cache_ttl_seconds=604800,
             default_max_retries=5,
             default_retry_delay=1.0,
         )
 
         assert executor.user_agent == "TestAgent/1.0"
         assert executor.discogs_token == TEST_API_TOKEN
-        assert executor.cache_ttl_days == 7
+        assert executor.cache_ttl_seconds == 604800
         assert executor.default_max_retries == 5
         assert executor.default_retry_delay == 1.0
         assert executor.session is None
@@ -170,7 +170,7 @@ class TestBuildCacheKey:
         )
 
         assert isinstance(key, str)
-        assert "api_request" in key
+        assert key.startswith("api_response_musicbrainz_")
         assert "musicbrainz" in key
 
     def test_build_cache_key_no_params(self) -> None:
@@ -493,6 +493,29 @@ class TestRequestOutcomes:
         assert not sleeps
 
     @pytest.mark.asyncio
+    async def test_answer_is_cached_for_the_configured_ttl(
+        self, executor: ApiRequestExecutor, mock_session: MagicMock, mock_cache_service: AsyncMock
+    ) -> None:
+        """An answer is stored for the executor's TTL in seconds, so an empty one is asked again once it runs out."""
+        mock_session.get = MagicMock(return_value=self.respond(200, json_body={"results": []}))
+        executor.set_session(mock_session)
+
+        await executor.execute_request("discogs", "https://api.discogs.com/database/search", params={"q": "abbey road"})
+
+        assert mock_cache_service.set_async.await_args.kwargs["ttl"] == executor.cache_ttl_seconds
+
+    @pytest.mark.asyncio
+    async def test_answers_cached_under_the_old_key_are_not_read(
+        self, executor: ApiRequestExecutor, mock_session: MagicMock, mock_cache_service: AsyncMock
+    ) -> None:
+        """Answers stored before the TTL change expire in 2126, so the cache key moved and they are no longer read."""
+        mock_cache_service.get_async = AsyncMock(side_effect=lambda key: {"stale": True} if str(key).startswith("api_request_") else None)
+        mock_session.get = MagicMock(return_value=self.respond(200, json_body={"fresh": True}))
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("discogs", "https://api.discogs.com/database/search") == {"fresh": True}
+
+    @pytest.mark.asyncio
     async def test_dropped_body_is_retried(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
         """A connection dropped while the body is read is transient, so the request is sent again."""
         dropped = self.respond(200, json_body={})
@@ -603,7 +626,7 @@ class TestPrepareRequest:
             error_logger=error_logger,
             user_agent="TestAgent/1.0",
             discogs_token=None,
-            cache_ttl_days=1,
+            cache_ttl_seconds=86400,
             default_max_retries=3,
             default_retry_delay=0.01,
         )

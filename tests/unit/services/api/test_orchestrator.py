@@ -182,7 +182,6 @@ class TestExternalApiOrchestratorAllure:
                     "batch_size": 10,
                     "delay_between_batches": 60,
                     "adaptive_delay": False,
-                    "cache_ttl_days": 30,
                     "pending_verification_interval_days": 30,
                 },
                 "logic": {
@@ -226,7 +225,6 @@ class TestExternalApiOrchestratorAllure:
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator(config=test_config)
         # Verify configuration was extracted from the AppConfig model
         assert orchestrator.min_valid_year == 1900
-        assert orchestrator.cache_ttl_days == 30
 
     def test_http_session_management(self) -> None:
         """Test HTTP session management capabilities."""

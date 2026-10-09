@@ -74,7 +74,6 @@ MINIMAL_CONFIG_DATA: dict[str, Any] = {
             "batch_size": 10,
             "delay_between_batches": 60,
             "adaptive_delay": False,
-            "cache_ttl_days": 30,
             "pending_verification_interval_days": 30,
         },
         "logic": {

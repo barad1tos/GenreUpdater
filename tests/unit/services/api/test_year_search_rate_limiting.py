@@ -16,6 +16,7 @@ import pytest
 from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import YearSearchCoordinator
 from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import MockCacheService
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -24,8 +25,8 @@ if TYPE_CHECKING:
 def _create_mock_client() -> MagicMock:
     """Create a mock API client."""
     client = MagicMock()
-    client.search_release = AsyncMock(return_value=[])
-    client.get_scored_releases = AsyncMock(return_value=[])
+    client.fetch_release_records = AsyncMock(return_value=[])
+    client.score_records = MagicMock(side_effect=lambda records, *_args: records)
     return client
 
 
@@ -43,6 +44,7 @@ def _create_coordinator(
         discogs_client=_create_mock_client(),
         applemusic_client=_create_mock_client(),
         release_scorer=MagicMock(),
+        cache_service=MockCacheService(),
         max_concurrent_api_calls=max_concurrent_api_calls,
     )
 
@@ -101,9 +103,9 @@ class TestYearSearchRateLimiting:
             return []
 
         # Patch all API clients to use our slow mock
-        coordinator.musicbrainz_client.get_scored_releases = AsyncMock(side_effect=slow_api_call)
-        coordinator.discogs_client.get_scored_releases = AsyncMock(side_effect=slow_api_call)
-        coordinator.applemusic_client.get_scored_releases = AsyncMock(side_effect=slow_api_call)
+        coordinator.musicbrainz_client.fetch_release_records = AsyncMock(side_effect=slow_api_call)
+        coordinator.discogs_client.fetch_release_records = AsyncMock(side_effect=slow_api_call)
+        coordinator.applemusic_client.fetch_release_records = AsyncMock(side_effect=slow_api_call)
 
         # Execute multiple searches concurrently
         search_tasks = [
@@ -135,6 +137,7 @@ class TestYearSearchRateLimiting:
             discogs_client=_create_mock_client(),
             applemusic_client=_create_mock_client(),
             release_scorer=MagicMock(),
+            cache_service=MockCacheService(),
         )
         semaphore = coordinator._api_semaphore
 

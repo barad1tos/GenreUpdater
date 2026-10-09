@@ -35,14 +35,6 @@ class TestSmartCacheConfig:
         assert policy.invalidation_strategy == InvalidationStrategy.EVENT_DRIVEN
         assert policy.max_size_mb == 30
 
-    def test_failed_api_lookup_policy(self) -> None:
-        """Test failed API lookup policy configuration."""
-        policy = self.config.get_policy(CacheContentType.FAILED_API_LOOKUP)
-
-        assert policy.ttl_seconds == 1 * 60 * 60  # 1 hour
-        assert policy.invalidation_strategy == InvalidationStrategy.TIME_BASED
-        assert policy.max_size_mb == 5
-
     def test_negative_result_policy(self) -> None:
         """Test negative result policy matches current system."""
         policy = self.config.get_policy(CacheContentType.NEGATIVE_RESULT)
@@ -61,10 +53,6 @@ class TestSmartCacheConfig:
         api_ttl = self.config.get_ttl(CacheContentType.SUCCESSFUL_API_METADATA)
         assert api_ttl == self.config.INFINITE_TTL
 
-        # Short TTL for failed API lookups
-        failed_ttl = self.config.get_ttl(CacheContentType.FAILED_API_LOOKUP)
-        assert failed_ttl == 1 * 60 * 60  # 1 hour
-
     def test_should_use_fingerprint_validation(self) -> None:
         """Test fingerprint validation detection."""
         # Track metadata uses event-driven (no fingerprint by default)
@@ -77,7 +65,7 @@ class TestSmartCacheConfig:
         assert not self.config.should_use_fingerprint_validation(CacheContentType.SUCCESSFUL_API_METADATA)
 
         # Failed API lookup uses time-based (no fingerprint)
-        assert not self.config.should_use_fingerprint_validation(CacheContentType.FAILED_API_LOOKUP)
+        assert not self.config.should_use_fingerprint_validation(CacheContentType.NEGATIVE_RESULT)
 
     def test_should_use_event_invalidation(self) -> None:
         """Test event invalidation detection."""
@@ -91,7 +79,7 @@ class TestSmartCacheConfig:
         assert self.config.should_use_event_invalidation(CacheContentType.SUCCESSFUL_API_METADATA)
 
         # Failed API lookup uses time-based (no events)
-        assert not self.config.should_use_event_invalidation(CacheContentType.FAILED_API_LOOKUP)
+        assert not self.config.should_use_event_invalidation(CacheContentType.NEGATIVE_RESULT)
 
     def test_is_persistent_cache(self) -> None:
         """Test persistent cache detection."""
@@ -105,7 +93,7 @@ class TestSmartCacheConfig:
         assert self.config.is_persistent_cache(CacheContentType.SUCCESSFUL_API_METADATA)
 
         # Failed API lookups should not be persistent
-        assert not self.config.is_persistent_cache(CacheContentType.FAILED_API_LOOKUP)
+        assert not self.config.is_persistent_cache(CacheContentType.NEGATIVE_RESULT)
 
         # Generic cache should not be persistent
         assert not self.config.is_persistent_cache(CacheContentType.GENERIC)
@@ -227,8 +215,8 @@ class TestEventDrivenCacheManager:
         """Test that time-based content ignores events."""
         event = CacheEvent(event_type=CacheEventType.TRACK_REMOVED, track_id="track123")
 
-        # Failed API lookups use time-based invalidation, should ignore events
-        assert not self.manager.should_invalidate_for_event(CacheContentType.FAILED_API_LOOKUP, event)
+        # Negative results use time-based invalidation, should ignore events
+        assert not self.manager.should_invalidate_for_event(CacheContentType.NEGATIVE_RESULT, event)
 
     def test_manual_invalidation_affects_all(self) -> None:
         """Test that manual invalidation affects all content types."""

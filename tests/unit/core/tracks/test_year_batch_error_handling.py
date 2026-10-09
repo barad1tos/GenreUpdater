@@ -425,7 +425,7 @@ class TestConfigValidationViaPydantic:
         from core.models.track_models import ProcessingConfig
 
         with pytest.raises(ValidationError, match="batch_size"):
-            ProcessingConfig(batch_size=-5, delay_between_batches=60, adaptive_delay=False, cache_ttl_days=30, pending_verification_interval_days=30)
+            ProcessingConfig(batch_size=-5, delay_between_batches=60, adaptive_delay=False, pending_verification_interval_days=30)
 
     def test_pydantic_rejects_zero_batch_size(self) -> None:
         """Zero batch_size is rejected by Pydantic validation."""
@@ -434,7 +434,7 @@ class TestConfigValidationViaPydantic:
         from core.models.track_models import ProcessingConfig
 
         with pytest.raises(ValidationError, match="batch_size"):
-            ProcessingConfig(batch_size=0, delay_between_batches=60, adaptive_delay=False, cache_ttl_days=30, pending_verification_interval_days=30)
+            ProcessingConfig(batch_size=0, delay_between_batches=60, adaptive_delay=False, pending_verification_interval_days=30)
 
     def test_concurrency_limit_uses_config_values(self) -> None:
         """Concurrency limit is derived from typed config fields."""

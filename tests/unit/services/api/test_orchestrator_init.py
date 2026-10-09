@@ -261,3 +261,21 @@ class TestYearSearchCoordinatorWiring:
         orchestrator._initialize_year_search_coordinator()
 
         assert orchestrator.year_search_coordinator.discogs_enabled is enabled
+
+
+class TestRequestCacheTtl:
+    """The request cache keeps provider answers only as long as an empty answer may stand."""
+
+    def test_request_cache_uses_the_negative_result_ttl(self) -> None:
+        """The executor caches answers for caching.negative_result_ttl, not for a century."""
+        config = create_test_config()
+        orchestrator = ExternalApiOrchestrator(
+            config=config,
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
+            cache_service=create_mock_cache_service(),
+            pending_verification_service=create_mock_pending_verification_service(),
+        )
+
+        assert orchestrator.request_executor.cache_ttl_seconds == int(config.caching.negative_result_ttl)

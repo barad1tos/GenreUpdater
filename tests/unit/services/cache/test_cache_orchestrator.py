@@ -191,7 +191,7 @@ class TestCacheOrchestrator:
 
     @pytest.mark.asyncio
     async def test_invalidate_for_track(self) -> None:
-        """Test that invalidate_for_track invalidates all related caches."""
+        """A track write drops the generic and album-year entries, and leaves the provider results alone."""
         orchestrator = self.create_orchestrator()
         orchestrator.api_service.event_manager = MagicMock()
 
@@ -212,9 +212,22 @@ class TestCacheOrchestrator:
 
             # Should invalidate generic caches
             mock_invalidate.assert_any_call("tracks_all")
-            # Should invalidate album and API caches
             mock_album.assert_called_once_with("Test Artist", "Test Album")
-            mock_api.assert_called_once_with("Test Artist", "Test Album")
+            mock_api.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_own_track_write_keeps_provider_results(self) -> None:
+        """Writing a year or genre to a track does not change what providers answered, so their records stay cached."""
+        orchestrator = self.create_orchestrator()
+        records = [{"title": "Kid A", "year": "2000"}]
+        await orchestrator.set_cached_api_result("Radiohead", "Kid A", source="musicbrainz", records=records)
+
+        await orchestrator.invalidate_for_track(TrackDict(id="123", name="Idioteque", artist="Radiohead", album="Kid A", genre="Rock"))
+        await asyncio.sleep(0.05)  # let any invalidation the write scheduled run
+
+        cached = await orchestrator.get_cached_api_result("Radiohead", "Kid A", "musicbrainz")
+        assert cached is not None
+        assert cached.api_response == {"records": records}
 
     @pytest.mark.asyncio
     async def test_invalidate_single_key(self) -> None:
@@ -442,28 +455,17 @@ class TestCacheOrchestrator:
             mock_get.assert_called_once_with("Artist", "Album", "source")
 
     @pytest.mark.asyncio
-    async def test_set_cached_api_result(self) -> None:
-        """Test that set_cached_api_result delegates to api service."""
+    async def test_set_cached_api_result_round_trip(self) -> None:
+        """Records stored through the orchestrator come back from the API cache, an empty answer included."""
         orchestrator = self.create_orchestrator()
+        records = [{"title": "Album", "year": "2020"}]
 
-        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.set_cached_api_result("Artist", "Album", "source", "2020", metadata={"extra": "data"})
+        await orchestrator.set_cached_api_result("Artist", "Album", source="discogs", records=records)
+        await orchestrator.set_cached_api_result("Artist", "Other", source="discogs", records=[])
 
-            mock_set.assert_called_once()
-            call_args = mock_set.call_args
-            assert call_args[0][0] == "Artist"
-            assert call_args[0][1] == "Album"
-            assert call_args.kwargs["source"] == "source"
-
-    @pytest.mark.asyncio
-    async def test_set_cached_api_result_negative(self) -> None:
-        """Test that set_cached_api_result handles negative results."""
-        orchestrator = self.create_orchestrator()
-
-        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.set_cached_api_result("Artist", "Album", "source", None, is_negative=True)
-
-            mock_set.assert_called_once()
-            # success should be False for negative/None results
-            call_args = mock_set.call_args
-            assert call_args.kwargs["success"] is False  # success parameter
+        found = await orchestrator.get_cached_api_result("Artist", "Album", "discogs")
+        empty = await orchestrator.get_cached_api_result("Artist", "Other", "discogs")
+        assert found is not None
+        assert found.api_response == {"records": records}
+        assert empty is not None
+        assert empty.api_response == {"records": []}

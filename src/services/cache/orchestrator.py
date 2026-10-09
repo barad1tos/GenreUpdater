@@ -15,14 +15,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from core.logger import LogFormat
 from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProtocol
 from core.run_tracking import IncrementalRunTracker
 from services.cache.album_cache import AlbumCacheService
 from services.cache.api_cache import ApiCacheService
-from services.cache.cache_config import CacheEvent, CacheEventType
 from services.cache.generic_cache import GenericCacheService
 from services.cache.hash_service import UnifiedHashService
 
@@ -50,9 +49,9 @@ class CacheOrchestrator(CacheServiceProtocol):
         self.config_manager = None
 
         # Initialize specialized services
-        self.album_service = AlbumCacheService(config, logger)
-        self.api_service = ApiCacheService(config, logger)
-        self.generic_service = GenericCacheService(config, logger)
+        self.album_service: AlbumCacheService = AlbumCacheService(config, logger)
+        self.api_service: ApiCacheService = ApiCacheService(config, logger)
+        self.generic_service: GenericCacheService = GenericCacheService(config, logger)
 
         # Service mapping for routing
         self._services = {
@@ -114,20 +113,6 @@ class CacheOrchestrator(CacheServiceProtocol):
 
     # Generic Cache API
 
-    @overload
-    async def get_async(
-        self,
-        key_data: Literal["ALL"],
-        compute_func: None = None,
-    ) -> list[TrackDict]: ...
-
-    @overload
-    async def get_async(
-        self,
-        key_data: CacheableKey,
-        compute_func: Callable[[], asyncio.Future[CacheableValue]] | None = None,
-    ) -> CacheableValue: ...
-
     async def get_async(
         self,
         key_data: CacheableKey,
@@ -136,7 +121,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Asynchronous get with optional compute function.
 
         Args:
-            key_data: Cache key or "ALL" for all entries
+            key_data: Cache key
             compute_func: Optional compute function to calculate value if not cached
 
         Returns:
@@ -196,7 +181,6 @@ class CacheOrchestrator(CacheServiceProtocol):
         artist = str(track_payload.get("artist", "") or "").strip()
         original_artist = str(track_payload.get("original_artist", "") or "").strip()
         album = str(track_payload.get("album", "") or "").strip()
-        track_id = str(track_payload.get("id", "") or "").strip()
 
         # Invalidate generic caches (full snapshot + per artist variants)
         self.generic_service.invalidate("tracks_all")
@@ -207,16 +191,9 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         if artist and album:
             await self.album_service.invalidate_album(artist, album)
-            await self.api_service.invalidate_for_album(artist, album)
-
+            # The provider result cache stays: writing a year or genre to a track does not change what the providers
+            # answered for its album. A renamed or removed track invalidates it through the library delta instead
             self.logger.debug("Invalidated caches for track: %s - %s", artist, album)
-
-            cache_event = CacheEvent(
-                event_type=CacheEventType.TRACK_MODIFIED,
-                track_id=track_id or None,
-                metadata={"artist": artist, "album": album},
-            )
-            self.api_service.event_manager.emit_event(cache_event)
 
     async def save_all_to_disk(self) -> None:
         """Save all persistent caches to disk.
@@ -341,22 +318,9 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached API result for an artist/album from a specific source."""
         return await self.api_service.get_cached_result(artist, album, source)
 
-    async def set_cached_api_result(
-        self,
-        artist: str,
-        album: str,
-        source: str,
-        year: str | None,
-        *,
-        metadata: dict[str, Any] | None = None,
-        is_negative: bool = False,
-    ) -> None:
-        """Cache an API result for an artist/album from a specific source."""
-        success = year is not None and not is_negative
-        data = {"year": year}
-        if metadata:
-            data |= metadata
-        await self.api_service.set_cached_result(artist, album, source=source, success=success, data=data)
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+        """Cache a provider's release records for an artist/album; an empty list records that it found nothing."""
+        await self.api_service.set_cached_result(artist, album, source=source, records=records)
 
     @staticmethod
     def generate_album_key(artist: str, album: str) -> str:

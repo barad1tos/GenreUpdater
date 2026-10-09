@@ -164,7 +164,6 @@ def _get_complete_config_data(
                 "batch_size": 25,
                 "delay_between_batches": 20,
                 "adaptive_delay": True,
-                "cache_ttl_days": 365,
                 "pending_verification_interval_days": 30,
                 "skip_prerelease": True,
                 "future_year_threshold": 1,
@@ -822,7 +821,6 @@ class TestDependencyContainerConfigLoading:
                 error_logger=mock_loggers["error"],
                 analytics_logger=mock_loggers["analytics"],
                 db_verify_logger=mock_loggers["db_verify"],
-                skip_api_validation=False,
             )
 
             container._load_config()

@@ -57,7 +57,6 @@ def config(tmp_path: Path) -> AppConfig:
                 "batch_size": 10,
                 "delay_between_batches": 60,
                 "adaptive_delay": False,
-                "cache_ttl_days": 30,
                 "pending_verification_interval_days": 1,
                 "prerelease_recheck_days": 7,
             },
@@ -610,6 +609,7 @@ async def test_cancelled_save_keeps_later_save_waiting_for_its_write(
     first_write_done = threading.Event()
 
     def gated_save(entries: list[PendingAlbumEntry]) -> None:
+        """Hold the first write until the test releases it; later writes go straight through."""
         if write_started.is_set():
             original_save(entries)
             return
@@ -648,6 +648,7 @@ async def test_cancelled_save_reports_its_write_failure(
     release_write = threading.Event()
 
     def failing_save(_entries: list[PendingAlbumEntry]) -> None:
+        """Fail the write once the test releases it, as a full disk would."""
         write_started.set()
         release_write.wait(timeout=5)
         raise OSError("disk full")

@@ -347,36 +347,24 @@ class MockCacheService:
         key = f"{self.generate_album_key(artist, album)}:{source}"
         return self.api_cache.get(key)
 
-    async def set_cached_api_result(
-        self,
-        artist: str,
-        album: str,
-        source: str,
-        year: str | None,
-        *,
-        metadata: dict[str, Any] | None = None,
-        is_negative: bool = False,
-    ) -> None:
-        """Cache an API result for an artist/album from a specific source.
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+        """Cache a provider's release records for an artist/album from a specific source.
 
         Args:
             artist: Artist name
             album: Album name
             source: API source identifier
-            year: Year to cache (None for negative cache)
-            metadata: Optional metadata about the result
-            is_negative: Whether this is a negative cache entry
+            records: The provider's release records, or an empty list for "nothing found"
         """
         key = f"{self.generate_album_key(artist, album)}:{source}"
-        metadata_payload = dict(metadata or {})
-        metadata_payload["is_negative"] = is_negative
         self.api_cache[key] = CachedApiResult(
             artist=artist,
             album=album,
-            year=year,
+            year=None,
             source=source,
             timestamp=datetime.now(UTC).timestamp(),
-            metadata=metadata_payload,
+            ttl=None if records else 2592000,
+            api_response={"records": list(records)},
         )
 
     async def invalidate_for_track(self, track: TrackDict) -> None:

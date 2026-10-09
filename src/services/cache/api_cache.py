@@ -1,11 +1,11 @@
 """API Cache Service - Specialized cache for external API responses.
 
 This module provides a dedicated cache service for storing and retrieving
-external API responses (Spotify, Last.fm, etc.) with JSON persistence.
+each provider's release records per album, with JSON persistence.
 
 Key Features:
 - JSON-based persistence for API response data
-- Content-aware TTL management (eternal for successful responses, retry TTL for failures)
+- Outcome-aware TTL: found records are kept for good, an empty answer expires after the negative-result TTL
 - Integration with SmartCacheConfig for intelligent caching policies
 - Automatic cache invalidation when tracks are removed from library
 """
@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -172,8 +173,9 @@ class ApiCacheService:
             self.logger.debug("API cache hit: %s - %s (%s)", artist, album, source)
             return cached_result
 
-    def _is_cache_expired(self, cached_result: CachedApiResult) -> bool:
-        """Check if cached result is expired based on content type.
+    @staticmethod
+    def _is_cache_expired(cached_result: CachedApiResult) -> bool:
+        """Tell whether an entry has outlived its outcome's TTL: found records never do, an empty answer after its TTL.
 
         Args:
             cached_result: Cached API result to check
@@ -181,69 +183,39 @@ class ApiCacheService:
         Returns:
             True if expired, False otherwise
         """
-        # Successful results are eternal (immutable data like release years)
-        # Determine success by checking if we have a year
-        has_year = cached_result.year is not None and cached_result.year.strip()
-        content_type = CacheContentType.SUCCESSFUL_API_METADATA if has_year else CacheContentType.FAILED_API_LOOKUP
-
-        policy = self.cache_config.get_policy(content_type)
-
-        # Infinite TTL for successful API metadata
-        if policy.ttl_seconds >= self.cache_config.INFINITE_TTL:
+        if cached_result.ttl is None:
             return False
+        age_seconds = datetime.now(UTC).timestamp() - cached_result.timestamp
+        return age_seconds > cached_result.ttl
 
-        # Check TTL for failed lookups
-        cached_time = datetime.fromtimestamp(cached_result.timestamp, UTC)
-        age_seconds = (datetime.now(UTC) - cached_time).total_seconds()
-        return age_seconds > policy.ttl_seconds
+    async def set_cached_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+        """Store a provider's answer for an album: its release records, or an empty list for "nothing found".
 
-    async def set_cached_result(
-        self,
-        artist: str,
-        album: str,
-        *,
-        source: str,
-        success: bool,
-        data: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Store API result in cache.
+        Found records are kept for good; an empty answer expires after the negative-result TTL, so the provider is asked
+        again. A failed request has no answer and must not be stored.
 
         Args:
             artist: The artist name for cache key generation.
             album: The album name for cache key generation.
             source: API source identifier.
-            success: Whether the API call was successful.
-            data: API response data (if successful).
-            metadata: Additional metadata to store.
+            records: The provider's release records before scoring; empty when the provider found nothing.
         """
         key = UnifiedHashService.hash_api_key(artist, album, source)
-
-        # Extract year from data if available (explicit None check to handle falsy values like 0 or empty string)
-        year = None
-        if data and isinstance(data, dict):
-            year_value: Any = data.get("year")
-            if year_value is not None:
-                year_str = str(year_value).strip()
-                year = year_str or None
-
-        # Create cached result - ensure api_response is always a dict for consumers
-        # Use explicit dict() constructor to satisfy both runtime and static analysis
-        response_data: dict[str, Any] | None = dict(data) if data else None
+        ttl = None if records else self.cache_config.get_policy(CacheContentType.NEGATIVE_RESULT).ttl_seconds
         cached_result = CachedApiResult(
             artist=artist.strip(),
             album=album.strip(),
-            year=year,
+            year=None,
             source=source.strip(),
             timestamp=datetime.now(UTC).timestamp(),
-            metadata=metadata or {},
-            api_response=response_data,
+            ttl=ttl,
+            api_response={"records": list(records)},
         )
 
         async with self._cache_lock:
             self.api_cache[key] = cached_result
 
-        self.logger.debug("Stored API result: %s - %s (%s) success=%s", artist, album, source, success)
+        self.logger.debug("Stored API result: %s - %s (%s) records=%d", artist, album, source, len(records))
 
     async def invalidate_for_album(self, artist: str, album: str) -> None:
         """Invalidate all API cache entries for specific album.
@@ -326,9 +298,17 @@ class ApiCacheService:
 
                 cache_data = {key: serialize_model(result) for key, result in self.api_cache.items()}
 
-                # Write JSON file
-                with self.api_cache_file.open("w", encoding="utf-8") as file:
-                    json.dump(cache_data, file, indent=2, ensure_ascii=False)
+                # Write a temporary file beside the cache and swap it in, so a write that breaks halfway leaves the
+                # previous file whole: found records are kept for good and live only here
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(self.api_cache_file.parent), suffix=".tmp", delete=False) as tmp_file:
+                    temp_path = Path(tmp_file.name)
+                try:
+                    with temp_path.open("w", encoding="utf-8") as temp_file:
+                        json.dump(cache_data, temp_file, indent=2, ensure_ascii=False)
+                    temp_path.replace(self.api_cache_file)
+                except (OSError, TypeError, ValueError):
+                    temp_path.unlink(missing_ok=True)
+                    raise
 
                 self.logger.info("API cache saved to %s (%d entries)", self.api_cache_file, len(cache_data))
 
@@ -354,6 +334,11 @@ class ApiCacheService:
                 cache_entries: dict[str, CachedApiResult] = {}
 
                 for key, item in cache_data.items():
+                    # An entry without a records list would fail every lookup of its album, so it is dropped
+                    response = item.get("api_response") if isinstance(item, dict) else None
+                    if not isinstance(response, dict) or not isinstance(response.get("records"), list):
+                        self.logger.warning("Skipping API cache entry %s without records", key)
+                        continue
                     try:
                         # Create CachedApiResult object with proper fields
                         cached_result = CachedApiResult(
@@ -438,17 +423,13 @@ class ApiCacheService:
         Returns:
             Dictionary containing cache statistics
         """
-        successful_results = [result for result in self.api_cache.values() if result.year is not None and result.year.strip()]
-        successful_count = len(successful_results)
-        failed_count = len(self.api_cache) - successful_count
+        found_count = sum(result.ttl is None for result in self.api_cache.values())
 
         return {
             "total_entries": len(self.api_cache),
-            "successful_responses": successful_count,
-            "failed_lookups": failed_count,
+            "found": found_count,
+            "not_found": len(self.api_cache) - found_count,
             "cache_file": str(self.api_cache_file),
             "cache_file_exists": self.api_cache_file.exists(),
-            "successful_policy": self.cache_config.get_policy(CacheContentType.SUCCESSFUL_API_METADATA).ttl_seconds,
-            "failed_policy": self.cache_config.get_policy(CacheContentType.FAILED_API_LOOKUP).ttl_seconds,
-            "persistent": self.cache_config.is_persistent_cache(CacheContentType.SUCCESSFUL_API_METADATA),
+            "not_found_policy": self.cache_config.get_policy(CacheContentType.NEGATIVE_RESULT).ttl_seconds,
         }

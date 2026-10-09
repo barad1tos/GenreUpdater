@@ -10,6 +10,7 @@ import pytest
 from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import YearSearchCoordinator
 from tests.factories import create_test_app_config
+from tests.mocks.protocol_mocks import MockCacheService
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -38,6 +39,7 @@ class TestAlternativeSearchFallback:
             discogs_client=AsyncMock(),
             applemusic_client=AsyncMock(),
             release_scorer=MagicMock(),
+            cache_service=MockCacheService(),
         )
 
     @pytest.mark.asyncio
