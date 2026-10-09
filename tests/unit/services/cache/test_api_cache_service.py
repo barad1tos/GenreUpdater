@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
 import pytest
 
+from core.models.normalization import search_names
 from core.models.track_models import CachedApiResult
 from services.cache.api_cache import ApiCacheService
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType
@@ -584,3 +585,31 @@ class TestSaveCleanup:
             await service.save_to_disk()
 
         assert not list(tmp_path.rglob("*.tmp"))
+
+
+class TestInvalidationBySearchNames:
+    """A track event names the album as the library does; invalidation finds the entries under the names the search used."""
+
+    @pytest.mark.asyncio
+    async def test_rewritten_names_are_invalidated(self) -> None:
+        """An album whose names the search rewrote (&, quotes, a parenthetical edition) is dropped by its library names."""
+        service = TestApiCacheService.create_service()
+        artist_norm, album_norm = search_names("Earth, Wind & Fire", "That's the Way of the World (Remastered)")
+        for source in ("musicbrainz", "discogs", "itunes"):
+            await service.set_cached_result(artist_norm, album_norm, source=source, records=[{"year": "1975"}])
+
+        await service.invalidate_for_album("Earth, Wind & Fire", "That's the Way of the World (Remastered)")
+
+        assert service.api_cache == {}
+
+    @pytest.mark.asyncio
+    async def test_alternative_search_names_are_invalidated(self) -> None:
+        """Entries the alternative search stored (Various Artists searched by album alone) are dropped too."""
+        config = create_test_app_config(album_type_detection={"soundtrack_patterns": ["soundtrack"], "various_artists_names": ["Various Artists"]})
+        service = TestApiCacheService.create_service(config)
+        await service.set_cached_result("", "now 47", source="discogs", records=[{"year": "2000"}])
+        await service.set_cached_result("other artist", "now 47", source="discogs", records=[{"year": "2001"}])
+
+        await service.invalidate_for_album("Various Artists", "Now 47")
+
+        assert [entry.artist for entry in service.api_cache.values()] == ["other artist"]

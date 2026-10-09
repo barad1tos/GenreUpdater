@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, ensure_directory, get_full_log_path
-from core.models.normalization import are_names_equal
+from core.models.normalization import normalize_for_matching, search_names
+from core.models.search_strategy import SearchStrategy, detect_search_strategy
 from core.models.track_models import CachedApiResult
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
 from services.cache.hash_service import UnifiedHashService
@@ -218,27 +219,46 @@ class ApiCacheService:
         self.logger.debug("Stored API result: %s - %s (%s) records=%d", artist, album, source, len(records))
 
     async def invalidate_for_album(self, artist: str, album: str) -> None:
-        """Invalidate all API cache entries for specific album.
+        """Drop every provider's entries for an album named as the library names it.
+
+        The year search stores entries under the names it asked for, which can differ from the library's: the search
+        rewrites names (search_names), and the alternative search asks under other names again (a soundtrack by its
+        title, Various Artists by the album alone). All of those are matched.
 
         Args:
-            artist: The artist name for cache key generation.
-            album: The album name for cache key generation.
+            artist: The artist name as the library has it
+            album: The album name as the library has it
         """
+        targets = self._names_stored_for(artist, album)
         async with self._cache_lock:
-            # Find all keys for this artist/album across all sources
-            keys_to_remove: list[str] = []
-
-            keys_to_remove.extend(
+            keys_to_remove = [
                 key
                 for key, cached_result in self.api_cache.items()
-                if are_names_equal(cached_result.artist, artist) and are_names_equal(cached_result.album, album)
-            )
-            # Remove found entries
+                if (normalize_for_matching(cached_result.artist), normalize_for_matching(cached_result.album)) in targets
+            ]
             for key in keys_to_remove:
                 del self.api_cache[key]
 
         if keys_to_remove:
             self.logger.info("Invalidated %d API cache entries for %s - %s", len(keys_to_remove), artist, album)
+
+    def _names_stored_for(self, artist: str, album: str) -> set[tuple[str, str]]:
+        """Return the (artist, album) pairs, normalized for matching, that the search may have stored an album under.
+
+        Args:
+            artist: The artist name as the library has it
+            album: The album name as the library has it
+
+        Returns:
+            The library names, the search names, and the alternative search names when a strategy applies
+        """
+        search_artist, search_album = search_names(artist, album)
+        pairs = {(artist, album), (search_artist, search_album)}
+        alternative = detect_search_strategy(artist, album, self.config)
+        if alternative.strategy is not SearchStrategy.NORMAL:
+            # The same fallbacks the coordinator uses when it asks under the alternative names
+            pairs.add((alternative.modified_artist or "", alternative.modified_album or search_album))
+        return {(normalize_for_matching(pair_artist), normalize_for_matching(pair_album)) for pair_artist, pair_album in pairs}
 
     async def invalidate_all(self) -> None:
         """Clear all API cache entries."""

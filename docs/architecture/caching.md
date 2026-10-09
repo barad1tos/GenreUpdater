@@ -79,7 +79,7 @@ What each provider (MusicBrainz, Discogs, iTunes) answered for an album: its rel
 | Nothing found                   | `negative_result_ttl` (30 days)     |
 | Request failed or token refused | Not cached; the next run asks again |
 
-The records are scored when they are read, with the current search's artist region and activity period, so a cached answer never carries another search's context. Writing a year or a genre to a track leaves these entries alone, since it does not change what the providers answered. Removing a track, or renaming its artist or album, drops the album's entries for all three providers when the names match. The search rewrites some names before it asks: `&` becomes `and`, `w/` becomes `with`, a colon becomes a space, a trailing `+ 4` and anything after ` / ` are dropped, and from album titles quotes and parenthetical editions such as `(Remastered)` are removed. For those names the old entry stays behind unused. `--fresh` clears this cache along with the others.
+The records are scored when they are read, with the current search's artist region and activity period, so a cached answer never carries another search's context. Writing a year or a genre to a track leaves these entries alone, since it does not change what the providers answered. Removing a track, or renaming its artist or album, drops the album's entries for all three providers. The entries are found under the names the search used, which can differ from the library's: the search rewrites names before it asks (`&` becomes `and`, `w/` becomes `with`, a colon becomes a space, a trailing `+ 4` and anything after ` / ` are dropped, and quotes and parenthetical editions such as `(Remastered)` are removed from album titles), and the alternative search asks under other names again (a soundtrack by its title, Various Artists by the album alone). `--fresh` clears this cache along with the others.
 
 ```yaml
 caching:
@@ -129,7 +129,7 @@ UnifiedHashService.hash_api_key("Pink Floyd", "The Wall", "musicbrainz")  # prov
 | Trigger                                | Cache Affected                                                                      |
 |----------------------------------------|-------------------------------------------------------------------------------------|
 | TTL expiry                             | Memory cache, album year cache, provider "nothing found", request cache             |
-| Track removed, artist or album renamed | Provider result cache for the album (names as the search writes them)               |
+| Track removed, artist or album renamed | Provider result cache for the album                                                 |
 | Track modified                         | Library snapshot delta                                                              |
 | `--force`                              | Album year cache and skip checks bypassed; provider and request caches still answer |
 | `--fresh`                              | All caches cleared                                                                  |
