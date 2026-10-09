@@ -151,6 +151,8 @@ Re-process them later:
 uv run python main.py verify_pending
 ```
 
+An album whose lookup reaches no provider (network outage, rate limit, server errors) is neither saved there nor changed: the console prints `Year lookup unavailable for '<artist> - <album>'`, and the next run asks the providers again. When `verify_pending` meets such an album, its summary counts it as unavailable and the run does not postpone the next verification.
+
 ## Reverting Changes
 
 If a wrong year was applied:

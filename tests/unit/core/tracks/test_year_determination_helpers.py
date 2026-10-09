@@ -17,6 +17,7 @@ from core.models.protocols import (
     CacheServiceProtocol,
     ExternalApiServiceProtocol,
     PendingVerificationServiceProtocol,
+    YearLookupUnavailableError,
 )
 from core.debug_utils import DebugConfig
 from core.models.types import TrackDict
@@ -404,3 +405,22 @@ class TestFetchFromApi:
         assert call_kwargs["artist"] == "Artist"
         assert call_kwargs["album"] == "Album"
         assert call_kwargs["year_scores"] == {"2021": 95, "2020": 80}
+
+
+class TestFetchFromApiUnavailable:
+    """An album no provider answered for is left alone for the next run."""
+
+    @pytest.mark.asyncio
+    async def test_unavailable_lookup_propagates_without_fallback_or_cache(self) -> None:
+        """The determinator passes an unavailable lookup up instead of reading it as an album without a year."""
+        cache_service = _create_mock_cache_service()
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(side_effect=YearLookupUnavailableError("no provider"))
+        fallback_handler = _create_mock_fallback_handler()
+        determinator = _create_year_determinator(cache_service=cache_service, external_api=external_api, fallback_handler=fallback_handler)
+
+        with pytest.raises(YearLookupUnavailableError):
+            await determinator._fetch_from_api("Artist", "Album", [_create_track()], "1999")
+
+        fallback_handler.apply_year_fallback.assert_not_called()
+        cache_service.store_album_year_in_cache.assert_not_called()

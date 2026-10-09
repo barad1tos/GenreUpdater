@@ -24,6 +24,7 @@ from rich.progress import (
 )
 
 from core.logger import PLAIN_TEXT, get_shared_console
+from core.models.protocols import YearLookupUnavailableError
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
@@ -406,7 +407,14 @@ class YearBatchProcessor:
         force_api = force or skip_reason == "needs_api_verification"
 
         # Determine the year for this album
-        year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force_api)
+        try:
+            year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force_api)
+        except YearLookupUnavailableError:
+            # Nothing is known about the album yet, so nothing is recorded; the next run asks the providers again
+            self.console_logger.warning(
+                "Year lookup unavailable for '%s - %s': no provider could be reached; it is retried on the next run", artist, album, extra=PLAIN_TEXT
+            )
+            return
 
         if not year:
             self._handle_no_year_found(artist, album, album_tracks)

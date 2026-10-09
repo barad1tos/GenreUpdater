@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.protocols import YearLookupUnavailableError
 from tests.factories import create_test_app_config
 from tests.unit.core.tracks.conftest import (
     create_test_track,
@@ -680,3 +681,23 @@ class TestRetryExhaustion:
         )
 
         assert result is False
+
+
+class TestUnavailableYearLookup:
+    """An album whose lookup reached no provider is skipped and named as unavailable, not as yearless."""
+
+    async def test_unavailable_album_is_skipped_with_its_own_line(self, *, rich_console_logger: tuple[logging.Logger, io.StringIO]) -> None:
+        """The console says the lookup was unavailable, and the album's tracks stay untouched."""
+        console_logger, console_output = rich_console_logger
+        determinator = create_year_determinator_mock()
+        determinator.determine_album_year = AsyncMock(side_effect=YearLookupUnavailableError("no provider"))
+        processor = create_year_batch_processor(year_determinator=determinator, console_logger=console_logger)
+        update_tracks = AsyncMock()
+        processor._track_updater.update_tracks_for_album = update_tracks
+
+        await processor._process_single_album("Artist", "Album", album_tracks=[create_test_track()], updated_tracks=[], changes_log=[])
+
+        printed = console_output.getvalue()
+        assert "Year lookup unavailable for 'Artist - Album': no provider could be reached; it is retried on the next run" in printed
+        assert "no year could be determined" not in printed
+        update_tracks.assert_not_called()
