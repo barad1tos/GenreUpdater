@@ -161,6 +161,11 @@ class TestSoundtrackTitle:
             ("Harry Potter: Original Motion Picture Soundtrack", "Harry Potter"),
             ("Star Wars: Episode IV - A New Hope (Original Soundtrack)", "Star Wars: Episode IV - A New Hope"),
             ("Interstellar OST", "Interstellar"),
+            ("Inception\u2014Soundtrack", "Inception"),
+            ("Mission: Impossible Soundtrack", "Mission: Impossible"),
+            ("Star Wars: The Force Awakens OST", "Star Wars: The Force Awakens"),
+            ("Star Trek: The Motion Picture (Original Soundtrack)", "Star Trek: The Motion Picture"),
+            ("Dune: Part Two (Original Motion Picture Soundtrack)", "Dune: Part Two"),
         ],
     )
     def test_title_is_cut_before_the_label(self, config: AppConfig, album: str, title: str) -> None:
@@ -170,3 +175,9 @@ class TestSoundtrackTitle:
     @pytest.mark.parametrize("album", ["Ghost Stories", "Lost Highway", "Frost"])
     def test_a_pattern_inside_a_word_is_not_a_soundtrack(self, config: AppConfig, album: str) -> None:
         assert detect_search_strategy("Artist", album, config).strategy is SearchStrategy.NORMAL
+
+    @pytest.mark.parametrize(("pattern", "album"), [("(OST)", "Akira (OST)"), ("O.S.T.", "Akira O.S.T.")])
+    def test_a_configured_pattern_with_punctuation_matches(self, pattern: str, album: str) -> None:
+        config = create_test_app_config(album_type_detection={"soundtrack_patterns": [pattern]})
+        info = detect_search_strategy("Geinoh Yamashirogumi", album, config)
+        assert (info.strategy, info.modified_album) == (SearchStrategy.SOUNDTRACK, "Akira")
