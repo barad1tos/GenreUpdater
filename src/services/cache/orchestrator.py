@@ -22,7 +22,6 @@ from core.models.protocols import CacheableKey, CacheableValue, CacheServiceProt
 from core.run_tracking import IncrementalRunTracker
 from services.cache.album_cache import AlbumCacheService
 from services.cache.api_cache import ApiCacheService
-from services.cache.cache_config import CacheEvent, CacheEventType
 from services.cache.generic_cache import GenericCacheService
 from services.cache.hash_service import UnifiedHashService
 
@@ -182,7 +181,6 @@ class CacheOrchestrator(CacheServiceProtocol):
         artist = str(track_payload.get("artist", "") or "").strip()
         original_artist = str(track_payload.get("original_artist", "") or "").strip()
         album = str(track_payload.get("album", "") or "").strip()
-        track_id = str(track_payload.get("id", "") or "").strip()
 
         # Invalidate generic caches (full snapshot + per artist variants)
         self.generic_service.invalidate("tracks_all")
@@ -193,16 +191,9 @@ class CacheOrchestrator(CacheServiceProtocol):
 
         if artist and album:
             await self.album_service.invalidate_album(artist, album)
-            await self.api_service.invalidate_for_album(artist, album)
-
+            # The provider result cache stays: writing a year or genre to a track does not change what the providers
+            # answered for its album. A renamed or removed track invalidates it through the library delta instead
             self.logger.debug("Invalidated caches for track: %s - %s", artist, album)
-
-            cache_event = CacheEvent(
-                event_type=CacheEventType.TRACK_MODIFIED,
-                track_id=track_id or None,
-                metadata={"artist": artist, "album": album},
-            )
-            self.api_service.event_manager.emit_event(cache_event)
 
     async def save_all_to_disk(self) -> None:
         """Save all persistent caches to disk.

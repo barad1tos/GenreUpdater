@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
@@ -217,7 +217,7 @@ class TestDiscogsClientAllure:
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
         pressing = TestDiscogsClientAllure.create_pressing(1, master_id=0)
 
-        records = await client._process_discogs_results([pressing], "test artist", reissue_keywords=[])
+        records = await client._process_discogs_results([pressing], "test artist")
 
         assert len(records) == 1
         mock_api_request.assert_not_called()
@@ -377,18 +377,13 @@ class TestDiscogsClientAllure:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_execute_search_api_message_logs_warning(self) -> None:
-        mock_api_request = AsyncMock(return_value={"message": "You must authenticate"})
-        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
+    @pytest.mark.parametrize("body", [{"message": "You must authenticate"}, {"pagination": {}}], ids=["message", "no-results"])
+    async def test_execute_search_error_body_fails_the_lookup(self, body: dict[str, Any]) -> None:
+        """A successful status with an error-shaped body is no answer, so it fails the lookup instead of reading as "nothing found"."""
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=AsyncMock(return_value=body))
 
-        result = await client._execute_search(
-            {"artist": "Test", "release_title": "Album", "type": "release"},
-            "Test strategy",
-        )
-
-        assert result is None
-        assert isinstance(client.error_logger, MockLogger)
-        assert any("API message: You must authenticate" in msg for msg in client.error_logger.warning_messages)
+        with pytest.raises(ApiRequestError):
+            await client._execute_search({"artist": "Test", "release_title": "Album", "type": "release"}, "Test strategy")
 
     @pytest.mark.asyncio
     @pytest.mark.unit
@@ -429,7 +424,6 @@ class TestDiscogsClientAllure:
         scored, _detail_count = await client._process_single_discogs_item(
             item,
             "target artist",
-            reissue_keywords=[],
             detail_fetch_count=0,
             detail_fetch_limit=10,
         )
@@ -510,3 +504,25 @@ class TestRecordsAndScoring:
     def test_client_keeps_no_cache_of_its_own(self) -> None:
         """Discogs relies on the shared caches like the other providers, so it takes no cache service."""
         assert "cache_service" not in inspect.signature(DiscogsClient).parameters
+
+    @pytest.mark.asyncio
+    async def test_reissue_keywords_apply_at_scoring_time(self) -> None:
+        """Records are kept for good, so the reissue keywords in force when scoring decide the flag, not those at fetch time."""
+        response = TestDiscogsClientAllure.create_mock_discogs_response(album_name="Test Album (Remastered)")
+        response["results"][0]["master_id"] = 0
+        seen: list[dict[str, Any]] = []
+
+        def score_release(release: dict[str, Any], *_args: Any, **_kwargs: Any) -> int:
+            """Record what the scorer was given."""
+            seen.append(release)
+            return 50
+
+        client = TestDiscogsClientAllure.create_discogs_client(
+            mock_api_request=AsyncMock(return_value=response), mock_score_release=MagicMock(side_effect=score_release)
+        )
+        with patch.object(client, "_get_reissue_keywords", return_value=[]):
+            records = await client.fetch_release_records("test artist", "test album")
+        with patch.object(client, "_get_reissue_keywords", return_value=["remaster"]):
+            client.score_records(records, "test artist", "test album", ArtistContext())
+
+        assert seen[0].get("is_reissue") is True

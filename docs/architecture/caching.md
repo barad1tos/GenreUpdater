@@ -79,7 +79,7 @@ What each provider (MusicBrainz, Discogs, iTunes) answered for an album: its rel
 | Nothing found                   | `negative_result_ttl` (30 days)     |
 | Request failed or token refused | Not cached; the next run asks again |
 
-The records are scored when they are read, with the current search's artist region and activity period, so a cached answer never carries another search's context. Removing or renaming a track drops the album's entries for all three providers when the names match; the search rewrites some names before it asks (an `&` becomes `and`, a parenthetical edition such as `(Remastered)` is dropped), and for those the old entry stays behind unused.
+The records are scored when they are read, with the current search's artist region and activity period, so a cached answer never carries another search's context. Writing a year or a genre to a track leaves these entries alone, since it does not change what the providers answered. Removing a track, or renaming its artist or album, drops the album's entries for all three providers when the names match. The search rewrites some names before it asks: `&` becomes `and`, `w/` becomes `with`, a colon becomes a space, a trailing `+ 4` and anything after ` / ` are dropped, and from album titles quotes and parenthetical editions such as `(Remastered)` are removed. For those names the old entry stays behind unused. `--fresh` clears this cache along with the others.
 
 ```yaml
 caching:
@@ -94,7 +94,7 @@ caching:
 
 ### 4. Request Cache
 
-Each provider response by URL and query, so repeated requests within and across runs are answered locally (for example, pressings of one Discogs album share their master). Responses are kept for `negative_result_ttl`; a 404 and a failed request are not cached. It lives in the generic cache file.
+Each provider response by URL and query, so repeated requests within and across runs are answered locally (for example, pressings of one Discogs album share their master). Responses are kept for `negative_result_ttl`; a 404 and a failed request are not cached. It lives in the generic cache file. Responses cached before this TTL applied carried an expiry around 2126; loading the generic cache drops any entry due to outlive the longest TTL a writer sets (one year), so those go on the first run.
 
 ### 5. In-Memory Cache
 
@@ -126,12 +126,13 @@ UnifiedHashService.hash_api_key("Pink Floyd", "The Wall", "musicbrainz")  # prov
 
 ### Automatic
 
-| Trigger                  | Cache Affected                                                          |
-|--------------------------|-------------------------------------------------------------------------|
-| TTL expiry               | Memory cache, album year cache, provider "nothing found", request cache |
-| Track removed or renamed | Provider result cache for the album (names as the search writes them)   |
-| Track modified           | Library snapshot delta                                                  |
-| Force flag               | All caches bypassed                                                     |
+| Trigger                                | Cache Affected                                                                      |
+|----------------------------------------|-------------------------------------------------------------------------------------|
+| TTL expiry                             | Memory cache, album year cache, provider "nothing found", request cache             |
+| Track removed, artist or album renamed | Provider result cache for the album (names as the search writes them)               |
+| Track modified                         | Library snapshot delta                                                              |
+| `--force`                              | Album year cache and skip checks bypassed; provider and request caches still answer |
+| `--fresh`                              | All caches cleared                                                                  |
 
 ### Manual
 

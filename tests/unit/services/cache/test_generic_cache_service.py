@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
@@ -287,7 +288,7 @@ class TestGenericCacheService:
         """Ensure initialize() repopulates cache from existing file."""
         hashed_key = UnifiedHashService.hash_generic_key("abc")
         payload = {
-            hashed_key: {"value": {"foo": "bar"}, "expires_at": 9999999999.0},
+            hashed_key: {"value": {"foo": "bar"}, "expires_at": time.time() + 3600},
         }
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -305,6 +306,29 @@ class TestGenericCacheService:
                 assert cached == {"foo": "bar"}
             finally:
                 await service.stop_cleanup_task()
+
+    @pytest.mark.asyncio
+    async def test_load_drops_entries_kept_beyond_any_ttl(self, tmp_path: Path) -> None:
+        """Entries due to outlive the longest TTL any writer sets came from the old 100-year request cache and are dropped."""
+        now = time.time()
+        payload = {
+            UnifiedHashService.hash_generic_key("legacy"): {"value": {"results": []}, "expires_at": now + 100 * 365 * 86400},
+            UnifiedHashService.hash_generic_key("fresh"): {"value": {"results": [1]}, "expires_at": now + 30 * 86400},
+            UnifiedHashService.hash_generic_key("start_year"): {"value": 1981, "expires_at": now + 365 * 86400},
+        }
+        cache_path = tmp_path / "generic_cache.json"
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        service = TestGenericCacheService.create_service(create_test_app_config(max_generic_entries=100))
+        service.cache_file = cache_path
+        await service.initialize()
+
+        try:
+            assert service.get("legacy") is None
+            assert service.get("fresh") == {"results": [1]}
+            assert service.get("start_year") == 1981
+        finally:
+            await service.stop_cleanup_task()
 
     def test_default_ttl_override_from_config(self) -> None:
         """Ensure explicit TTL in config is applied."""

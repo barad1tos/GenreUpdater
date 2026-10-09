@@ -191,7 +191,7 @@ class TestCacheOrchestrator:
 
     @pytest.mark.asyncio
     async def test_invalidate_for_track(self) -> None:
-        """Test that invalidate_for_track invalidates all related caches."""
+        """A track write drops the generic and album-year entries, and leaves the provider results alone."""
         orchestrator = self.create_orchestrator()
         orchestrator.api_service.event_manager = MagicMock()
 
@@ -212,9 +212,22 @@ class TestCacheOrchestrator:
 
             # Should invalidate generic caches
             mock_invalidate.assert_any_call("tracks_all")
-            # Should invalidate album and API caches
             mock_album.assert_called_once_with("Test Artist", "Test Album")
-            mock_api.assert_called_once_with("Test Artist", "Test Album")
+            mock_api.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_own_track_write_keeps_provider_results(self) -> None:
+        """Writing a year or genre to a track does not change what providers answered, so their records stay cached."""
+        orchestrator = self.create_orchestrator()
+        records = [{"title": "Kid A", "year": "2000"}]
+        await orchestrator.set_cached_api_result("Radiohead", "Kid A", source="musicbrainz", records=records)
+
+        await orchestrator.invalidate_for_track(TrackDict(id="123", name="Idioteque", artist="Radiohead", album="Kid A", genre="Rock"))
+        await asyncio.sleep(0.05)  # let any invalidation the write scheduled run
+
+        cached = await orchestrator.get_cached_api_result("Radiohead", "Kid A", "musicbrainz")
+        assert cached is not None
+        assert cached.api_response == {"records": records}
 
     @pytest.mark.asyncio
     async def test_invalidate_single_key(self) -> None:

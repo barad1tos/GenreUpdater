@@ -334,6 +334,11 @@ class ApiCacheService:
                 cache_entries: dict[str, CachedApiResult] = {}
 
                 for key, item in cache_data.items():
+                    # An entry without a records list would fail every lookup of its album, so it is dropped
+                    response = item.get("api_response") if isinstance(item, dict) else None
+                    if not isinstance(response, dict) or not isinstance(response.get("records"), list):
+                        self.logger.warning("Skipping API cache entry %s without records", key)
+                        continue
                     try:
                         # Create CachedApiResult object with proper fields
                         cached_result = CachedApiResult(
@@ -426,7 +431,5 @@ class ApiCacheService:
             "not_found": len(self.api_cache) - found_count,
             "cache_file": str(self.api_cache_file),
             "cache_file_exists": self.api_cache_file.exists(),
-            "successful_policy": self.cache_config.get_policy(CacheContentType.SUCCESSFUL_API_METADATA).ttl_seconds,
             "not_found_policy": self.cache_config.get_policy(CacheContentType.NEGATIVE_RESULT).ttl_seconds,
-            "persistent": self.cache_config.is_persistent_cache(CacheContentType.SUCCESSFUL_API_METADATA),
         }

@@ -191,11 +191,11 @@ class TestApiCacheService:
             "key1": {
                 "artist": "The Doors",
                 "album": "L.A. Woman",
-                "year": "1971",
+                "year": None,
                 "source": "musicbrainz",
                 "timestamp": datetime.now(UTC).timestamp(),
                 "metadata": {},
-                "api_response": {"year": "1971"},
+                "api_response": {"records": [{"year": "1971"}]},
             }
         }
         mock_file = MagicMock()
@@ -214,7 +214,7 @@ class TestApiCacheService:
         result = service.api_cache["key1"]
         assert result.artist == "The Doors"
         assert result.album == "L.A. Woman"
-        assert result.year == "1971"
+        assert result.api_response == {"records": [{"year": "1971"}]}
 
     @pytest.mark.asyncio
     async def test_handle_track_removed_event(self) -> None:
@@ -291,9 +291,7 @@ class TestApiCacheService:
         assert stats["not_found"] == 2
         assert "cache_file" in stats
         assert "cache_file_exists" in stats
-        assert "successful_policy" in stats
         assert "not_found_policy" in stats
-        assert stats["persistent"] is True
 
     @pytest.mark.asyncio
     async def test_edge_cases(self) -> None:
@@ -378,10 +376,11 @@ class TestApiCacheService:
                 "source": "musicbrainz",
                 "timestamp": 1700000000.0,
                 "metadata": {},
+                "api_response": {"records": [{"year": "2023"}]},
             },
             "invalid_key": {
                 "album": "Album Only",
-                "year": "2023",
+                "api_response": {"records": []},
             },
         }
         mock_file = MagicMock()
@@ -542,4 +541,31 @@ class TestSaveIsAtomic:
             await service.save_to_disk()
 
         assert service.api_cache_file.read_text(encoding="utf-8") == saved
-        assert list(tmp_path.rglob("*.tmp")) == []
+        assert not list(tmp_path.rglob("*.tmp"))
+
+
+class TestCacheFileShape:
+    """The cache file is read and written only in the records shape."""
+
+    @pytest.mark.asyncio
+    async def test_entries_without_records_are_skipped_on_load(self, tmp_path: Path) -> None:
+        """An entry with no records list would fail every lookup of its album, so loading drops it."""
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
+        service = ApiCacheService(config, MagicMock())
+        service.api_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"artist": "artist", "album": "album", "year": None, "source": "discogs", "timestamp": 0.0, "ttl": None, "metadata": {}}
+        service.api_cache_file.write_text(
+            json.dumps({"good": {**entry, "api_response": {"records": []}}, "bad": {**entry, "api_response": {"year": "1999"}}}),
+            encoding="utf-8",
+        )
+
+        await service.initialize()
+
+        assert list(service.api_cache) == ["good"]
+
+    def test_stats_do_not_claim_a_ttl_for_found_records(self) -> None:
+        """Found records are kept for good, so the stats name no TTL for them."""
+        stats = TestApiCacheService.create_service().get_stats()
+
+        assert "successful_policy" not in stats
+        assert stats["not_found_policy"] > 0

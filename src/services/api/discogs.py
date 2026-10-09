@@ -14,6 +14,7 @@ from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
 
 from .api_base import BaseApiClient, ScoredRelease
+from .request_executor import ApiRequestError
 
 if TYPE_CHECKING:
     import logging
@@ -306,7 +307,10 @@ class DiscogsClient(BaseApiClient):
             strategy_name: Name of the search strategy (for logging)
 
         Returns:
-            Discogs search response dict, or None when nothing matched; a failed request raises ApiRequestError
+            Discogs search response dict, or None when nothing matched
+
+        Raises:
+            ApiRequestError: The search answered with an error body instead of results
 
         """
         search_url = f"{DISCOGS_BASE_URL}/database/search"
@@ -315,14 +319,12 @@ class DiscogsClient(BaseApiClient):
 
         data = await self._make_api_request("discogs", search_url, params=params)
 
-        # Check for an error message
-        if isinstance(data, dict) and "message" in data:
-            self.error_logger.warning("[discogs] API message: %s", data.get("message"))
+        # No such resource (HTTP 404) is an answer; a body that is not a search result is not
+        if data is None:
             return None
-
-        # Check for results
-        if not data or "results" not in data:
-            return None
+        if "message" in data or "results" not in data:
+            api_name, reason = "discogs", f"search answered without results: {data.get('message', 'no results field')}"
+            raise ApiRequestError(api_name, log_url, reason)
 
         results = data.get("results", [])
         if not results:
@@ -524,19 +526,17 @@ class DiscogsClient(BaseApiClient):
         artist_norm: str,
         *,
         year_str: str,
-        is_reissue: bool,
         master_year: int | None = None,
     ) -> dict[str, Any]:
         """Build a release record from a Discogs item, the way the scorer reads it, without scoring.
 
-        The record holds the ScoredRelease fields except the score, plus the reissue flag and the master year as the
-        release-group date. Nothing in it depends on the artist context or the clock.
+        The record holds the ScoredRelease fields except the score, plus the master year as the release-group date.
+        Nothing in it depends on the artist context, the clock or the configured reissue keywords.
 
         Args:
             item: Discogs release item
             artist_norm: Normalized artist name, used when the title names no artist
             year_str: Year string for the release
-            is_reissue: Whether this is detected as a reissue
             master_year: Original release year from Discogs master release
 
         Returns:
@@ -559,8 +559,6 @@ class DiscogsClient(BaseApiClient):
             "disambiguation": None,
             "source": "discogs",
         }
-        if is_reissue:
-            record["is_reissue"] = True
         # The master year as the release-group date, so the year-difference penalty applies as for MusicBrainz
         if master_year is not None:
             record["releasegroup_first_date"] = str(master_year)
@@ -573,7 +571,9 @@ class DiscogsClient(BaseApiClient):
         album_norm: str,
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Score release records with this search's artist context.
+        """Score release records with this search's artist context and the configured reissue keywords.
+
+        Records are cached for good, so the reissue flag is decided here from the keywords in force, not stored.
 
         Args:
             records: Release records from fetch_release_records
@@ -584,9 +584,12 @@ class DiscogsClient(BaseApiClient):
         Returns:
             Releases with a positive score, highest first
         """
+        reissue_keywords = [keyword.lower() for keyword in self._get_reissue_keywords()]
         scored_releases: list[ScoredRelease] = []
         for record in records:
-            score = self._score_original_release(record, artist_norm, album_norm, artist_context=artist_context, source="discogs")
+            title = str(record["title"]).lower()
+            to_score = {**record, "is_reissue": True} if any(keyword in title for keyword in reissue_keywords) else record
+            score = self._score_original_release(to_score, artist_norm, album_norm, artist_context=artist_context, source="discogs")
             if score > 0:
                 release = {key: value for key, value in record.items() if key not in {"is_reissue", "releasegroup_first_date"}}
                 scored_releases.append(cast("ScoredRelease", {**release, "score": score}))
@@ -598,7 +601,6 @@ class DiscogsClient(BaseApiClient):
         item: DiscogsRelease,
         artist_norm: str,
         *,
-        reissue_keywords: list[str],
         detail_fetch_count: int,
         detail_fetch_limit: int,
     ) -> tuple[dict[str, Any] | None, int]:
@@ -607,7 +609,6 @@ class DiscogsClient(BaseApiClient):
         Args:
             item: Discogs release item to process
             artist_norm: Normalized artist name
-            reissue_keywords: Keywords to detect reissues
             detail_fetch_count: Current number of detail fetches performed
             detail_fetch_limit: Maximum number of detail fetches allowed
 
@@ -627,32 +628,24 @@ class DiscogsClient(BaseApiClient):
         if not self._is_valid_year(year_str):
             return None, updated_detail_fetch_count
 
-        # Check if this is a reissue
-        _, title_album = DiscogsClient._extract_artist_from_title(item.get("title", ""))
-        title_lower = (title_album or item.get("title", "")).lower()
-        is_reissue = any(keyword.lower() in title_lower for keyword in reissue_keywords)
-
         # The master release year, analogous to the MusicBrainz release-group first date. Discogs gives master_id 0 to a
         # release outside any master; pressings sharing a master repeat one URL, which the request cache answers
         master_id = item.get("master_id")
         master_year = await self._fetch_master_release_year(master_id) if master_id else None
 
-        record = self._build_release_record(item, artist_norm, year_str=year_str, is_reissue=is_reissue, master_year=master_year)
+        record = self._build_release_record(item, artist_norm, year_str=year_str, master_year=master_year)
         return record, updated_detail_fetch_count
 
     async def _process_discogs_results(
         self,
         results: list[DiscogsRelease],
         artist_norm: str,
-        *,
-        reissue_keywords: list[str],
     ) -> list[dict[str, Any]]:
         """Turn Discogs search results into release records.
 
         Args:
             results: List of Discogs release items
             artist_norm: Normalized artist name
-            reissue_keywords: Keywords to detect reissues
 
         Returns:
             Release records for the items that match the artist and have a valid year
@@ -666,7 +659,6 @@ class DiscogsClient(BaseApiClient):
             record, detail_fetch_count = await self._process_single_discogs_item(
                 item,
                 artist_norm,
-                reissue_keywords=reissue_keywords,
                 detail_fetch_count=detail_fetch_count,
                 detail_fetch_limit=detail_fetch_limit,
             )
@@ -700,7 +692,7 @@ class DiscogsClient(BaseApiClient):
         discogs_response = await self._make_discogs_search_request(artist_norm, album_norm, artist_orig, album_orig)
         if discogs_response is None:
             return []
-        return await self._process_discogs_results(discogs_response.get("results", []), artist_norm, reissue_keywords=self._get_reissue_keywords())
+        return await self._process_discogs_results(discogs_response.get("results", []), artist_norm)
 
     async def get_scored_releases(
         self,
