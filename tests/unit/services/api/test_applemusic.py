@@ -614,6 +614,23 @@ class TestScoredReleaseStructure:
         assert mock_score_func.call_args.kwargs["artist_context"] is artist_context
 
     @pytest.mark.asyncio
+    async def test_storefront_is_not_the_release_country(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+        sample_itunes_result: dict[str, Any],
+    ) -> None:
+        """The searched storefront says nothing about where a release came from, so no country reaches the scorer."""
+        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
+        mock_score_func.return_value = 85.0
+
+        results = await client.get_scored_releases("pink floyd", "dark side", ArtistContext(region="us"))
+
+        assert mock_score_func.call_args.kwargs["release"]["country"] is None
+        assert results[0]["country"] is None
+
+    @pytest.mark.asyncio
     async def test_scored_release_has_all_required_fields(
         self,
         client: AppleMusicClient,

@@ -153,8 +153,8 @@ class TestDiscogsClientAllure:
         mock_response["results"][0]["year"] = 1969  # Set specific year
         mock_api_request = AsyncMock(return_value=mock_response)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        year = await client.get_year_from_discogs("Test Artist", "Test Album")
-        assert year == "1969"
+        releases = await client.get_scored_releases("test artist", "test album", ArtistContext())
+        assert [release["year"] for release in releases] == ["1969"]
 
     @pytest.mark.asyncio
     async def test_authentication_handling(self) -> None:

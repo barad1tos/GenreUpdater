@@ -350,7 +350,8 @@ class AppleMusicClient:
                         "artist": artist_name,
                         "year": release_year,
                         "album_type": result.get("collectionType", ""),
-                        "country": self.country_code,
+                        # The storefront searched is not where the release came from, so it earns no country bonus
+                        "country": None,
                         "status": "official",  # iTunes only has official releases
                         "format": "Digital",  # iTunes is digital distribution
                         "label": result.get("copyright", ""),
@@ -381,7 +382,7 @@ class AppleMusicClient:
                 "score": score,
                 "artist": artist_name,
                 "album_type": result.get("collectionType", ""),
-                "country": self.country_code,
+                "country": None,
                 "status": "official",
                 "format": "Digital",
                 "label": result.get("copyright") or None,

@@ -1349,31 +1349,6 @@ class ExternalApiOrchestrator:
         )
         return None
 
-    async def get_year_from_discogs(
-        self,
-        artist: str,
-        album: str,
-    ) -> str | None:
-        """Fetch the earliest release year for an album from Discogs.
-
-        This method delegates to the Discogs client.
-
-        Args:
-            artist: Artist name
-            album: Album name
-
-        Returns:
-            Year string or None if not found
-
-        """
-        # Normalize inputs
-        artist_norm = normalize_name(artist)
-        album_norm = normalize_name(album)
-
-        # Delegate to the Discogs client
-        result: str | None = await self.discogs_client.get_year_from_discogs(artist_norm, album_norm)
-        return result
-
 
 # Factory function for easy instantiation
 def create_external_api_orchestrator(

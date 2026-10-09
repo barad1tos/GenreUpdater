@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
-from services.api.year_scoring import ArtistContext
 
 from .api_base import BaseApiClient, ScoredRelease
 
@@ -23,6 +22,7 @@ if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
     from core.models.track_models import AppConfig, YearRetrievalConfig
     from metrics import Analytics
+    from services.api.year_scoring import ArtistContext
 
 
 # Discogs API v2 base URL
@@ -320,34 +320,6 @@ class DiscogsClient(BaseApiClient):
 
         # Check both with and without "The" prefix
         return target_normalized in title_normalized or target_no_the in title_normalized
-
-    @track_instance_method("discogs_year_search")
-    async def get_year_from_discogs(self, artist: str, album: str) -> str | None:
-        """Get year from Discogs (for backward compatibility).
-
-        Args:
-            artist: Artist name
-            album: Album name
-
-        Returns:
-            Year string or None
-
-        """
-        releases = await self.get_scored_releases(
-            self._normalize_name(artist),
-            self._normalize_name(album),
-            ArtistContext(),
-            artist_orig=artist,
-            album_orig=album,
-        )
-
-        if releases:
-            # Return the year from the highest scored release
-            best_release = max(releases, key=lambda x: x["score"])
-            year = best_release.get("year")
-            return str(year) if year is not None else None
-
-        return None
 
     async def _get_cached_discogs_releases(self, cache_key: str) -> list[ScoredRelease] | None:
         """Retrieve cached Discogs releases if available.
