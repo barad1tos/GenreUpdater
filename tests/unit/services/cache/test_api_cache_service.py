@@ -167,23 +167,21 @@ class TestApiCacheService:
         assert await service.get_cached_result("Artist1", "Album1", "source1") is not None
 
     @pytest.mark.asyncio
-    async def test_save_to_disk(self) -> None:
-        """Test saving cache to disk."""
-        service = TestApiCacheService.create_service()
-        await service.initialize()
+    async def test_save_to_disk(self, tmp_path: Path) -> None:
+        """Saved records come back when a new service loads the file."""
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
+        service = TestApiCacheService.create_service(config)
         await service.set_cached_result("Queen", "A Night at the Opera", source="spotify", records=[{"year": "1975"}])
         await service.set_cached_result("Queen", "News of the World", source="musicbrainz", records=[{"year": "1977"}])
 
-        mock_file = MagicMock()
+        await service.save_to_disk()
+        reloaded = TestApiCacheService.create_service(config)
+        await reloaded.initialize()
 
-        with (
-            patch("pathlib.Path.open") as mock_open,
-            patch("core.logger.ensure_directory"),
-        ):
-            mock_open.return_value = mock_file
-            await service.save_to_disk()
-        mock_open.assert_called_once_with("w", encoding="utf-8")
-        mock_file.__enter__.assert_called_once()
+        cached = await reloaded.get_cached_result("Queen", "News of the World", "musicbrainz")
+        assert cached is not None
+        assert cached.api_response == {"records": [{"year": "1977"}]}
+        assert len(reloaded.api_cache) == 2
 
     @pytest.mark.asyncio
     async def test_load_from_disk(self) -> None:
@@ -345,15 +343,13 @@ class TestApiCacheService:
         assert event.metadata["album"] == "The Wall"
 
     @pytest.mark.asyncio
-    async def test_save_error_handling(self) -> None:
-        """Test error handling during save."""
-        service = TestApiCacheService.create_service()
-        await service.initialize()
+    async def test_save_error_handling(self, tmp_path: Path) -> None:
+        """A disk error while saving is logged and raised."""
+        service = TestApiCacheService.create_service(create_test_app_config(logs_base_dir=str(tmp_path)))
         await service.set_cached_result("Artist", "Album", source="source", records=[{"year": "2023"}])
 
         with (
-            patch("pathlib.Path.open", side_effect=OSError("Disk full")),
-            patch("core.logger.ensure_directory"),
+            patch("services.cache.api_cache.tempfile.NamedTemporaryFile", side_effect=OSError("Disk full")),
             pytest.raises(OSError, match="Disk full"),
         ):
             await service.save_to_disk()
@@ -528,3 +524,22 @@ class TestOutcomeCaching:
         await service.invalidate_for_album("Artist ", "album")
 
         assert service.api_cache == {}
+
+
+class TestSaveIsAtomic:
+    """A save that breaks halfway leaves the previous cache file whole."""
+
+    @pytest.mark.asyncio
+    async def test_failed_save_keeps_the_previous_file(self, tmp_path: Path) -> None:
+        """Found records are kept for good, so a crash while writing must not cost the file that holds them."""
+        service = ApiCacheService(create_test_app_config(logs_base_dir=str(tmp_path)), MagicMock())
+        await service.set_cached_result("artist", "album", source="discogs", records=[{"title": "Album", "year": "1999"}])
+        await service.save_to_disk()
+        saved = service.api_cache_file.read_text(encoding="utf-8")
+
+        await service.set_cached_result("artist", "other", source="discogs", records=[{"title": "Other", "year": "2001"}])
+        with patch("services.cache.api_cache.json.dump", side_effect=TypeError("not serializable")), pytest.raises(TypeError):
+            await service.save_to_disk()
+
+        assert service.api_cache_file.read_text(encoding="utf-8") == saved
+        assert list(tmp_path.rglob("*.tmp")) == []

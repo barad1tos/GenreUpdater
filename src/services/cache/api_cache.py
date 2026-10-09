@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -297,9 +298,17 @@ class ApiCacheService:
 
                 cache_data = {key: serialize_model(result) for key, result in self.api_cache.items()}
 
-                # Write JSON file
-                with self.api_cache_file.open("w", encoding="utf-8") as file:
-                    json.dump(cache_data, file, indent=2, ensure_ascii=False)
+                # Write a temporary file beside the cache and swap it in, so a write that breaks halfway leaves the
+                # previous file whole: found records are kept for good and live only here
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(self.api_cache_file.parent), suffix=".tmp", delete=False) as tmp_file:
+                    temp_path = Path(tmp_file.name)
+                    try:
+                        json.dump(cache_data, tmp_file, indent=2, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        tmp_file.close()
+                        temp_path.unlink(missing_ok=True)
+                        raise
+                temp_path.replace(self.api_cache_file)
 
                 self.logger.info("API cache saved to %s (%d entries)", self.api_cache_file, len(cache_data))
 
