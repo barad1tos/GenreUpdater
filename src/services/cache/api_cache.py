@@ -51,7 +51,6 @@ class ApiCacheService:
 
         # Background tasks to prevent garbage collection
         self._background_tasks: set[asyncio.Task[Any]] = set()
-        self._max_background_tasks = 100
         self._shutting_down = False  # Flag to prevent new tasks during shutdown
 
         # Lock for thread-safe cache operations
@@ -77,21 +76,12 @@ class ApiCacheService:
             log_message: Optional message to log before scheduling
 
         Returns:
-            True if task was scheduled, False if limit reached or shutting down
+            True if task was scheduled, False if shutting down
         """
         # Prevent new tasks during shutdown to avoid race conditions
         if self._shutting_down:
             self.logger.debug(
                 "Shutdown in progress, skipping invalidation for %s - %s",
-                artist,
-                album,
-            )
-            return False
-
-        if len(self._background_tasks) >= self._max_background_tasks:
-            self.logger.debug(
-                "Background task limit reached (%d), skipping invalidation for %s - %s",
-                self._max_background_tasks,
                 artist,
                 album,
             )

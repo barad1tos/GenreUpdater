@@ -450,34 +450,19 @@ class TestApiCacheService:
         assert len(service.api_cache) == 1
 
     @pytest.mark.asyncio
-    async def test_background_task_limit(self) -> None:
-        """Test that background tasks are limited to max count."""
+    async def test_every_removed_album_is_invalidated(self) -> None:
+        """Removing many albums at once invalidates each of them; none is skipped."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        # Create fake tasks to fill the limit
-        for _ in range(service._max_background_tasks):
-            fake_task = asyncio.create_task(asyncio.sleep(10))
-            service._background_tasks.add(fake_task)
+        albums = [f"Album {index}" for index in range(150)]
+        for album in albums:
+            await service.set_cached_result("Artist", album, source="musicbrainz", records=[{"year": "2001"}])
 
-        assert len(service._background_tasks) == 100
-        event = CacheEvent(
-            event_type=CacheEventType.TRACK_REMOVED,
-            track_id="test_track",
-            metadata={"artist": "Test Artist", "album": "Test Album"},
-        )
-        initial_count = len(service._background_tasks)
-        service._handle_track_removed(event)
-        # Count should remain the same - new task was skipped
-        assert len(service._background_tasks) == initial_count
-        cast(MagicMock, service.logger.debug).assert_any_call(
-            "Background task limit reached (%d), skipping invalidation for %s - %s",
-            100,
-            "Test Artist",
-            "Test Album",
-        )
-        for task in list(service._background_tasks):
-            task.cancel()
-        await asyncio.gather(*service._background_tasks, return_exceptions=True)
+        for index, album in enumerate(albums):
+            service.emit_track_removed(str(index), "Artist", album)
+        await asyncio.gather(*service._background_tasks)
+
+        assert service.api_cache == {}
         service._background_tasks.clear()
 
 
