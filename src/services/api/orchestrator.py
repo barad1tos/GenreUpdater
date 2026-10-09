@@ -20,7 +20,6 @@ import asyncio
 import contextlib
 import os
 import random
-import re
 import ssl
 from datetime import UTC
 from datetime import datetime as dt
@@ -31,6 +30,7 @@ import certifi
 
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT, LogFormat
+from core.models.normalization import search_names
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
@@ -52,51 +52,6 @@ if TYPE_CHECKING:
     from metrics import Analytics
     from services.cache.orchestrator import CacheOrchestrator
     from services.pending_verification import PendingVerificationService
-
-
-def normalize_name(name: str) -> str:
-    """Normalize artist/album name for API queries.
-
-    Performs substitutions that improve API matching:
-    - & → and (Karma & Effect → Karma and Effect)
-    - w/ → with (Split w/ Band → Split with Band)
-    - Strips trailing compilation markers (Album + 4 → Album)
-    - Normalizes whitespace
-
-    Note: This is for API QUERIES, not for scoring/matching.
-    Scoring uses ReleaseScorer._normalize_name which is more aggressive.
-    """
-    if not name:
-        return name
-
-    result = name
-
-    # Common substitutions for better API matching
-    substitutions = {
-        " & ": " and ",
-        "&": " and ",  # Handle no-space cases like "Fire&Water"
-        " w/ ": " with ",
-        " w/": " with ",
-        " = ": " ",  # Liberation = Termination → Liberation Termination
-        ":": " ",  # Issue #103: Colons break Lucene search (III:Trauma → III Trauma)
-    }
-
-    for old, new in substitutions.items():
-        result = result.replace(old, new)
-
-    # Strip trailing compilation markers: "+ 4", "+ 10" (number = # bonus tracks)
-    # Pattern: " + " followed by digit(s) at end of string
-    # More conservative than ".*" to preserve legitimate titles like "Album + Bonus Tracks"
-    result = re.sub(r"\s*+\+\s++\d.*$", "", result)
-
-    # Strip content after " / " (split albums - keep first part only)
-    # "Robot Hive / Exodus" → "Robot Hive"
-    # "House By the Cemetery / Mortal Massacre" → "House By the Cemetery"
-    if " / " in result:
-        result = result.split(" / ", maxsplit=1)[0].strip()
-
-    # Normalize whitespace (multiple spaces to single)
-    return re.sub(r"\s+", " ", result).strip()
 
 
 # Constants
@@ -1009,21 +964,8 @@ class ExternalApiOrchestrator:
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
-        """Prepare normalized and display names for API search.
-
-        Strips quotes and parenthetical content from album name for cleaner API queries.
-        APIs don't search for "(Deluxe Edition)" or "(Bonus Track Version)" -
-        these are metadata, not album names.
-        """
-        artist_norm = normalize_name(artist)
-
-        # Remove quotes from album name (e.g., "Survival of the Sickest" → Survival of the Sickest)
-        album_clean = album.replace('"', "").replace("'", "")
-
-        # Remove all parenthetical content from album for API queries
-        # "(Deluxe Edition)", "(Bonus Track Version)", "(Remastered)" → removed
-        album_clean = re.sub(r"\s*+\([^)]*+\)", "", album_clean).strip()
-        album_norm = normalize_name(album_clean)
+        """Prepare the names the search asks for (see search_names) and the names its logs show."""
+        artist_norm, album_norm = search_names(artist, album)
 
         log_artist = artist if artist != artist_norm else artist_norm
         log_album = album if album != album_norm else album_norm

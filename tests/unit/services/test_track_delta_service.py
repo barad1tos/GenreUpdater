@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.tracks.track_delta import TrackDelta, compute_track_delta
+from core.tracks.track_delta import TrackDelta, compute_track_delta, has_identity_changed
 from core.models.track_models import TrackDict
 
 
@@ -385,3 +385,11 @@ class TestComputeTrackDelta:
         # Both empty
         delta = compute_track_delta([], {})
         assert delta.is_empty()
+
+
+def test_album_artist_change_is_an_identity_change() -> None:
+    """The year search groups by album artist, so changing it changes the album's identity."""
+    stored = TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist="Various Artists")
+    current = TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist="Some Band")
+
+    assert has_identity_changed(current, stored)

@@ -933,6 +933,25 @@ class TestDetectUpdatedTracks:
 
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_renamed_track_is_updated(self, tmp_path_factory: pytest.TempPathFactory) -> None:
+        """A track whose album was renamed is updated even when its genre and year stay the same."""
+        service = LibrarySnapshotService(_make_config(tmp_path_factory), logging.getLogger("test"))
+        await service.initialize()
+        tracks = _make_tracks()
+        renamed = TrackDict(id="1", name="Alpha", artist="Artist A", album="Album A (Deluxe)")
+        mock_client = MockAppleScriptClient()
+        mock_client.set_run_script_result("raw")
+
+        with (
+            patch("services.cache.snapshot.spinner"),
+            patch.object(service, "_parse_fetch_tracks_output", return_value=[{"id": "1"}]),
+            patch.object(service, "_parse_raw_track", return_value=renamed),
+        ):
+            result = await service._detect_updated_tracks(mock_client, {"1", "2"}, {"1", "2"}, {str(t.id): t for t in tracks})
+
+        assert result == ["1"]
+
 
 # ========================= Is Enabled / Is Delta Enabled Tests =========================
 

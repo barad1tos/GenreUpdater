@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.api.orchestrator import normalize_name
+from core.models.normalization import normalize_search_name
 from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.year_scoring import create_release_scorer, ArtistContext, ArtistPeriodContext
 from services.cache.orchestrator import CacheOrchestrator
@@ -63,7 +63,7 @@ class TestNormalizeNameIntegration:
             ("Fire & Water", "Fire and Water"),
             ("Fire&Water", "Fire and Water"),
             ("Split w/ Band", "Split with Band"),
-            ("Split w/Band", "Split with Band"),  # w/ with no space - normalize_name adds space
+            ("Split w/Band", "Split with Band"),  # w/ with no space - normalize_search_name adds space
             # Colon normalization for Lucene search
             ("III:Trauma", "III Trauma"),
             ("Album: Subtitle", "Album Subtitle"),  # Colon replaced with space, then normalized
@@ -82,13 +82,13 @@ class TestNormalizeNameIntegration:
             ("Album  With   Spaces", "Album With Spaces"),
         ],
     )
-    def test_normalize_name_transformations(
+    def test_normalize_search_name_transformations(
         self,
         input_name: str,
         expected: str,
     ) -> None:
         """Verify name normalization handles all expected transformations."""
-        result = normalize_name(input_name)
+        result = normalize_search_name(input_name)
         assert result == expected
 
 

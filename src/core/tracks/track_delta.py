@@ -120,9 +120,9 @@ def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
 
 
 def has_identity_changed(current: TrackDict, stored: TrackDict) -> bool:
-    """Check if track identity (artist or album) has changed.
+    """Check if track identity (artist, album, or album artist) has changed.
 
-    When artist or album changes, the API cache for the OLD artist/album
+    When any of them changes, the API cache for the OLD album
     becomes stale and must be invalidated. This is separate from has_track_changed()
     which only checks fields we manage (genre, year).
 
@@ -133,16 +133,15 @@ def has_identity_changed(current: TrackDict, stored: TrackDict) -> bool:
         stored: Stored track from snapshot
 
     Returns:
-        True if artist or album changed (requires cache invalidation for old values)
+        True if artist, album, or album artist changed (requires cache invalidation for old values)
 
     """
-    current_artist = (current.artist or "").strip().lower()
-    stored_artist = (stored.artist or "").strip().lower()
-
-    current_album = (current.album or "").strip().lower()
-    stored_album = (stored.album or "").strip().lower()
-
-    return current_artist != stored_artist or current_album != stored_album
+    names = (
+        (current.artist, stored.artist),
+        (current.album, stored.album),
+        (current.album_artist, stored.album_artist),
+    )
+    return any((now or "").strip().lower() != (before or "").strip().lower() for now, before in names)
 
 
 def compute_track_delta(

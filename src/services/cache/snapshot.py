@@ -22,7 +22,7 @@ from core.apple_script_names import FETCH_TRACKS_BY_IDS
 from core.logger import ensure_directory, spinner
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, LibraryDeltaCache
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_track_changed
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_identity_changed, has_track_changed
 from services.cache.json_utils import dumps_json, loads_json
 
 DEFAULT_MAX_AGE_HOURS: int = 24
@@ -461,7 +461,12 @@ class LibrarySnapshotService:
         updated_ids = [
             track_id
             for track_id in common_ids
-            if track_id in current_map and track_id in snapshot_map and has_track_changed(current_map[track_id], snapshot_map[track_id])
+            if track_id in current_map
+            and track_id in snapshot_map
+            and (
+                has_track_changed(current_map[track_id], snapshot_map[track_id])
+                or has_identity_changed(current_map[track_id], snapshot_map[track_id])
+            )
         ]
         self.logger.info(
             "Force scan found %d updated tracks (checked %d/%d common)",

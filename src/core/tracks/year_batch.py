@@ -34,7 +34,7 @@ from core.models.validators import is_empty_year
 from .prerelease_handler import PrereleaseHandler
 from .track_updater import TrackUpdater
 from .year_determination import YearDeterminator
-from .year_utils import normalize_collaboration_artist
+from .year_utils import album_group_artist
 
 if TYPE_CHECKING:
     import logging
@@ -549,15 +549,7 @@ class YearBatchProcessor:
         """
         albums: dict[tuple[str, str], list[TrackDict]] = defaultdict(list)
         for track in tracks:
-            album_artist = str(track.get("album_artist", ""))
-            album = str(track.get("album", ""))
-
-            # Fallback to normalized artist if album_artist is empty
-            if not album_artist or not album_artist.strip():
-                raw_artist = str(track.get("artist", ""))
-                album_artist = normalize_collaboration_artist(raw_artist)
-
-            album_key = (album_artist, album)
+            album_key = (album_group_artist(track), str(track.get("album", "")))
             albums[album_key].append(track)
 
         return albums

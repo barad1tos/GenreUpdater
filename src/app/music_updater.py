@@ -24,6 +24,7 @@ from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_delta import has_identity_changed
 from core.tracks.track_processor import TrackProcessor
 from core.tracks.year_retriever import YearRetriever
+from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import (
     load_track_list,
     save_changes_report,
@@ -124,7 +125,7 @@ class MusicUpdater:
         )
 
         # Pipeline snapshot manager
-        self.snapshot_manager = PipelineSnapshotManager(
+        self.snapshot_manager: PipelineSnapshotManager = PipelineSnapshotManager(
             track_processor=self.track_processor,
             console_logger=deps.console_logger,
         )
@@ -677,7 +678,7 @@ class MusicUpdater:
 
         for track_id in removed_ids:
             if stored := snapshot_map.get(track_id):
-                api_cache.emit_track_removed(track_id, stored.artist or "", stored.album or "")
+                api_cache.emit_track_removed(track_id, album_group_artist(stored), stored.album or "")
 
         self.console_logger.info("Emitted cache invalidation for %d removed tracks", len(removed_ids))
 
@@ -699,7 +700,7 @@ class MusicUpdater:
             stored = snapshot_map.get(track_id)
             current = result_map.get(track_id)
             if stored and current and has_identity_changed(current, stored):
-                api_cache.emit_track_modified(track_id, stored.artist or "", stored.album or "")
+                api_cache.emit_track_modified(track_id, album_group_artist(stored), stored.album or "")
                 identity_changed_count += 1
 
         if identity_changed_count:

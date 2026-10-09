@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from core.models.track_models import TrackDict
 from core.tracks.year_utils import (
+    album_group_artist,
     normalize_collaboration_artist,
     resolve_non_negative_float,
     resolve_non_negative_int,
@@ -180,3 +182,19 @@ class TestNormalizeCollaborationArtist:
 
     def test_whitespace_stripped(self) -> None:
         assert normalize_collaboration_artist("  Main Artist  feat. Other") == "Main Artist"
+
+
+class TestAlbumGroupArtist:
+    """The artist the year search groups an album by, and asks the providers about."""
+
+    def test_album_artist_wins(self) -> None:
+        """A compilation is grouped by its album artist, not by each track's artist."""
+        track = TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist="Various Artists")
+
+        assert album_group_artist(track) == "Various Artists"
+
+    def test_main_artist_of_a_collaboration_without_album_artist(self) -> None:
+        """Without an album artist, a collaboration is grouped by its main artist."""
+        track = TrackDict(id="1", name="Song", artist="Daft Punk & Pharrell", album="Random Access Memories", album_artist="")
+
+        assert album_group_artist(track) == normalize_collaboration_artist("Daft Punk & Pharrell")

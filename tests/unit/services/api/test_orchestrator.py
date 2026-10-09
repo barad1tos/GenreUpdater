@@ -12,7 +12,8 @@ import pytest
 
 from core.debug_utils import DebugConfig
 from core.models.protocols import YearLookupUnavailableError
-from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
+from core.models.normalization import normalize_search_name
+from services.api.orchestrator import ExternalApiOrchestrator
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext, ArtistPeriodContext, ReleaseScorer
 from tests.factories import create_test_app_config
@@ -95,9 +96,9 @@ class TestExternalApiOrchestratorAllure:
             ("Guns N' Roses", "Guns N' Roses"),
         ],
     )
-    def test_normalize_name_function(self, input_name: str, expected: str) -> None:
+    def test_normalize_search_name_function(self, input_name: str, expected: str) -> None:
         """Test name normalization function."""
-        result = normalize_name(input_name)
+        result = normalize_search_name(input_name)
         assert result == expected
 
     def test_api_provider_configuration(self) -> None:
