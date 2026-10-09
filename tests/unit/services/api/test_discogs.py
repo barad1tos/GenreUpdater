@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import pytest
 
 from services.api.discogs import DiscogsClient, DiscogsRelease
+from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
@@ -629,3 +630,21 @@ class TestDiscogsClientAllure:
         assert result is None
         assert isinstance(client.console_logger, MockLogger)
         assert any("unexpected type" in msg for msg in client.console_logger.warning_messages)
+
+
+class TestRequestFailurePropagation:
+    """A failed request fails the Discogs lookup and leaves nothing cached."""
+
+    @pytest.mark.asyncio
+    async def test_failed_search_fails_the_lookup_and_caches_nothing(self) -> None:
+        """A search that failed must fail the lookup and leave the scored-list cache untouched."""
+        cache = MagicMock()
+        cache.get_async = AsyncMock(return_value=None)
+        cache.set_async = AsyncMock()
+        request = AsyncMock(side_effect=ApiRequestError("discogs", "https://discogs/search", "failed"))
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=request, mock_cache_service=cache)
+
+        with pytest.raises(ApiRequestError):
+            await client.get_scored_releases("artist", "album", ArtistContext())
+
+        cache.set_async.assert_not_called()

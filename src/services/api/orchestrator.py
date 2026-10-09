@@ -38,7 +38,7 @@ from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
-from services.api.request_executor import ApiRequestExecutor
+from services.api.request_executor import ApiRequestError, ApiRequestExecutor
 from services.api.year_score_resolver import YearScoreResolver
 from services.api.year_scoring import ArtistContext, ArtistPeriodContext, create_release_scorer
 from services.api.year_search_coordinator import YearSearchCoordinator
@@ -458,6 +458,7 @@ class ExternalApiOrchestrator:
             discogs_client=self.discogs_client,
             applemusic_client=self.applemusic_client,
             release_scorer=self.release_scorer,
+            discogs_enabled=bool(self.discogs_token),
         )
 
         # Scoring function is now properly injected during API client initialization
@@ -611,7 +612,8 @@ class ExternalApiOrchestrator:
     ) -> dict[str, Any] | None:
         """Make an API request with rate limiting, error handling, and retry logic.
 
-        Delegates to ApiRequestExecutor for HTTP handling.
+        Delegates to ApiRequestExecutor for HTTP handling: returns the answer, None for HTTP 404, and raises
+        ApiRequestError when the request failed.
         """
         return await self.request_executor.execute_request(
             api_name=api_name,
@@ -819,6 +821,9 @@ class ExternalApiOrchestrator:
         earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
+
+        A lookup that no provider answered lets the coordinator's YearLookupUnavailableError through: the year is unknown, so
+        neither the library year nor a verification mark stands in for it.
 
         Args:
             artist: Artist name
@@ -1064,7 +1069,7 @@ class ExternalApiOrchestrator:
 
             return ArtistContext(region=str(artist_region) if artist_region else None, period=period)
 
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
+        except (ApiRequestError, OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
             self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err, exc_info=context_err)
             return ArtistContext(period=period)
 
@@ -1319,8 +1324,15 @@ class ExternalApiOrchestrator:
             )
             return cached_year
 
-        # 2. Try MusicBrainz (primary source)
-        begin_year, _ = await self.get_artist_activity_period(artist_norm)
+        # 2. Try MusicBrainz (primary source), then iTunes as the fallback
+        # A failed lookup leaves the year unknown, not absent: caching -1 would switch off the plausibility checks for a day
+        musicbrainz_failed = False
+        try:
+            begin_year, _ = await self.get_artist_activity_period(artist_norm)
+        except ApiRequestError as error:
+            self.console_logger.debug("[orchestrator] MusicBrainz artist start year unavailable for %s: %s", artist_norm, error)
+            begin_year, musicbrainz_failed = None, True
+
         if begin_year:
             self.cache_service.generic_service.set(cache_key, begin_year, ttl=31536000)
             self.console_logger.debug(
@@ -1331,7 +1343,11 @@ class ExternalApiOrchestrator:
             return begin_year
 
         # 3. Fallback to iTunes
-        itunes_year = await self.applemusic_client.get_artist_start_year(artist_norm)
+        try:
+            itunes_year = await self.applemusic_client.get_artist_start_year(artist_norm)
+        except ApiRequestError as error:
+            self.console_logger.debug("[orchestrator] iTunes artist start year unavailable for %s: %s", artist_norm, error)
+            return None
         if itunes_year:
             self.cache_service.generic_service.set(cache_key, itunes_year, ttl=31536000)
             self.console_logger.debug(
@@ -1340,6 +1356,9 @@ class ExternalApiOrchestrator:
                 itunes_year,
             )
             return itunes_year
+
+        if musicbrainz_failed:
+            return None
 
         # 4. Cache negative result with shorter TTL
         self.cache_service.generic_service.set(cache_key, -1, ttl=86400)

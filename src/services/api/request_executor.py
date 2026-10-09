@@ -12,6 +12,8 @@ import logging
 import secrets
 import time
 import urllib.parse
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -31,6 +33,54 @@ API_RESPONSE_LOG_LIMIT = 500
 SECURE_RANDOM = secrets.SystemRandom()
 # Request headers safe to log; everything else (Authorization, cookies) is left out
 LOGGABLE_REQUEST_HEADERS = ("User-Agent", "Accept", "Accept-Encoding", "Content-Type")
+HTTP_NOT_FOUND = 404
+HTTP_FORBIDDEN = 403
+MAX_RETRY_DELAY_SECONDS = 120.0
+
+
+class ApiRequestError(Exception):
+    """A provider request failed: no usable answer arrived within the retry budget.
+
+    Distinct from a provider answering that nothing matches, which `execute_request` returns as None (HTTP 404) or
+    as an answer without results. Derives from Exception so the clients' broad parsing handlers never swallow it.
+    """
+
+    def __init__(self, api_name: str, url: str, reason: str, *, status: int | None = None) -> None:
+        super().__init__(f"[{api_name}] {reason}: {url}")
+        self.api_name = api_name
+        self.url = url
+        self.status = status
+
+
+class TransientRequestError(Exception):
+    """A failure worth retrying: a timeout, a dropped connection, a rate limit or a server error."""
+
+    def __init__(self, reason: str, *, status: int | None = None, retry_after: float | None = None) -> None:
+        super().__init__(reason)
+        self.status = status
+        self.retry_after = retry_after
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Read the wait a Retry-After header asks for, in either its delta-seconds or its HTTP-date form; garbage gives None."""
+    if not value:
+        return None
+    try:
+        return max(float(value), 0.0)
+    except ValueError:
+        pass
+    try:
+        resume_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if resume_at.tzinfo is None:
+        resume_at = resume_at.replace(tzinfo=UTC)
+    return max((resume_at - datetime.now(UTC)).total_seconds(), 0.0)
+
+
+def _is_throttled(api_name: str, status: int) -> bool:
+    """Tell whether a status means "slow down": 429 and 5xx everywhere, and 403 from iTunes, which throttles with it."""
+    return status == HTTP_TOO_MANY_REQUESTS or status >= HTTP_SERVER_ERROR or (api_name == "itunes" and status == HTTP_FORBIDDEN)
 
 
 class ApiRequestExecutor:
@@ -127,7 +177,11 @@ class ApiRequestExecutor:
             timeout_override: Override default timeout
 
         Returns:
-            Parsed JSON response dict, or None if request failed
+            The parsed answer, or None when the provider says the resource does not exist (HTTP 404)
+
+        Raises:
+            ApiRequestError: The request failed after its retry budget, its answer was unusable, or it could not be
+                prepared
         """
         # Debug logging for iTunes requests
         if api_name == "itunes":
@@ -149,7 +203,7 @@ class ApiRequestExecutor:
         # Prepare request components
         prepared = self._prepare_request(api_name, url, headers_override, timeout_override)
         if prepared is None:
-            return None
+            raise ApiRequestError(api_name, self._build_log_url(url, params), "request could not be prepared")
 
         request_headers, limiter, request_timeout = prepared
 
@@ -173,7 +227,7 @@ class ApiRequestExecutor:
             self.console_logger.debug(
                 "[%s] Request execution result: %s",
                 api_name,
-                "Success" if result is not None else "Failed/None",
+                "Success" if result is not None else "Not found",
             )
 
         # Cache the result
@@ -246,7 +300,7 @@ class ApiRequestExecutor:
         cache_key: str,
         result: dict[str, Any] | None,
     ) -> None:
-        """Cache the API response; a failed request (None) is not cached, so the next lookup asks the API again.
+        """Cache the API response; a 404 (None) is not cached, so the next lookup asks the API again, and a failure never reaches here.
 
         An empty body is skipped as well, so a cached {} can only be a failure an earlier version stored.
         """
@@ -321,26 +375,57 @@ class ApiRequestExecutor:
         max_retries: int,
         base_delay: float,
     ) -> dict[str, Any] | None:
-        """Execute a request with retry logic."""
+        """Send the request, retrying transient failures with backoff until the budget is spent.
+
+        Args:
+            api_name: Provider key for limits, logs and errors
+            url: Endpoint without the query
+            params: Query parameters
+            request_headers: Headers to send
+            request_timeout: Timeout for one attempt
+            limiter: Provider rate limiter
+            max_retries: Retries allowed after the first attempt
+            base_delay: Backoff base in seconds
+
+        Returns:
+            The parsed answer, or None for HTTP 404
+
+        Raises:
+            ApiRequestError: A permanent failure, or a transient one that outlasted the retry budget
+        """
         log_url = self._build_log_url(url, params)
+        attempt = 0
+        while True:
+            try:
+                return await self._attempt_request(
+                    api_name,
+                    url,
+                    params,
+                    request_headers=request_headers,
+                    request_timeout=request_timeout,
+                    limiter=limiter,
+                    attempt=attempt,
+                    log_url=log_url,
+                )
+            except TransientRequestError as failure:
+                if attempt >= max_retries:
+                    self.error_logger.exception("[%s] Request failed after %d attempts: %s (%s)", api_name, attempt + 1, log_url, failure)
+                    raise ApiRequestError(api_name, log_url, f"failed after {attempt + 1} attempts ({failure})", status=failure.status) from (
+                        failure.__cause__ or failure
+                    )
+                delay = self._retry_delay(attempt, base_delay, failure.retry_after)
+                self.console_logger.warning("[%s] %s, retrying %d/%d in %.2fs", api_name, failure, attempt + 1, max_retries, delay)
+                await asyncio.sleep(delay)
+                attempt += 1
 
-        for attempt in range(max_retries + 1):
-            result = await self._attempt_request(
-                api_name,
-                url,
-                params,
-                request_headers=request_headers,
-                request_timeout=request_timeout,
-                limiter=limiter,
-                attempt=attempt,
-                log_url=log_url,
-                max_retries=max_retries,
-                base_delay=base_delay,
-            )
-            if result is not None:
-                return result
+    @staticmethod
+    def _retry_delay(attempt: int, base_delay: float, retry_after: float | None) -> float:
+        """Back off exponentially with jitter, waiting longer when the provider asks for it, capped at two minutes.
 
-        return None
+        The backoff stays the floor because MusicBrainz sheds load with 503 and "Retry-After: 0".
+        """
+        backoff = base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4)
+        return min(max(backoff, retry_after or 0.0), MAX_RETRY_DELAY_SECONDS)
 
     @staticmethod
     def _build_log_url(url: str, params: dict[str, str] | None) -> str:
@@ -358,10 +443,26 @@ class ApiRequestExecutor:
         limiter: ApiRateLimiter,
         attempt: int,
         log_url: str,
-        max_retries: int,
-        base_delay: float,
     ) -> dict[str, Any] | None:
-        """Attempt a single request with exception handling."""
+        """Send one attempt and sort its exceptions into transient failures and permanent ones.
+
+        Args:
+            api_name: Provider key for limits, logs and errors
+            url: Endpoint without the query
+            params: Query parameters
+            request_headers: Headers to send
+            request_timeout: Timeout for one attempt
+            limiter: Provider rate limiter
+            attempt: Zero-based attempt number
+            log_url: URL with its query, for logs and errors
+
+        Returns:
+            The parsed answer, or None for HTTP 404
+
+        Raises:
+            TransientRequestError: A timeout, a dropped connection or body, a rate limit or a server error
+            ApiRequestError: Any other failure; retrying would not change it
+        """
         try:
             return await self._execute_single_request(
                 api_name,
@@ -373,20 +474,23 @@ class ApiRequestExecutor:
                 attempt=attempt,
                 log_url=log_url,
             )
-        except RuntimeError as rt:
-            return self._handle_runtime_error(rt, api_name, attempt, max_retries, url)
-        except (TimeoutError, aiohttp.ClientError) as e:
-            return await self._handle_client_error(
-                e,
-                api_name=api_name,
-                attempt=attempt,
-                max_retries=max_retries,
-                base_delay=base_delay,
-                url=url,
-            )
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            self._handle_unexpected_error(e, api_name, url)
-            return None
+        except (TransientRequestError, ApiRequestError):
+            raise
+        except (TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientPayloadError) as error:
+            # A payload error is a connection dropped while the body was read
+            self.api_call_durations.setdefault(api_name, []).append(0.0)
+            raise TransientRequestError(type(error).__name__) from error
+        except RuntimeError as error:
+            if "Event loop is closed" in str(error):
+                # The process is shutting down, so a retry cannot succeed; clear the reference only, since
+                # ExternalApiOrchestrator owns the session's lifecycle
+                self.session = None
+                raise ApiRequestError(api_name, log_url, "event loop closed") from error
+            self.error_logger.exception("[%s] Request to %s failed", api_name, log_url)
+            raise ApiRequestError(api_name, log_url, f"{type(error).__name__}: {error}") from error
+        except (aiohttp.ClientError, OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            self.error_logger.exception("[%s] Unexpected error requesting %s", api_name, log_url)
+            raise ApiRequestError(api_name, log_url, f"{type(error).__name__}: {error}") from error
 
     async def _execute_single_request(
         self,
@@ -413,8 +517,8 @@ class ApiRequestExecutor:
             log_url: URL string for logging purposes
 
         Returns:
-            Response dict if successful, None if should retry,
-            raises exception if failed
+            The parsed answer, or None for HTTP 404; a transient failure raises TransientRequestError and any other
+            failure ApiRequestError, both from the response processing
 
         Raises:
             RuntimeError: If the session is lost before making the request.
@@ -460,7 +564,6 @@ class ApiRequestExecutor:
                 return await self._process_response(
                     response,
                     api_name=api_name,
-                    url=url,
                     attempt=attempt,
                     log_url=log_url,
                     elapsed=elapsed,
@@ -494,7 +597,6 @@ class ApiRequestExecutor:
         response: aiohttp.ClientResponse,
         *,
         api_name: str,
-        url: str,
         attempt: int,
         log_url: str,
         elapsed: float,
@@ -504,17 +606,16 @@ class ApiRequestExecutor:
         Args:
             response: The HTTP response to process
             api_name: Name of the API (e.g., 'discogs', 'musicbrainz')
-            url: Request URL
             attempt: Current retry attempt number (0-indexed)
             log_url: URL string for logging purposes
             elapsed: Time elapsed for the request, in seconds
 
         Returns:
-            Response dict if successful, None if should retry,
-            raises exception if failed
+            The parsed answer, or None for HTTP 404
 
         Raises:
-            self._create_response_error: If the response status indicates a rate limit, server error, or other failure.
+            TransientRequestError: A rate limit or a server error
+            ApiRequestError: Any other error status, or an answer that is not a JSON object
         """
         response_status = response.status
 
@@ -526,9 +627,6 @@ class ApiRequestExecutor:
                 {name: sent_headers[name] for name in LOGGABLE_REQUEST_HEADERS if name in sent_headers},
             )
 
-        # Read response text
-        response_text_snippet = await self._read_response_text(response, api_name)
-
         self.console_logger.debug(
             "[%s] Request (Attempt %d): %s - Status: %d (%.3fs)",
             api_name,
@@ -538,12 +636,19 @@ class ApiRequestExecutor:
             elapsed,
         )
 
-        # Handle rate limiting and server errors
-        if response_status == HTTP_TOO_MANY_REQUESTS or response_status >= HTTP_SERVER_ERROR:
-            raise self._create_response_error(
-                response=response,
+        # A 404 is the provider saying the resource does not exist: an answer, not a failure, whatever its body holds
+        if response_status == HTTP_NOT_FOUND:
+            self.console_logger.debug("[%s] Not found: %s", api_name, log_url)
+            return None
+
+        response_text_snippet = await self._read_response_text(response, api_name)
+
+        if _is_throttled(api_name, response_status):
+            reason = f"HTTP {response_status}"
+            raise TransientRequestError(
+                reason,
                 status=response_status,
-                message=response_text_snippet,
+                retry_after=_parse_retry_after(response.headers.get("Retry-After")),
             )
 
         if not response.ok:
@@ -551,42 +656,23 @@ class ApiRequestExecutor:
                 "[%s] API request failed with status %d. URL: %s. Snippet: %s",
                 api_name,
                 response_status,
-                url,
+                log_url,
                 response_text_snippet,
             )
-            raise self._create_response_error(
-                response=response,
-                status=response_status,
-                message=response_text_snippet,
-            )
+            raise ApiRequestError(api_name, log_url, f"HTTP {response_status}", status=response_status)
 
         # Process successful response
         content_type = response.headers.get("Content-Type", "")
         if "application/json" in content_type or (api_name == "itunes" and "text/javascript" in content_type):
-            return await self._parse_json_response(response, api_name, url, response_text_snippet)
+            return await self._parse_json_response(response, api_name, log_url, response_text_snippet)
 
         self.error_logger.warning(
             "[%s] Received non-JSON response from %s. Content-Type: %s",
             api_name,
-            url,
+            log_url,
             content_type,
         )
-        return None
-
-    @staticmethod
-    def _create_response_error(
-        response: aiohttp.ClientResponse,
-        status: int,
-        message: str,
-    ) -> aiohttp.ClientResponseError:
-        """Create ClientResponseError with proper type handling."""
-        # noinspection PyTypeChecker
-        return aiohttp.ClientResponseError(
-            request_info=response.request_info,
-            history=response.history,
-            status=status,
-            message=message,
-        )
+        raise ApiRequestError(api_name, log_url, f"non-JSON answer ({content_type})")
 
     async def _read_response_text(
         self,
@@ -624,155 +710,49 @@ class ApiRequestExecutor:
             text_snippet,
         )
 
-    def _handle_runtime_error(
-        self,
-        exception: RuntimeError,
-        api_name: str,
-        attempt: int,
-        max_retries: int,
-        url: str,
-    ) -> dict[str, Any] | None:
-        """Handle RuntimeError exceptions.
-
-        When encountering "Event loop is closed" errors, this method clears the
-        session reference but does NOT close the session. Session lifecycle is
-        managed by ExternalApiOrchestrator, not here. The executor only clears
-        its reference to signal that a new session is needed.
-
-        Args:
-            exception: The RuntimeError that occurred.
-            api_name: Name of the API for logging.
-            attempt: Current retry attempt number (0-indexed).
-            max_retries: Maximum number of retries allowed.
-            url: URL that was being requested.
-
-        Returns:
-            None always. Caller must handle session recreation if needed.
-        """
-        if "Event loop is closed" not in str(exception) or attempt >= max_retries:
-            self._log_final_failure(api_name, url, exception)
-            return None
-
-        self.error_logger.exception(
-            "[%s] Event loop is closed. Clearing session reference and retrying %d/%d",
-            api_name,
-            attempt + 1,
-            max_retries,
-        )
-        # Clear session reference but do NOT close it.
-        # Session lifecycle is managed by ExternalApiOrchestrator.
-        self.session = None
-        return None
-
-    async def _handle_client_error(
-        self,
-        exception: TimeoutError | aiohttp.ClientError,
-        *,
-        api_name: str,
-        attempt: int,
-        max_retries: int,
-        base_delay: float,
-        url: str,
-    ) -> dict[str, Any] | None:
-        """Handle client timeout and connection errors."""
-        # Track elapsed time for failed requests
-        self.api_call_durations[api_name].append(0.0)
-
-        retryable_errors = (
-            aiohttp.ClientConnectorError,
-            aiohttp.ServerDisconnectedError,
-            asyncio.TimeoutError,
-        )
-
-        if attempt >= max_retries or not isinstance(exception, retryable_errors):
-            self.error_logger.exception(
-                "[%s] Request failed after %d attempts",
-                api_name,
-                attempt + 1,
-            )
-            self._log_final_failure(api_name, url, exception)
-            return None
-
-        max_delay = 120.0  # Cap to prevent excessively long waits (2 minutes)
-        delay = min(base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4), max_delay)
-
-        if delay > 15.0:
-            self.console_logger.info(
-                "[%s] Long retry delay: waiting %.1fs before attempt %d/%d",
-                api_name,
-                delay,
-                attempt + 2,
-                max_retries + 1,
-            )
-
-        self.console_logger.warning(
-            "[%s] %s, retrying %d/%d in %.2fs",
-            api_name,
-            type(exception).__name__,
-            attempt + 1,
-            max_retries,
-            delay,
-        )
-        await asyncio.sleep(delay)
-        return None
-
-    def _handle_unexpected_error(
-        self,
-        exception: Exception,
-        api_name: str,
-        url: str,
-    ) -> None:
-        """Handle unexpected exceptions."""
-        self.error_logger.exception(
-            "[%s] Unexpected error making request to %s",
-            api_name,
-            url,
-        )
-        self._log_final_failure(api_name, url, exception)
-
-    def _log_final_failure(
-        self,
-        api_name: str,
-        url: str,
-        exception: Exception,
-    ) -> None:
-        """Log the final failure after all retries exhausted."""
-        self.error_logger.error(
-            "[%s] Request failed for URL: %s. Last exception: %s",
-            api_name,
-            url,
-            exception,
-        )
-
     async def _parse_json_response(
         self,
         response: aiohttp.ClientResponse,
         api_name: str,
         url: str,
         snippet: str,
-    ) -> dict[str, Any] | None:
-        """Parse JSON response and ensure it is a dict."""
+    ) -> dict[str, Any]:
+        """Parse the answer as a JSON object.
+
+        Args:
+            response: The HTTP response
+            api_name: Provider key for logs and errors
+            url: URL with its query, for logs and errors
+            snippet: Start of the body, for logs
+
+        Returns:
+            The JSON object
+
+        Raises:
+            ApiRequestError: The body is not JSON, or is JSON but not an object
+        """
         try:
             data = await response.json()
-            if isinstance(data, dict):
-                return data
-            self.error_logger.warning(
-                "[%s] JSON response is not a dict (type: %s) from %s. Snippet: %s",
-                api_name,
-                type(data).__name__,
-                url,
-                str(data)[:200],
-            )
         except aiohttp.ContentTypeError as cte:
             return await self._handle_content_type_error(response, api_name, url, snippet, cte)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as error:
             self.error_logger.exception(
                 "[%s] Error parsing JSON response from %s. Snippet: %s",
                 api_name,
                 url,
                 snippet[:200],
             )
-        return None
+            raise ApiRequestError(api_name, url, "malformed JSON") from error
+        if isinstance(data, dict):
+            return data
+        self.error_logger.warning(
+            "[%s] JSON response is not a dict (type: %s) from %s. Snippet: %s",
+            api_name,
+            type(data).__name__,
+            url,
+            str(data)[:200],
+        )
+        raise ApiRequestError(api_name, url, f"JSON {type(data).__name__} instead of an object")
 
     async def _handle_content_type_error(
         self,
@@ -781,8 +761,22 @@ class ApiRequestExecutor:
         url: str,
         snippet: str,
         error: aiohttp.ContentTypeError,
-    ) -> dict[str, Any] | None:
-        """Handle ContentTypeError, especially for iTunes API."""
+    ) -> dict[str, Any]:
+        """Parse an iTunes answer served as text/javascript; for any other API a wrong content type is a failure.
+
+        Args:
+            response: The HTTP response
+            api_name: Provider key for logs and errors
+            url: URL with its query, for logs and errors
+            snippet: Start of the body, for logs
+            error: The content-type error aiohttp raised
+
+        Returns:
+            The JSON object
+
+        Raises:
+            ApiRequestError: The answer cannot be read as a JSON object
+        """
         self.console_logger.debug(
             "[%s] ContentTypeError caught: %s from %s",
             api_name,
@@ -797,7 +791,7 @@ class ApiRequestExecutor:
                 url,
                 snippet[:200],
             )
-            return None
+            raise ApiRequestError(api_name, url, "unexpected content type") from error
 
         # iTunes API returns text/javascript but content is JSON
         self.console_logger.debug(
@@ -825,11 +819,12 @@ class ApiRequestExecutor:
                 type(data).__name__,
                 url,
             )
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError) as parse_error:
             self.error_logger.exception(
                 "[%s] Error parsing iTunes JSON response from %s. Snippet: %s",
                 api_name,
                 url,
                 snippet[:200],
             )
-        return None
+            raise ApiRequestError(api_name, url, "malformed JSON") from parse_error
+        raise ApiRequestError(api_name, url, "JSON is not an object")

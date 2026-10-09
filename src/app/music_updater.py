@@ -16,6 +16,7 @@ from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
 from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import is_music_app_running
+from core.models.protocols import YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
@@ -399,8 +400,14 @@ class MusicUpdater:
 
         verified_count = 0
         failed_count = 0
+        unavailable_count = 0
         for entry in albums_to_verify:
-            year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            try:
+                year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            except YearLookupUnavailableError:
+                # No provider answered: the entry stays as it was and is checked again on the next run
+                unavailable_count += 1
+                continue
             if not year_str:
                 failed_count += 1
                 continue
@@ -410,24 +417,35 @@ class MusicUpdater:
             else:
                 failed_count += 1
 
-        # Update last verification timestamp
-        await self.deps.pending_verification_service.update_verification_timestamp()
+        # A run that could not check every due album must not postpone the next one
+        if unavailable_count == 0:
+            await self.deps.pending_verification_service.update_verification_timestamp()
 
         duration = time.time() - start_time
         if verified_count > 0:
             self.console_logger.info(
-                "%s %s | verified: %s failed: %s %s",
+                "%s %s | verified: %s failed: %s unavailable: %s %s",
                 LogFormat.label("PENDING"),
                 LogFormat.success("DONE"),
                 LogFormat.success(str(verified_count)),
                 LogFormat.dim(str(failed_count)),
+                LogFormat.dim(str(unavailable_count)),
+                LogFormat.duration(duration),
+            )
+        elif unavailable_count == len(albums_to_verify):
+            self.console_logger.info(
+                "%s %s | providers unavailable, nothing verified (%s due) %s",
+                LogFormat.label("PENDING"),
+                LogFormat.warning("DONE"),
+                LogFormat.number(unavailable_count),
                 LogFormat.duration(duration),
             )
         else:
             self.console_logger.info(
-                "%s %s | no years found %s",
+                "%s %s | no years found, unavailable: %s %s",
                 LogFormat.label("PENDING"),
                 LogFormat.warning("DONE"),
+                LogFormat.dim(str(unavailable_count)),
                 LogFormat.duration(duration),
             )
 

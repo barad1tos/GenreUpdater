@@ -8,11 +8,11 @@ Music Genre Updater fetches album release years from multiple external APIs and 
 
 ## Data Sources
 
-| Source | Priority | Strengths |
-|--------|----------|-----------|
-| MusicBrainz | Primary | Release groups, accurate original dates |
-| Discogs | Secondary | Detailed release info, reissue detection |
-| iTunes/Apple Music | Tertiary | Verification, catalog data |
+| Source             | Priority  | Strengths                                |
+|--------------------|-----------|------------------------------------------|
+| MusicBrainz        | Primary   | Release groups, accurate original dates  |
+| Discogs            | Secondary | Detailed release info, reissue detection |
+| iTunes/Apple Music | Tertiary  | Verification, catalog data               |
 
 ## How It Works
 
@@ -57,32 +57,32 @@ Each API result receives a score based on:
 
 ### Positive Factors
 
-| Factor | Points |
-|--------|--------|
-| Exact artist match | +20 |
-| Exact album match | +25 |
-| MusicBrainz release group match | +50 |
-| Official release status | +10 |
-| Album type (not compilation) | +15 |
-| Major market release | +5 |
+| Factor                          | Points |
+|---------------------------------|--------|
+| Exact artist match              | +20    |
+| Exact album match               | +25    |
+| MusicBrainz release group match | +50    |
+| Official release status         | +10    |
+| Album type (not compilation)    | +15    |
+| Major market release            | +5     |
 
 ### Negative Factors
 
-| Factor | Points |
-|--------|--------|
-| Reissue detected | -30 |
-| Compilation/live album | -25 |
-| Bootleg status | -50 |
+| Factor                      | Points    |
+|-----------------------------|-----------|
+| Reissue detected            | -30       |
+| Compilation/live album      | -25       |
+| Bootleg status              | -50       |
 | Year far from release group | -5 to -40 |
-| Album name mismatch | -5 to -40 |
+| Album name mismatch         | -5 to -40 |
 
 ### Confidence Thresholds
 
-| Score | Action |
-|-------|--------|
-| ≥70 | Apply automatically (high confidence) |
+| Score | Action                                   |
+|-------|------------------------------------------|
+| ≥70   | Apply automatically (high confidence)    |
 | 30-69 | Apply only if track has no existing year |
-| <30 | Skip - mark for manual verification |
+| <30   | Skip - mark for manual verification      |
 
 ## Reissue Detection
 
@@ -150,6 +150,8 @@ Re-process them later:
 ```bash
 uv run python main.py verify_pending
 ```
+
+An album whose lookup reaches no provider (network outage, rate limit, server errors) is neither saved there nor changed: the console prints `Year lookup unavailable for '<artist> - <album>'`, and the next run asks the providers again. When `verify_pending` meets such an album, its summary counts it as unavailable and the run does not postpone the next verification.
 
 ## Reverting Changes
 

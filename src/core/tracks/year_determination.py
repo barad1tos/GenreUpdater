@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT
+from core.models.protocols import YearLookupUnavailableError
 from core.models.track_status import is_prerelease_status
 from core.models.validators import is_empty_year, is_valid_year
 
@@ -135,7 +136,7 @@ class YearDeterminator:
     ) -> str | None:
         """Fetch year from external API and validate.
 
-        Returns validated year or None.
+        Returns validated year or None; a lookup no provider answered raises YearLookupUnavailableError.
         """
         earliest_added = YearConsistencyChecker.get_earliest_track_added_year(album_tracks)
 
@@ -146,6 +147,9 @@ class YearDeterminator:
                 current_library_year=dominant_year,
                 earliest_track_added_year=earliest_added,
             )
+        except YearLookupUnavailableError:
+            # Not a failure of this album's data: no provider answered, so the caller skips the album until the next run
+            raise
         except (OSError, ValueError, RuntimeError) as error:
             # The caller treats None like an album no API knows, so only these logs show the lookup failed
             self.error_logger.exception(

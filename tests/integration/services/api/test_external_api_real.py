@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 import pytest
 
 from app.app_config import Config
+from core.models.protocols import YearLookupUnavailableError
 from core.models.track_models import AppConfig
 from metrics.analytics import Analytics, LoggerContainer
 from services.api.orchestrator import ExternalApiOrchestrator
@@ -389,15 +390,18 @@ class TestApiErrorHandling:
         api_orchestrator: ExternalApiOrchestrator,
     ) -> None:
         """Test handling of very long album names."""
-        # This very long album name shouldn't crash the API
-        result = await api_orchestrator.get_album_year(
-            artist="Test Artist",
-            album="This Is A Very Long Album Name That Should Not Cause Any Problems " * 5,
-        )
+        # This very long album name shouldn't crash the API: the lookup either answers, or reports that no provider
+        # could be reached (MusicBrainz sheds load with 503 when the suite's parallel requests pile up)
+        try:
+            result = await api_orchestrator.get_album_year(
+                artist="Test Artist",
+                album="This Is A Very Long Album Name That Should Not Cause Any Problems " * 5,
+            )
+        except YearLookupUnavailableError:
+            # Skipped, not passed: an outage says nothing about how the long name was handled
+            pytest.skip("No year provider could be reached; the long-name request was not exercised")
 
-        # Should handle gracefully, probably returning None
-        # The important thing is it doesn't crash
-        assert result is None or isinstance(result, tuple)
+        assert isinstance(result, tuple)
 
 
 class TestApiCleanup:

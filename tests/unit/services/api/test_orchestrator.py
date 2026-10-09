@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.debug_utils import DebugConfig
+from core.models.protocols import YearLookupUnavailableError
 from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
+from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext, ArtistPeriodContext, ReleaseScorer
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
@@ -415,6 +417,8 @@ class TestExternalApiOrchestratorAllure:
         async def fetch_after_both_searches_start(
             artist_norm: str, album_norm: str, artist_context: ArtistContext, log_artist: str, log_album: str
         ) -> list[Any]:
+            """Hold each search until both have started, then score it with the context it was given."""
+            del log_album
             arrived.append(log_artist)
             if len(arrived) == len(periods):
                 both_searches_started.set()
@@ -440,3 +444,90 @@ class TestExternalApiOrchestratorAllure:
         }
         assert expected["early artist"] != expected["late artist"]  # the periods change the score, so a swap would show
         assert scores == expected
+
+
+class TestRequestFailureBoundaries:
+    """A failed request leaves the orchestrator's answers unknown, never cached or replaced by a fallback."""
+
+    @staticmethod
+    def _orchestrator_with_generic_cache() -> tuple[ExternalApiOrchestrator, MagicMock]:
+        """Create an orchestrator whose generic cache is empty, and return that cache to check its writes."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        generic_cache = MagicMock()
+        generic_cache.get = MagicMock(return_value=None)
+        orchestrator.cache_service.generic_service = generic_cache
+        return orchestrator, generic_cache
+
+    @pytest.mark.asyncio
+    async def test_failed_period_lookup_leaves_the_context_empty(self) -> None:
+        """An activity-period request that failed yields an empty context instead of escaping the search setup."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        musicbrainz_client = MagicMock()
+        musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=ApiRequestError("musicbrainz", "u", "failed"))
+        orchestrator.musicbrainz_client = musicbrainz_client
+
+        assert await orchestrator._setup_artist_context("artist", "Artist") == ArtistContext()
+        musicbrainz_client.get_artist_activity_period.assert_awaited_once_with("artist")
+
+    @pytest.mark.asyncio
+    async def test_failed_region_lookup_keeps_the_period(self) -> None:
+        """A region request that failed keeps the period that already arrived."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        musicbrainz_client = MagicMock()
+        musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(1990, 2005))
+        musicbrainz_client.get_artist_region = AsyncMock(side_effect=ApiRequestError("musicbrainz", "u", "failed"))
+        orchestrator.musicbrainz_client = musicbrainz_client
+
+        artist_context = await orchestrator._setup_artist_context("artist", "Artist")
+
+        assert artist_context == ArtistContext(period=ArtistPeriodContext(start_year=1990, end_year=2005))
+
+    @pytest.mark.asyncio
+    async def test_failed_musicbrainz_start_year_is_not_cached(self) -> None:
+        """A MusicBrainz failure leaves the start year unknown and caches no negative answer."""
+        orchestrator, generic_cache = self._orchestrator_with_generic_cache()
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=ApiRequestError("musicbrainz", "u", "failed"))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=None)
+
+        assert await orchestrator.get_artist_start_year("artist") is None
+        generic_cache.set.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_itunes_start_year_is_not_cached(self) -> None:
+        """MusicBrainz without a year and a failed iTunes fallback leave the start year unknown, not absent."""
+        orchestrator, generic_cache = self._orchestrator_with_generic_cache()
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(None, None))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(side_effect=ApiRequestError("itunes", "u", "failed"))
+
+        assert await orchestrator.get_artist_start_year("artist") is None
+        generic_cache.set.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unavailable_lookup_propagates_without_a_fallback_year(self) -> None:
+        """An album no provider answered for raises instead of returning its library year."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        orchestrator._initialize_year_search = AsyncMock(return_value=("artist", "album", "Artist", "Album", ArtistContext()))
+        orchestrator.year_search_coordinator = MagicMock()
+        orchestrator.year_search_coordinator.fetch_all_api_results = AsyncMock(side_effect=YearLookupUnavailableError("no provider"))
+        orchestrator._safe_mark_for_verification = AsyncMock()
+
+        with pytest.raises(YearLookupUnavailableError):
+            await orchestrator.get_album_year("Artist", "Album", current_library_year="1999")
+
+        orchestrator._safe_mark_for_verification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_musicbrainz_still_tries_itunes(self) -> None:
+        """A MusicBrainz failure does not skip the iTunes fallback, and an iTunes answer is cached as usual."""
+        orchestrator, generic_cache = self._orchestrator_with_generic_cache()
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=ApiRequestError("musicbrainz", "u", "failed"))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
+
+        assert await orchestrator.get_artist_start_year("artist") == 1983
+        generic_cache.set.assert_called_once_with("artist_start_year:artist", 1983, ttl=31536000)

@@ -237,3 +237,27 @@ class TestTokenValuesNotLogged:
         assert token == self.PLAINTEXT_TOKEN
         secure_config.encrypt_token.assert_not_called()
         assert self.PLAINTEXT_TOKEN not in caplog.text
+
+
+class TestYearSearchCoordinatorWiring:
+    """The coordinator learns whether Discogs can be queried at all."""
+
+    @pytest.mark.parametrize(("token", "enabled"), [("token-value", True), ("", False)])
+    def test_discogs_enabled_follows_the_token(self, token: str, enabled: bool) -> None:
+        """Without a Discogs token the coordinator treats Discogs as inactive, not as a failed provider."""
+        orchestrator = ExternalApiOrchestrator(
+            config=create_test_config(),
+            console_logger=MockLogger(),
+            error_logger=MockLogger(),
+            analytics=MockAnalytics(),
+            cache_service=create_mock_cache_service(),
+            pending_verification_service=create_mock_pending_verification_service(),
+        )
+        orchestrator.discogs_token = token
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.discogs_client = MagicMock()
+        orchestrator.applemusic_client = MagicMock()
+
+        orchestrator._initialize_year_search_coordinator()
+
+        assert orchestrator.year_search_coordinator.discogs_enabled is enabled

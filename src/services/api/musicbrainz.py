@@ -15,6 +15,7 @@ from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
 
 from .api_base import BaseApiClient, ScoredRelease
+from .request_executor import ApiRequestError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -524,6 +525,9 @@ class MusicBrainzClient(BaseApiClient):
         Returns:
             List of (release_data, group_info) tuples
 
+        Raises:
+            ApiRequestError: A release fetch failed, broke or was cancelled, so the list would be incomplete
+
         """
         release_fetch_tasks: list[tuple[Awaitable[MBApiData | None], MBApiData]] = []
         max_groups_to_process = 3
@@ -545,19 +549,19 @@ class MusicBrainzClient(BaseApiClient):
             release_fetch_tasks.append((task, rg_info))
 
         results = await asyncio.gather(*[t[0] for t in release_fetch_tasks], return_exceptions=True)
+        # Any fetch that broke, failed or was cancelled leaves the list incomplete; a shorter list would pass for a real answer
+        failure = next((result for result in results if isinstance(result, BaseException)), None)
+        if isinstance(failure, ApiRequestError):
+            raise ApiRequestError(failure.api_name, failure.url, "release fetch failed", status=failure.status) from failure
+        if failure is not None:
+            # The type names the failure, because gather returns a cancelled fetch as a CancelledError with an empty message
+            api_name, reason = "musicbrainz", f"release fetch broke ({type(failure).__name__})"
+            raise ApiRequestError(api_name, f"{MUSICBRAINZ_BASE_URL}/release/", reason) from failure
 
         processed_results: list[tuple[MBApiData | None, MBApiData]] = []
         for i, result in enumerate(results):
             rg_info = release_fetch_tasks[i][1]
-
-            # BaseException, so a cancelled fetch gets the failed-fetch warning instead of passing as an empty response;
-            # the type is logged because gather returns a cancelled task as a CancelledError with an empty message
-            if isinstance(result, BaseException):
-                self.error_logger.warning("Failed to fetch releases for MB RG ID %s: %s: %s", rg_info.get("id"), type(result).__name__, result)
-                processed_results.append((None, rg_info))
-                continue
-
-            if not result or not isinstance(result, dict) or "releases" not in result:
+            if isinstance(result, BaseException) or not result or not isinstance(result, dict) or "releases" not in result:
                 processed_results.append((None, rg_info))
                 continue
 

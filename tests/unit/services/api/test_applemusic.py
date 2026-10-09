@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
+from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
 
 
@@ -1066,25 +1067,14 @@ class TestExtractYearFromResult:
         assert year == 2000
 
 
-class _FailingSplitString(str):
-    """String subclass whose split() raises ValueError for testing defensive except."""
-
-    def strip(self, *_args: object, **_kwargs: object) -> _FailingSplitString:
-        return self
-
-    def split(self, *_args: object, **_kwargs: object) -> list[str]:
-        raise ValueError("simulated split failure")
-
-
 class TestExtractYearDebugLog:
     """Cover the except (IndexError, ValueError) debug-log branch in _extract_year_from_result."""
 
     def test_logs_debug_on_value_error(self, client: AppleMusicClient) -> None:
         """ValueError during year parsing triggers _logger.debug and returns None."""
-        result = {
-            "artistName": "Metallica",
-            "releaseDate": _FailingSplitString("2020-01-01"),
-        }
+        release_date = MagicMock()
+        release_date.strip.return_value.split.side_effect = ValueError("simulated split failure")
+        result = {"artistName": "Metallica", "releaseDate": release_date}
 
         with patch("services.api.applemusic._logger") as mock_logger:
             year = client._extract_year_from_result(result, "metallica")
@@ -1124,3 +1114,15 @@ class TestProcessApiResultsUnexpectedError:
         mock_error_logger.exception.assert_called_once()
         log_msg = mock_error_logger.exception.call_args[0][0]
         assert "Unexpected error" in log_msg
+
+
+class TestRequestFailurePropagation:
+    """A failed request fails the Apple Music lookup."""
+
+    @pytest.mark.asyncio
+    async def test_failed_search_fails_the_lookup(self, client: AppleMusicClient, mock_api_request_func: AsyncMock) -> None:
+        """A search that failed must fail the lookup, not read as "nothing found"."""
+        mock_api_request_func.side_effect = ApiRequestError("itunes", "https://itunes/search", "failed")
+
+        with pytest.raises(ApiRequestError):
+            await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
