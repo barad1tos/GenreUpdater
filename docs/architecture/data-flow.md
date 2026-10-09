@@ -214,9 +214,12 @@ flowchart TD
 
 ### Retry Policy
 
-| Error Type | Retries | Backoff |
-|------------|---------|---------|
-| Network | 3 | Exponential |
-| Rate Limit | ∞ | Fixed 60s |
-| Not Found | 0 | N/A |
-| Server Error | 2 | Linear |
+| Response or error                                   | Retries                    | Backoff                                         | Outcome when retries run out |
+|-----------------------------------------------------|----------------------------|-------------------------------------------------|------------------------------|
+| Timeout, dropped connection, closed event loop      | `max_retries` (default 2)  | Exponential with jitter, capped at 120 s        | `ApiRequestError`            |
+| Rate limit (429)                                    | `max_retries`              | `Retry-After` when sent, otherwise exponential  | `ApiRequestError`            |
+| Server error (5xx)                                  | `max_retries`              | Exponential with jitter, capped at 120 s        | `ApiRequestError`            |
+| Not found (404)                                     | 0                          | N/A                                             | `None` (a definite answer)   |
+| Other 4xx, non-JSON or malformed body               | 0                          | N/A                                             | `ApiRequestError`            |
+
+A failed request raises `ApiRequestError` instead of returning an empty answer, so callers can tell an outage from "nothing found".

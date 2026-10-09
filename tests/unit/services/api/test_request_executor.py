@@ -13,7 +13,9 @@ from services.api.request_executor import (
     HTTP_SERVER_ERROR,
     HTTP_TOO_MANY_REQUESTS,
     WAIT_TIME_LOG_THRESHOLD,
+    ApiRequestError,
     ApiRequestExecutor,
+    TransientRequestError,
 )
 from tests.mocks.protocol_mocks import MockCacheService
 
@@ -315,8 +317,10 @@ class TestFailedRequestCaching:
         url = "https://api.discogs.com/database/search"
         answer = {"results": [{"title": "Album"}]}
 
-        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[None, answer]) as request:
-            assert await executor.execute_request("discogs", url) is None
+        failure = ApiRequestError("discogs", url, "failed after 4 attempts")
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[failure, answer]) as request:
+            with pytest.raises(ApiRequestError):
+                await executor.execute_request("discogs", url)
             assert mock_cache_service.storage == {}
             assert await executor.execute_request("discogs", url) == answer
 
@@ -336,12 +340,137 @@ class TestFailedRequestCaching:
         mock_cache_service.storage[executor._build_cache_key("musicbrainz", url, None)] = {}
         no_matches = {"count": 0, "release-groups": []}
 
-        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[None, no_matches]):
-            assert await executor.execute_request("musicbrainz", url) is None
+        failure = ApiRequestError("musicbrainz", url, "failed after 4 attempts")
+        with patch.object(executor, "_execute_with_retry", new_callable=AsyncMock, side_effect=[failure, no_matches]):
+            with pytest.raises(ApiRequestError):
+                await executor.execute_request("musicbrainz", url)
             assert list(mock_cache_service.storage.values()) == [{}]
             assert await executor.execute_request("musicbrainz", url) == no_matches
 
         assert list(mock_cache_service.storage.values()) == [no_matches]
+
+
+class TestRequestOutcomes:
+    """Each response maps to one outcome: an answer, a definite "not found", or a failure after the retry budget."""
+
+    @staticmethod
+    def respond(status: int, *, json_body: object = None, headers: dict[str, str] | None = None) -> MagicMock:
+        """Build a fake aiohttp response usable as `async with session.get(...)`."""
+        response = MagicMock()
+        response.status = status
+        response.ok = status < 400
+        response.headers = {"Content-Type": "application/json", **(headers or {})}
+        response.text = AsyncMock(return_value=json.dumps(json_body))
+        response.json = AsyncMock(return_value=json_body)
+        response.request_info = MagicMock(headers={})
+        response.history = ()
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=response)
+        context.__aexit__ = AsyncMock(return_value=False)
+        return context
+
+    @pytest.fixture
+    def sleeps(self, monkeypatch: pytest.MonkeyPatch) -> list[float]:
+        """Record backoff sleeps instead of waiting."""
+        delays: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            """Record the delay without waiting."""
+            delays.append(delay)
+
+        monkeypatch.setattr("services.api.request_executor.asyncio.sleep", fake_sleep)
+        return delays
+
+    @pytest.mark.asyncio
+    async def test_answer(self, executor: ApiRequestExecutor, mock_session: MagicMock) -> None:
+        """A 200 with a JSON object is the answer."""
+        mock_session.get = MagicMock(return_value=self.respond(200, json_body={"count": 0}))
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("musicbrainz", "https://mb.example/ws") == {"count": 0}
+
+    @pytest.mark.asyncio
+    async def test_not_found_is_a_definite_answer(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """A 404 says the resource does not exist: None, asked once, no backoff."""
+        mock_session.get = MagicMock(return_value=self.respond(404, json_body={"message": "not found"}))
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("discogs", "https://api.discogs.com/masters/1") is None
+        assert mock_session.get.call_count == 1
+        assert sleeps == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [400, 401, 403])
+    async def test_other_client_errors_fail_at_once(
+        self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float], status: int
+    ) -> None:
+        """A client error other than 404 will not change on a retry, so it fails on the first attempt, naming the query."""
+        mock_session.get = MagicMock(return_value=self.respond(status, json_body={}))
+        executor.set_session(mock_session)
+
+        with pytest.raises(ApiRequestError) as raised:
+            await executor.execute_request("discogs", "https://api.discogs.com/database/search", params={"q": "abbey road"})
+
+        assert raised.value.status == status
+        assert "q=abbey" in raised.value.url
+        assert mock_session.get.call_count == 1
+        assert sleeps == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [429, 500, 503])
+    async def test_transient_statuses_retry_then_fail(
+        self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float], status: int
+    ) -> None:
+        """A rate limit or server error is retried with backoff, then fails once the budget is spent."""
+        mock_session.get = MagicMock(return_value=self.respond(status, json_body={}))
+        executor.set_session(mock_session)
+
+        with pytest.raises(ApiRequestError) as raised:
+            await executor.execute_request("musicbrainz", "https://mb.example/ws")
+
+        assert raised.value.status == status
+        assert mock_session.get.call_count == executor.default_max_retries + 1
+        assert len(sleeps) == executor.default_max_retries
+
+    @pytest.mark.asyncio
+    async def test_retry_after_is_honoured(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """A 429 that names its wait gets exactly that wait before the next attempt."""
+        mock_session.get = MagicMock(
+            side_effect=[self.respond(429, json_body={}, headers={"Retry-After": "7"}), self.respond(200, json_body={"ok": True})]
+        )
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("discogs", "https://api.discogs.com/database/search") == {"ok": True}
+        assert sleeps == [7.0]
+
+    @pytest.mark.asyncio
+    async def test_timeout_retries_then_fails(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """Timeouts are retried, and the final failure keeps the timeout as its cause."""
+        mock_session.get = MagicMock(side_effect=TimeoutError("slow"))
+        executor.set_session(mock_session)
+
+        with pytest.raises(ApiRequestError) as raised:
+            await executor.execute_request("itunes", "https://itunes.example/search")
+
+        assert isinstance(raised.value.__cause__, TimeoutError)
+        assert len(sleeps) == executor.default_max_retries
+
+    @pytest.mark.asyncio
+    async def test_non_json_answer_is_a_failure(self, executor: ApiRequestExecutor, mock_session: MagicMock) -> None:
+        """An HTML page in place of JSON is not an answer."""
+        context = self.respond(200, json_body="<html>")
+        context.__aenter__.return_value.headers = {"Content-Type": "text/html"}
+        mock_session.get = MagicMock(return_value=context)
+        executor.set_session(mock_session)
+
+        with pytest.raises(ApiRequestError):
+            await executor.execute_request("musicbrainz", "https://mb.example/ws")
+
+    @pytest.mark.asyncio
+    async def test_missing_session_is_a_failure(self, executor: ApiRequestExecutor) -> None:
+        """A request that cannot even be prepared fails rather than reading as "not found"."""
+        with pytest.raises(ApiRequestError):
+            await executor.execute_request("musicbrainz", "https://mb.example/ws")
 
 
 class TestBuildLogUrl:
@@ -542,70 +671,6 @@ class TestSessionGuardInRetryLoop:
             )
 
 
-class TestHandleClientError:
-    """Tests for _handle_client_error method."""
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_max_retries_exceeded(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test handling when max retries exceeded."""
-        error = aiohttp.ClientConnectorError(
-            connection_key=MagicMock(),
-            os_error=OSError("Connection refused"),
-        )
-
-        result = await executor._handle_client_error(
-            error, api_name="musicbrainz", attempt=3, max_retries=3, base_delay=0.01, url="https://api.example.com"
-        )
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_non_retryable(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test handling non-retryable error."""
-        # ValueError is not in retryable_errors
-        error = aiohttp.ClientPayloadError("Payload error")
-
-        result = await executor._handle_client_error(
-            error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
-        )
-
-        assert result is None
-
-
-class TestHandleUnexpectedError:
-    """Tests for _handle_unexpected_error method."""
-
-    def test_handle_unexpected_error_logs(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test unexpected error is logged."""
-        error = ValueError("Unexpected error")
-
-        # Should not raise
-        executor._handle_unexpected_error(error, "musicbrainz", "https://api.example.com")
-
-
-class TestLogFinalFailure:
-    """Tests for _log_final_failure method."""
-
-    def test_log_final_failure(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test final failure is logged."""
-        error = Exception("Test error")
-
-        # Should not raise
-        executor._log_final_failure("musicbrainz", "https://api.example.com", error)
-
-
 class TestConstants:
     """Tests for module constants."""
 
@@ -645,35 +710,14 @@ class TestExecuteRequest:
         executor: ApiRequestExecutor,
         mock_cache_service: AsyncMock,
     ) -> None:
-        """Test returns None when no session."""
+        """A request without a session is a failure, not an empty answer."""
         mock_cache_service.get_async.return_value = None
 
-        result = await executor.execute_request(
-            "musicbrainz",
-            "https://api.example.com/search",
-        )
-
-        assert result is None
-
-
-class TestCreateResponseError:
-    """Tests for _create_response_error static method."""
-
-    def test_create_response_error(self) -> None:
-        """Test creating response error."""
-        mock_response = MagicMock()
-        mock_response.request_info = MagicMock()
-        mock_response.history = ()
-
-        error = ApiRequestExecutor._create_response_error(
-            mock_response,
-            status=404,
-            message="Not Found",
-        )
-
-        assert isinstance(error, aiohttp.ClientResponseError)
-        assert error.status == 404
-        assert error.message == "Not Found"
+        with pytest.raises(ApiRequestError):
+            await executor.execute_request(
+                "musicbrainz",
+                "https://api.example.com/search",
+            )
 
 
 class TestMetrics:
@@ -763,8 +807,12 @@ class TestExecuteWithRetry:
         expected_result = {"data": "value"}
 
         with patch.object(configured_executor, "_attempt_request", new_callable=AsyncMock) as mock_attempt:
-            # First two attempts fail, third succeeds
-            mock_attempt.side_effect = [None, None, expected_result]
+            # First two attempts fail transiently, third succeeds
+            mock_attempt.side_effect = [
+                TransientRequestError("HTTP 503", status=503),
+                TransientRequestError("TimeoutError"),
+                expected_result,
+            ]
 
             result = await configured_executor._execute_with_retry(
                 api_name="musicbrainz",
@@ -786,22 +834,23 @@ class TestExecuteWithRetry:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """Test all retry attempts fail."""
+        """Exhausting the retry budget on transient failures raises ApiRequestError."""
         with patch.object(configured_executor, "_attempt_request", new_callable=AsyncMock) as mock_attempt:
-            mock_attempt.return_value = None
+            mock_attempt.side_effect = TransientRequestError("HTTP 500", status=500)
 
-            result = await configured_executor._execute_with_retry(
-                api_name="musicbrainz",
-                url="https://api.example.com",
-                params=None,
-                request_headers={"User-Agent": "Test"},
-                request_timeout=aiohttp.ClientTimeout(total=30),
-                limiter=mock_rate_limiter,
-                max_retries=2,
-                base_delay=0.01,
-            )
+            with pytest.raises(ApiRequestError) as exc_info:
+                await configured_executor._execute_with_retry(
+                    api_name="musicbrainz",
+                    url="https://api.example.com",
+                    params=None,
+                    request_headers={"User-Agent": "Test"},
+                    request_timeout=aiohttp.ClientTimeout(total=30),
+                    limiter=mock_rate_limiter,
+                    max_retries=2,
+                    base_delay=0.01,
+                )
 
-            assert result is None
+            assert exc_info.value.status == 500
             # max_retries + 1 attempts (0, 1, 2)
             assert mock_attempt.call_count == 3
 
@@ -838,14 +887,12 @@ class TestAttemptRequest:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """Test handling RuntimeError in attempt."""
+        """A closed event loop is a transient failure."""
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = RuntimeError("Event loop is closed")
 
-            with patch.object(configured_executor, "_handle_runtime_error") as mock_handler:
-                mock_handler.return_value = None
-
-                result = await configured_executor._attempt_request(
+            with pytest.raises(TransientRequestError):
+                await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
                     params=None,
@@ -854,12 +901,7 @@ class TestAttemptRequest:
                     limiter=mock_rate_limiter,
                     attempt=0,
                     log_url="https://api.example.com",
-                    max_retries=3,
-                    base_delay=0.01,
                 )
-
-                assert result is None
-                mock_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_attempt_request_timeout_error(
@@ -867,14 +909,12 @@ class TestAttemptRequest:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """Test handling TimeoutError in attempt."""
+        """A timeout is a transient failure."""
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = TimeoutError()
 
-            with patch.object(configured_executor, "_handle_client_error", new_callable=AsyncMock) as mock_handler:
-                mock_handler.return_value = None
-
-                result = await configured_executor._attempt_request(
+            with pytest.raises(TransientRequestError):
+                await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
                     params=None,
@@ -883,12 +923,7 @@ class TestAttemptRequest:
                     limiter=mock_rate_limiter,
                     attempt=0,
                     log_url="https://api.example.com",
-                    max_retries=3,
-                    base_delay=0.01,
                 )
-
-                assert result is None
-                mock_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_attempt_request_client_connector_error(
@@ -896,17 +931,15 @@ class TestAttemptRequest:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """Test handling ClientConnectorError in attempt."""
+        """A refused connection is a transient failure."""
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = aiohttp.ClientConnectorError(
                 connection_key=MagicMock(),
                 os_error=OSError("Connection refused"),
             )
 
-            with patch.object(configured_executor, "_handle_client_error", new_callable=AsyncMock) as mock_handler:
-                mock_handler.return_value = None
-
-                result = await configured_executor._attempt_request(
+            with pytest.raises(TransientRequestError):
+                await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
                     params=None,
@@ -915,12 +948,7 @@ class TestAttemptRequest:
                     limiter=mock_rate_limiter,
                     attempt=0,
                     log_url="https://api.example.com",
-                    max_retries=3,
-                    base_delay=0.01,
                 )
-
-                assert result is None
-                mock_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_attempt_request_unexpected_error(
@@ -928,12 +956,12 @@ class TestAttemptRequest:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """Test handling unexpected errors in attempt."""
+        """An unexpected error fails the request at once."""
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = ValueError("Unexpected error")
 
-            with patch.object(configured_executor, "_handle_unexpected_error") as mock_handler:
-                result = await configured_executor._attempt_request(
+            with pytest.raises(ApiRequestError):
+                await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
                     params=None,
@@ -942,12 +970,7 @@ class TestAttemptRequest:
                     limiter=mock_rate_limiter,
                     attempt=0,
                     log_url="https://api.example.com",
-                    max_retries=3,
-                    base_delay=0.01,
                 )
-
-                assert result is None
-                mock_handler.assert_called_once()
 
 
 class TestExecuteSingleRequest:
@@ -1098,7 +1121,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                result = await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+                result = await executor._process_response(mock_response, api_name="musicbrainz", attempt=0, log_url="log_url", elapsed=0.5)
 
                 assert result == {"results": []}
 
@@ -1115,8 +1138,8 @@ class TestProcessResponse:
         with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "Rate limited"
 
-            with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+            with pytest.raises(TransientRequestError) as exc_info:
+                await executor._process_response(mock_response, api_name="musicbrainz", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert exc_info.value.status == HTTP_TOO_MANY_REQUESTS
 
@@ -1133,8 +1156,8 @@ class TestProcessResponse:
         with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "Internal Server Error"
 
-            with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+            with pytest.raises(TransientRequestError) as exc_info:
+                await executor._process_response(mock_response, api_name="musicbrainz", attempt=0, log_url="log_url", elapsed=0.5)
 
             assert exc_info.value.status == HTTP_SERVER_ERROR
 
@@ -1144,17 +1167,17 @@ class TestProcessResponse:
         executor: ApiRequestExecutor,
         mock_response: MagicMock,
     ) -> None:
-        """Test processing non-OK response."""
-        mock_response.status = 404
+        """A non-transient client error fails the request at once."""
+        mock_response.status = 403
         mock_response.ok = False
 
         with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
-            mock_read.return_value = "Not Found"
+            mock_read.return_value = "Forbidden"
 
-            with pytest.raises(aiohttp.ClientResponseError) as exc_info:
-                await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+            with pytest.raises(ApiRequestError) as exc_info:
+                await executor._process_response(mock_response, api_name="musicbrainz", attempt=0, log_url="log_url", elapsed=0.5)
 
-            assert exc_info.value.status == 404
+            assert exc_info.value.status == 403
 
     @pytest.mark.asyncio
     async def test_process_response_non_json_content(
@@ -1168,9 +1191,8 @@ class TestProcessResponse:
         with patch.object(executor, "_read_response_text", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = "<html>Not JSON</html>"
 
-            result = await executor._process_response(mock_response, api_name="musicbrainz", url="url", attempt=0, log_url="log_url", elapsed=0.5)
-
-            assert result is None
+            with pytest.raises(ApiRequestError):
+                await executor._process_response(mock_response, api_name="musicbrainz", attempt=0, log_url="log_url", elapsed=0.5)
 
     @pytest.mark.asyncio
     async def test_process_response_itunes_text_javascript(
@@ -1187,7 +1209,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"resultCount": 1, "results": []}
 
-                result = await executor._process_response(mock_response, api_name="itunes", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+                result = await executor._process_response(mock_response, api_name="itunes", attempt=0, log_url="log_url", elapsed=0.5)
 
                 assert result == {"resultCount": 1, "results": []}
                 mock_parse.assert_called_once()
@@ -1207,7 +1229,7 @@ class TestProcessResponse:
             with patch.object(executor, "_parse_json_response", new_callable=AsyncMock) as mock_parse:
                 mock_parse.return_value = {"results": []}
 
-                result = await executor._process_response(mock_response, api_name="discogs", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+                result = await executor._process_response(mock_response, api_name="discogs", attempt=0, log_url="log_url", elapsed=0.5)
                 assert result == {"results": []}
 
     @pytest.mark.asyncio
@@ -1228,7 +1250,7 @@ class TestProcessResponse:
             patch.object(executor, "_parse_json_response", new_callable=AsyncMock, return_value={"results": []}),
             caplog.at_level(logging.DEBUG),
         ):
-            await executor._process_response(mock_response, api_name="discogs", url="url", attempt=0, log_url="log_url", elapsed=0.5)
+            await executor._process_response(mock_response, api_name="discogs", attempt=0, log_url="log_url", elapsed=0.5)
 
         assert TEST_API_TOKEN not in caplog.text
         assert "TestAgent/1.0" in caplog.text
@@ -1303,154 +1325,6 @@ class TestReadResponseText:
             assert "[Error Reading Response:" in result
 
 
-class TestHandleRuntimeError:
-    """Tests for _handle_runtime_error method (synchronous)."""
-
-    def test_handle_runtime_error_event_loop_closed_retryable(
-        self,
-        executor: ApiRequestExecutor,
-        mock_session: MagicMock,
-    ) -> None:
-        """Test event loop closed error with retries remaining."""
-        executor.set_session(mock_session)
-        error = RuntimeError("Event loop is closed")
-
-        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
-
-        assert result is None
-        assert executor.session is None  # Session should be cleared
-
-    def test_handle_runtime_error_event_loop_closed_max_retries(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test event loop closed error at max retries."""
-        error = RuntimeError("Event loop is closed")
-
-        result = executor._handle_runtime_error(error, "musicbrainz", attempt=3, max_retries=3, url="https://api.example.com")
-
-        assert result is None
-
-    def test_handle_runtime_error_other_error(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test other RuntimeError types."""
-        error = RuntimeError("Some other runtime error")
-
-        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
-
-        assert result is None
-
-    def test_handle_runtime_error_clears_session_without_closing(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Session reference is cleared but NOT closed on event-loop errors.
-
-        Session lifecycle is managed by ExternalApiOrchestrator, not by
-        RequestExecutor. The executor only drops its reference to avoid
-        double-close or race conditions.
-        """
-        mock_session = MagicMock()
-        mock_session.closed = False
-        mock_session.close = AsyncMock()
-        executor.set_session(mock_session)
-
-        error = RuntimeError("Event loop is closed")
-
-        result = executor._handle_runtime_error(error, "musicbrainz", attempt=0, max_retries=3, url="https://api.example.com")
-
-        assert result is None
-        assert executor.session is None
-        mock_session.close.assert_not_called()
-
-
-class TestHandleClientErrorIntegration:
-    """Integration tests for _handle_client_error with retries."""
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_connector_error_retryable(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test connector error triggers retry with delay."""
-        error = aiohttp.ClientConnectorError(
-            connection_key=MagicMock(),
-            os_error=OSError("Connection refused"),
-        )
-
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            result = await executor._handle_client_error(
-                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
-            )
-
-            assert result is None
-            mock_sleep.assert_called_once()
-            # Verify delay is calculated with jitter
-            delay = mock_sleep.call_args[0][0]
-            assert delay >= 0.008  # 0.01 * 0.8
-            assert delay <= 0.014  # 0.01 * 1.4
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_server_disconnected_retryable(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test ServerDisconnectedError triggers retry."""
-        error = aiohttp.ServerDisconnectedError("Server disconnected")
-
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            result = await executor._handle_client_error(
-                error, api_name="musicbrainz", attempt=1, max_retries=3, base_delay=0.01, url="https://api.example.com"
-            )
-
-            assert result is None
-            mock_sleep.assert_called_once()
-            # Second attempt: delay = 0.01 * 2^1 * jitter = ~0.02
-            delay = mock_sleep.call_args[0][0]
-            assert delay >= 0.016  # 0.02 * 0.8
-            assert delay <= 0.028  # 0.02 * 1.4
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_timeout_retryable(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test TimeoutError triggers retry."""
-        error = TimeoutError()
-
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            result = await executor._handle_client_error(
-                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
-            )
-
-            assert result is None
-            mock_sleep.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_handle_client_error_tracks_duration(
-        self,
-        executor: ApiRequestExecutor,
-    ) -> None:
-        """Test failed request duration is tracked."""
-        error = aiohttp.ClientConnectorError(
-            connection_key=MagicMock(),
-            os_error=OSError("Connection refused"),
-        )
-
-        initial_count = len(executor.api_call_durations["musicbrainz"])
-
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            await executor._handle_client_error(
-                error, api_name="musicbrainz", attempt=0, max_retries=3, base_delay=0.01, url="https://api.example.com"
-            )
-
-        # Duration 0.0 should be appended for failed requests
-        assert len(executor.api_call_durations["musicbrainz"]) == initial_count + 1
-        assert executor.api_call_durations["musicbrainz"][-1] == 0.0
-
-
 class TestParseJsonResponse:
     """Tests for _parse_json_response method."""
 
@@ -1476,9 +1350,8 @@ class TestParseJsonResponse:
         mock_response = MagicMock()
         mock_response.json = AsyncMock(return_value=["list", "not", "dict"])
 
-        result = await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
 
     @pytest.mark.asyncio
     async def test_parse_json_response_content_type_error(
@@ -1512,9 +1385,8 @@ class TestParseJsonResponse:
         mock_response = MagicMock()
         mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
 
-        result = await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._parse_json_response(mock_response, "musicbrainz", "url", "snippet")
 
 
 class TestHandleContentTypeError:
@@ -1525,7 +1397,7 @@ class TestHandleContentTypeError:
         self,
         executor: ApiRequestExecutor,
     ) -> None:
-        """Test non-iTunes API returns None."""
+        """A non-iTunes API with the wrong content type fails the request."""
         mock_response = MagicMock()
         error = aiohttp.ContentTypeError(
             request_info=MagicMock(),
@@ -1533,9 +1405,8 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(mock_response, "musicbrainz", "url", "snippet", error)
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._handle_content_type_error(mock_response, "musicbrainz", "url", "snippet", error)
 
     @pytest.mark.asyncio
     async def test_handle_content_type_error_itunes_success(
@@ -1569,9 +1440,8 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
     @pytest.mark.asyncio
     async def test_handle_content_type_error_itunes_invalid_json(
@@ -1587,9 +1457,8 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
     @pytest.mark.asyncio
     async def test_handle_content_type_error_itunes_unicode_error(
@@ -1605,9 +1474,8 @@ class TestHandleContentTypeError:
             message="Wrong content type",
         )
 
-        result = await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
-
-        assert result is None
+        with pytest.raises(ApiRequestError):
+            await executor._handle_content_type_error(mock_response, "itunes", "url", "snippet", error)
 
 
 class TestExecuteRequestIntegration:
