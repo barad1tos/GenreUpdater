@@ -783,7 +783,11 @@ class DiscogsClient(BaseApiClient):
             List of scored releases sorted by score
 
         """
-        cache_key = f"discogs_{artist_norm}_{album_norm}"
+        # The cached list holds final scores, which depend on the artist context, so the context is part of the key;
+        # lists cached before it was are no longer read and expire with their TTL
+        period = artist_context.period or {}
+        context_key = f"{artist_context.region or ''}_{period.get('start_year') or ''}_{period.get('end_year') or ''}"
+        cache_key = f"discogs_{artist_norm}_{album_norm}_{context_key}"
         cache_ttl_seconds = self.cache_ttl_days * 86400
 
         # Check cache first

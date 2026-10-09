@@ -123,7 +123,7 @@ class TestDiscogsClientAllure:
         mock_response = TestDiscogsClientAllure.create_mock_discogs_response("The Beatles", "Abbey Road")
         mock_api_request = AsyncMock(return_value=mock_response)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("The Beatles", "Abbey Road", "US")
+        result = await client.get_scored_releases("The Beatles", "Abbey Road", ArtistContext(region="US"))
         assert result is not None
         assert len(result) > 0
 
@@ -143,7 +143,7 @@ class TestDiscogsClientAllure:
         mock_response = {"results": [], "pagination": {"pages": 0, "items": 0}}
         mock_api_request = AsyncMock(return_value=mock_response)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("NonExistentArtist123", "NonExistentAlbum456", None)
+        result = await client.get_scored_releases("NonExistentArtist123", "NonExistentAlbum456", ArtistContext())
         assert result == []
 
     @pytest.mark.asyncio
@@ -169,7 +169,7 @@ class TestDiscogsClientAllure:
         """
         mock_api_request = AsyncMock(return_value={"results": []})
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        await client.get_scored_releases("Test Artist", "Test Album", None)
+        await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
 
         # Verify all 3 search strategies were attempted (primary + 2 fallbacks)
         expected_call_count = 3
@@ -188,7 +188,7 @@ class TestDiscogsClientAllure:
         # Mock API request that returns None (quota exceeded)
         mock_api_request = AsyncMock(return_value=None)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
         # Client should handle quota exceeded gracefully
         assert result == []
 
@@ -198,7 +198,7 @@ class TestDiscogsClientAllure:
         # Mock API request that returns None (timeout)
         mock_api_request = AsyncMock(return_value=None)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
         # Client should handle timeouts gracefully
         assert result == []
 
@@ -225,12 +225,28 @@ class TestDiscogsClientAllure:
         # API should not be called if cache hit
         mock_api_request = AsyncMock(return_value=mock_response)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request, mock_cache_service=mock_cache_service)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
         # Should get cached results
         assert result == cached_releases
 
         # Verify cache was checked
         mock_cache_service.get_async.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_scored_list_cache_is_per_artist_context(self) -> None:
+        """Scores depend on the artist context, so a lookup with another context never reads a list scored for the first."""
+        mock_cache_service = MagicMock()
+        mock_cache_service.get_async = AsyncMock(return_value=None)
+        mock_cache_service.set_async = AsyncMock()
+        mock_api_request = AsyncMock(return_value=TestDiscogsClientAllure.create_mock_discogs_response())
+        client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request, mock_cache_service=mock_cache_service)
+
+        await client.get_scored_releases("test artist", "test album", ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014}))
+        await client.get_scored_releases("test artist", "test album", ArtistContext())
+
+        list_keys = [call.args[0] for call in mock_cache_service.get_async.await_args_list if str(call.args[0]).startswith("discogs_test")]
+        assert len(list_keys) == 2
+        assert list_keys[0] != list_keys[1]
 
     @pytest.mark.asyncio
     async def test_failed_search_is_not_cached(self) -> None:
@@ -241,7 +257,7 @@ class TestDiscogsClientAllure:
         failed_request = AsyncMock(return_value=None)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=failed_request, mock_cache_service=mock_cache_service)
 
-        assert await client.get_scored_releases("test artist", "test album", None) == []
+        assert await client.get_scored_releases("test artist", "test album", ArtistContext()) == []
         # The primary search and both fallbacks ran and failed
         assert failed_request.await_count == 3
         mock_cache_service.set_async.assert_not_called()
@@ -325,7 +341,7 @@ class TestDiscogsClientAllure:
 
         mock_api_request = AsyncMock(return_value=mock_response)
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
 
         # Primary search should succeed, no fallbacks needed
         assert len(result) > 0
@@ -347,7 +363,7 @@ class TestDiscogsClientAllure:
         # First call (primary) returns empty, second call (fallback) returns results
         mock_api_request = AsyncMock(side_effect=[{"results": []}, mock_response])
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
 
         # Should get results from fallback
         assert len(result) > 0
@@ -372,7 +388,7 @@ class TestDiscogsClientAllure:
         # First two calls return empty, third returns results
         mock_api_request = AsyncMock(side_effect=[{"results": []}, {"results": []}, mock_response])
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        result = await client.get_scored_releases("Test Artist", "Test Album", None)
+        result = await client.get_scored_releases("Test Artist", "Test Album", ArtistContext())
 
         # Should get results from album-only fallback
         assert len(result) > 0
@@ -423,7 +439,7 @@ class TestDiscogsClientAllure:
         """Test that search strategies are applied for previously failing cases from issue #107."""
         mock_api_request = AsyncMock(return_value={"results": []})
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
-        await client.get_scored_releases(artist, album, None)
+        await client.get_scored_releases(artist, album, ArtistContext())
 
         # All 3 strategies should be tried when no results found
         assert mock_api_request.call_count == 3
@@ -553,7 +569,7 @@ class TestDiscogsClientAllure:
             mock_cache_service=mock_cache_service,
         )
 
-        result = await client.get_scored_releases("test artist", "test album", None)
+        result = await client.get_scored_releases("test artist", "test album", ArtistContext())
 
         assert result == []
         assert isinstance(client.error_logger, MockLogger)

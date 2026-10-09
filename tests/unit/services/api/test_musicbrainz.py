@@ -420,7 +420,7 @@ class TestRetrieveAndScoreReleasesErrorHandling:
             patch.object(client, "_fetch_releases_for_groups", new_callable=AsyncMock, return_value=[{}]),
             patch.object(client, "_process_and_score_releases", side_effect=IndexError("list index out of range")),
         ):
-            result = await client.get_scored_releases("artist", "album", None)
+            result = await client.get_scored_releases("artist", "album", ArtistContext())
 
         assert result == []
 

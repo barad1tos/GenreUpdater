@@ -324,6 +324,38 @@ class TestFetchAllApiResults:
 
         assert len(results) >= 1
 
+    @pytest.mark.asyncio
+    async def test_every_provider_scores_with_the_search_context(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        mock_discogs_client: AsyncMock,
+        mock_applemusic_client: AsyncMock,
+    ) -> None:
+        """Each provider receives the lookup's own artist context, so its releases score against that artist."""
+        artist_context = ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014})
+        for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
+            client.get_scored_releases.return_value = [{"title": "Album", "year": "1973", "score": 85}]
+
+        await coordinator.fetch_all_api_results("pink floyd", "dark side", artist_context, "Pink Floyd", "Dark Side")
+
+        for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
+            assert client.get_scored_releases.await_args.args[2] is artist_context
+
+    @pytest.mark.asyncio
+    async def test_script_search_scores_with_the_search_context(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+    ) -> None:
+        """The non-Latin search hands the lookup's context to the provider it tries first."""
+        artist_context = ArtistContext(region="JP", period={"start_year": 1990, "end_year": None})
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "アルバム", "year": "1995", "score": 85}]
+
+        await coordinator.fetch_all_api_results("ドリカム", "アルバム", artist_context, "ドリカム", "アルバム")
+
+        assert mock_musicbrainz_client.get_scored_releases.await_args.args[2] is artist_context
+
 
 class TestTrySingleApi:
     """Tests for _try_single_api method."""
