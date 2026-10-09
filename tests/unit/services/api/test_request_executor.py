@@ -480,6 +480,19 @@ class TestRequestOutcomes:
         assert len(sleeps) == 1
 
     @pytest.mark.asyncio
+    async def test_not_found_is_an_answer_even_when_its_body_breaks(
+        self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]
+    ) -> None:
+        """A 404 says the resource does not exist before its body is read, so a broken body does not turn it into a retry."""
+        missing = self.respond(404, json_body={})
+        missing.__aenter__.return_value.text = AsyncMock(side_effect=aiohttp.ClientPayloadError("connection dropped"))
+        mock_session.get = MagicMock(return_value=missing)
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("discogs", "https://api.discogs.com/masters/1") is None
+        assert not sleeps
+
+    @pytest.mark.asyncio
     async def test_dropped_body_is_retried(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
         """A connection dropped while the body is read is transient, so the request is sent again."""
         dropped = self.respond(200, json_body={})

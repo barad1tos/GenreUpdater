@@ -627,9 +627,6 @@ class ApiRequestExecutor:
                 {name: sent_headers[name] for name in LOGGABLE_REQUEST_HEADERS if name in sent_headers},
             )
 
-        # Read response text
-        response_text_snippet = await self._read_response_text(response, api_name)
-
         self.console_logger.debug(
             "[%s] Request (Attempt %d): %s - Status: %d (%.3fs)",
             api_name,
@@ -639,10 +636,12 @@ class ApiRequestExecutor:
             elapsed,
         )
 
-        # A 404 is the provider saying the resource does not exist: an answer, not a failure
+        # A 404 is the provider saying the resource does not exist: an answer, not a failure, whatever its body holds
         if response_status == HTTP_NOT_FOUND:
             self.console_logger.debug("[%s] Not found: %s", api_name, log_url)
             return None
+
+        response_text_snippet = await self._read_response_text(response, api_name)
 
         if _is_throttled(api_name, response_status):
             reason = f"HTTP {response_status}"

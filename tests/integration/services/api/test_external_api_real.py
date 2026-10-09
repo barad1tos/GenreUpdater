@@ -398,7 +398,8 @@ class TestApiErrorHandling:
                 album="This Is A Very Long Album Name That Should Not Cause Any Problems " * 5,
             )
         except YearLookupUnavailableError:
-            return
+            # Skipped, not passed: an outage says nothing about how the long name was handled
+            pytest.skip("No year provider could be reached; the long-name request was not exercised")
 
         assert isinstance(result, tuple)
 

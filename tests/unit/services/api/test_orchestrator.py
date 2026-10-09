@@ -467,6 +467,7 @@ class TestRequestFailureBoundaries:
         orchestrator.musicbrainz_client = musicbrainz_client
 
         assert await orchestrator._setup_artist_context("artist", "Artist") == ArtistContext()
+        musicbrainz_client.get_artist_activity_period.assert_awaited_once_with("artist")
 
     @pytest.mark.asyncio
     async def test_failed_region_lookup_keeps_the_period(self) -> None:
