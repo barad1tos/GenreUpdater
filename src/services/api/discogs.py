@@ -154,7 +154,7 @@ class DiscogsClient(BaseApiClient):
             release_id: Discogs release ID
 
         Returns:
-            Release details or None if fetch fails
+            Release details, or None when Discogs has no such release (HTTP 404); a failed request raises ApiRequestError
 
         """
         try:
@@ -168,7 +168,7 @@ class DiscogsClient(BaseApiClient):
             if detail_data:
                 return detail_data
 
-            self.console_logger.warning("[discogs] Failed to fetch details for release %s", release_id)
+            self.console_logger.warning("[discogs] No details for release %s", release_id)
             return None
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
@@ -186,7 +186,7 @@ class DiscogsClient(BaseApiClient):
             master_id: Discogs master release ID
 
         Returns:
-            Original release year, or None when the master has no year or the request failed
+            Original release year, or None when the master has no year or does not exist (HTTP 404); a failed request raises ApiRequestError
 
         """
         # Check cache first (including negative results)
@@ -208,7 +208,7 @@ class DiscogsClient(BaseApiClient):
 
             master_data = await self._make_api_request("discogs", master_url, params=params)
             if not master_data:
-                # A failed request says nothing about the master; leave the cache alone so a later lookup of it asks again
+                # A missing master (HTTP 404) is left out of the cache, so a later lookup of it asks again
                 return None
 
             cache_ttl = self.cache_ttl_days * 86400
@@ -364,7 +364,7 @@ class DiscogsClient(BaseApiClient):
             strategy_name: Name of the search strategy (for logging)
 
         Returns:
-            Discogs search response dict or None if failed/no results
+            Discogs search response dict, or None when nothing matched; a failed request raises ApiRequestError
 
         """
         search_url = f"{DISCOGS_BASE_URL}/database/search"
@@ -475,7 +475,7 @@ class DiscogsClient(BaseApiClient):
             album_orig: Original album name (for logging and fallbacks)
 
         Returns:
-            Discogs search response dict or None if all strategies failed
+            Discogs search response dict, or None when no strategy matched; a failed request raises ApiRequestError
 
         """
         self.console_logger.debug(
@@ -800,7 +800,7 @@ class DiscogsClient(BaseApiClient):
             discogs_response = await self._make_discogs_search_request(artist_norm, album_norm, artist_orig, album_orig)
 
             if discogs_response is None:
-                # A failed search and an empty one both give None; the executor already caches real answers, so [] here would only keep a failure
+                # Nothing matched; a failed search raises instead, and the executor already caches real answers, so [] is not cached here
                 return []
 
             results = discogs_response.get("results", [])

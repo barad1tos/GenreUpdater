@@ -483,7 +483,7 @@ class AppleMusicClient:
             artist_norm: Normalized artist name
 
         Returns:
-            API response data or None if request failed
+            API response data, or None when nothing was found (HTTP 404); a failed request raises ApiRequestError
 
         """
         params = {

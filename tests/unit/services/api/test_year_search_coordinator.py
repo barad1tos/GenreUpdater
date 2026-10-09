@@ -925,3 +925,43 @@ class TestProviderOutcomes:
 
         assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album") == []
         mock_discogs_client.get_scored_releases.assert_not_called()
+
+
+class TestRejectedCredentials:
+    """A provider that rejects its credentials is switched off for the run, like one without a token."""
+
+    @pytest.mark.parametrize("status", [401, 403])
+    @pytest.mark.asyncio
+    async def test_rejected_token_is_inactive_not_failed(
+        self,
+        *,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        mock_discogs_client: AsyncMock,
+        mock_applemusic_client: AsyncMock,
+        caplog: pytest.LogCaptureFixture,
+        status: int,
+    ) -> None:
+        """Empty answers elsewhere stay "nothing found", the rejection is named once, and the provider is not asked again."""
+        mock_musicbrainz_client.get_scored_releases.return_value = []
+        mock_applemusic_client.get_scored_releases.return_value = []
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", f"HTTP {status}", status=status)
+
+        with caplog.at_level(logging.WARNING):
+            assert await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album") == []
+            assert await coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record") == []
+
+        assert mock_discogs_client.get_scored_releases.await_count == 1
+        assert len([record for record in caplog.records if f"rejected the credentials (HTTP {status})" in record.getMessage()]) == 1
+
+    @pytest.mark.asyncio
+    async def test_server_error_still_makes_the_lookup_unavailable(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_discogs_client: AsyncMock,
+    ) -> None:
+        """Only a credentials rejection switches a provider off; a server error leaves the lookup unknown."""
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 500", status=500)
+
+        with pytest.raises(YearLookupUnavailableError):
+            await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")

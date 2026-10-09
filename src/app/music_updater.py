@@ -432,6 +432,14 @@ class MusicUpdater:
                 LogFormat.dim(str(unavailable_count)),
                 LogFormat.duration(duration),
             )
+        elif unavailable_count == len(albums_to_verify):
+            self.console_logger.info(
+                "%s %s | providers unavailable, nothing verified (%s due) %s",
+                LogFormat.label("PENDING"),
+                LogFormat.warning("DONE"),
+                LogFormat.number(unavailable_count),
+                LogFormat.duration(duration),
+            )
         else:
             self.console_logger.info(
                 "%s %s | no years found, unavailable: %s %s",

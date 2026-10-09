@@ -612,7 +612,8 @@ class ExternalApiOrchestrator:
     ) -> dict[str, Any] | None:
         """Make an API request with rate limiting, error handling, and retry logic.
 
-        Delegates to ApiRequestExecutor for HTTP handling.
+        Delegates to ApiRequestExecutor for HTTP handling: returns the answer, None for HTTP 404, and raises
+        ApiRequestError when the request failed.
         """
         return await self.request_executor.execute_request(
             api_name=api_name,

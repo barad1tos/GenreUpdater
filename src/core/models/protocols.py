@@ -50,11 +50,12 @@ CacheableValue = str | int | float | bool | dict[str, Any] | list[Any] | list[Tr
 CacheableKey = str | int
 
 
-class YearLookupUnavailableError(ConnectionError):
+class YearLookupUnavailableError(Exception):
     """No year provider could be reached for an album, so the lookup says nothing about it.
 
     `get_album_year` raises it instead of answering "no year", so callers neither record the album as unknown nor
-    fall back to its library year; the next run asks again.
+    fall back to its library year; the next run asks again. Derives from Exception, not OSError, so the broad
+    ``except (OSError, ...)`` handlers along the way never read it as an album without a year.
     """
 
 
@@ -313,6 +314,9 @@ class ExternalApiServiceProtocol(Protocol):
         earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
+
+        A lookup that no provider answered raises YearLookupUnavailableError: the year is unknown, so callers must not
+        record the album as yearless or fall back to its library year.
 
         Args:
             artist: Artist name

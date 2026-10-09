@@ -424,3 +424,7 @@ class TestFetchFromApiUnavailable:
 
         fallback_handler.apply_year_fallback.assert_not_called()
         cache_service.store_album_year_in_cache.assert_not_called()
+
+    def test_unavailable_is_not_an_os_error(self) -> None:
+        """The clients' and services' broad except (OSError, ...) handlers must never read an unavailable lookup as "no year"."""
+        assert not issubclass(YearLookupUnavailableError, OSError)

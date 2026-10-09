@@ -283,7 +283,7 @@ class ApiRequestExecutor:
         cache_key: str,
         result: dict[str, Any] | None,
     ) -> None:
-        """Cache the API response; a failed request (None) is not cached, so the next lookup asks the API again.
+        """Cache the API response; a 404 (None) is not cached, so the next lookup asks the API again, and a failure never reaches here.
 
         An empty body is skipped as well, so a cached {} can only be a failure an earlier version stored.
         """
@@ -497,8 +497,8 @@ class ApiRequestExecutor:
             log_url: URL string for logging purposes
 
         Returns:
-            Response dict if successful, None if should retry,
-            raises exception if failed
+            The parsed answer, or None for HTTP 404; a transient failure raises TransientRequestError and any other
+            failure ApiRequestError, both from the response processing
 
         Raises:
             RuntimeError: If the session is lost before making the request.
