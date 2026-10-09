@@ -78,10 +78,14 @@ def _get_patterns(config: AppConfig) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(soundtrack_list), frozenset(various_list)
 
 
-# Words that lead into a soundtrack label: "(Original Motion Picture Soundtrack)", "Music from the Motion Picture"
+# Words that may join the parts of one label: "Soundtrack from the Motion Picture", "Motion Picture Original Score"
 _LEAD_IN: Final[str] = r"(?:original|official|music|songs?|from|the|and|inspired|by)"
 _LEAD_IN_GAP: Final[re.Pattern[str]] = re.compile(rf"(?:\s|\b{_LEAD_IN}\b)*", re.IGNORECASE)
-_TRAILING_LEAD_IN: Final[re.Pattern[str]] = re.compile(rf"(?:\b{_LEAD_IN}\b\s*)+$", re.IGNORECASE)
+# The lead-in phrase before a label, stripped from the title: "The Original", "Music from the", "Songs Inspired by"
+_TRAILING_LEAD_IN: Final[re.Pattern[str]] = re.compile(
+    r"(?:\bthe\s+)?(?:\b(?:original|official)\s+)?(?:\b(?:music|songs?)\s+(?:from|inspired\s+by)\s+)?(?:\bthe\s+)?$",
+    re.IGNORECASE,
+)
 # What may sit between a movie title and its label: "Title (OST)", "Title - OST", "Title: OST", "Title\u2014OST"
 _TITLE_END: Final[str] = " \t([:-\u2013\u2014"
 

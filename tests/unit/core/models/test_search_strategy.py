@@ -166,6 +166,9 @@ class TestSoundtrackTitle:
             ("Star Wars: The Force Awakens OST", "Star Wars: The Force Awakens"),
             ("Star Trek: The Motion Picture (Original Soundtrack)", "Star Trek: The Motion Picture"),
             ("Dune: Part Two (Original Motion Picture Soundtrack)", "Dune: Part Two"),
+            ("The Sound of Music Soundtrack", "The Sound of Music"),
+            ("The Last Song Soundtrack", "The Last Song"),
+            ("Grease: The Original Soundtrack from the Motion Picture", "Grease"),
         ],
     )
     def test_title_is_cut_before_the_label(self, config: AppConfig, album: str, title: str) -> None:
