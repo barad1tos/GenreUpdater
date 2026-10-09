@@ -526,7 +526,7 @@ class MusicBrainzClient(BaseApiClient):
             List of (release_data, group_info) tuples
 
         Raises:
-            ApiRequestError: A release fetch failed, so the list would be incomplete
+            ApiRequestError: A release fetch failed or was cancelled, so the list would be incomplete
 
         """
         release_fetch_tasks: list[tuple[Awaitable[MBApiData | None], MBApiData]] = []
@@ -550,8 +550,13 @@ class MusicBrainzClient(BaseApiClient):
 
         results = await asyncio.gather(*[t[0] for t in release_fetch_tasks], return_exceptions=True)
         # A failed fetch means the provider could not be queried; a shorter list would pass for a real answer
-        if failure := next((result for result in results if isinstance(result, ApiRequestError)), None):
+        failure = next((result for result in results if isinstance(result, (ApiRequestError, asyncio.CancelledError))), None)
+        if isinstance(failure, ApiRequestError):
             raise ApiRequestError(failure.api_name, failure.url, "release fetch failed", status=failure.status) from failure
+        if failure is not None:
+            # A fetch cancelled on its own leaves the list just as incomplete as a failed one
+            api_name, reason = "musicbrainz", "release fetch cancelled"
+            raise ApiRequestError(api_name, f"{MUSICBRAINZ_BASE_URL}/release/", reason) from failure
 
         processed_results: list[tuple[MBApiData | None, MBApiData]] = []
         for i, result in enumerate(results):

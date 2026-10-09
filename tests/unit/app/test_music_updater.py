@@ -525,3 +525,24 @@ class TestVerifyPendingUnavailable:
         messages = deps.console_logger.info_messages
         assert all("no years found" not in message for message in messages)
         assert any("providers unavailable" in message for message in messages)
+
+    @pytest.mark.asyncio
+    async def test_partly_unavailable_still_reports_no_years(self) -> None:
+        """With one album unavailable and one answered without a year, the summary reports no years and counts the unavailable one."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        entries = [
+            PendingAlbumEntry(timestamp=datetime(2026, 1, 1, tzinfo=UTC), artist="Down", album="Gone", reason=VerificationReason.NO_YEAR_FOUND),
+            PendingAlbumEntry(timestamp=datetime(2026, 1, 1, tzinfo=UTC), artist="Up", album="Here", reason=VerificationReason.NO_YEAR_FOUND),
+        ]
+        pending = MagicMock()
+        pending.get_all_pending_albums = AsyncMock(return_value=entries)
+        pending.is_verification_needed = AsyncMock(return_value=True)
+        pending.update_verification_timestamp = AsyncMock()
+        deps.pending_verification_service = pending
+        deps.external_api_service.get_album_year = AsyncMock(side_effect=[YearLookupUnavailableError("no provider"), (None, False, 0, {})])
+
+        await MusicUpdater(deps).run_verify_pending()
+
+        messages = deps.console_logger.info_messages
+        assert any(f"no years found, unavailable: {LogFormat.dim('1')}" in message for message in messages)
+        assert all("providers unavailable" not in message for message in messages)

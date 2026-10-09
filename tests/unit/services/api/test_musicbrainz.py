@@ -516,13 +516,12 @@ class TestFetchReleasesForGroupsExceptionHandling:
         "error",
         [
             pytest.param(OSError("network timeout"), id="OSError"),
-            pytest.param(asyncio.CancelledError(), id="CancelledError"),
         ],
     )
     @pytest.mark.asyncio
     @pytest.mark.unit
     async def test_fetch_releases_logs_warning_on_gather_exception(self, error: BaseException) -> None:
-        """A failed or cancelled release fetch is logged and leaves that release group without releases."""
+        """A release fetch that broke outside the request contract is logged and leaves that release group without releases."""
         error_logger = MockLogger()
 
         async def mock_api_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
@@ -565,6 +564,16 @@ class TestRequestFailurePropagation:
     async def test_failed_search_fails_the_lookup(self) -> None:
         """A search that failed must fail the lookup, not read as "nothing found"."""
         request = AsyncMock(side_effect=ApiRequestError("musicbrainz", "https://mb/release-group", "failed"))
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
+
+        with pytest.raises(ApiRequestError):
+            await client.get_scored_releases("artist", "album", ArtistContext())
+
+    @pytest.mark.asyncio
+    async def test_cancelled_release_fetch_fails_the_lookup(self) -> None:
+        """A release fetch cancelled on its own leaves the list incomplete, so the lookup fails instead of scoring it."""
+        search = {"count": 1, "release-groups": [{"id": "rg-1", "title": "Album", "primary-type": "Album", "artist-credit": [{"name": "Artist"}]}]}
+        request = AsyncMock(side_effect=[search, asyncio.CancelledError()])
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
 
         with pytest.raises(ApiRequestError):

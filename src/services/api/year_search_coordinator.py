@@ -36,8 +36,9 @@ class _ReleaseSource(Protocol):
         ...
 
 
-# A provider answering these has refused the credentials; asking it again this run would get the same answer
-_REJECTED_CREDENTIALS = frozenset({401, 403})
+# Discogs answering these has refused its token; asking it again this run would get the same answer. Only Discogs sends a
+# credential: from iTunes (which throttles with 403) or MusicBrainz these statuses are ordinary failures
+_REJECTED_TOKEN = frozenset({401, 403})
 
 
 @dataclass(slots=True)
@@ -93,8 +94,8 @@ class YearSearchCoordinator:
         self.applemusic_client = applemusic_client
         self.release_scorer = release_scorer
         self.discogs_enabled = discogs_enabled
-        # Clients that rejected their credentials this run: inactive like Discogs without a token, never counted as failed
-        self._rejected_clients: list[_ReleaseSource] = []
+        # Set when Discogs rejects its token: inactive for the rest of the run, like Discogs without a token
+        self._discogs_rejected = False
         self._api_semaphore = asyncio.Semaphore(max_concurrent_api_calls)
 
     async def fetch_all_api_results(
@@ -327,33 +328,31 @@ class YearSearchCoordinator:
     ) -> list[ScoredRelease]:
         """Ask one provider for scored releases, holding the semaphore that limits concurrent API requests."""
         async with self._api_semaphore:
+            if api_client is self.discogs_client and self._discogs_rejected:
+                # Queued before the token was rejected; sending it now would only be refused again
+                return []
             return await api_client.get_scored_releases(artist_norm, album_norm, artist_context)
 
     def _record_failure(self, api_name: str, error: BaseException, tally: ProviderTally) -> None:
-        """Count a provider failure toward an unavailable lookup, or switch off a provider that rejected its credentials."""
-        if not (isinstance(error, ApiRequestError) and error.status in _REJECTED_CREDENTIALS):
+        """Count a provider failure toward an unavailable lookup, or switch Discogs off when it rejected its token."""
+        if not isinstance(error, ApiRequestError) or api_name != "discogs" or error.status not in _REJECTED_TOKEN:
             tally.failed = True
             return
-        client = self._get_api_client(api_name)
-        if client is None:
+        if self._discogs_rejected:
+            # Another search met the same rejection first and already said so
             return
-        self._rejected_clients.append(client)
-        self.console_logger.warning(
-            "%s rejected the credentials (HTTP %d); it is not queried again this run, so check its token", api_name, error.status
-        )
+        self._discogs_rejected = True
+        self.console_logger.warning("discogs rejected the token (HTTP %d); it is not queried again this run, so check discogs_token", error.status)
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
-        """Get an active API client by name: none for Discogs without a token or a provider that rejected its credentials."""
+        """Get an active API client by name: none for Discogs without a token or with a rejected one."""
         api_mapping: dict[str, MusicBrainzClient | DiscogsClient | AppleMusicClient | None] = {
             "musicbrainz": self.musicbrainz_client,
-            "discogs": self.discogs_client if self.discogs_enabled else None,
+            "discogs": self.discogs_client if self.discogs_enabled and not self._discogs_rejected else None,
             "itunes": self.applemusic_client,
             "applemusic": self.applemusic_client,
         }
-        client = api_mapping.get(api_name)
-        if client is None or any(client is rejected for rejected in self._rejected_clients):
-            return None
-        return client
+        return api_mapping.get(api_name)
 
     async def _execute_standard_api_search(
         self,

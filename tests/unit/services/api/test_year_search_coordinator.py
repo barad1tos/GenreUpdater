@@ -952,7 +952,7 @@ class TestRejectedCredentials:
             assert await coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record") == []
 
         assert mock_discogs_client.get_scored_releases.await_count == 1
-        assert len([record for record in caplog.records if f"rejected the credentials (HTTP {status})" in record.getMessage()]) == 1
+        assert len([record for record in caplog.records if f"rejected the token (HTTP {status})" in record.getMessage()]) == 1
 
     @pytest.mark.asyncio
     async def test_server_error_still_makes_the_lookup_unavailable(
@@ -965,3 +965,66 @@ class TestRejectedCredentials:
 
         with pytest.raises(YearLookupUnavailableError):
             await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+
+    @pytest.mark.parametrize("status", [401, 403])
+    @pytest.mark.asyncio
+    async def test_providers_without_credentials_still_fail(
+        self,
+        *,
+        coordinator: YearSearchCoordinator,
+        mock_applemusic_client: AsyncMock,
+        status: int,
+    ) -> None:
+        """iTunes sends no credential, so its 401/403 (Apple throttles with 403) is a failure, not a rejected token."""
+        mock_applemusic_client.get_scored_releases.side_effect = ApiRequestError("itunes", "u", f"HTTP {status}", status=status)
+
+        with pytest.raises(YearLookupUnavailableError):
+            await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+        with pytest.raises(YearLookupUnavailableError):
+            await coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record")
+
+        assert mock_applemusic_client.get_scored_releases.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_rejection_in_the_script_search_switches_discogs_off(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_discogs_client: AsyncMock,
+    ) -> None:
+        """A rejected token met in the script-optimized phase is not a failure, and the standard phase skips Discogs."""
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+
+        assert await coordinator.fetch_all_api_results("ドリカム", "アルバム", ArtistContext(), "ドリカム", "アルバム") == []
+        assert mock_discogs_client.get_scored_releases.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_concurrent_rejections_are_named_once(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_discogs_client: AsyncMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Two searches that meet the rejection at once neither fail nor repeat the warning."""
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+
+        with caplog.at_level(logging.WARNING):
+            results = await asyncio.gather(
+                coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album"),
+                coordinator.fetch_all_api_results("other", "record", ArtistContext(), "Other", "Record"),
+            )
+
+        assert results == [[], []]
+        assert len([record for record in caplog.records if "rejected the token" in record.getMessage()]) == 1
+
+    @pytest.mark.asyncio
+    async def test_queued_discogs_request_is_dropped_after_rejection(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_discogs_client: AsyncMock,
+    ) -> None:
+        """A Discogs request that waited on the semaphore while its token was rejected is not sent."""
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+        await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
+
+        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "other", "record", ArtistContext()) == []
+        assert mock_discogs_client.get_scored_releases.await_count == 1

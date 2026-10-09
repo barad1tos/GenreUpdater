@@ -518,3 +518,15 @@ class TestRequestFailureBoundaries:
             await orchestrator.get_album_year("Artist", "Album", current_library_year="1999")
 
         orchestrator._safe_mark_for_verification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_musicbrainz_still_tries_itunes(self) -> None:
+        """A MusicBrainz failure does not skip the iTunes fallback, and an iTunes answer is cached as usual."""
+        orchestrator, generic_cache = self._orchestrator_with_generic_cache()
+        orchestrator.musicbrainz_client = MagicMock()
+        orchestrator.musicbrainz_client.get_artist_activity_period = AsyncMock(side_effect=ApiRequestError("musicbrainz", "u", "failed"))
+        orchestrator.applemusic_client = MagicMock()
+        orchestrator.applemusic_client.get_artist_start_year = AsyncMock(return_value=1983)
+
+        assert await orchestrator.get_artist_start_year("artist") == 1983
+        generic_cache.set.assert_called_once_with("artist_start_year:artist", 1983, ttl=31536000)

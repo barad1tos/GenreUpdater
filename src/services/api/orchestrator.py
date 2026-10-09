@@ -1325,13 +1325,13 @@ class ExternalApiOrchestrator:
             return cached_year
 
         # 2. Try MusicBrainz (primary source), then iTunes as the fallback
+        # A failed lookup leaves the year unknown, not absent: caching -1 would switch off the plausibility checks for a day
+        musicbrainz_failed = False
         try:
             begin_year, _ = await self.get_artist_activity_period(artist_norm)
-            itunes_year = None if begin_year else await self.applemusic_client.get_artist_start_year(artist_norm)
         except ApiRequestError as error:
-            # Unknown, not absent: caching -1 would switch off the plausibility checks for a day after the outage
-            self.console_logger.debug("[orchestrator] Artist start year unavailable for %s: %s", artist_norm, error)
-            return None
+            self.console_logger.debug("[orchestrator] MusicBrainz artist start year unavailable for %s: %s", artist_norm, error)
+            begin_year, musicbrainz_failed = None, True
 
         if begin_year:
             self.cache_service.generic_service.set(cache_key, begin_year, ttl=31536000)
@@ -1342,7 +1342,12 @@ class ExternalApiOrchestrator:
             )
             return begin_year
 
-        # 3. iTunes fallback answer
+        # 3. Fallback to iTunes
+        try:
+            itunes_year = await self.applemusic_client.get_artist_start_year(artist_norm)
+        except ApiRequestError as error:
+            self.console_logger.debug("[orchestrator] iTunes artist start year unavailable for %s: %s", artist_norm, error)
+            return None
         if itunes_year:
             self.cache_service.generic_service.set(cache_key, itunes_year, ttl=31536000)
             self.console_logger.debug(
@@ -1351,6 +1356,9 @@ class ExternalApiOrchestrator:
                 itunes_year,
             )
             return itunes_year
+
+        if musicbrainz_failed:
+            return None
 
         # 4. Cache negative result with shorter TTL
         self.cache_service.generic_service.set(cache_key, -1, ttl=86400)

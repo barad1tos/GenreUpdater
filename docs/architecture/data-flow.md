@@ -214,12 +214,12 @@ flowchart TD
 
 ### Retry Policy
 
-| Response or error                              | Retries       | Backoff                                        | Outcome when retries run out |
-|------------------------------------------------|---------------|------------------------------------------------|------------------------------|
-| Timeout, dropped connection, closed event loop | `max_retries` | Exponential with jitter, capped at 120 s       | `ApiRequestError`            |
-| Rate limit (429)                               | `max_retries` | `Retry-After` when sent, otherwise exponential | `ApiRequestError`            |
-| Server error (5xx)                             | `max_retries` | Exponential with jitter, capped at 120 s       | `ApiRequestError`            |
-| Not found (404)                                | 0             | N/A                                            | `None` (a definite answer)   |
-| Other 4xx, non-JSON or malformed body          | 0             | N/A                                            | `ApiRequestError`            |
+| Response or error                                             | Retries       | Backoff                                                                                        | Outcome when retries run out |
+|---------------------------------------------------------------|---------------|------------------------------------------------------------------------------------------------|------------------------------|
+| Timeout, dropped connection or body, closed event loop        | `max_retries` | Exponential with jitter, capped at 120 s                                                       | `ApiRequestError`            |
+| Rate limit (429), or 403 from iTunes, which throttles with it | `max_retries` | Exponential, or the longer `Retry-After` (seconds or HTTP date)                                | `ApiRequestError`            |
+| Server error (5xx)                                            | `max_retries` | Exponential, or the longer `Retry-After`; MusicBrainz sheds load with 503 and `Retry-After: 0` | `ApiRequestError`            |
+| Not found (404)                                               | 0             | N/A                                                                                            | `None` (a definite answer)   |
+| Other 4xx, non-JSON or malformed body                         | 0             | N/A                                                                                            | `ApiRequestError`            |
 
 `max_retries` comes from `config.yaml` (3 in the shipped file); iTunes requests pass 2. A failed request raises `ApiRequestError` instead of returning an empty answer, so callers can tell an outage from "nothing found".

@@ -12,6 +12,8 @@ import logging
 import secrets
 import time
 import urllib.parse
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -32,6 +34,7 @@ SECURE_RANDOM = secrets.SystemRandom()
 # Request headers safe to log; everything else (Authorization, cookies) is left out
 LOGGABLE_REQUEST_HEADERS = ("User-Agent", "Accept", "Accept-Encoding", "Content-Type")
 HTTP_NOT_FOUND = 404
+HTTP_FORBIDDEN = 403
 MAX_RETRY_DELAY_SECONDS = 120.0
 
 
@@ -59,11 +62,25 @@ class TransientRequestError(Exception):
 
 
 def _parse_retry_after(value: str | None) -> float | None:
-    """Read the seconds of a Retry-After header in its delta-seconds form; an HTTP date or garbage gives None."""
-    try:
-        return max(float(value), 0.0) if value else None
-    except ValueError:
+    """Read the wait a Retry-After header asks for, in either its delta-seconds or its HTTP-date form; garbage gives None."""
+    if not value:
         return None
+    try:
+        return max(float(value), 0.0)
+    except ValueError:
+        pass
+    try:
+        resume_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if resume_at.tzinfo is None:
+        resume_at = resume_at.replace(tzinfo=UTC)
+    return max((resume_at - datetime.now(UTC)).total_seconds(), 0.0)
+
+
+def _is_throttled(api_name: str, status: int) -> bool:
+    """Tell whether a status means "slow down": 429 and 5xx everywhere, and 403 from iTunes, which throttles with it."""
+    return status == HTTP_TOO_MANY_REQUESTS or status >= HTTP_SERVER_ERROR or (api_name == "itunes" and status == HTTP_FORBIDDEN)
 
 
 class ApiRequestExecutor:
@@ -403,10 +420,12 @@ class ApiRequestExecutor:
 
     @staticmethod
     def _retry_delay(attempt: int, base_delay: float, retry_after: float | None) -> float:
-        """Wait what the provider asked for, or back off exponentially with jitter, capped at two minutes."""
-        if retry_after is not None:
-            return min(retry_after, MAX_RETRY_DELAY_SECONDS)
-        return min(base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4), MAX_RETRY_DELAY_SECONDS)
+        """Back off exponentially with jitter, waiting longer when the provider asks for it, capped at two minutes.
+
+        The backoff stays the floor because MusicBrainz sheds load with 503 and "Retry-After: 0".
+        """
+        backoff = base_delay * (2**attempt) * (0.8 + SECURE_RANDOM.random() * 0.4)
+        return min(max(backoff, retry_after or 0.0), MAX_RETRY_DELAY_SECONDS)
 
     @staticmethod
     def _build_log_url(url: str, params: dict[str, str] | None) -> str:
@@ -457,7 +476,8 @@ class ApiRequestExecutor:
             )
         except (TransientRequestError, ApiRequestError):
             raise
-        except (TimeoutError, aiohttp.ClientConnectionError) as error:
+        except (TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientPayloadError) as error:
+            # A payload error is a connection dropped while the body was read
             self.api_call_durations.setdefault(api_name, []).append(0.0)
             raise TransientRequestError(type(error).__name__) from error
         except RuntimeError as error:
@@ -624,7 +644,7 @@ class ApiRequestExecutor:
             self.console_logger.debug("[%s] Not found: %s", api_name, log_url)
             return None
 
-        if response_status == HTTP_TOO_MANY_REQUESTS or response_status >= HTTP_SERVER_ERROR:
+        if _is_throttled(api_name, response_status):
             reason = f"HTTP {response_status}"
             raise TransientRequestError(
                 reason,

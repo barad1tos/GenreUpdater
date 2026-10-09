@@ -2,6 +2,8 @@
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -442,6 +444,51 @@ class TestRequestOutcomes:
 
         assert await executor.execute_request("discogs", "https://api.discogs.com/database/search") == {"ok": True}
         assert sleeps == [7.0]
+
+    @pytest.mark.asyncio
+    async def test_retry_after_date_is_honoured(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """A 429 that names its wait as an HTTP date gets the time left until that date."""
+        resume_at = format_datetime(datetime.now(UTC) + timedelta(seconds=30), usegmt=True)
+        mock_session.get = MagicMock(
+            side_effect=[self.respond(429, json_body={}, headers={"Retry-After": resume_at}), self.respond(200, json_body={"ok": True})]
+        )
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("discogs", "https://api.discogs.com/database/search") == {"ok": True}
+        assert len(sleeps) == 1
+        assert 25.0 <= sleeps[0] <= 30.0
+
+    @pytest.mark.asyncio
+    async def test_zero_retry_after_still_backs_off(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """A provider that says "retry now" while rate limiting still gets the backoff, not an instant retry."""
+        mock_session.get = MagicMock(
+            side_effect=[self.respond(503, json_body={}, headers={"Retry-After": "0"}), self.respond(200, json_body={"ok": True})]
+        )
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("musicbrainz", "https://musicbrainz.org/ws/2/release-group/") == {"ok": True}
+        assert len(sleeps) == 1
+        assert sleeps[0] >= 0.008  # base delay 0.01 with the lowest jitter
+
+    @pytest.mark.asyncio
+    async def test_itunes_throttling_403_is_retried(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """iTunes answers a burst with 403 rather than 429, so its 403 is retried with backoff like a rate limit."""
+        mock_session.get = MagicMock(side_effect=[self.respond(403, json_body={}), self.respond(200, json_body={"results": []})])
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("itunes", "https://itunes.apple.com/search", params={"term": "rock"}) == {"results": []}
+        assert len(sleeps) == 1
+
+    @pytest.mark.asyncio
+    async def test_dropped_body_is_retried(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
+        """A connection dropped while the body is read is transient, so the request is sent again."""
+        dropped = self.respond(200, json_body={})
+        dropped.__aenter__.return_value.json = AsyncMock(side_effect=aiohttp.ClientPayloadError("connection dropped"))
+        mock_session.get = MagicMock(side_effect=[dropped, self.respond(200, json_body={"ok": True})])
+        executor.set_session(mock_session)
+
+        assert await executor.execute_request("musicbrainz", "https://musicbrainz.org/ws/2/release-group/") == {"ok": True}
+        assert len(sleeps) == 1
 
     @pytest.mark.asyncio
     async def test_timeout_retries_then_fails(self, executor: ApiRequestExecutor, mock_session: MagicMock, sleeps: list[float]) -> None:
