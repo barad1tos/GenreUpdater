@@ -291,7 +291,6 @@ class ProcessingConfig(BaseModel):
     batch_size: int = Field(ge=1)
     delay_between_batches: float = Field(ge=0)
     adaptive_delay: bool
-    cache_ttl_days: int = Field(ge=0)
     pending_verification_interval_days: int = Field(ge=0)
     skip_prerelease: bool = True
     future_year_threshold: int = Field(default=1, ge=0)

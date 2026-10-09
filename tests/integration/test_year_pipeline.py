@@ -104,7 +104,6 @@ class TestYearPipelineIntegration:
                     "batch_size": 100,
                     "delay_between_batches": 60,
                     "adaptive_delay": False,
-                    "cache_ttl_days": 30,
                     "pending_verification_interval_days": 30,
                     "prerelease_handling": "process_editable",
                     # Off the default of 30, so a mark shows whether the configured value reached it

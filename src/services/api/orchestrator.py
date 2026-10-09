@@ -210,14 +210,14 @@ class ExternalApiOrchestrator:
         self._initialize_rate_limiters()
 
         # Initialize API request executor (handles HTTP requests with retry/caching)
-        self.request_executor = ApiRequestExecutor(
+        self.request_executor: ApiRequestExecutor = ApiRequestExecutor(
             cache_service=cache_service,
             rate_limiters=self.rate_limiters,
             console_logger=console_logger,
             error_logger=error_logger,
             user_agent=self.user_agent,
             discogs_token=self.discogs_token,
-            cache_ttl_days=self.cache_ttl_days,
+            cache_ttl_seconds=int(self.config.caching.negative_result_ttl),
             default_max_retries=self.default_api_max_retries,
             default_retry_delay=self.default_api_retry_delay,
         )
@@ -280,7 +280,6 @@ class ExternalApiOrchestrator:
         # Extract processing parameters
         self.preferred_api = self._normalize_api_name(year_cfg.preferred_api.value)
 
-        self.cache_ttl_days = processing.cache_ttl_days
         self.skip_prerelease = processing.skip_prerelease
         self.future_year_threshold = processing.future_year_threshold
         self.prerelease_recheck_days = processing.prerelease_recheck_days

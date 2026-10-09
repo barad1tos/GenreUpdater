@@ -146,7 +146,6 @@ year_retrieval:
     batch_size: 25
     delay_between_batches: 20
     adaptive_delay: true
-    cache_ttl_days: 36500
     pending_verification_interval_days: 30
     skip_prerelease: true
     future_year_threshold: 1
