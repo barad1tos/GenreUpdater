@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime as dt
 from typing import Any, ClassVar, TypedDict
@@ -66,6 +67,14 @@ class ArtistPeriodContext(TypedDict, total=False):
 
     start_year: int | None
     end_year: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtistContext:
+    """What one year search knows about its artist: ISO country code and activity period."""
+
+    region: str | None = None
+    period: ArtistPeriodContext | None = None
 
 
 class ReleaseScorer:
@@ -129,26 +138,12 @@ class ReleaseScorer:
         self.min_valid_year = min_valid_year
         self.current_year = dt.now(UTC).year
         self.definitive_score_threshold = definitive_score_threshold
-        self.artist_period_context: ArtistPeriodContext | None = None
         self.console_logger = console_logger or logging.getLogger(__name__)
         self.remaster_keywords = remaster_keywords or []
         self.major_market_codes = major_market_codes or self._DEFAULT_MARKET_CODES
 
         # Constants from the original implementation
         self.YEAR_LENGTH = 4
-
-    def set_artist_period_context(self, context: ArtistPeriodContext | None) -> None:
-        """Set the artist activity period context for scoring.
-
-        Args:
-            context: Dictionary with start_year and end_year information
-
-        """
-        self.artist_period_context = context
-
-    def clear_artist_period_context(self) -> None:
-        """Clear the artist activity period context."""
-        self.artist_period_context = None
 
     # _get_default_scoring_config() removed — defaults live in
     # ScoringConfig Pydantic model (track_models.py) and constructor above
@@ -661,12 +656,19 @@ class ReleaseScorer:
             return penalty
         return 0
 
-    def _calculate_contextual_score(self, year: int, rg_first_year: int | None, score_components: list[str]) -> int:
+    def _calculate_contextual_score(
+        self,
+        year: int,
+        rg_first_year: int | None,
+        period: ArtistPeriodContext | None,
+        score_components: list[str],
+    ) -> int:
         """Calculate contextual factors score (artist period, year differences).
 
         Args:
             year: Validated release year
             rg_first_year: Release group first year (if available)
+            period: Artist activity period of the search being scored
             score_components: List to append score messages to
 
         Returns:
@@ -676,8 +678,8 @@ class ReleaseScorer:
         contextual_score = 0
 
         # Apply Artist Activity Period Context
-        if self.artist_period_context:
-            contextual_score += self._score_artist_period(year, score_components)
+        if period:
+            contextual_score += self._score_artist_period(year, period, score_components)
 
         # Penalty based on difference from RG First Year
         if rg_first_year and year > rg_first_year + 1:
@@ -685,14 +687,12 @@ class ReleaseScorer:
 
         return contextual_score
 
-    def _score_artist_period(self, year: int, score_components: list[str]) -> int:
+    def _score_artist_period(self, year: int, period: ArtistPeriodContext, score_components: list[str]) -> int:
         """Score based on artist activity period context."""
-        if self.artist_period_context is None:
-            return 0
         cfg = self.scoring_config
         period_score = 0
-        start_year: int | None = self.artist_period_context.get("start_year")
-        end_year: int | None = self.artist_period_context.get("end_year")
+        start_year: int | None = period.get("start_year")
+        end_year: int | None = period.get("end_year")
 
         # Penalty if the year is before the artist's start (allow 1-year grace)
         # Config values are expected to be negative (per schema Field(le=0))
@@ -799,7 +799,7 @@ class ReleaseScorer:
         artist_norm: str,
         album_norm: str,
         *,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         source: str = "unknown",
         album_orig: str | None = None,
     ) -> int:
@@ -818,7 +818,7 @@ class ReleaseScorer:
             release: Dictionary containing release metadata
             artist_norm: Normalized artist name for matching
             album_norm: Normalized album name for matching
-            artist_region: Artist's region/country for bonus scoring
+            artist_context: Region and activity period of the artist this search is for
             source: Source of the release data (musicbrainz, discogs, itunes)
             album_orig: Original album name with parentheses for edition stripping
 
@@ -889,8 +889,8 @@ class ReleaseScorer:
         char_score, rg_first_year = self._calculate_release_characteristics_score(release, year_str, source, score_components)
         score += char_score
 
-        score += self._calculate_contextual_score(year, rg_first_year, score_components)
-        score += self._calculate_country_score(release, artist_region, score_components)
+        score += self._calculate_contextual_score(year, rg_first_year, artist_context.period, score_components)
+        score += self._calculate_country_score(release, artist_context.region, score_components)
         score += self._calculate_source_score(source, score_components)
 
         final_score = max(0, score)

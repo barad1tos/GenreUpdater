@@ -17,6 +17,7 @@ import pytest
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
+from services.api.year_scoring import ArtistContext
 from tests.factories import create_test_app_config
 from tests.mocks.protocol_mocks import MockCacheService
 
@@ -59,7 +60,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_control_chars,
             album_norm=album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -74,7 +75,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist,
             album_norm=album_with_nulls,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -89,7 +90,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=extremely_long_artist,
             album_norm=album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -104,7 +105,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist,
             album_norm=extremely_long_album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -119,7 +120,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=unicode_artist,
             album_norm=unicode_album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -131,7 +132,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="",
             album_norm="",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -146,7 +147,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_lucene_chars,
             album_norm=album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -158,7 +159,7 @@ class TestMusicBrainzInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="   \t\n\r   ",
             album_norm="   \t\n\r   ",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -207,7 +208,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_control,
             album_norm=album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -219,7 +220,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="",
             album_norm="Some Album",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -231,7 +232,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="Some Artist",
             album_norm="",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -246,7 +247,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=long_artist,
             album_norm=long_album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -261,7 +262,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=unicode_artist,
             album_norm=unicode_album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -276,7 +277,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_special,
             album_norm=album,
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -288,7 +289,7 @@ class TestDiscogsInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="   \t\n   ",
             album_norm="   \r\n   ",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -327,6 +328,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_special,
             album_norm=album,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -341,6 +343,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_control,
             album_norm=album,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -355,6 +358,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=long_artist,
             album_norm=long_album,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -369,6 +373,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=unicode_artist,
             album_norm=unicode_album,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -380,6 +385,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="",
             album_norm="",
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -391,6 +397,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm="   \t\n   ",
             album_norm="   \r\n   ",
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -405,6 +412,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=artist_with_newline,
             album_norm=album_with_newline,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)
@@ -419,6 +427,7 @@ class TestAppleMusicInputBoundary:
         releases = await client.get_scored_releases(
             artist_norm=mixed_artist,
             album_norm=mixed_album,
+            artist_context=ArtistContext(),
         )
 
         assert isinstance(releases, list)

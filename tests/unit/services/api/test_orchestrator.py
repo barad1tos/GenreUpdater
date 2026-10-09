@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,7 @@ import pytest
 
 from core.debug_utils import DebugConfig
 from services.api.orchestrator import ExternalApiOrchestrator, normalize_name
+from services.api.year_scoring import ArtistContext, ArtistPeriodContext, ReleaseScorer
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
@@ -287,7 +289,7 @@ class TestExternalApiOrchestratorAllure:
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
         orchestrator.error_logger = error_logger
         search_error = TimeoutError("search timed out")
-        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=("artist", "album", "Artist", "Album", None)))
+        monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=("artist", "album", "Artist", "Album", ArtistContext())))
         monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=search_error))
 
         with caplog.at_level(logging.ERROR, logger=error_logger.name):
@@ -336,7 +338,7 @@ class TestExternalApiOrchestratorAllure:
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
         console_logger, console_output = rich_console_logger
         orchestrator.console_logger = console_logger
-        search_inputs = ("artist", "mixes", "Artist [live]", "Mixes [/edit]", None)
+        search_inputs = ("artist", "mixes", "Artist [live]", "Mixes [/edit]", ArtistContext())
         monkeypatch.setattr(orchestrator, "_initialize_year_search", AsyncMock(return_value=search_inputs))
         monkeypatch.setattr(orchestrator, "_fetch_all_api_results", AsyncMock(side_effect=TimeoutError("search timed out")))
 
@@ -352,7 +354,7 @@ class TestExternalApiOrchestratorAllure:
         error_logger: logging.Logger,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A failed artist-context fetch returns no region and keeps its traceback in the error log."""
+        """A failed artist-context fetch returns an empty context and keeps its traceback in the error log."""
         orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
         orchestrator.error_logger = error_logger
         context_error = OSError("MusicBrainz unreachable")
@@ -361,12 +363,80 @@ class TestExternalApiOrchestratorAllure:
         orchestrator.musicbrainz_client = musicbrainz_client
 
         with caplog.at_level(logging.WARNING, logger=error_logger.name):
-            artist_region = await orchestrator._setup_artist_context("artist", "Artist")
+            artist_context = await orchestrator._setup_artist_context("artist", "Artist")
 
-        assert artist_region is None
+        assert artist_context == ArtistContext()
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
         assert logged_exception is not None
         assert logged_exception[1] is context_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
+
+    @pytest.mark.asyncio
+    async def test_failed_region_keeps_the_artist_period(self) -> None:
+        """A region lookup that fails after the period arrived still scores the search with that period."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        musicbrainz_client = MagicMock()
+        musicbrainz_client.get_artist_activity_period = AsyncMock(return_value=(1990, 2005))
+        musicbrainz_client.get_artist_region = AsyncMock(side_effect=OSError("MusicBrainz unreachable"))
+        orchestrator.musicbrainz_client = musicbrainz_client
+
+        artist_context = await orchestrator._setup_artist_context("artist", "Artist")
+
+        assert artist_context == ArtistContext(period=ArtistPeriodContext(start_year=1990, end_year=2005))
+
+    @pytest.mark.asyncio
+    async def test_concurrent_year_searches_score_with_their_own_artist_period(self, *, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Two albums searched at once on one orchestrator each score their releases with their own artist's activity period."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        orchestrator.release_scorer = ReleaseScorer()  # the test config zeroes every bonus; the defaults make the period count
+        periods = {
+            "early artist": ArtistPeriodContext(start_year=1970, end_year=1980),
+            "late artist": ArtistPeriodContext(start_year=2000, end_year=2010),
+        }
+        regions = {"early artist": "gb", "late artist": "us"}
+        musicbrainz_client = MagicMock()
+        musicbrainz_client.get_artist_activity_period = AsyncMock(
+            side_effect=lambda artist_norm: (periods[artist_norm]["start_year"], periods[artist_norm]["end_year"])
+        )
+        musicbrainz_client.get_artist_region = AsyncMock(side_effect=lambda artist_norm: regions[artist_norm])
+        orchestrator.musicbrainz_client = musicbrainz_client
+
+        # Both searches wait here until both have set up their artist context, so the provider calls interleave
+        releases = {
+            artist_norm: {"title": "Album", "artist": artist_norm, "year": "1971", "country": "gb", "status": "official", "source": "musicbrainz"}
+            for artist_norm in periods
+        }
+        both_searches_started = asyncio.Event()
+        arrived: list[str] = []
+        scores: dict[str, int] = {}
+
+        async def fetch_after_both_searches_start(
+            artist_norm: str, album_norm: str, artist_context: ArtistContext, log_artist: str, log_album: str
+        ) -> list[Any]:
+            arrived.append(log_artist)
+            if len(arrived) == len(periods):
+                both_searches_started.set()
+            await both_searches_started.wait()
+            scores[artist_norm] = orchestrator.release_scorer.score_original_release(
+                releases[artist_norm], artist_norm, album_norm, artist_context=artist_context, source="musicbrainz"
+            )
+            return []
+
+        monkeypatch.setattr(orchestrator, "_fetch_all_api_results", fetch_after_both_searches_start)
+
+        await asyncio.gather(orchestrator.get_album_year("early artist", "album"), orchestrator.get_album_year("late artist", "album"))
+
+        expected = {
+            artist_norm: orchestrator.release_scorer.score_original_release(
+                releases[artist_norm],
+                artist_norm,
+                "album",
+                artist_context=ArtistContext(region=regions[artist_norm], period=period),
+                source="musicbrainz",
+            )
+            for artist_norm, period in periods.items()
+        }
+        assert expected["early artist"] != expected["late artist"]  # the periods change the score, so a swap would show
+        assert scores == expected

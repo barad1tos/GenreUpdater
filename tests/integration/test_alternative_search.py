@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import YearSearchCoordinator
 from tests.factories import create_test_app_config
 
@@ -47,7 +48,7 @@ class TestAlternativeSearchFallback:
         results = await mock_coordinator.fetch_all_api_results(
             artist_norm="ghost",
             album_norm="prequelle",
-            artist_region=None,
+            artist_context=ArtistContext(),
             log_artist="Ghost",
             log_album="Prequelle",
         )
@@ -71,7 +72,7 @@ class TestAlternativeSearchFallback:
         results = await mock_coordinator.fetch_all_api_results(
             artist_norm="hans zimmer",
             album_norm="inception original soundtrack",
-            artist_region=None,
+            artist_context=ArtistContext(),
             log_artist="Hans Zimmer",
             log_album="Inception (Original Soundtrack)",
         )
@@ -87,7 +88,7 @@ class TestAlternativeSearchFallback:
         results = await mock_coordinator.fetch_all_api_results(
             artist_norm="metallica",
             album_norm="master of puppets",
-            artist_region=None,
+            artist_context=ArtistContext(),
             log_artist="Metallica",
             log_album="Master of Puppets",
         )
@@ -112,7 +113,7 @@ class TestAlternativeSearchFallback:
         results = await mock_coordinator.fetch_all_api_results(
             artist_norm="various artists",
             album_norm="now thats what i call music 50",
-            artist_region=None,
+            artist_context=ArtistContext(),
             log_artist="Various Artists",
             log_album="Now That's What I Call Music 50",
         )
@@ -136,7 +137,7 @@ class TestAlternativeSearchFallback:
         results = await mock_coordinator.fetch_all_api_results(
             artist_norm="ghost",
             album_norm="prequelle [message from the clergy]",
-            artist_region=None,
+            artist_context=ArtistContext(),
             log_artist="Ghost",
             log_album="Prequelle [MESSAGE FROM THE CLERGY]",
         )

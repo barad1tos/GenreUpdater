@@ -873,7 +873,7 @@ class TestAbsurdYearDetection:
         """Test real-world case: Gorillaz getting 1974 year (band formed 1998).
 
         Note: With threshold 1970, this would NOT be caught.
-        This case is caught by scoring system's artist_period_context.
+        This case is caught by the scoring system's artist activity period.
         """
         mock_pending = MockPendingVerificationService()
         retriever = self.create_retriever_with_absurd_threshold(

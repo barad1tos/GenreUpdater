@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import pytest
 
 from services.api.discogs import DiscogsClient, DiscogsRelease
+from services.api.year_scoring import ArtistContext
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
@@ -283,7 +284,7 @@ class TestDiscogsClientAllure:
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
         pressing = TestDiscogsClientAllure.create_pressing(1, master_id=0)
 
-        scored = await client._process_discogs_results([pressing], "test artist", "test album", artist_region=None, reissue_keywords=[])
+        scored = await client._process_discogs_results([pressing], "test artist", "test album", artist_context=ArtistContext(), reissue_keywords=[])
 
         assert len(scored) == 1
         mock_api_request.assert_not_called()
@@ -295,7 +296,7 @@ class TestDiscogsClientAllure:
         client = TestDiscogsClientAllure.create_discogs_client(mock_api_request=mock_api_request)
         pressings = [TestDiscogsClientAllure.create_pressing(release_id, master_id=654321) for release_id in (1, 2, 3)]
 
-        scored = await client._process_discogs_results(pressings, "test artist", "test album", artist_region=None, reissue_keywords=[])
+        scored = await client._process_discogs_results(pressings, "test artist", "test album", artist_context=ArtistContext(), reissue_keywords=[])
 
         assert len(scored) == 3
         assert [call.args[1] for call in mock_api_request.call_args_list] == ["https://api.discogs.com/masters/654321"]
@@ -526,7 +527,7 @@ class TestDiscogsClientAllure:
             item,
             "target artist",
             "some album",
-            artist_region=None,
+            artist_context=ArtistContext(),
             reissue_keywords=[],
             detail_fetch_count=0,
             detail_fetch_limit=10,

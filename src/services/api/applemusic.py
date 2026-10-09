@@ -25,6 +25,7 @@ from core.models.normalization import normalize_for_matching
 
 if TYPE_CHECKING:
     from services.api.api_base import ScoredRelease
+    from services.api.year_scoring import ArtistContext
     from collections.abc import Callable, Coroutine
 
 # iTunes Search API base URL
@@ -88,6 +89,7 @@ class AppleMusicClient:
         self,
         artist_norm: str,
         album_norm: str,
+        artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
         """Get scored releases from iTunes Search API with lookup fallback.
 
@@ -97,6 +99,7 @@ class AppleMusicClient:
         Args:
             artist_norm: Normalized artist name
             album_norm: Normalized album name
+            artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
             List of scored releases from iTunes Search API
@@ -158,7 +161,7 @@ class AppleMusicClient:
                 return []
 
             # Filter and score results
-            return self._process_api_results(results, artist_norm, album_norm, search_term)
+            return self._process_api_results(results, artist_norm, album_norm, artist_context, search_term)
 
         except (OSError, ValueError, RuntimeError) as e:
             self.error_logger.warning(
@@ -214,6 +217,7 @@ class AppleMusicClient:
         results: list[dict[str, Any]],
         artist_norm: str,
         album_norm: str,
+        artist_context: ArtistContext,
         search_term: str,
     ) -> list[ScoredRelease]:
         """Process API results into scored releases with error handling.
@@ -222,6 +226,7 @@ class AppleMusicClient:
             results: Raw API results to process
             artist_norm: Normalized artist name for scoring
             album_norm: Normalized album name for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             search_term: Original search term for logging
 
         Returns:
@@ -232,7 +237,7 @@ class AppleMusicClient:
 
         for result in results:
             try:
-                if scored_release := self._process_itunes_result(result, artist_norm, album_norm):
+                if scored_release := self._process_itunes_result(result, artist_norm, album_norm, artist_context):
                     scored_releases.append(scored_release)
                 else:
                     skipped_count += 1
@@ -282,13 +287,20 @@ class AppleMusicClient:
             self.console_logger.debug("[itunes] Could not parse release date: '%s'", release_date)
         return None
 
-    def _process_itunes_result(self, result: dict[str, Any], target_artist_norm: str, target_album_norm: str) -> ScoredRelease | None:
+    def _process_itunes_result(
+        self,
+        result: dict[str, Any],
+        target_artist_norm: str,
+        target_album_norm: str,
+        artist_context: ArtistContext,
+    ) -> ScoredRelease | None:
         """Process a single iTunes Search API result into a ScoredRelease.
 
         Args:
             result: Raw result from iTunes Search API
             target_artist_norm: Normalized target artist name
             target_album_norm: Normalized target album name
+            artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
             ScoredRelease object or None if result should be filtered out
@@ -347,7 +359,7 @@ class AppleMusicClient:
                     },
                     artist_norm=target_artist_norm,
                     album_norm=target_album_norm,
-                    artist_region=None,  # Not used in scoring
+                    artist_context=artist_context,
                     source="itunes",
                 )
             except (KeyError, ValueError, TypeError, AttributeError) as e:

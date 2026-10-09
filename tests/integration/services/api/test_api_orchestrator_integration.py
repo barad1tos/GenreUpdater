@@ -22,7 +22,7 @@ import pytest
 
 from services.api.orchestrator import normalize_name
 from services.api.api_base import ApiRateLimiter, ScoredRelease
-from services.api.year_scoring import create_release_scorer, ArtistPeriodContext
+from services.api.year_scoring import create_release_scorer, ArtistContext, ArtistPeriodContext
 from services.cache.orchestrator import CacheOrchestrator
 from services.pending_verification import PendingVerificationService
 from tests.mocks.csv_mock import MockLogger
@@ -263,7 +263,7 @@ class TestApiOrchestratorYearResolution:
             release=original_release,
             artist_norm="artist",
             album_norm="album",
-            artist_region=None,
+            artist_context=ArtistContext(),
             source="musicbrainz",
         )
 
@@ -271,7 +271,7 @@ class TestApiOrchestratorYearResolution:
             release=remaster_release,
             artist_norm="artist",
             album_norm="album",
-            artist_region=None,
+            artist_context=ArtistContext(),
             source="musicbrainz",
         )
 
@@ -378,9 +378,6 @@ class TestApiOrchestratorArtistActivityPeriod:
             console_logger=MockLogger(),
         )
 
-        # Set the artist period context
-        scorer.set_artist_period_context(period_context)
-
         # Release from within activity period
         release_1985 = {"title": "Classic Album", "artist": "80s Band", "year": "1985"}
         # Release from outside activity period (likely a reissue)
@@ -391,7 +388,7 @@ class TestApiOrchestratorArtistActivityPeriod:
             release=release_1985,
             artist_norm="80s band",
             album_norm="classic album",
-            artist_region=None,
+            artist_context=ArtistContext(period=period_context),
             source="musicbrainz",
         )
 
@@ -399,7 +396,7 @@ class TestApiOrchestratorArtistActivityPeriod:
             release=release_2020,
             artist_norm="80s band",
             album_norm="classic album",
-            artist_region=None,
+            artist_context=ArtistContext(period=period_context),
             source="musicbrainz",
         )
 

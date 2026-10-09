@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
+from services.api.year_scoring import ArtistContext
 
 from .api_base import BaseApiClient, ScoredRelease
 
@@ -335,7 +336,7 @@ class DiscogsClient(BaseApiClient):
         releases = await self.get_scored_releases(
             self._normalize_name(artist),
             self._normalize_name(album),
-            None,
+            ArtistContext(),
             artist_orig=artist,
             album_orig=album,
         )
@@ -609,7 +610,7 @@ class DiscogsClient(BaseApiClient):
         artist_norm: str,
         album_norm: str,
         *,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         year_str: str,
         is_reissue: bool,
         master_year: int | None = None,
@@ -620,7 +621,7 @@ class DiscogsClient(BaseApiClient):
             item: Discogs release item
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             year_str: Year string for the release
             is_reissue: Whether this is detected as a reissue
             master_year: Original release year from Discogs master release
@@ -665,7 +666,7 @@ class DiscogsClient(BaseApiClient):
             release_info_with_meta,
             artist_norm,
             album_norm,
-            artist_region=artist_region,
+            artist_context=artist_context,
             source="discogs",
         )
 
@@ -682,7 +683,7 @@ class DiscogsClient(BaseApiClient):
         artist_norm: str,
         album_norm: str,
         *,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         reissue_keywords: list[str],
         detail_fetch_count: int,
         detail_fetch_limit: int,
@@ -694,7 +695,7 @@ class DiscogsClient(BaseApiClient):
             item: Discogs release item to process
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             reissue_keywords: Keywords to detect reissues
             detail_fetch_count: Current number of detail fetches performed
             detail_fetch_limit: Maximum number of detail fetches allowed
@@ -735,7 +736,7 @@ class DiscogsClient(BaseApiClient):
             item,
             artist_norm,
             album_norm,
-            artist_region=artist_region,
+            artist_context=artist_context,
             year_str=year_str,
             is_reissue=is_reissue,
             master_year=master_year,
@@ -749,7 +750,7 @@ class DiscogsClient(BaseApiClient):
         artist_norm: str,
         album_norm: str,
         *,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         reissue_keywords: list[str],
     ) -> list[ScoredRelease]:
         """Process Discogs search results and create scored releases.
@@ -758,7 +759,7 @@ class DiscogsClient(BaseApiClient):
             results: List of Discogs release items
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             reissue_keywords: Keywords to detect reissues
 
         Returns:
@@ -775,7 +776,7 @@ class DiscogsClient(BaseApiClient):
                 item,
                 artist_norm,
                 album_norm,
-                artist_region=artist_region,
+                artist_context=artist_context,
                 reissue_keywords=reissue_keywords,
                 detail_fetch_count=detail_fetch_count,
                 detail_fetch_limit=detail_fetch_limit,
@@ -792,7 +793,7 @@ class DiscogsClient(BaseApiClient):
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         *,
         artist_orig: str | None = None,
         album_orig: str | None = None,
@@ -802,7 +803,7 @@ class DiscogsClient(BaseApiClient):
         Args:
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             artist_orig: Original artist name (before normalization)
             album_orig: Original album name (before normalization)
 
@@ -836,7 +837,7 @@ class DiscogsClient(BaseApiClient):
                 results,
                 artist_norm,
                 album_norm,
-                artist_region=artist_region,
+                artist_context=artist_context,
                 reissue_keywords=reissue_keywords,
             )
 

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.musicbrainz import MusicBrainzClient
-from services.api.year_scoring import ReleaseScorer
+from services.api.year_scoring import ArtistContext, ReleaseScorer
 from tests.mocks.csv_mock import MockLogger
 
 
@@ -209,9 +209,9 @@ class TestMusicBrainzClientAllure:
         """Create a client that scores with the real ReleaseScorer, the way the orchestrator wires it."""
         scorer = ReleaseScorer()
 
-        def score_release(release: dict[str, Any], artist_norm: str, album_norm: str, artist_region: str | None, source: str = "unknown") -> int:
+        def score_release(release: dict[str, Any], artist_norm: str, album_norm: str, artist_context: ArtistContext, source: str = "unknown") -> int:
             """Score a release with the real scorer."""
-            return int(scorer.score_original_release(release, artist_norm, album_norm, artist_region=artist_region, source=source))
+            return int(scorer.score_original_release(release, artist_norm, album_norm, artist_context=artist_context, source=source))
 
         return TestMusicBrainzClientAllure.create_musicbrainz_client(mock_score_release=MagicMock(side_effect=score_release))
 
@@ -232,7 +232,9 @@ class TestMusicBrainzClientAllure:
         """MusicBrainz releases are scored on the release group's first year, so the real scorer keeps them."""
         client = TestMusicBrainzClientAllure.create_scoring_client()
 
-        scored = client._process_and_score_releases([TestMusicBrainzClientAllure.create_release_group_result()], "the beatles", "abbey road", None)
+        scored = client._process_and_score_releases(
+            [TestMusicBrainzClientAllure.create_release_group_result()], "the beatles", "abbey road", ArtistContext()
+        )
 
         assert [release["year"] for release in scored] == ["1969", "1969"]
         assert all(release["score"] > 0 for release in scored)
@@ -242,8 +244,8 @@ class TestMusicBrainzClientAllure:
         client = TestMusicBrainzClientAllure.create_scoring_client()
         release_group_result = TestMusicBrainzClientAllure.create_release_group_result()
 
-        without_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", None)
-        with_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", "GB")
+        without_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", ArtistContext())
+        with_region = client._process_and_score_releases([release_group_result], "the beatles", "abbey road", ArtistContext(region="GB"))
 
         assert with_region[0]["score"] > without_region[0]["score"]
         # The British pressing now outscores the American one, which only gets the major-market bonus

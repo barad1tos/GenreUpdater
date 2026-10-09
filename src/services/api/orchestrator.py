@@ -40,7 +40,7 @@ from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
 from services.api.request_executor import ApiRequestExecutor
 from services.api.year_score_resolver import YearScoreResolver
-from services.api.year_scoring import ArtistPeriodContext, create_release_scorer
+from services.api.year_scoring import ArtistContext, ArtistPeriodContext, create_release_scorer
 from services.api.year_search_coordinator import YearSearchCoordinator
 from stubs.cryptography.secure_config import SecureConfig, SecurityConfigError
 
@@ -188,9 +188,6 @@ class ExternalApiOrchestrator:
 
         # Initialize pending tasks for fire-and-forget async operations
         self._pending_tasks: set[asyncio.Task[Any]] = set()
-
-        # Initialize artist period context for release scoring
-        self.artist_period_context: ArtistPeriodContext | None = None
 
         # Initialize API client references (will be set in _initialize_api_clients)
         self.discogs_client: DiscogsClient
@@ -389,11 +386,11 @@ class ExternalApiOrchestrator:
             release: dict[str, Any],
             artist_norm: str,
             album_norm: str,
-            artist_region: str | None,
+            artist_context: ArtistContext,
             source: str = "unknown",
         ) -> int:
             """Create the release scoring function with an injected scorer."""
-            return int(self.release_scorer.score_original_release(release, artist_norm, album_norm, artist_region=artist_region, source=source))
+            return int(self.release_scorer.score_original_release(release, artist_norm, album_norm, artist_context=artist_context, source=source))
 
         # Initialize MusicBrainz client
         self.musicbrainz_client = MusicBrainzClient(
@@ -846,12 +843,12 @@ class ExternalApiOrchestrator:
             )
             return None, False, 0, {}
 
-        artist_norm, album_norm, log_artist, log_album, artist_region = inputs
+        artist_norm, album_norm, log_artist, log_album, artist_context = inputs
 
         # Main processing
         try:
             # Fetch and process API results
-            all_releases = await self._fetch_all_api_results(artist_norm, album_norm, artist_region, log_artist, log_album)
+            all_releases = await self._fetch_all_api_results(artist_norm, album_norm, artist_context, log_artist, log_album)
 
             if not all_releases:
                 return await self._handle_no_results(
@@ -879,12 +876,10 @@ class ExternalApiOrchestrator:
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__, extra=PLAIN_TEXT
             )
             return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
-        finally:
-            self.release_scorer.clear_artist_period_context()
 
     async def _initialize_year_search(
         self, artist: str, album: str, current_library_year: str | None
-    ) -> tuple[str, str, str, str, str | None] | None:
+    ) -> tuple[str, str, str, str, ArtistContext] | None:
         """Initialize year search with logging and context setup."""
         if debug.year:
             self.console_logger.info("get_album_year called with artist='%s' album='%s'", artist, album)
@@ -901,9 +896,9 @@ class ExternalApiOrchestrator:
         self._log_search_initialization(log_artist, log_album, current_library_year, artist_norm, album_norm)
 
         # Get artist context
-        artist_region = await self._setup_artist_context(artist_norm, log_artist)
+        artist_context = await self._setup_artist_context(artist_norm, log_artist)
 
-        return artist_norm, album_norm, log_artist, log_album, artist_region
+        return artist_norm, album_norm, log_artist, log_album, artist_context
 
     def _log_script_debug(self, script_type: ScriptType) -> None:
         """Log debug information for script-specific text processing."""
@@ -1045,8 +1040,10 @@ class ExternalApiOrchestrator:
         activity_log = f"({start_year or '?'} - {end_year or 'present'})" if start_year or end_year else "(activity period unknown)"
         self.console_logger.info("Artist activity period context: %s", activity_log)
 
-    async def _setup_artist_context(self, artist_norm: str, log_artist: str) -> str | None:
-        """Set up artist context for release scoring."""
+    async def _setup_artist_context(self, artist_norm: str, log_artist: str) -> ArtistContext:
+        """Gather the artist's activity period and region for scoring this search's releases."""
+        # A region lookup that fails after the period arrived still leaves the period to score with
+        period: ArtistPeriodContext | None = None
         try:
             # Get artist's activity period for context (cached)
             if debug.year:
@@ -1057,32 +1054,30 @@ class ExternalApiOrchestrator:
 
             start_year, end_year = self._parse_activity_period(activity_result)
 
-            # Store as ArtistPeriodContext and set in scorer
-            self.artist_period_context = ArtistPeriodContext(start_year=start_year, end_year=end_year)
+            period = ArtistPeriodContext(start_year=start_year, end_year=end_year)
             self._log_activity_period(start_year, end_year)
-            self.release_scorer.set_artist_period_context(self.artist_period_context)
 
             # Get the artist's likely region for scoring context (cached)
             artist_region = await self.musicbrainz_client.get_artist_region(artist_norm)
             if artist_region:
                 self.console_logger.info("Artist region context: %s", artist_region.upper())
 
-            return str(artist_region) if artist_region else None
+            return ArtistContext(region=str(artist_region) if artist_region else None, period=period)
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
             self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err, exc_info=context_err)
-            return None
+            return ArtistContext(period=period)
 
     async def _fetch_all_api_results(
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
         """Fetch scored releases from all API providers with script-aware logic."""
-        return await self.year_search_coordinator.fetch_all_api_results(artist_norm, album_norm, artist_region, log_artist, log_album)
+        return await self.year_search_coordinator.fetch_all_api_results(artist_norm, album_norm, artist_context, log_artist, log_album)
 
     async def _handle_no_results(
         self,
@@ -1243,11 +1238,11 @@ class ExternalApiOrchestrator:
         release: dict[str, Any],
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         source: str = "unknown",
     ) -> float:
         """Public wrapper for release scoring."""
-        return float(self.release_scorer.score_original_release(release, artist_norm, album_norm, artist_region=artist_region, source=source))
+        return float(self.release_scorer.score_original_release(release, artist_norm, album_norm, artist_context=artist_context, source=source))
 
     async def get_artist_activity_period(
         self,
