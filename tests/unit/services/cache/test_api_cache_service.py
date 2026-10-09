@@ -12,7 +12,7 @@ import pytest
 
 from core.models.track_models import CachedApiResult
 from services.cache.api_cache import ApiCacheService
-from services.cache.cache_config import CacheEvent, CacheEventType
+from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType
 from services.cache.hash_service import UnifiedHashService
 from tests.factories import create_test_app_config
 
@@ -65,14 +65,14 @@ class TestApiCacheService:
         artist = "Pink Floyd"
         album = "Dark Side of the Moon"
         source = "musicbrainz"
-        data = {"year": "1973", "genres": ["Progressive Rock"]}
+        records = [{"year": "1973", "genres": ["Progressive Rock"]}]
 
-        await service.set_cached_result(artist, album, source=source, success=True, data=data)
+        await service.set_cached_result(artist, album, source=source, records=records)
         result = await service.get_cached_result(artist, album, source)
         assert result is not None
         assert result.artist == artist.strip()
         assert result.album == album.strip()
-        assert result.year == "1973"
+        assert result.api_response == {"records": records}
         assert result.source == source.strip()
         missing = await service.get_cached_result("Unknown", "Album", "source")
         assert missing is None
@@ -82,8 +82,8 @@ class TestApiCacheService:
         """Test cache entry expiration."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        # Failed result (no year) should expire
-        await service.set_cached_result("Artist", "Album", source="source", success=False)
+        # An empty answer expires
+        await service.set_cached_result("Artist", "Album", source="source", records=[])
         # Get the key for our entry
         key = UnifiedHashService.hash_api_key("Artist", "Album", "source")
 
@@ -96,10 +96,10 @@ class TestApiCacheService:
 
     @pytest.mark.asyncio
     async def test_successful_results_eternal(self) -> None:
-        """Test that successful API results with year never expire."""
+        """Found records never expire."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        await service.set_cached_result("Beatles", "Abbey Road", source="spotify", success=True, data={"year": "1969"})
+        await service.set_cached_result("Beatles", "Abbey Road", source="spotify", records=[{"year": "1969"}])
         key = UnifiedHashService.hash_api_key("Beatles", "Abbey Road", "spotify")
 
         # Set timestamp to very old
@@ -107,7 +107,7 @@ class TestApiCacheService:
             service.api_cache[key].timestamp = 0.0
         result = await service.get_cached_result("Beatles", "Abbey Road", "spotify")
         assert result is not None
-        assert result.year == "1969"
+        assert result.api_response == {"records": [{"year": "1969"}]}
 
     @pytest.mark.asyncio
     async def test_invalidate_for_album(self) -> None:
@@ -117,28 +117,28 @@ class TestApiCacheService:
 
         artist = "Led Zeppelin"
         album = "IV"
-        await service.set_cached_result(artist, album, source="spotify", success=True, data={"year": "1971"})
-        await service.set_cached_result(artist, album, source="musicbrainz", success=True, data={"year": "1971"})
-        await service.set_cached_result(artist, album, source="discogs", success=True, data={"year": "1971"})
+        await service.set_cached_result(artist, album, source="spotify", records=[{"year": "1971"}])
+        await service.set_cached_result(artist, album, source="musicbrainz", records=[{"year": "1971"}])
+        await service.set_cached_result(artist, album, source="discogs", records=[{"year": "1971"}])
 
         # Also add entry for different album
-        await service.set_cached_result(artist, "Physical Graffiti", source="spotify", success=True, data={"year": "1975"})
+        await service.set_cached_result(artist, "Physical Graffiti", source="spotify", records=[{"year": "1975"}])
         await service.invalidate_for_album(artist, album)
         assert await service.get_cached_result(artist, album, "spotify") is None
         assert await service.get_cached_result(artist, album, "musicbrainz") is None
         assert await service.get_cached_result(artist, album, "discogs") is None
         result = await service.get_cached_result(artist, "Physical Graffiti", "spotify")
         assert result is not None
-        assert result.year == "1975"
+        assert result.api_response == {"records": [{"year": "1975"}]}
 
     @pytest.mark.asyncio
     async def test_invalidate_all(self) -> None:
         """Test clearing all cache entries."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        await service.set_cached_result("Artist1", "Album1", source="source1", success=True, data={"year": "2020"})
-        await service.set_cached_result("Artist2", "Album2", source="source2", success=True, data={"year": "2021"})
-        await service.set_cached_result("Artist3", "Album3", source="source3", success=True, data={"year": "2022"})
+        await service.set_cached_result("Artist1", "Album1", source="source1", records=[{"year": "2020"}])
+        await service.set_cached_result("Artist2", "Album2", source="source2", records=[{"year": "2021"}])
+        await service.set_cached_result("Artist3", "Album3", source="source3", records=[{"year": "2022"}])
         await service.invalidate_all()
         assert len(service.api_cache) == 0
         assert await service.get_cached_result("Artist1", "Album1", "source1") is None
@@ -149,11 +149,11 @@ class TestApiCacheService:
         service = TestApiCacheService.create_service()
         await service.initialize()
         # Add a successful entry that should persist indefinitely
-        await service.set_cached_result("Artist1", "Album1", source="source1", success=True, data={"year": "2020"})
+        await service.set_cached_result("Artist1", "Album1", source="source1", records=[{"year": "2020"}])
 
         # Add failed entries that should expire
-        await service.set_cached_result("Artist2", "Album2", source="source2", success=False)
-        await service.set_cached_result("Artist3", "Album3", source="source3", success=False)
+        await service.set_cached_result("Artist2", "Album2", source="source2", records=[])
+        await service.set_cached_result("Artist3", "Album3", source="source3", records=[])
         key2 = UnifiedHashService.hash_api_key("Artist2", "Album2", "source2")
         key3 = UnifiedHashService.hash_api_key("Artist3", "Album3", "source3")
 
@@ -171,8 +171,8 @@ class TestApiCacheService:
         """Test saving cache to disk."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        await service.set_cached_result("Queen", "A Night at the Opera", source="spotify", success=True, data={"year": "1975"})
-        await service.set_cached_result("Queen", "News of the World", source="musicbrainz", success=True, data={"year": "1977"})
+        await service.set_cached_result("Queen", "A Night at the Opera", source="spotify", records=[{"year": "1975"}])
+        await service.set_cached_result("Queen", "News of the World", source="musicbrainz", records=[{"year": "1977"}])
 
         mock_file = MagicMock()
 
@@ -226,8 +226,8 @@ class TestApiCacheService:
 
         artist = "Radiohead"
         album = "OK Computer"
-        await service.set_cached_result(artist, album, source="spotify", success=True, data={"year": "1997"})
-        await service.set_cached_result(artist, album, source="musicbrainz", success=True, data={"year": "1997"})
+        await service.set_cached_result(artist, album, source="spotify", records=[{"year": "1997"}])
+        await service.set_cached_result(artist, album, source="musicbrainz", records=[{"year": "1997"}])
         event = CacheEvent(event_type=CacheEventType.TRACK_REMOVED, track_id="track123", metadata={"artist": artist, "album": album})
 
         service.event_manager.emit_event(event)
@@ -254,7 +254,7 @@ class TestApiCacheService:
         await service.initialize()
 
         # Pre-populate cache
-        await service.set_cached_result("Old Artist", "Old Album", source="musicbrainz", success=True, data={"year": "2020"})
+        await service.set_cached_result("Old Artist", "Old Album", source="musicbrainz", records=[{"year": "2020"}])
         assert await service.get_cached_result("Old Artist", "Old Album", "musicbrainz") is not None
 
         # Emit track modified event with old artist/album in metadata
@@ -280,21 +280,21 @@ class TestApiCacheService:
         """Test cache statistics."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        # Successful results (with year)
-        await service.set_cached_result("Artist1", "Album1", source="source1", success=True, data={"year": "2020"})
-        await service.set_cached_result("Artist2", "Album2", source="source2", success=True, data={"year": "2021"})
+        # Found records
+        await service.set_cached_result("Artist1", "Album1", source="source1", records=[{"year": "2020"}])
+        await service.set_cached_result("Artist2", "Album2", source="source2", records=[{"year": "2021"}])
 
-        # Failed results (no year)
-        await service.set_cached_result("Artist3", "Album3", source="source3", success=False)
-        await service.set_cached_result("Artist4", "Album4", source="source4", success=False, data={"other": "data"})
+        # Empty answers
+        await service.set_cached_result("Artist3", "Album3", source="source3", records=[])
+        await service.set_cached_result("Artist4", "Album4", source="source4", records=[])
         stats = service.get_stats()
         assert stats["total_entries"] == 4
-        assert stats["successful_responses"] == 2
-        assert stats["failed_lookups"] == 2
+        assert stats["found"] == 2
+        assert stats["not_found"] == 2
         assert "cache_file" in stats
         assert "cache_file_exists" in stats
         assert "successful_policy" in stats
-        assert "failed_policy" in stats
+        assert "not_found_policy" in stats
         assert stats["persistent"] is True
 
     @pytest.mark.asyncio
@@ -302,7 +302,7 @@ class TestApiCacheService:
         """Test edge cases."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        await service.set_cached_result("Artist", "Album", source="source", success=False)
+        await service.set_cached_result("Artist", "Album", source="source", records=[])
 
         # Mock the timestamp to be recent so it's not expired
         key = UnifiedHashService.hash_api_key("Artist", "Album", "source")
@@ -312,7 +312,7 @@ class TestApiCacheService:
         result = await service.get_cached_result("Artist", "Album", "source")
         assert result is not None
         assert result.year is None
-        await service.set_cached_result("Artist2", "Album2", source="source2", success=True, data={})
+        await service.set_cached_result("Artist2", "Album2", source="source2", records=[{}])
 
         # Mock timestamp to be recent
         key2 = UnifiedHashService.hash_api_key("Artist2", "Album2", "source2")
@@ -323,7 +323,7 @@ class TestApiCacheService:
         assert result is not None
         assert result.year is None
         # When stored with whitespace, it should be trimmed
-        await service.set_cached_result("  Artist3  ", "  Album3  ", source="  source3  ", success=True, data={"year": "2023"})
+        await service.set_cached_result("  Artist3  ", "  Album3  ", source="  source3  ", records=[{"year": "2023"}])
         # Should be able to retrieve with trimmed values
         result = await service.get_cached_result("  Artist3  ", "  Album3  ", "  source3  ")
         assert result is not None
@@ -349,7 +349,7 @@ class TestApiCacheService:
         """Test error handling during save."""
         service = TestApiCacheService.create_service()
         await service.initialize()
-        await service.set_cached_result("Artist", "Album", source="source", success=True, data={"year": "2023"})
+        await service.set_cached_result("Artist", "Album", source="source", records=[{"year": "2023"}])
 
         with (
             patch("pathlib.Path.open", side_effect=OSError("Disk full")),
@@ -424,20 +424,22 @@ class TestApiCacheService:
             "valid_key": {
                 "artist": "Artist1",
                 "album": "Album1",
-                "year": "2023",
+                "year": None,
                 "source": "spotify",
-                "timestamp": datetime.now(UTC).timestamp(),
+                "timestamp": 0.0,  # Found records never expire, however old
+                "ttl": None,
                 "metadata": {},
-                "api_response": {"year": "2023"},
+                "api_response": {"records": [{"year": "2023"}]},
             },
             "expired_key": {
                 "artist": "Artist2",
                 "album": "Album2",
                 "year": None,
                 "source": "musicbrainz",
-                "timestamp": 0.0,  # Expired timestamp
+                "timestamp": 0.0,  # An empty answer past its TTL
+                "ttl": 60,
                 "metadata": {},
-                "api_response": None,
+                "api_response": {"records": []},
             },
         }
 
@@ -481,3 +483,48 @@ class TestApiCacheService:
             task.cancel()
         await asyncio.gather(*service._background_tasks, return_exceptions=True)
         service._background_tasks.clear()
+
+
+class TestOutcomeCaching:
+    """Provider records are stored by outcome: found for good, an empty answer until the negative TTL runs out."""
+
+    @pytest.mark.asyncio
+    async def test_found_records_are_permanent_and_empty_answers_expire(self) -> None:
+        """An empty answer is asked again after the negative TTL; found records are kept."""
+        service = TestApiCacheService.create_service()
+        records = [{"title": "Album", "year": "1999"}]
+        await service.set_cached_result("artist", "album", source="discogs", records=records)
+        await service.set_cached_result("artist", "other", source="discogs", records=[])
+        negative_ttl = service.cache_config.get_policy(CacheContentType.NEGATIVE_RESULT).ttl_seconds
+        for entry in service.api_cache.values():
+            entry.timestamp -= negative_ttl + 1
+
+        found = await service.get_cached_result("artist", "album", "discogs")
+
+        assert found is not None
+        assert found.api_response == {"records": records}
+        assert found.ttl is None
+        assert await service.get_cached_result("artist", "other", "discogs") is None
+
+    @pytest.mark.asyncio
+    async def test_fresh_empty_answer_is_served(self) -> None:
+        """Within the negative TTL an empty answer is a cache hit, so the provider is not asked again."""
+        service = TestApiCacheService.create_service()
+        await service.set_cached_result("artist", "album", source="itunes", records=[])
+
+        cached = await service.get_cached_result("artist", "album", "itunes")
+
+        assert cached is not None
+        assert cached.api_response == {"records": []}
+        assert cached.ttl == service.cache_config.get_policy(CacheContentType.NEGATIVE_RESULT).ttl_seconds
+
+    @pytest.mark.asyncio
+    async def test_invalidation_covers_every_source_and_spelling(self) -> None:
+        """Invalidating an album drops its records from all three providers, whatever the name spelling."""
+        service = TestApiCacheService.create_service()
+        for source in ("musicbrainz", "discogs", "itunes"):
+            await service.set_cached_result("artist", "Album", source=source, records=[{"year": "2001"}])
+
+        await service.invalidate_for_album("Artist ", "album")
+
+        assert service.api_cache == {}

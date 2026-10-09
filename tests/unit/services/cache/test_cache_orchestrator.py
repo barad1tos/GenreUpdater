@@ -442,28 +442,17 @@ class TestCacheOrchestrator:
             mock_get.assert_called_once_with("Artist", "Album", "source")
 
     @pytest.mark.asyncio
-    async def test_set_cached_api_result(self) -> None:
-        """Test that set_cached_api_result delegates to api service."""
+    async def test_set_cached_api_result_round_trip(self) -> None:
+        """Records stored through the orchestrator come back from the API cache, an empty answer included."""
         orchestrator = self.create_orchestrator()
+        records = [{"title": "Album", "year": "2020"}]
 
-        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.set_cached_api_result("Artist", "Album", "source", "2020", metadata={"extra": "data"})
+        await orchestrator.set_cached_api_result("Artist", "Album", source="discogs", records=records)
+        await orchestrator.set_cached_api_result("Artist", "Other", source="discogs", records=[])
 
-            mock_set.assert_called_once()
-            call_args = mock_set.call_args
-            assert call_args[0][0] == "Artist"
-            assert call_args[0][1] == "Album"
-            assert call_args.kwargs["source"] == "source"
-
-    @pytest.mark.asyncio
-    async def test_set_cached_api_result_negative(self) -> None:
-        """Test that set_cached_api_result handles negative results."""
-        orchestrator = self.create_orchestrator()
-
-        with patch.object(orchestrator.api_service, "set_cached_result", new_callable=AsyncMock) as mock_set:
-            await orchestrator.set_cached_api_result("Artist", "Album", "source", None, is_negative=True)
-
-            mock_set.assert_called_once()
-            # success should be False for negative/None results
-            call_args = mock_set.call_args
-            assert call_args.kwargs["success"] is False  # success parameter
+        found = await orchestrator.get_cached_api_result("Artist", "Album", "discogs")
+        empty = await orchestrator.get_cached_api_result("Artist", "Other", "discogs")
+        assert found is not None
+        assert found.api_response == {"records": records}
+        assert empty is not None
+        assert empty.api_response == {"records": []}

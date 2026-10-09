@@ -243,26 +243,17 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
-    async def set_cached_api_result(
-        self,
-        artist: str,
-        album: str,
-        source: str,
-        year: str | None,
-        *,
-        metadata: dict[str, Any] | None = None,
-        is_negative: bool = False,
-    ) -> None:
-        """Cache an API result for an artist/album from a specific source.
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+        """Cache a provider's release records for an artist/album.
+
+        Found records are kept for good; an empty list records that the provider found nothing and expires after the
+        negative-result TTL. A failed request has no answer and must not be cached.
 
         Args:
             artist: Artist name
             album: Album name
             source: API source identifier
-            year: Year to cache (None for negative cache)
-            metadata: Optional metadata about the result
-            is_negative: Whether this is a negative cache entry
-
+            records: The provider's release records before scoring, or an empty list
         """
         ...
 

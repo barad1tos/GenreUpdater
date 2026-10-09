@@ -341,22 +341,9 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached API result for an artist/album from a specific source."""
         return await self.api_service.get_cached_result(artist, album, source)
 
-    async def set_cached_api_result(
-        self,
-        artist: str,
-        album: str,
-        source: str,
-        year: str | None,
-        *,
-        metadata: dict[str, Any] | None = None,
-        is_negative: bool = False,
-    ) -> None:
-        """Cache an API result for an artist/album from a specific source."""
-        success = year is not None and not is_negative
-        data = {"year": year}
-        if metadata:
-            data |= metadata
-        await self.api_service.set_cached_result(artist, album, source=source, success=success, data=data)
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+        """Cache a provider's release records for an artist/album; an empty list records that it found nothing."""
+        await self.api_service.set_cached_result(artist, album, source=source, records=records)
 
     @staticmethod
     def generate_album_key(artist: str, album: str) -> str:
