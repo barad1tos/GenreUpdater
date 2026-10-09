@@ -397,7 +397,7 @@ class TestRequestOutcomes:
 
         assert await executor.execute_request("discogs", "https://api.discogs.com/masters/1") is None
         assert mock_session.get.call_count == 1
-        assert sleeps == []
+        assert not sleeps
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [400, 401, 403])
@@ -414,7 +414,7 @@ class TestRequestOutcomes:
         assert raised.value.status == status
         assert "q=abbey" in raised.value.url
         assert mock_session.get.call_count == 1
-        assert sleeps == []
+        assert not sleeps
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [429, 500, 503])

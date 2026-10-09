@@ -61,7 +61,7 @@ Artist2\x1DAlbum2\x1D...
 
 ### Parsing Pipeline
 
-```python test="skip"
+```text
 raw_output: str
     → split by '\x1E'
     → for each record: split by '\x1D'
@@ -105,7 +105,7 @@ flowchart LR
 
 ### Modification Detection
 
-```python test="skip"
+```text
 last_run = load_last_run_timestamp()
 for track in tracks:
     if track.date_modified > last_run:
@@ -163,11 +163,11 @@ flowchart LR
 
 ### Batch Sizes
 
-| Operation | Default Size | Configurable |
-|-----------|--------------|--------------|
-| Track Fetch | 200 | `ids_batch_size` |
-| Year Update | 25 | `batch_size` |
-| Genre Update | 50 | `batch_size` |
+| Operation    | Default Size | Configurable     |
+|--------------|--------------|------------------|
+| Track Fetch  | 200          | `ids_batch_size` |
+| Year Update  | 25           | `batch_size`     |
+| Genre Update | 50           | `batch_size`     |
 
 ## Update Pipeline
 
