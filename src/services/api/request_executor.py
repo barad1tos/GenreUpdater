@@ -460,7 +460,7 @@ class ApiRequestExecutor:
             The parsed answer, or None for HTTP 404
 
         Raises:
-            TransientRequestError: A timeout, a dropped connection, a closed event loop, a rate limit or a server error
+            TransientRequestError: A timeout, a dropped connection or body, a rate limit or a server error
             ApiRequestError: Any other failure; retrying would not change it
         """
         try:
@@ -482,10 +482,10 @@ class ApiRequestExecutor:
             raise TransientRequestError(type(error).__name__) from error
         except RuntimeError as error:
             if "Event loop is closed" in str(error):
-                # Clear the reference only; ExternalApiOrchestrator owns the session's lifecycle
+                # The process is shutting down, so a retry cannot succeed; clear the reference only, since
+                # ExternalApiOrchestrator owns the session's lifecycle
                 self.session = None
-                reason = "event loop closed"
-                raise TransientRequestError(reason) from error
+                raise ApiRequestError(api_name, log_url, "event loop closed") from error
             self.error_logger.exception("[%s] Request to %s failed", api_name, log_url)
             raise ApiRequestError(api_name, log_url, f"{type(error).__name__}: {error}") from error
         except (aiohttp.ClientError, OSError, ValueError, KeyError, TypeError, AttributeError) as error:

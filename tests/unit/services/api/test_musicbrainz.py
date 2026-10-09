@@ -510,19 +510,19 @@ class TestSearchReleaseGroupsSuccessLog:
 
 
 class TestFetchReleasesForGroupsExceptionHandling:
-    """Tests for _fetch_releases_for_groups exception in results (line 552)."""
+    """Any release fetch that broke leaves the list incomplete, so it fails the lookup."""
 
     @pytest.mark.parametrize(
         "error",
         [
             pytest.param(OSError("network timeout"), id="OSError"),
+            pytest.param(ValueError("bad payload"), id="ValueError"),
         ],
     )
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_fetch_releases_logs_warning_on_gather_exception(self, error: BaseException) -> None:
-        """A release fetch that broke outside the request contract is logged and leaves that release group without releases."""
-        error_logger = MockLogger()
+    async def test_broken_release_fetch_fails_the_lookup(self, error: Exception) -> None:
+        """An exception outside the request contract fails the lookup instead of scoring a shorter list."""
 
         async def mock_api_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
             """Fail the release fetch with the parametrized error."""
@@ -530,21 +530,14 @@ class TestFetchReleasesForGroupsExceptionHandling:
 
         client = MusicBrainzClient(
             console_logger=MockLogger(),
-            error_logger=error_logger,
+            error_logger=MockLogger(),
             make_api_request_func=mock_api_request,
             score_release_func=MagicMock(return_value=0.85),
             analytics=_mock_analytics(),
         )
 
-        release_groups: list[dict[str, Any]] = [{"id": "rg-abc-123", "title": "Test Album"}]
-        results = await client._fetch_releases_for_groups(release_groups)
-
-        assert len(results) == 1
-        assert results[0][0] is None
-        assert len(error_logger.warning_messages) == 1
-        assert "Failed to fetch releases for MB RG ID rg-abc-123" in error_logger.warning_messages[0]
-        # A cancelled fetch comes back with an empty message, so the type is what names the failure
-        assert type(error).__name__ in error_logger.warning_messages[0]
+        with pytest.raises(ApiRequestError, match=type(error).__name__):
+            await client._fetch_releases_for_groups([{"id": "rg-abc-123", "title": "Test Album"}])
 
 
 class TestRequestFailurePropagation:

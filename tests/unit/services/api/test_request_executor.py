@@ -934,11 +934,11 @@ class TestAttemptRequest:
         configured_executor: ApiRequestExecutor,
         mock_rate_limiter: AsyncMock,
     ) -> None:
-        """A closed event loop is a transient failure."""
+        """A closed event loop means the process is shutting down, so the request fails without a retry."""
         with patch.object(configured_executor, "_execute_single_request", new_callable=AsyncMock) as mock_execute:
             mock_execute.side_effect = RuntimeError("Event loop is closed")
 
-            with pytest.raises(TransientRequestError):
+            with pytest.raises(ApiRequestError):
                 await configured_executor._attempt_request(
                     api_name="musicbrainz",
                     url="https://api.example.com",
