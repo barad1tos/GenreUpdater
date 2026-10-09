@@ -126,13 +126,13 @@ UnifiedHashService.hash_api_key("Pink Floyd", "The Wall", "musicbrainz")  # prov
 
 ### Automatic
 
-| Trigger                                | Cache Affected                                                                      |
-|----------------------------------------|-------------------------------------------------------------------------------------|
-| TTL expiry                             | Memory cache, album year cache, provider "nothing found", request cache             |
-| Track removed, artist or album renamed | Provider result cache for the album                                                 |
-| Track modified                         | Library snapshot delta                                                              |
-| `--force`                              | Album year cache and skip checks bypassed; provider and request caches still answer |
-| `--fresh`                              | All caches cleared                                                                  |
+| Trigger                                              | Cache Affected                                                                      |
+|------------------------------------------------------|-------------------------------------------------------------------------------------|
+| TTL expiry                                           | Memory cache, album year cache, provider "nothing found", request cache             |
+| Track removed; artist, album or album artist renamed | Provider result cache for the album                                                 |
+| Track modified                                       | Library snapshot delta                                                              |
+| `--force`                                            | Album year cache and skip checks bypassed; provider and request caches still answer |
+| `--fresh`                                            | All caches cleared                                                                  |
 
 ### Manual
 

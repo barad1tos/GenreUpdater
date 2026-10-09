@@ -12,6 +12,7 @@ from app.music_updater import LibraryFetchError, MusicUpdater
 from core.logger import LogFormat
 from core.models.cache_types import LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
 from core.models.protocols import YearLookupUnavailableError
+from core.models.track_models import TrackDict
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
@@ -546,3 +547,27 @@ class TestVerifyPendingUnavailable:
         messages = deps.console_logger.info_messages
         assert any(f"no years found, unavailable: {LogFormat.dim('1')}" in message for message in messages)
         assert all("providers unavailable" not in message for message in messages)
+
+
+class TestInvalidationEventsUseGroupArtist:
+    """Invalidation events name albums by the artist the year search grouped them by."""
+
+    @staticmethod
+    def _track(album_artist: str) -> TrackDict:
+        return TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist=album_artist)
+
+    def test_removed_track_event_uses_album_artist(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        api_cache = MagicMock()
+
+        updater._emit_removed_track_events(["1"], {"1": self._track("Various Artists")}, api_cache)
+
+        api_cache.emit_track_removed.assert_called_once_with("1", "Various Artists", "Now 47")
+
+    def test_identity_change_event_uses_stored_album_artist(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        api_cache = MagicMock()
+
+        updater._emit_identity_change_events(["1"], {"1": self._track("Various Artists")}, [self._track("Some Band")], api_cache)
+
+        api_cache.emit_track_modified.assert_called_once_with("1", "Various Artists", "Now 47")

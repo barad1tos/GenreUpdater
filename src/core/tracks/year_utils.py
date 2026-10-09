@@ -6,7 +6,10 @@ These utilities are used across the year retrieval subsystem.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.models.track_models import TrackDict
 
 
 def resolve_non_negative_int(value: Any, default: int) -> int:
@@ -126,3 +129,17 @@ def normalize_collaboration_artist(artist: str) -> str:
         (artist.split(separator, maxsplit=1)[0].strip() for separator in separators if separator in artist),
         artist,
     )
+
+
+def album_group_artist(track: TrackDict) -> str:
+    """Return the artist the year search groups the track's album by.
+
+    Args:
+        track: Track from the library
+
+    Returns:
+        The album artist when set, otherwise the main artist of the track artist
+
+    """
+    album_artist = track.album_artist or ""
+    return album_artist if album_artist.strip() else normalize_collaboration_artist(track.artist or "")
