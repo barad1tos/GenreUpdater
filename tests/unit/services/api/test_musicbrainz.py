@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.musicbrainz import MusicBrainzClient
+from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext, ReleaseScorer
 from tests.mocks.csv_mock import MockLogger
 
@@ -545,3 +546,26 @@ class TestFetchReleasesForGroupsExceptionHandling:
         assert "Failed to fetch releases for MB RG ID rg-abc-123" in error_logger.warning_messages[0]
         # A cancelled fetch comes back with an empty message, so the type is what names the failure
         assert type(error).__name__ in error_logger.warning_messages[0]
+
+
+class TestRequestFailurePropagation:
+    """A failed request fails the MusicBrainz lookup instead of shrinking it."""
+
+    @pytest.mark.asyncio
+    async def test_failed_release_fetch_fails_the_lookup(self) -> None:
+        """A release-group fetch that failed must fail the lookup, not shrink it."""
+        search = {"count": 1, "release-groups": [{"id": "rg-1", "title": "Album", "primary-type": "Album", "artist-credit": [{"name": "Artist"}]}]}
+        request = AsyncMock(side_effect=[search, ApiRequestError("musicbrainz", "https://mb/release", "failed")])
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
+
+        with pytest.raises(ApiRequestError):
+            await client.get_scored_releases("artist", "album", ArtistContext())
+
+    @pytest.mark.asyncio
+    async def test_failed_search_fails_the_lookup(self) -> None:
+        """A search that failed must fail the lookup, not read as "nothing found"."""
+        request = AsyncMock(side_effect=ApiRequestError("musicbrainz", "https://mb/release-group", "failed"))
+        client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
+
+        with pytest.raises(ApiRequestError):
+            await client.get_scored_releases("artist", "album", ArtistContext())

@@ -15,6 +15,7 @@ from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.track_models import MBArtist
 
 from .api_base import BaseApiClient, ScoredRelease
+from .request_executor import ApiRequestError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -524,6 +525,9 @@ class MusicBrainzClient(BaseApiClient):
         Returns:
             List of (release_data, group_info) tuples
 
+        Raises:
+            ApiRequestError: A release fetch failed, so the list would be incomplete
+
         """
         release_fetch_tasks: list[tuple[Awaitable[MBApiData | None], MBApiData]] = []
         max_groups_to_process = 3
@@ -545,6 +549,9 @@ class MusicBrainzClient(BaseApiClient):
             release_fetch_tasks.append((task, rg_info))
 
         results = await asyncio.gather(*[t[0] for t in release_fetch_tasks], return_exceptions=True)
+        # A failed fetch means the provider could not be queried; a shorter list would pass for a real answer
+        if failure := next((result for result in results if isinstance(result, ApiRequestError)), None):
+            raise ApiRequestError(failure.api_name, failure.url, "release fetch failed", status=failure.status) from failure
 
         processed_results: list[tuple[MBApiData | None, MBApiData]] = []
         for i, result in enumerate(results):
