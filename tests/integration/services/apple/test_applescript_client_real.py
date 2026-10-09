@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from app.app_config import Config
+from core.apple_script_names import FETCH_TRACKS
 from metrics.analytics import Analytics, LoggerContainer
 from services.apple.applescript_client import AppleScriptClient
 
@@ -161,16 +162,13 @@ class TestRunScriptFile:
         await applescript_client.initialize()
 
         assert applescript_client.apple_scripts_dir is not None
-        scripts_dir = Path(applescript_client.apple_scripts_dir)
-        fetch_script = scripts_dir / "fetch_tracks.applescript"
-
-        if not fetch_script.exists():
-            pytest.skip("fetch_tracks.applescript not found")
+        if not (Path(applescript_client.apple_scripts_dir) / FETCH_TRACKS).exists():
+            pytest.skip(f"{FETCH_TRACKS} not found")
 
         # Run with test artist filter to limit results
-        # The script takes artist name as argument
+        # The script takes artist name as argument; run_script takes the script's name, as production code passes it
         result = await applescript_client.run_script(
-            str(fetch_script),
+            FETCH_TRACKS,
             arguments=["__TEST_NONEXISTENT_ARTIST__"],  # Non-existent artist = empty result
             timeout=30,
         )
