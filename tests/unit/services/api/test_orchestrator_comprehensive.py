@@ -8,10 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.api.orchestrator import (
-    ExternalApiOrchestrator,
-    normalize_name,
-)
+from core.models.normalization import normalize_search_name
+from services.api.orchestrator import ExternalApiOrchestrator
 from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
@@ -19,72 +17,72 @@ if TYPE_CHECKING:
 
 
 class TestNormalizeFunction:
-    """Test the normalize_name function for API query normalization."""
+    """Test the normalize_search_name function for API query normalization."""
 
     def test_normalize_preserves_simple_names(self) -> None:
         """Test that simple names without special patterns are preserved."""
-        assert normalize_name("The Beatles") == "The Beatles"
-        assert normalize_name("Björk") == "Björk"
-        assert normalize_name("Плач Єремії") == "Плач Єремії"
+        assert normalize_search_name("The Beatles") == "The Beatles"
+        assert normalize_search_name("Björk") == "Björk"
+        assert normalize_search_name("Плач Єремії") == "Плач Єремії"
 
     def test_normalize_handles_empty_and_whitespace(self) -> None:
         """Test handling of empty strings and whitespace."""
-        assert normalize_name("") == ""
-        assert normalize_name("   ") == ""  # Whitespace is normalized/stripped
+        assert normalize_search_name("") == ""
+        assert normalize_search_name("   ") == ""  # Whitespace is normalized/stripped
 
     def test_normalize_ampersand_to_and(self) -> None:
         """Test that ampersand converts to 'and' for better API matching."""
-        assert normalize_name("Karma & Effect") == "Karma and Effect"
-        assert normalize_name("Blessed & Cursed") == "Blessed and Cursed"
-        assert normalize_name("Pt. 1 & 2") == "Pt. 1 and 2"
-        assert normalize_name("Fire&Water") == "Fire and Water"  # No spaces
+        assert normalize_search_name("Karma & Effect") == "Karma and Effect"
+        assert normalize_search_name("Blessed & Cursed") == "Blessed and Cursed"
+        assert normalize_search_name("Pt. 1 & 2") == "Pt. 1 and 2"
+        assert normalize_search_name("Fire&Water") == "Fire and Water"  # No spaces
 
     def test_normalize_preserves_slash_in_artist_names(self) -> None:
         """Test that slash without spaces (like AC/DC) is preserved."""
-        assert normalize_name("AC/DC") == "AC/DC"
+        assert normalize_search_name("AC/DC") == "AC/DC"
 
     def test_normalize_splits_on_slash_with_spaces(self) -> None:
         """Test that ' / ' splits albums and keeps first part (split albums)."""
-        assert normalize_name("Robot Hive / Exodus") == "Robot Hive"
-        assert normalize_name("House By the Cemetery / Mortal Massacre") == "House By the Cemetery"
-        assert normalize_name("Solanaceae / King Dude") == "Solanaceae"
+        assert normalize_search_name("Robot Hive / Exodus") == "Robot Hive"
+        assert normalize_search_name("House By the Cemetery / Mortal Massacre") == "House By the Cemetery"
+        assert normalize_search_name("Solanaceae / King Dude") == "Solanaceae"
 
     def test_normalize_strips_plus_compilation_markers(self) -> None:
         """Test stripping trailing '+ digit' compilation markers (conservative)."""
         # Only strip when '+' precedes digits (bonus track counts)
-        assert normalize_name("Not for Want of Trying + 4") == "Not for Want of Trying"
-        assert normalize_name("Album + 10 Bonus Tracks") == "Album"
+        assert normalize_search_name("Not for Want of Trying + 4") == "Not for Want of Trying"
+        assert normalize_search_name("Album + 10 Bonus Tracks") == "Album"
         # Preserve legitimate titles where '+' precedes text
-        assert normalize_name("Nebularium + the Restless Memoirs") == "Nebularium + the Restless Memoirs"
-        assert normalize_name("The Singles Plus") == "The Singles Plus"  # No ' + '
+        assert normalize_search_name("Nebularium + the Restless Memoirs") == "Nebularium + the Restless Memoirs"
+        assert normalize_search_name("The Singles Plus") == "The Singles Plus"  # No ' + '
 
     def test_normalize_w_slash_to_with(self) -> None:
         """Test converting 'w/' to 'with'."""
-        assert normalize_name("Split w/ East Of The Wall") == "Split with East Of The Wall"
-        assert normalize_name("Collab w/Artist") == "Collab with Artist"
+        assert normalize_search_name("Split w/ East Of The Wall") == "Split with East Of The Wall"
+        assert normalize_search_name("Collab w/Artist") == "Collab with Artist"
 
     def test_normalize_equals_sign(self) -> None:
         """Test that ' = ' is converted to space."""
-        assert normalize_name("Liberation = Termination") == "Liberation Termination"
+        assert normalize_search_name("Liberation = Termination") == "Liberation Termination"
 
     def test_normalize_whitespace(self) -> None:
         """Test that multiple spaces are normalized to single space."""
-        assert normalize_name("Too   Many    Spaces") == "Too Many Spaces"
+        assert normalize_search_name("Too   Many    Spaces") == "Too Many Spaces"
 
     def test_normalize_complex_album_names(self) -> None:
         """Test complex album names with multiple patterns."""
         # Real problematic album from logs
         # Colons replaced with space for API matching (Issue #103)
-        assert normalize_name("The Alchemy Index, Vols. 1 & 2: Fire & Water") == "The Alchemy Index, Vols. 1 and 2 Fire and Water"
-        assert normalize_name("Make Love & War - The Wedlock") == "Make Love and War - The Wedlock"
+        assert normalize_search_name("The Alchemy Index, Vols. 1 & 2: Fire & Water") == "The Alchemy Index, Vols. 1 and 2 Fire and Water"
+        assert normalize_search_name("Make Love & War - The Wedlock") == "Make Love and War - The Wedlock"
 
     def test_normalize_colon_in_album_names(self) -> None:
         """Test colon normalization for API matching (Issue #103)."""
         # Colons break Lucene search - MusicBrainz escapes them to \:
         # which doesn't match "III: Trauma" in the database
-        assert normalize_name("III:Trauma") == "III Trauma"
-        assert normalize_name("Node: Reloaded") == "Node Reloaded"
-        assert normalize_name("Album: Subtitle") == "Album Subtitle"
+        assert normalize_search_name("III:Trauma") == "III Trauma"
+        assert normalize_search_name("Node: Reloaded") == "Node Reloaded"
+        assert normalize_search_name("Album: Subtitle") == "Album Subtitle"
 
 
 def _create_orchestrator_config(**overrides: object) -> AppConfig:
