@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     import logging
 
     from metrics import Analytics
+    from services.api.year_scoring import ArtistContext
 
 # Type alias for MusicBrainz API response data
 MBApiData = dict[str, Any]
@@ -569,7 +570,7 @@ class MusicBrainzClient(BaseApiClient):
         release_results: list[tuple[MBApiData | None, MBApiData]],
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
         """Process and score releases from fetched data.
 
@@ -577,7 +578,7 @@ class MusicBrainzClient(BaseApiClient):
             release_results: List of (release_data, group_info) tuples
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
             List of scored releases
@@ -615,7 +616,7 @@ class MusicBrainzClient(BaseApiClient):
                     release_to_score,
                     artist_norm,
                     album_norm,
-                    artist_region=artist_region,
+                    artist_context=artist_context,
                     source="musicbrainz",
                 )
 
@@ -700,7 +701,7 @@ class MusicBrainzClient(BaseApiClient):
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         *,
         artist_orig: str | None = None,
         album_orig: str | None = None,
@@ -712,7 +713,7 @@ class MusicBrainzClient(BaseApiClient):
         Args:
             artist_norm: Normalized artist name
             album_norm: Normalized album name
-            artist_region: Artist's region for scoring
+            artist_context: Region and activity period of the artist, used in scoring
             artist_orig: Original artist name (before normalization)
             album_orig: Original album name (before normalization)
 
@@ -742,7 +743,7 @@ class MusicBrainzClient(BaseApiClient):
             release_results = await self._fetch_releases_for_groups(all_release_groups)
 
             # Process and score the releases
-            scored_releases = self._process_and_score_releases(release_results, artist_norm, album_norm, artist_region)
+            scored_releases = self._process_and_score_releases(release_results, artist_norm, album_norm, artist_context)
 
         except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError, IndexError) as e:
             self.error_logger.exception("Error fetching from MusicBrainz for '%s - %s': %s", artist_norm, album_norm, e)

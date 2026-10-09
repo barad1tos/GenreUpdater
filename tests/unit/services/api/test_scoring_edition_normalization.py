@@ -13,6 +13,7 @@ import pytest
 
 from services.api import year_scoring
 from services.api.year_scoring import (
+    ArtistContext,
     ReleaseScorer,
     create_release_scorer,
 )
@@ -197,7 +198,7 @@ class TestAlbumMatchWithEditionNormalization:
             release,
             "evanescence",
             "fallen",  # normalized (unused when album_orig provided)
-            artist_region=None,
+            artist_context=ArtistContext(),
             album_orig="Fallen (Deluxe Edition)",  # Original name for stripping
         )
         # Should get album exact match bonus because editions are stripped
@@ -215,7 +216,7 @@ class TestAlbumMatchWithEditionNormalization:
             release,
             "pink floyd",
             "dark side of the moon",  # user has clean name
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
         # API title has (2011 Remaster) which gets stripped
         assert score > 30
@@ -232,7 +233,7 @@ class TestAlbumMatchWithEditionNormalization:
             release,
             "linkin park",
             "hybrid theory",  # normalized (unused when album_orig provided)
-            artist_region=None,
+            artist_context=ArtistContext(),
             album_orig="Hybrid Theory (Deluxe Edition)",  # Different edition
         )
         # Both strip to "Hybrid Theory" so should match
@@ -251,14 +252,14 @@ class TestAlbumMatchWithEditionNormalization:
             release,
             "evanescence",
             "fallen",
-            artist_region=None,
+            artist_context=ArtistContext(),
             album_orig="Fallen (Deluxe Edition)",  # Won't be stripped without keywords
         )
         score_without_suffix = scorer_without_keywords.score_original_release(
             release,
             "evanescence",
             "fallen",
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
         # Clean match should score higher without keyword stripping
         assert score_without_suffix > score_with_suffix
@@ -280,7 +281,7 @@ class TestArtistMismatchPenalty:
             "year": "2003",
             "source": "musicbrainz",
         }
-        score = scorer.score_original_release(release, "evanescence", "fallen", artist_region=None)
+        score = scorer.score_original_release(release, "evanescence", "fallen", artist_context=ArtistContext())
         # Should get positive score with artist match bonus
         assert score > 30
 
@@ -293,7 +294,7 @@ class TestArtistMismatchPenalty:
             "year": "1994",
             "source": "musicbrainz",
         }
-        score = scorer.score_original_release(release, "evanescence", "evanescence", artist_region=None)
+        score = scorer.score_original_release(release, "evanescence", "evanescence", artist_context=ArtistContext())
         # Should get very low or zero score due to artist mismatch
         assert score < 20
 
@@ -312,8 +313,8 @@ class TestArtistMismatchPenalty:
             "year": "1969",
             "source": "musicbrainz",
         }
-        score_substring = scorer.score_original_release(release_substring, "beatles", "abbey road", artist_region=None)
-        score_mismatch = scorer.score_original_release(release_mismatch, "beatles", "abbey road", artist_region=None)
+        score_substring = scorer.score_original_release(release_substring, "beatles", "abbey road", artist_context=ArtistContext())
+        score_mismatch = scorer.score_original_release(release_mismatch, "beatles", "abbey road", artist_context=ArtistContext())
         # Substring match should score higher than complete mismatch
         assert score_substring > score_mismatch
 
@@ -335,8 +336,8 @@ class TestArtistMismatchPenalty:
             "year": "1994",
             "source": "musicbrainz",
         }
-        score_correct = scorer.score_original_release(correct_release, "evanescence", "evanescence", artist_region=None)
-        score_wrong = scorer.score_original_release(wrong_release, "evanescence", "evanescence", artist_region=None)
+        score_correct = scorer.score_original_release(correct_release, "evanescence", "evanescence", artist_context=ArtistContext())
+        score_wrong = scorer.score_original_release(wrong_release, "evanescence", "evanescence", artist_context=ArtistContext())
         # Correct artist+album should score MUCH higher
         assert score_correct > score_wrong + 40
 
@@ -524,7 +525,7 @@ class TestIntegrationEditionNormalization:
             api_release,
             "evanescence",
             "fallen",  # normalized (unused when album_orig provided)
-            artist_region=None,
+            artist_context=ArtistContext(),
             album_orig="Fallen (Deluxe Edition)",  # User's original album name
         )
         # Should score well because editions are normalized
@@ -546,7 +547,7 @@ class TestIntegrationEditionNormalization:
             api_release,
             "the beatles",
             "abbey road",  # User has clean name
-            artist_region=None,
+            artist_context=ArtistContext(),
         )
         # API title "(2019 Remaster)" is stripped -> "Abbey Road" matches user's album
         assert score > 40
@@ -567,7 +568,7 @@ class TestIntegrationEditionNormalization:
             api_release,
             "pink floyd",
             "the dark side of the moon",  # normalized (unused when album_orig provided)
-            artist_region=None,
+            artist_context=ArtistContext(),
             album_orig="The Dark Side of the Moon (50th Anniversary Edition)",
         )
         assert score > 40

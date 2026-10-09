@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import YearSearchCoordinator
 from tests.factories import create_test_app_config
 
@@ -109,7 +110,7 @@ class TestYearSearchRateLimiting:
             coordinator.fetch_all_api_results(
                 artist_norm=f"artist{i}",
                 album_norm=f"album{i}",
-                artist_region=None,
+                artist_context=ArtistContext(),
                 log_artist=f"Artist {i}",
                 log_album=f"Album {i}",
             )

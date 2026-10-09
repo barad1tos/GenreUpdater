@@ -355,23 +355,6 @@ class ExternalApiServiceProtocol(Protocol):
         """
         ...
 
-    async def get_year_from_discogs(
-        self,
-        artist: str,
-        album: str,
-    ) -> str | None:
-        """Fetch the earliest release year for an album from Discogs.
-
-        Args:
-            artist: Artist name
-            album: Album name
-
-        Returns:
-            Year string or None if not found
-
-        """
-        ...
-
 
 @runtime_checkable
 class AppleScriptClientProtocol(Protocol):

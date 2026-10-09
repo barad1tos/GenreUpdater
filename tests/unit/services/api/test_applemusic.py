@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
+from services.api.year_scoring import ArtistContext
 
 
 @pytest.fixture
@@ -165,7 +166,7 @@ class TestGetScoredReleases:
         """Test returns empty list when API returns None."""
         mock_api_request_func.return_value = None
 
-        result = await client.get_scored_releases("pink floyd", "dark side")
+        result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         assert result == []
 
@@ -178,7 +179,7 @@ class TestGetScoredReleases:
         """Test returns empty list when API returns empty results."""
         mock_api_request_func.return_value = {"results": []}
 
-        result = await client.get_scored_releases("unknown artist", "unknown album")
+        result = await client.get_scored_releases("unknown artist", "unknown album", artist_context=ArtistContext())
 
         assert result == []
 
@@ -194,7 +195,7 @@ class TestGetScoredReleases:
         mock_api_request_func.return_value = {"results": [sample_itunes_result]}
         mock_score_func.return_value = 90.0
 
-        result = await client.get_scored_releases("pink floyd", "dark side")
+        result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         assert len(result) == 1
         assert result[0]["title"] == "The Dark Side of the Moon"
@@ -214,7 +215,7 @@ class TestGetScoredReleases:
         # Return valid results to avoid triggering the lookup fallback
         mock_api_request_func.return_value = {"results": [sample_itunes_result]}
 
-        await client.get_scored_releases("pink floyd", "dark side")
+        await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         mock_api_request_func.assert_called_once()
         call_kwargs = mock_api_request_func.call_args[1]
@@ -248,7 +249,7 @@ class TestGetScoredReleases:
         ]
         mock_score_func.return_value = 85.0
 
-        result = await client.get_scored_releases("korn", "issues")
+        result = await client.get_scored_releases("korn", "issues", artist_context=ArtistContext())
 
         # Should have made 3 API calls
         assert mock_api_request_func.call_count == 3
@@ -269,7 +270,7 @@ class TestGetScoredReleases:
             {"results": []},  # Artist search: no matching artist
         ]
 
-        result = await client.get_scored_releases("unknown artist", "unknown album")
+        result = await client.get_scored_releases("unknown artist", "unknown album", artist_context=ArtistContext())
 
         assert mock_api_request_func.call_count == 2
         assert result == []
@@ -307,7 +308,7 @@ class TestGetScoredReleases:
         ]
         mock_score_func.return_value = 90.0
 
-        result = await client.get_scored_releases("tool", "lateralus")
+        result = await client.get_scored_releases("tool", "lateralus", artist_context=ArtistContext())
 
         # Should have made 3 API calls: primary search (None) + artist search + lookup
         assert mock_api_request_func.call_count == 3
@@ -325,7 +326,7 @@ class TestGetScoredReleases:
         """Test handles API error gracefully."""
         mock_api_request_func.side_effect = OSError("Connection error")
 
-        result = await client.get_scored_releases("pink floyd", "dark side")
+        result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         assert result == []
 
@@ -344,7 +345,7 @@ class TestGetScoredReleases:
         }
         mock_api_request_func.return_value = {"results": [result_without_year]}
 
-        result = await client.get_scored_releases("pink floyd", "dark side")
+        result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         assert result == []
         mock_score_func.assert_not_called()
@@ -372,7 +373,7 @@ class TestGetScoredReleases:
         mock_api_request_func.return_value = {"results": results}
         mock_score_func.return_value = 85.0
 
-        result = await client.get_scored_releases("pink floyd", "albums")
+        result = await client.get_scored_releases("pink floyd", "albums", artist_context=ArtistContext())
 
         assert len(result) == 2
 
@@ -393,6 +394,7 @@ class TestProcessItunesResult:
             sample_itunes_result,
             "pink floyd",
             "dark side",
+            artist_context=ArtistContext(),
         )
 
         assert result is not None
@@ -413,7 +415,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -427,7 +429,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -442,7 +444,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -457,7 +459,7 @@ class TestProcessItunesResult:
             "releaseDate": "invalid-date",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -472,7 +474,7 @@ class TestProcessItunesResult:
             "releaseDate": "20-01-01T00:00:00Z",  # Year too short
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -489,7 +491,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -506,6 +508,7 @@ class TestProcessItunesResult:
             sample_itunes_result,
             "pink floyd",
             "dark side",
+            artist_context=ArtistContext(),
         )
 
         assert result is not None
@@ -526,7 +529,7 @@ class TestProcessItunesResult:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["catalog_number"] is None
@@ -550,7 +553,7 @@ class TestReissueDetectionEdgeCases:
 
         # Mock _parse_release_year to return a non-integer string
         with patch.object(client, "_parse_release_year", return_value="N/A"):
-            result = await client.get_scored_releases("pink floyd", "dark side")
+            result = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         # Should still produce a result (is_reissue stays False, key not added)
         assert len(result) == 1
@@ -593,6 +596,41 @@ class TestScoredReleaseStructure:
     """Tests for ScoredRelease structure returned by the client."""
 
     @pytest.mark.asyncio
+    async def test_releases_are_scored_with_the_search_artist_context(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+        sample_itunes_result: dict[str, Any],
+    ) -> None:
+        """The artist's region and period reach the scorer for iTunes releases, as they do for the other providers."""
+        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
+        mock_score_func.return_value = 85.0
+        artist_context = ArtistContext(region="gb", period={"start_year": 1965, "end_year": 2014})
+
+        await client.get_scored_releases("pink floyd", "dark side", artist_context)
+
+        mock_score_func.assert_called_once()
+        assert mock_score_func.call_args.kwargs["artist_context"] is artist_context
+
+    @pytest.mark.asyncio
+    async def test_storefront_is_not_the_release_country(
+        self,
+        client: AppleMusicClient,
+        mock_api_request_func: AsyncMock,
+        mock_score_func: MagicMock,
+        sample_itunes_result: dict[str, Any],
+    ) -> None:
+        """The searched storefront says nothing about where a release came from, so no country reaches the scorer."""
+        mock_api_request_func.return_value = {"results": [sample_itunes_result]}
+        mock_score_func.return_value = 85.0
+
+        results = await client.get_scored_releases("pink floyd", "dark side", ArtistContext(region="us"))
+
+        assert mock_score_func.call_args.kwargs["release"]["country"] is None
+        assert results[0]["country"] is None
+
+    @pytest.mark.asyncio
     async def test_scored_release_has_all_required_fields(
         self,
         client: AppleMusicClient,
@@ -604,7 +642,7 @@ class TestScoredReleaseStructure:
         mock_api_request_func.return_value = {"results": [sample_itunes_result]}
         mock_score_func.return_value = 85.0
 
-        results = await client.get_scored_releases("pink floyd", "dark side")
+        results = await client.get_scored_releases("pink floyd", "dark side", artist_context=ArtistContext())
 
         assert len(results) == 1
         release = results[0]
@@ -641,7 +679,7 @@ class TestEdgeCases:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["artist"] == "Artist"
@@ -658,7 +696,7 @@ class TestEdgeCases:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -671,7 +709,7 @@ class TestEdgeCases:
         """Test handles empty search terms."""
         mock_api_request_func.return_value = {"results": []}
 
-        result = await client.get_scored_releases("", "")
+        result = await client.get_scored_releases("", "", artist_context=ArtistContext())
 
         # Should make request with just space-stripped term
         assert result == []
@@ -685,7 +723,7 @@ class TestEdgeCases:
         """Test handles RuntimeError."""
         mock_api_request_func.side_effect = RuntimeError("Runtime error")
 
-        result = await client.get_scored_releases("artist", "album")
+        result = await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
 
         assert result == []
 
@@ -698,7 +736,7 @@ class TestEdgeCases:
         """Test handles ValueError."""
         mock_api_request_func.side_effect = ValueError("Value error")
 
-        result = await client.get_scored_releases("artist", "album")
+        result = await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
 
         assert result == []
 
@@ -878,7 +916,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -895,7 +933,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is None
 
@@ -912,7 +950,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["score"] == 50.0
@@ -930,7 +968,7 @@ class TestScoreFiltering:
             "releaseDate": "2020-01-01T00:00:00Z",
         }
 
-        result = client._process_itunes_result(result_data, "artist", "album")
+        result = client._process_itunes_result(result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
         assert result["score"] == 0.01
@@ -961,7 +999,7 @@ class TestScoreFiltering:
         # First call returns 50, second returns 0
         mock_score_func.side_effect = [50.0, 0.0]
 
-        result = await client.get_scored_releases("good artist", "good album")
+        result = await client.get_scored_releases("good artist", "good album", artist_context=ArtistContext())
 
         # Only the first result should be returned
         assert len(result) == 1
@@ -1079,6 +1117,7 @@ class TestProcessApiResultsUnexpectedError:
                 artist_norm="artist",
                 album_norm="album",
                 search_term="artist album",
+                artist_context=ArtistContext(),
             )
 
         assert scored == []

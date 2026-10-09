@@ -405,10 +405,8 @@ class MockExternalApiService:
         """Initialize the mock external API service."""
         self.get_album_year_response: tuple[str | None, bool, int, dict[str, int]] = ("2020", True, 85, {"2020": 85})
         self.artist_activity_response: tuple[int | None, int | None] = (1990, None)
-        self.discogs_year_response: str | None = "2020"
         self.get_album_year_calls: list[tuple[str, str, str | None, int | None]] = []
         self.artist_activity_requests: list[str] = []
-        self.discogs_requests: list[tuple[str, str]] = []
         self.initialize_calls: list[bool] = []
         self.close_count = 0
 
@@ -455,23 +453,6 @@ class MockExternalApiService:
         """
         self.artist_activity_requests.append(artist_norm)
         return self.artist_activity_response
-
-    async def get_year_from_discogs(
-        self,
-        artist: str,
-        album: str,
-    ) -> str | None:
-        """Get year from Discogs.
-
-        Args:
-            artist: Artist name
-            album: Album name
-
-        Returns:
-            Year string or None
-        """
-        self.discogs_requests.append((artist, album))
-        return self.discogs_year_response
 
     async def get_artist_start_year(
         self,

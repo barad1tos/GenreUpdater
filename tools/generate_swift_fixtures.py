@@ -30,7 +30,7 @@ from core.models.normalization import normalize_for_matching  # noqa: E402
 from core.models.track_models import ScoringConfig, TrackDict  # noqa: E402
 from core.tracks.year_consistency import YearConsistencyChecker  # noqa: E402
 from services.api.year_score_resolver import YearScoreResolver  # noqa: E402
-from services.api.year_scoring import ReleaseScorer  # noqa: E402
+from services.api.year_scoring import ArtistContext, ReleaseScorer  # noqa: E402
 
 # Quiet logger for deterministic output
 _logger = logging.getLogger("fixture_gen")
@@ -945,17 +945,11 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
         artist_norm = normalize_for_matching(query_artist)
         album_norm = normalize_for_matching(query_album)
 
-        # Set artist period context if provided
-        if "artistPeriod" in case:
-            scorer.artist_period_context = case["artistPeriod"]
-        else:
-            scorer.artist_period_context = None
-
         score = scorer.score_original_release(
             release=release,
             artist_norm=artist_norm,
             album_norm=album_norm,
-            artist_region=case.get("artistRegion"),
+            artist_context=ArtistContext(region=case.get("artistRegion"), period=case.get("artistPeriod")),
             source=str(release.get("source", "unknown")),
             album_orig=query_album,
         )
@@ -984,7 +978,6 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
         query_album = str(rset["queryAlbum"])
         artist_norm = normalize_for_matching(query_artist)
         album_norm = normalize_for_matching(query_album)
-        scorer.artist_period_context = None
 
         scored: list[dict[str, Any]] = []
         for cand in rset["candidates"]:
@@ -993,7 +986,7 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
                 release=cand_release,
                 artist_norm=artist_norm,
                 album_norm=album_norm,
-                artist_region=rset.get("artistRegion"),
+                artist_context=ArtistContext(region=rset.get("artistRegion")),
                 source=str(cand_release.get("source", "unknown")),
                 album_orig=query_album,
             )

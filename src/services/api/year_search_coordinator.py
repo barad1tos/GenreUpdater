@@ -7,7 +7,7 @@ information from multiple providers (MusicBrainz, Discogs, Apple Music).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 from core.debug_utils import debug
 from core.models.script_detection import ScriptType, detect_primary_script
@@ -22,22 +22,14 @@ if TYPE_CHECKING:
     from services.api.applemusic import AppleMusicClient
     from services.api.discogs import DiscogsClient
     from services.api.musicbrainz import MusicBrainzClient
-    from services.api.year_scoring import ReleaseScorer
+    from services.api.year_scoring import ArtistContext, ReleaseScorer
 
 
-class _RegionAwareApi(Protocol):
-    """Protocol for APIs that accept artist_region parameter."""
+class _ReleaseSource(Protocol):
+    """A provider client that scores its releases against one search's artist context."""
 
-    async def get_scored_releases(self, artist_norm: str, album_norm: str, artist_region: str | None) -> list[ScoredRelease]:
-        """Get scored releases with region awareness."""
-        ...
-
-
-class _SimpleApi(Protocol):
-    """Protocol for APIs that don't accept artist_region parameter."""
-
-    async def get_scored_releases(self, artist_norm: str, album_norm: str) -> list[ScoredRelease]:
-        """Get scored releases."""
+    async def get_scored_releases(self, artist_norm: str, album_norm: str, artist_context: ArtistContext) -> list[ScoredRelease]:
+        """Get scored releases for the album."""
         ...
 
 
@@ -90,12 +82,12 @@ class YearSearchCoordinator:
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
         """Fetch scored releases from all API providers with script-aware logic."""
-        self._log_api_search_start(artist_norm, album_norm, artist_region, log_artist, log_album)
+        self._log_api_search_start(artist_norm, album_norm, artist_context, log_artist, log_album)
 
         # Try script-optimized search first
         artist_script = detect_primary_script(log_artist)
@@ -103,23 +95,23 @@ class YearSearchCoordinator:
         primary_script = artist_script if artist_script != ScriptType.UNKNOWN else album_script
 
         if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
-            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_region)
+            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_context)
             if script_results:
                 return script_results
 
         # Standard API search (all providers concurrently)
-        results = await self._execute_standard_api_search(artist_norm, album_norm, artist_region, log_artist, log_album)
+        results = await self._execute_standard_api_search(artist_norm, album_norm, artist_context, log_artist, log_album)
         if results:
             return results
 
         # Fallback: try alternative search strategy
-        return await self._try_alternative_search(album_norm, artist_region, log_artist, log_album)
+        return await self._try_alternative_search(album_norm, artist_context, log_artist, log_album)
 
     def _log_api_search_start(
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
     ) -> None:
@@ -131,7 +123,7 @@ class YearSearchCoordinator:
             "Starting API search with parameters: artist_norm='%s', album_norm='%s', artist_region='%s'",
             artist_norm,
             album_norm,
-            artist_region or "None",
+            artist_context.region or "None",
         )
         self.console_logger.info("Original names: artist='%s', album='%s'", log_artist, log_album)
 
@@ -140,7 +132,7 @@ class YearSearchCoordinator:
         script_type: ScriptType,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
         if debug.api:
@@ -153,7 +145,7 @@ class YearSearchCoordinator:
             api_lists["primary"],
             artist_norm=artist_norm,
             album_norm=album_norm,
-            artist_region=artist_region,
+            artist_context=artist_context,
             script_type=script_type,
             is_fallback=False,
         )
@@ -167,7 +159,7 @@ class YearSearchCoordinator:
             api_lists["fallback"],
             artist_norm=artist_norm,
             album_norm=album_norm,
-            artist_region=artist_region,
+            artist_context=artist_context,
             script_type=script_type,
             is_fallback=True,
         )
@@ -219,7 +211,7 @@ class YearSearchCoordinator:
         *,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         script_type: ScriptType,
         is_fallback: bool,
     ) -> list[ScoredRelease] | None:
@@ -230,7 +222,7 @@ class YearSearchCoordinator:
                 api_name,
                 artist_norm=artist_norm,
                 album_norm=album_norm,
-                artist_region=artist_region,
+                artist_context=artist_context,
                 script_type=script_type,
                 is_fallback=is_fallback,
             )
@@ -244,7 +236,7 @@ class YearSearchCoordinator:
         *,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         script_type: ScriptType,
         is_fallback: bool,
     ) -> list[ScoredRelease] | None:
@@ -258,7 +250,7 @@ class YearSearchCoordinator:
 
             if debug.api:
                 self.console_logger.info("Trying %s for %s text", api_name, script_type.value)
-            results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region)
+            results: list[ScoredRelease] = await self._call_api_with_proper_params(api_client, artist_norm, album_norm, artist_context)
 
             if results:
                 if debug.api:
@@ -282,25 +274,14 @@ class YearSearchCoordinator:
 
     async def _call_api_with_proper_params(
         self,
-        api_client: MusicBrainzClient | DiscogsClient | AppleMusicClient,
-        api_name: str,
+        api_client: _ReleaseSource,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Call API with proper parameters based on what the API accepts.
-
-        MusicBrainz and Discogs accept artist_region parameter.
-        AppleMusic doesn't accept artist_region parameter.
-
-        Uses semaphore to limit concurrent API requests.
-        """
+        """Ask one provider for scored releases, holding the semaphore that limits concurrent API requests."""
         async with self._api_semaphore:
-            if api_name in {"musicbrainz", "discogs"}:
-                # Cast to protocol that accepts artist_region
-                return await cast(_RegionAwareApi, api_client).get_scored_releases(artist_norm, album_norm, artist_region)
-            # Cast to protocol that doesn't accept artist_region
-            return await cast(_SimpleApi, api_client).get_scored_releases(artist_norm, album_norm)
+            return await api_client.get_scored_releases(artist_norm, album_norm, artist_context)
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
         """Get API client by name."""
@@ -316,7 +297,7 @@ class YearSearchCoordinator:
         self,
         artist_norm: str,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
@@ -330,7 +311,7 @@ class YearSearchCoordinator:
             if api_client := self._get_api_client(api_name):
                 active_api_names.append(api_name)
                 api_tasks.append(
-                    self._call_api_with_proper_params(api_client, api_name, artist_norm, album_norm, artist_region),
+                    self._call_api_with_proper_params(api_client, artist_norm, album_norm, artist_context),
                 )
 
         # Execute all API calls concurrently
@@ -342,7 +323,7 @@ class YearSearchCoordinator:
     async def _try_alternative_search(
         self,
         album_norm: str,
-        artist_region: str | None,
+        artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
@@ -370,7 +351,7 @@ class YearSearchCoordinator:
         return await self._execute_standard_api_search(
             alt_artist_norm,
             alt_album_norm,
-            artist_region,
+            artist_context,
             alt_artist or log_artist,
             alt_album or log_album,
         )

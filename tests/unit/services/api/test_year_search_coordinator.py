@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.models.script_detection import ScriptType
+from services.api.year_scoring import ArtistContext
 from services.api.year_search_coordinator import YearSearchCoordinator
 from tests.factories import create_test_app_config
 
@@ -304,7 +305,7 @@ class TestFetchAllApiResults:
         mock_musicbrainz_client.get_scored_releases.return_value = []
         mock_discogs_client.get_scored_releases.return_value = []
 
-        results = await coordinator.fetch_all_api_results("pink floyd", "dark side", None, "Pink Floyd", "Dark Side")
+        results = await coordinator.fetch_all_api_results("pink floyd", "dark side", ArtistContext(), "Pink Floyd", "Dark Side")
 
         assert results == []
 
@@ -319,9 +320,41 @@ class TestFetchAllApiResults:
         mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
         mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 90}]
 
-        results = await coordinator.fetch_all_api_results("artist", "album", None, "Artist", "Album")
+        results = await coordinator.fetch_all_api_results("artist", "album", ArtistContext(), "Artist", "Album")
 
         assert len(results) >= 1
+
+    @pytest.mark.asyncio
+    async def test_every_provider_scores_with_the_search_context(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+        mock_discogs_client: AsyncMock,
+        mock_applemusic_client: AsyncMock,
+    ) -> None:
+        """Each provider receives the lookup's own artist context, so its releases score against that artist."""
+        artist_context = ArtistContext(region="GB", period={"start_year": 1965, "end_year": 2014})
+        for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
+            client.get_scored_releases.return_value = [{"title": "Album", "year": "1973", "score": 85}]
+
+        await coordinator.fetch_all_api_results("pink floyd", "dark side", artist_context, "Pink Floyd", "Dark Side")
+
+        for client in (mock_musicbrainz_client, mock_discogs_client, mock_applemusic_client):
+            assert client.get_scored_releases.await_args.args[2] is artist_context
+
+    @pytest.mark.asyncio
+    async def test_script_search_scores_with_the_search_context(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_musicbrainz_client: AsyncMock,
+    ) -> None:
+        """The non-Latin search hands the lookup's context to the provider it tries first."""
+        artist_context = ArtistContext(region="JP", period={"start_year": 1990, "end_year": None})
+        mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "アルバム", "year": "1995", "score": 85}]
+
+        await coordinator.fetch_all_api_results("ドリカム", "アルバム", artist_context, "ドリカム", "アルバム")
+
+        assert mock_musicbrainz_client.get_scored_releases.await_args.args[2] is artist_context
 
 
 class TestTrySingleApi:
@@ -337,7 +370,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_single_api(
-            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_context=ArtistContext(), script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is not None
@@ -347,7 +380,7 @@ class TestTrySingleApi:
     async def test_returns_none_on_unknown_api(self, coordinator: YearSearchCoordinator) -> None:
         """Test returns None for unknown API."""
         results = await coordinator._try_single_api(
-            "unknown", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            "unknown", artist_norm="artist", album_norm="album", artist_context=ArtistContext(), script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is None
@@ -362,7 +395,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client.get_scored_releases.return_value = []
 
         results = await coordinator._try_single_api(
-            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_context=ArtistContext(), script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is None
@@ -377,7 +410,7 @@ class TestTrySingleApi:
         mock_musicbrainz_client.get_scored_releases.side_effect = ValueError("API error")
 
         results = await coordinator._try_single_api(
-            "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            "musicbrainz", artist_norm="artist", album_norm="album", artist_context=ArtistContext(), script_type=ScriptType.LATIN, is_fallback=False
         )
 
         assert results is None
@@ -398,7 +431,12 @@ class TestTrySingleApi:
         with caplog.at_level(logging.WARNING, logger=error_logger.name), patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = False
             await coordinator._try_single_api(
-                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.CYRILLIC, is_fallback=False
+                "musicbrainz",
+                artist_norm="artist",
+                album_norm="album",
+                artist_context=ArtistContext(),
+                script_type=ScriptType.CYRILLIC,
+                is_fallback=False,
             )
 
         error_records = [record for record in caplog.records if record.name == error_logger.name]
@@ -424,7 +462,12 @@ class TestTryApiList:
         mock_discogs_client.get_scored_releases.return_value = [{"title": "Album", "year": "2020", "score": 85}]
 
         results = await coordinator._try_api_list(
-            ["musicbrainz", "discogs"], artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            ["musicbrainz", "discogs"],
+            artist_norm="artist",
+            album_norm="album",
+            artist_context=ArtistContext(),
+            script_type=ScriptType.LATIN,
+            is_fallback=False,
         )
 
         assert results is not None
@@ -442,7 +485,12 @@ class TestTryApiList:
         mock_discogs_client.get_scored_releases.return_value = []
 
         results = await coordinator._try_api_list(
-            ["musicbrainz", "discogs"], artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+            ["musicbrainz", "discogs"],
+            artist_norm="artist",
+            album_norm="album",
+            artist_context=ArtistContext(),
+            script_type=ScriptType.LATIN,
+            is_fallback=False,
         )
 
         assert results is None
@@ -500,7 +548,7 @@ class TestExecuteStandardApiSearch:
         mock_discogs_client.get_scored_releases.return_value = []
         mock_applemusic_client.get_scored_releases.return_value = []
 
-        results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
+        results = await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album")
 
         assert len(results) >= 1
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
@@ -530,7 +578,7 @@ class TestExecuteStandardApiSearch:
             return None if api_name == "discogs" else original_get(api_name)
 
         with patch.object(coordinator, "_get_api_client", side_effect=selective_get):
-            results = await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
+            results = await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album")
 
         assert len(results) >= 1
         mock_musicbrainz_client.get_scored_releases.assert_called_once()
@@ -550,7 +598,7 @@ class TestExecuteStandardApiSearch:
         mock_musicbrainz_client.get_scored_releases.side_effect = api_error
 
         with caplog.at_level(logging.WARNING, logger=error_logger.name):
-            await coordinator._execute_standard_api_search("artist", "album", None, "Artist", "Album")
+            await coordinator._execute_standard_api_search("artist", "album", ArtistContext(), "Artist", "Album")
 
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
@@ -575,7 +623,7 @@ class TestScriptOptimizedSearch:
         results = await coordinator.fetch_all_api_results(
             "московский исполнитель",
             "альбом",
-            None,
+            ArtistContext(),
             "Московский Исполнитель",  # Cyrillic artist
             "Альбом",
         )
@@ -659,7 +707,12 @@ class TestDebugApiLogging:
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
             result = await coordinator._try_single_api(
-                "unknown_api", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+                "unknown_api",
+                artist_norm="artist",
+                album_norm="album",
+                artist_context=ArtistContext(),
+                script_type=ScriptType.LATIN,
+                is_fallback=False,
             )
 
         assert result is None
@@ -678,7 +731,12 @@ class TestDebugApiLogging:
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
             await coordinator._try_single_api(
-                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.LATIN, is_fallback=False
+                "musicbrainz",
+                artist_norm="artist",
+                album_norm="album",
+                artist_context=ArtistContext(),
+                script_type=ScriptType.LATIN,
+                is_fallback=False,
             )
 
         mock_console.info.assert_any_call("Trying %s for %s text", "musicbrainz", "latin")
@@ -696,7 +754,12 @@ class TestDebugApiLogging:
         with patch("services.api.year_search_coordinator.debug") as mock_debug:
             mock_debug.api = True
             result = await coordinator._try_single_api(
-                "musicbrainz", artist_norm="artist", album_norm="album", artist_region=None, script_type=ScriptType.CHINESE, is_fallback=False
+                "musicbrainz",
+                artist_norm="artist",
+                album_norm="album",
+                artist_context=ArtistContext(),
+                script_type=ScriptType.CHINESE,
+                is_fallback=False,
             )
 
         assert result is None
