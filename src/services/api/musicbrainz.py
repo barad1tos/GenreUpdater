@@ -569,34 +569,25 @@ class MusicBrainzClient(BaseApiClient):
 
         return processed_results
 
-    def _process_and_score_releases(
-        self,
-        release_results: list[tuple[MBApiData | None, MBApiData]],
-        artist_norm: str,
-        album_norm: str,
-        artist_context: ArtistContext,
-    ) -> list[ScoredRelease]:
-        """Process and score releases from fetched data.
+    def _build_release_records(self, release_results: list[tuple[MBApiData | None, MBApiData]]) -> list[dict[str, Any]]:
+        """Turn fetched release groups into release records, the way the scorer reads them, without scoring.
+
+        Each record holds the ScoredRelease fields except the score, the credited artist for name matching, and the
+        group's first date for the release-group match. Nothing in it depends on the artist context or the clock.
 
         Args:
             release_results: List of (release_data, group_info) tuples
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
-            List of scored releases
-
+            Release records, one per distinct release
         """
-        scored_releases: list[ScoredRelease] = []
+        records: list[dict[str, Any]] = []
         processed_release_ids: set[str] = set()
 
         for result, rg_info in release_results:
             if not result:
                 continue
 
-            # Result is already dict[str, Any], no need to cast to TypedDict
-            # Just assert the structure we expect
             releases_list = result.get("releases", []) if isinstance(result, dict) else []
 
             for release in releases_list:
@@ -605,30 +596,41 @@ class MusicBrainzClient(BaseApiClient):
                     continue
                 processed_release_ids.add(release_id)
 
-                # Extract artist name from artist-credit (MusicBrainz format)
-                # Try release first, then fall back to release group
+                # Credited artist from the release, else from the release group
                 artist_name = self._extract_artist_from_credit(release) or self._extract_artist_from_credit(rg_info)
-
-                # Score the release as the scorer reads it, the way Discogs does: the ScoredRelease fields, the credited
-                # artist for name matching, and the group's first date for the release-group match
-                release_info = self._create_scored_release(release, rg_info, 0.0, artist_norm)
-                release_to_score: MBApiData = {**release_info, "artist": artist_name}
+                record: dict[str, Any] = {**self._create_scored_release(release, rg_info, 0.0, ""), "artist": artist_name}
+                del record["score"]
                 if rg_first_date := rg_info.get("first-release-date"):
-                    release_to_score["releasegroup_first_date"] = rg_first_date
+                    record["releasegroup_first_date"] = rg_first_date
+                records.append(record)
 
-                score = self._score_original_release(
-                    release_to_score,
-                    artist_norm,
-                    album_norm,
-                    artist_context=artist_context,
-                    source="musicbrainz",
-                )
+        return records
 
-                if score > 0:
-                    release_info["score"] = score
-                    scored_releases.append(release_info)
+    def score_records(
+        self,
+        records: list[dict[str, Any]],
+        artist_norm: str,
+        album_norm: str,
+        artist_context: ArtistContext,
+    ) -> list[ScoredRelease]:
+        """Score release records with this search's artist context.
 
-        return scored_releases
+        Args:
+            records: Release records from fetch_release_records
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_context: Region and activity period of the artist, used in scoring
+
+        Returns:
+            Releases with a positive score, highest first
+        """
+        scored_releases: list[ScoredRelease] = []
+        for record in records:
+            score = self._score_original_release(record, artist_norm, album_norm, artist_context=artist_context, source="musicbrainz")
+            if score > 0:
+                release = {key: value for key, value in record.items() if key != "releasegroup_first_date"}
+                scored_releases.append(cast("ScoredRelease", {**release, "artist": artist_norm, "score": score}))
+        return sorted(scored_releases, key=lambda scored: scored["score"], reverse=True)
 
     @staticmethod
     def _extract_artist_from_credit(data: dict[str, Any]) -> str:
@@ -701,6 +703,42 @@ class MusicBrainzClient(BaseApiClient):
         }
 
     @track_instance_method("musicbrainz_release_search")
+    async def fetch_release_records(
+        self,
+        artist_norm: str,
+        album_norm: str,
+        *,
+        artist_orig: str | None = None,
+        album_orig: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch MusicBrainz release records for an album, using fallback searches when the precise query finds nothing.
+
+        Any error propagates: a failed lookup must not read as an album MusicBrainz does not know.
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_orig: Original artist name (before normalization)
+            album_orig: Original album name (before normalization)
+
+        Returns:
+            Release records, empty when MusicBrainz knows no matching release group
+        """
+        self.console_logger.debug(
+            "[musicbrainz] Start search | artist_orig='%s' artist_norm='%s', album_orig='%s', album_norm='%s'",
+            artist_orig or artist_norm,
+            artist_norm,
+            album_orig or album_norm,
+            album_norm,
+        )
+        all_release_groups = await self._perform_primary_search(artist_norm, album_norm) or await self._perform_fallback_searches(
+            artist_norm, album_norm, artist_orig, album_orig
+        )
+        if not all_release_groups:
+            self.console_logger.warning("[musicbrainz] All search attempts failed for '%s - %s'.", artist_norm, album_norm)
+            return []
+        return self._build_release_records(await self._fetch_releases_for_groups(all_release_groups))
+
     async def get_scored_releases(
         self,
         artist_norm: str,
@@ -710,9 +748,7 @@ class MusicBrainzClient(BaseApiClient):
         artist_orig: str | None = None,
         album_orig: str | None = None,
     ) -> list[ScoredRelease]:
-        """Retrieve and score releases from MusicBrainz.
-
-        Uses multiple search strategies with fallbacks if precise queries fail.
+        """Fetch MusicBrainz release records and score them with the artist context.
 
         Args:
             artist_norm: Normalized artist name
@@ -722,38 +758,10 @@ class MusicBrainzClient(BaseApiClient):
             album_orig: Original album name (before normalization)
 
         Returns:
-            List of scored releases sorted by score
-
+            Releases with a positive score, highest first
         """
-        self.console_logger.debug(
-            "[musicbrainz] Start search | artist_orig='%s' artist_norm='%s', album_orig='%s', album_norm='%s'",
-            artist_orig or artist_norm,
-            artist_norm,
-            album_orig or album_norm,
-            album_norm,
-        )
-
-        try:
-            # Attempt primary search first
-            all_release_groups = await self._perform_primary_search(artist_norm, album_norm) or await self._perform_fallback_searches(
-                artist_norm, album_norm, artist_orig, album_orig
-            )
-
-            if not all_release_groups:
-                self.console_logger.warning("[musicbrainz] All search attempts failed for '%s - %s'.", artist_norm, album_norm)
-                return []
-
-            # Fetch releases for found release groups
-            release_results = await self._fetch_releases_for_groups(all_release_groups)
-
-            # Process and score the releases
-            scored_releases = self._process_and_score_releases(release_results, artist_norm, album_norm, artist_context)
-
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError, IndexError) as e:
-            self.error_logger.exception("Error fetching from MusicBrainz for '%s - %s': %s", artist_norm, album_norm, e)
-            return []
-
-        return sorted(scored_releases, key=lambda x: x["score"], reverse=True)
+        records = await self.fetch_release_records(artist_norm, album_norm, artist_orig=artist_orig, album_orig=album_orig)
+        return self.score_records(records, artist_norm, album_norm, artist_context)
 
     @staticmethod
     def _get_format_from_media(media: list[Medium] | list[dict[str, Any]] | None) -> str | None:

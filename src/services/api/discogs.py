@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable, Callable
 
-    from core.models.protocols import CacheServiceProtocol
     from core.models.track_models import AppConfig, YearRetrievalConfig
     from metrics import Analytics
     from services.api.year_scoring import ArtistContext
@@ -115,10 +114,8 @@ class DiscogsClient(BaseApiClient):
         analytics: Analytics service for performance tracking
         make_api_request_func: Function to make API requests with rate-limiting
         score_release_func: Function to score releases for originality
-        cache_service: Cache service for storing results
         scoring_config: Year retrieval configuration with scoring rules
         config: Typed application configuration
-        cache_ttl_days: Cache TTL in days
 
     """
 
@@ -131,20 +128,16 @@ class DiscogsClient(BaseApiClient):
         make_api_request_func: Callable[..., Awaitable[dict[str, Any] | None]],
         *,
         score_release_func: Callable[..., float],
-        cache_service: CacheServiceProtocol,
         scoring_config: YearRetrievalConfig,
         config: AppConfig,
-        cache_ttl_days: int = 30,
     ) -> None:
         super().__init__(console_logger, error_logger)
         self.analytics = analytics
         self.token = token
         self._make_api_request = make_api_request_func
         self._score_original_release = score_release_func
-        self.cache_service = cache_service
         self.scoring_config = scoring_config
         self.config = config
-        self.cache_ttl_days = cache_ttl_days
 
     @track_instance_method("discogs_release_details")
     async def _fetch_discogs_release_details(self, release_id: int) -> dict[str, Any] | None:
@@ -157,23 +150,15 @@ class DiscogsClient(BaseApiClient):
             Release details, or None when Discogs has no such release (HTTP 404); a failed request raises ApiRequestError
 
         """
-        try:
-            detail_url = f"{DISCOGS_BASE_URL}/releases/{release_id}"
-            params: dict[str, Any] = {}  # Auth is handled in headers
+        detail_url = f"{DISCOGS_BASE_URL}/releases/{release_id}"
+        self.console_logger.debug("[discogs] Fetching details for release ID %s", release_id)
+        # Auth is handled in headers
+        detail_data = await self._make_api_request("discogs", detail_url, params={})
+        if detail_data:
+            return detail_data
 
-            self.console_logger.debug("[discogs] Fetching details for release ID %s", release_id)
-
-            detail_data = await self._make_api_request("discogs", detail_url, params=params)
-
-            if detail_data:
-                return detail_data
-
-            self.console_logger.warning("[discogs] No details for release %s", release_id)
-            return None
-
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
-            self.error_logger.exception("[discogs] Error fetching release details for ID %s: %s", release_id, e)
-            return None
+        self.console_logger.warning("[discogs] No details for release %s", release_id)
+        return None
 
     @track_instance_method("discogs_master_release")
     async def _fetch_master_release_year(self, master_id: int) -> int | None:
@@ -189,44 +174,20 @@ class DiscogsClient(BaseApiClient):
             Original release year, or None when the master has no year or does not exist (HTTP 404); a failed request raises ApiRequestError
 
         """
-        # Check cache first (including negative results)
-        cache_key = f"discogs_master_{master_id}"
-        cached_year = await self.cache_service.get_async(cache_key)
-        if cached_year is not None:
-            if cached_year == "NO_YEAR":
-                self.console_logger.debug("[discogs] Master year cache hit (no year) for ID %s", master_id)
-                return None
-            if isinstance(cached_year, (str, int)):
-                self.console_logger.debug("[discogs] Master year cache hit for ID %s: %s", master_id, cached_year)
-                return int(cached_year)
-
-        try:
-            master_url = f"{DISCOGS_BASE_URL}/masters/{master_id}"
-            params: dict[str, Any] = {}
-
-            self.console_logger.debug("[discogs] Fetching master release ID %s", master_id)
-
-            master_data = await self._make_api_request("discogs", master_url, params=params)
-            if not master_data:
-                # A missing master (HTTP 404) is left out of the cache, so a later lookup of it asks again
-                return None
-
-            cache_ttl = self.cache_ttl_days * 86400
-            year = master_data.get("year")
-            if isinstance(year, (int, str)):
-                # Cache for a long time (master years don't change)
-                await self.cache_service.set_async(cache_key, year, ttl=cache_ttl)
-                self.console_logger.debug("[discogs] Master release %s year: %s", master_id, year)
-                return int(year)
-
-            # Cache negative result to avoid repeated API calls
-            await self.cache_service.set_async(cache_key, "NO_YEAR", ttl=cache_ttl)
-            self.console_logger.debug("[discogs] Master release %s has no year (cached)", master_id)
+        master_url = f"{DISCOGS_BASE_URL}/masters/{master_id}"
+        self.console_logger.debug("[discogs] Fetching master release ID %s", master_id)
+        master_data = await self._make_api_request("discogs", master_url, params={})
+        if not master_data:
             return None
 
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
-            self.error_logger.exception("[discogs] Error fetching master release %s: %s", master_id, e)
-            return None
+        # A year Discogs cannot give as a number is no year, the same on every lookup, so it is not an error
+        year = master_data.get("year")
+        if isinstance(year, int) or (isinstance(year, str) and year.isdigit()):
+            self.console_logger.debug("[discogs] Master release %s year: %s", master_id, year)
+            return int(year)
+
+        self.console_logger.debug("[discogs] Master release %s has no year", master_id)
+        return None
 
     @staticmethod
     def _extract_artist_from_title(title: str) -> tuple[str | None, str | None]:
@@ -320,25 +281,6 @@ class DiscogsClient(BaseApiClient):
 
         # Check both with and without "The" prefix
         return target_normalized in title_normalized or target_no_the in title_normalized
-
-    async def _get_cached_discogs_releases(self, cache_key: str) -> list[ScoredRelease] | None:
-        """Retrieve cached Discogs releases if available.
-
-        Args:
-            cache_key: The cache key to look up
-
-        Returns:
-            List of cached scored releases or None if not found/invalid
-
-        """
-        cached_data = await self.cache_service.get_async(cache_key)
-        if cached_data is not None:
-            if isinstance(cached_data, list):
-                self.console_logger.debug("Using cached Discogs results for cache key: %s", cache_key)
-                # Protocol overload types str-key results as TrackDict; Discogs stores ScoredRelease
-                return cast(list[ScoredRelease], cast(object, cached_data))
-            self.console_logger.warning("Cached Discogs data has unexpected type. Ignoring cache.")
-        return None
 
     def _get_reissue_keywords(self) -> list[str]:
         """Get reissue detection keywords from configuration.
@@ -576,41 +518,36 @@ class DiscogsClient(BaseApiClient):
 
         return year_str, detail_fetch_count
 
-    def _create_scored_release(
-        self,
+    @staticmethod
+    def _build_release_record(
         item: DiscogsRelease,
         artist_norm: str,
-        album_norm: str,
         *,
-        artist_context: ArtistContext,
         year_str: str,
         is_reissue: bool,
         master_year: int | None = None,
-    ) -> ScoredRelease | None:
-        """Create and score a release from Discogs item.
+    ) -> dict[str, Any]:
+        """Build a release record from a Discogs item, the way the scorer reads it, without scoring.
+
+        The record holds the ScoredRelease fields except the score, plus the reissue flag and the master year as the
+        release-group date. Nothing in it depends on the artist context or the clock.
 
         Args:
             item: Discogs release item
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
+            artist_norm: Normalized artist name, used when the title names no artist
             year_str: Year string for the release
             is_reissue: Whether this is detected as a reissue
             master_year: Original release year from Discogs master release
 
         Returns:
-            Scored release or None if score is 0
-
+            The release record
         """
-        # Extract artist and album from the title
         title_artist, title_album = DiscogsClient._extract_artist_from_title(item.get("title", ""))
 
-        # Create a scored release
-        # Use master_year as PRIMARY (original release year), fall back to individual release year
-        release_info: ScoredRelease = {
+        # The master year is the original release year; the release's own year is the fallback
+        record: dict[str, Any] = {
             "title": title_album if title_album is not None else item.get("title", ""),
             "year": str(master_year) if master_year else year_str,
-            "score": 0.0,
             "artist": title_artist if title_artist is not None else artist_norm,
             "album_type": item.get("type", "Album"),
             "country": item.get("country"),
@@ -622,59 +559,60 @@ class DiscogsClient(BaseApiClient):
             "disambiguation": None,
             "source": "discogs",
         }
-
-        # Store reissue flag and master year separately for scoring
-        release_info_with_meta = dict(release_info)
         if is_reissue:
-            release_info_with_meta["is_reissue"] = True
-
-        # Add master release year as releasegroup_first_date (analogous to MusicBrainz)
-        # This enables year_diff_penalty scoring for Discogs releases
+            record["is_reissue"] = True
+        # The master year as the release-group date, so the year-difference penalty applies as for MusicBrainz
         if master_year is not None:
-            release_info_with_meta["releasegroup_first_date"] = str(master_year)
+            record["releasegroup_first_date"] = str(master_year)
+        return record
 
-        # Score the release (pass extended dict with metadata)
-        score = self._score_original_release(
-            release_info_with_meta,
-            artist_norm,
-            album_norm,
-            artist_context=artist_context,
-            source="discogs",
-        )
+    def score_records(
+        self,
+        records: list[dict[str, Any]],
+        artist_norm: str,
+        album_norm: str,
+        artist_context: ArtistContext,
+    ) -> list[ScoredRelease]:
+        """Score release records with this search's artist context.
 
-        if score > 0:
-            release_info["score"] = score
-            self.console_logger.info("Scored Discogs Release: '%s' (%s) Score: %.2f", release_info["title"], release_info["year"], score)
-            return release_info
+        Args:
+            records: Release records from fetch_release_records
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_context: Region and activity period of the artist, used in scoring
 
-        return None
+        Returns:
+            Releases with a positive score, highest first
+        """
+        scored_releases: list[ScoredRelease] = []
+        for record in records:
+            score = self._score_original_release(record, artist_norm, album_norm, artist_context=artist_context, source="discogs")
+            if score > 0:
+                release = {key: value for key, value in record.items() if key not in {"is_reissue", "releasegroup_first_date"}}
+                scored_releases.append(cast("ScoredRelease", {**release, "score": score}))
+                self.console_logger.info("Scored Discogs Release: '%s' (%s) Score: %.2f", release["title"], release["year"], score)
+        return sorted(scored_releases, key=lambda scored: scored["score"], reverse=True)
 
     async def _process_single_discogs_item(
         self,
         item: DiscogsRelease,
         artist_norm: str,
-        album_norm: str,
         *,
-        artist_context: ArtistContext,
         reissue_keywords: list[str],
         detail_fetch_count: int,
         detail_fetch_limit: int,
-        master_years: dict[int, int | None],
-    ) -> tuple[ScoredRelease | None, int]:
-        """Process a single Discogs search result item.
+    ) -> tuple[dict[str, Any] | None, int]:
+        """Turn one Discogs search result into a release record.
 
         Args:
             item: Discogs release item to process
             artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
             reissue_keywords: Keywords to detect reissues
             detail_fetch_count: Current number of detail fetches performed
             detail_fetch_limit: Maximum number of detail fetches allowed
-            master_years: Master years this search already fetched, by master ID; filled in here
 
         Returns:
-            Tuple of (scored_release or None, updated_detail_fetch_count)
+            Tuple of (release record or None, updated_detail_fetch_count)
 
         """
         # Fetch missing year details if needed
@@ -694,73 +632,76 @@ class DiscogsClient(BaseApiClient):
         title_lower = (title_album or item.get("title", "")).lower()
         is_reissue = any(keyword.lower() in title_lower for keyword in reissue_keywords)
 
-        # Fetch master release year if available (analogous to MusicBrainz release-group first-release-date)
-        # Discogs gives master_id 0 to a release outside any master. Pressings of one album share their master, and a
-        # failed fetch caches nothing, so each master is asked for once per search
-        master_year: int | None = None
-        if master_id := item.get("master_id"):
-            if master_id not in master_years:
-                master_years[master_id] = await self._fetch_master_release_year(master_id)
-            master_year = master_years[master_id]
+        # The master release year, analogous to the MusicBrainz release-group first date. Discogs gives master_id 0 to a
+        # release outside any master; pressings sharing a master repeat one URL, which the request cache answers
+        master_id = item.get("master_id")
+        master_year = await self._fetch_master_release_year(master_id) if master_id else None
 
-        # Create and return scored release
-        scored_release = self._create_scored_release(
-            item,
-            artist_norm,
-            album_norm,
-            artist_context=artist_context,
-            year_str=year_str,
-            is_reissue=is_reissue,
-            master_year=master_year,
-        )
-
-        return scored_release, updated_detail_fetch_count
+        record = self._build_release_record(item, artist_norm, year_str=year_str, is_reissue=is_reissue, master_year=master_year)
+        return record, updated_detail_fetch_count
 
     async def _process_discogs_results(
         self,
         results: list[DiscogsRelease],
         artist_norm: str,
-        album_norm: str,
         *,
-        artist_context: ArtistContext,
         reissue_keywords: list[str],
-    ) -> list[ScoredRelease]:
-        """Process Discogs search results and create scored releases.
+    ) -> list[dict[str, Any]]:
+        """Turn Discogs search results into release records.
 
         Args:
             results: List of Discogs release items
             artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
             reissue_keywords: Keywords to detect reissues
 
         Returns:
-            List of scored releases
+            Release records for the items that match the artist and have a valid year
 
         """
-        scored_releases: list[ScoredRelease] = []
+        records: list[dict[str, Any]] = []
         detail_fetch_count = 0
         detail_fetch_limit = 10
-        master_years: dict[int, int | None] = {}
 
         for item in results:
-            scored_release, detail_fetch_count = await self._process_single_discogs_item(
+            record, detail_fetch_count = await self._process_single_discogs_item(
                 item,
                 artist_norm,
-                album_norm,
-                artist_context=artist_context,
                 reissue_keywords=reissue_keywords,
                 detail_fetch_count=detail_fetch_count,
                 detail_fetch_limit=detail_fetch_limit,
-                master_years=master_years,
             )
+            if record:
+                records.append(record)
 
-            if scored_release:
-                scored_releases.append(scored_release)
-
-        return scored_releases
+        return records
 
     @track_instance_method("discogs_release_search")
+    async def fetch_release_records(
+        self,
+        artist_norm: str,
+        album_norm: str,
+        *,
+        artist_orig: str | None = None,
+        album_orig: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch Discogs release records for an album.
+
+        Any error propagates: a failed lookup must not read as an album Discogs does not know.
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_orig: Original artist name (before normalization)
+            album_orig: Original album name (before normalization)
+
+        Returns:
+            Release records, empty when nothing matched
+        """
+        discogs_response = await self._make_discogs_search_request(artist_norm, album_norm, artist_orig, album_orig)
+        if discogs_response is None:
+            return []
+        return await self._process_discogs_results(discogs_response.get("results", []), artist_norm, reissue_keywords=self._get_reissue_keywords())
+
     async def get_scored_releases(
         self,
         artist_norm: str,
@@ -770,7 +711,7 @@ class DiscogsClient(BaseApiClient):
         artist_orig: str | None = None,
         album_orig: str | None = None,
     ) -> list[ScoredRelease]:
-        """Retrieve and score releases from Discogs.
+        """Fetch Discogs release records and score them with the artist context.
 
         Args:
             artist_norm: Normalized artist name
@@ -780,48 +721,7 @@ class DiscogsClient(BaseApiClient):
             album_orig: Original album name (before normalization)
 
         Returns:
-            List of scored releases sorted by score
-
+            Releases with a positive score, highest first
         """
-        # The cached list holds final scores, which depend on the artist context, so the context is part of the key;
-        # lists cached before it was are no longer read and expire with their TTL
-        period = artist_context.period or {}
-        context_key = f"{artist_context.region or ''}_{period.get('start_year') or ''}_{period.get('end_year') or ''}"
-        cache_key = f"discogs_{artist_norm}_{album_norm}_{context_key}"
-        cache_ttl_seconds = self.cache_ttl_days * 86400
-
-        # Check cache first
-        cached_releases = await self._get_cached_discogs_releases(cache_key)
-        if cached_releases is not None:
-            return cached_releases
-
-        try:
-            # Make search request
-            discogs_response = await self._make_discogs_search_request(artist_norm, album_norm, artist_orig, album_orig)
-
-            if discogs_response is None:
-                # Nothing matched; a failed search raises instead, and the executor already caches real answers, so [] is not cached here
-                return []
-
-            results = discogs_response.get("results", [])
-
-            # Get reissue keywords
-            reissue_keywords = self._get_reissue_keywords()
-
-            # Process results
-            scored_releases: list[ScoredRelease] = await self._process_discogs_results(
-                results,
-                artist_norm,
-                album_norm,
-                artist_context=artist_context,
-                reissue_keywords=reissue_keywords,
-            )
-
-            # Cache results
-            await self.cache_service.set_async(cache_key, scored_releases, ttl=cache_ttl_seconds)
-
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
-            self.error_logger.exception("Error fetching from Discogs for '%s - %s': %s", artist_norm, album_norm, e)
-            return []
-
-        return sorted(scored_releases, key=lambda x: x["score"], reverse=True)
+        records = await self.fetch_release_records(artist_norm, album_norm, artist_orig=artist_orig, album_orig=album_orig)
+        return self.score_records(records, artist_norm, album_norm, artist_context)

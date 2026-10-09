@@ -411,7 +411,6 @@ class ExternalApiOrchestrator:
             score_release_func=score_release_func,
             scoring_config=self.config.year_retrieval,
             config=self.config,
-            cache_service=self.cache_service,
         )
 
         # Initialize Apple Music Search API client

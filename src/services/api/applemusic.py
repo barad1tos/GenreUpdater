@@ -17,7 +17,6 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 from __future__ import annotations
 
 import logging
-import traceback
 from datetime import UTC, datetime
 from typing import Any, TYPE_CHECKING
 
@@ -85,16 +84,121 @@ class AppleMusicClient:
             self.limit,
         )
 
+    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[dict[str, Any]]:
+        """Fetch iTunes release records for an album, falling back to the artist's albums when the search finds nothing.
+
+        Any error propagates: a failed lookup must not read as an album iTunes does not know.
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+
+        Returns:
+            Release records, empty when iTunes has nothing for the album
+        """
+        # iTunes Search works best with "artist album"; aiohttp encodes the parameters
+        search_term = f"{artist_norm} {album_norm}".strip()
+        params = {
+            "term": search_term,
+            "country": self.country_code,
+            "entity": self.entity,
+            "limit": str(self.limit),
+        }
+        self.console_logger.debug("[itunes] Searching for: '%s' (country=%s)", search_term, self.country_code)
+        response_data = await self.make_api_request_func(
+            api_name="itunes",
+            url=self.base_url,
+            params=params,
+            max_retries=2,
+            base_delay=0.5,
+        )
+
+        # Search results, else the artist's albums from the lookup fallback
+        results = (response_data.get("results", []) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
+        if not results:
+            self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
+            return []
+        return self._build_release_records(results, search_term)
+
+    def score_records(
+        self,
+        records: list[dict[str, Any]],
+        artist_norm: str,
+        album_norm: str,
+        artist_context: ArtistContext,
+    ) -> list[ScoredRelease]:
+        """Score release records with this search's artist context and today's date.
+
+        iTunes gives catalog dates rather than original ones, so a release from this year or the last is scored as a
+        possible reissue; the flag is decided here, at scoring time, because it depends on the clock.
+
+        Args:
+            records: Release records from fetch_release_records
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_context: Region and activity period of the artist, used in scoring
+
+        Returns:
+            Releases with a positive score, in iTunes order
+        """
+        current_year = datetime.now(UTC).year
+        scored_releases: list[ScoredRelease] = []
+        for record in records:
+            is_reissue = int(record["year"]) >= current_year - 1
+            score = self.score_release_func(
+                release={
+                    "title": record["title"],
+                    "artist": record["artist"],
+                    "year": record["year"],
+                    "album_type": record["album_type"],
+                    # The storefront searched is not where the release came from, so it earns no country bonus
+                    "country": None,
+                    "status": "official",  # iTunes only has official releases
+                    "format": "Digital",  # iTunes is digital distribution
+                    "label": record["copyright"],
+                    "genre": record["genre"],
+                    "is_reissue": is_reissue,  # For reissue_penalty (-30)
+                },
+                artist_norm=artist_norm,
+                album_norm=album_norm,
+                artist_context=artist_context,
+                source="itunes",
+            )
+            if score <= 0:
+                self.console_logger.debug(
+                    "[itunes] Filtered out '%s - %s' (%s): score %.2f <= 0", record["artist"], record["title"], record["year"], score
+                )
+                continue
+
+            # iTunes has no label field; the copyright text stands in for it
+            release: ScoredRelease = {
+                "title": record["title"],
+                "year": record["year"],
+                "score": score,
+                "artist": record["artist"],
+                "album_type": record["album_type"],
+                "country": None,
+                "status": "official",
+                "format": "Digital",
+                "label": record["copyright"] or None,
+                "catalog_number": None,  # iTunes doesn't provide catalog numbers
+                "barcode": None,  # iTunes doesn't provide barcodes
+                "disambiguation": record["disambiguation"] or None,
+                "source": "itunes",
+            }
+            if is_reissue:
+                release["is_reissue"] = True
+            self.console_logger.debug("Scored iTunes Release: '%s' (%s) Score: %.2f", record["title"], record["year"], score)
+            scored_releases.append(release)
+        return scored_releases
+
     async def get_scored_releases(
         self,
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Get scored releases from iTunes Search API with lookup fallback.
-
-        Uses the search API first. If no results are found, falls back to
-        looking up the artist and fetching all their albums.
+        """Fetch iTunes release records and score them with the artist context.
 
         Args:
             artist_norm: Normalized artist name
@@ -102,75 +206,10 @@ class AppleMusicClient:
             artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
-            List of scored releases from iTunes Search API
-
+            Releases with a positive score, in iTunes order
         """
-        self.console_logger.debug(
-            "[itunes] get_scored_releases called with artist='%s', album='%s'",
-            artist_norm,
-            album_norm,
-        )
-        try:
-            # Build search query - iTunes Search works best with "artist album" format
-            search_term = f"{artist_norm} {album_norm}".strip()
-
-            # Build request parameters (aiohttp handles URL encoding automatically)
-            params = {
-                "term": search_term,
-                "country": self.country_code,
-                "entity": self.entity,
-                "limit": str(self.limit),
-            }
-
-            self.console_logger.debug(
-                "[itunes] Searching for: '%s' (country=%s)",
-                search_term,
-                self.country_code,
-            )
-
-            self.console_logger.debug(
-                "[itunes] About to call make_api_request_func with url=%s, params=%s",
-                self.base_url,
-                params,
-            )
-
-            # Make the API request
-            self.console_logger.debug("[itunes] Calling make_api_request_func now...")
-            response_data = await self.make_api_request_func(
-                api_name="itunes",
-                url=self.base_url,
-                params=params,
-                max_retries=2,
-                base_delay=0.5,
-            )
-            self.console_logger.debug(
-                "[itunes] make_api_request_func completed, response_data type: %s",
-                type(response_data),
-            )
-
-            self.console_logger.debug(
-                "[itunes] make_api_request_func returned: %s",
-                "data" if response_data else "None/empty",
-            )
-
-            # Get results from search API, fallback to artist lookup if empty
-            results = (response_data.get("results", []) if response_data else []) or await self._try_lookup_fallback(artist_norm, search_term)
-
-            if not results:
-                self.console_logger.info("[itunes] No results found for query: '%s'", search_term)
-                return []
-
-            # Filter and score results
-            return self._process_api_results(results, artist_norm, album_norm, artist_context, search_term)
-
-        except (OSError, ValueError, RuntimeError) as e:
-            self.error_logger.warning(
-                "[itunes] Error fetching data for '%s - %s': %s",
-                artist_norm,
-                album_norm,
-                e,
-            )
-            return []
+        records = await self.fetch_release_records(artist_norm, album_norm)
+        return self.score_records(records, artist_norm, album_norm, artist_context)
 
     async def _try_lookup_fallback(
         self,
@@ -212,60 +251,27 @@ class AppleMusicClient:
             )
         return results
 
-    def _process_api_results(
-        self,
-        results: list[dict[str, Any]],
-        artist_norm: str,
-        album_norm: str,
-        artist_context: ArtistContext,
-        search_term: str,
-    ) -> list[ScoredRelease]:
-        """Process API results into scored releases with error handling.
+    def _build_release_records(self, results: list[dict[str, Any]], search_term: str) -> list[dict[str, Any]]:
+        """Turn iTunes results into release records, skipping results that cannot be read.
 
         Args:
             results: Raw API results to process
-            artist_norm: Normalized artist name for scoring
-            album_norm: Normalized album name for scoring
-            artist_context: Region and activity period of the artist, used in scoring
             search_term: Original search term for logging
 
         Returns:
-            List of successfully processed ScoredRelease objects
+            Release records for the results with an artist, an album and a release year
         """
-        scored_releases: list[ScoredRelease] = []
-        skipped_count = 0
-
+        records: list[dict[str, Any]] = []
         for result in results:
             try:
-                if scored_release := self._process_itunes_result(result, artist_norm, album_norm, artist_context):
-                    scored_releases.append(scored_release)
-                else:
-                    skipped_count += 1
-            except (KeyError, ValueError, TypeError) as e:
-                self.error_logger.warning(
-                    "[itunes] Expected error processing result for '%s': %s (type: %s)",
-                    search_term,
-                    e,
-                    type(e).__name__,
-                )
-                skipped_count += 1
-            except (AttributeError, IndexError, RuntimeError) as e:
-                self.error_logger.exception(
-                    "[itunes] Unexpected error processing result for '%s': %s (type: %s)\n%s",
-                    search_term,
-                    e,
-                    type(e).__name__,
-                    traceback.format_exc(),
-                )
-                skipped_count += 1
+                if record := self._build_release_record(result):
+                    records.append(record)
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                # A malformed result reads the same on every lookup, so it is skipped rather than failing the provider
+                self.error_logger.warning("[itunes] Skipping unreadable result for '%s': %s: %s", search_term, type(e).__name__, e)
 
-        self.console_logger.debug(
-            "[itunes] Processed %d results, returning %d scored releases (%d skipped)",
-            len(results),
-            len(scored_releases),
-            skipped_count,
-        )
-        return scored_releases
+        self.console_logger.debug("[itunes] Built %d records from %d results", len(records), len(results))
+        return records
 
     def _parse_release_year(self, release_date: str) -> str | None:
         """Extract a 4-digit year from an iTunes ISO date string.
@@ -287,138 +293,35 @@ class AppleMusicClient:
             self.console_logger.debug("[itunes] Could not parse release date: '%s'", release_date)
         return None
 
-    def _process_itunes_result(
-        self,
-        result: dict[str, Any],
-        target_artist_norm: str,
-        target_album_norm: str,
-        artist_context: ArtistContext,
-    ) -> ScoredRelease | None:
-        """Process a single iTunes Search API result into a ScoredRelease.
+    def _build_release_record(self, result: dict[str, Any]) -> dict[str, Any] | None:
+        """Build a release record from one iTunes result: its raw fields, nothing that depends on the clock or context.
 
         Args:
             result: Raw result from iTunes Search API
-            target_artist_norm: Normalized target artist name
-            target_album_norm: Normalized target album name
-            artist_context: Region and activity period of the artist, used in scoring
 
         Returns:
-            ScoredRelease object or None if result should be filtered out
-
+            The release record, or None when the result has no artist, album or release year
         """
-        try:
-            # Extract basic information
-            artist_name = result.get("artistName", "").strip()
-            collection_name = result.get("collectionName", "").strip()
-            release_date = result.get("releaseDate", "").strip()
-
-            if not artist_name or not collection_name:
-                self.console_logger.debug("[itunes] Skipping result: missing artist or album name")
-                return None
-
-            # Extract release year from date
-            release_year = self._parse_release_year(release_date)
-
-            if not release_year:
-                self.console_logger.debug(
-                    "[itunes] Skipping '%s - %s': no valid release year",
-                    artist_name,
-                    collection_name,
-                )
-                return None
-
-            # Reissue detection BEFORE scoring: iTunes returns catalog/reissue dates, not original
-            # Mark recent years as potential reissues to apply reissue_penalty (-30) during scoring
-            is_reissue = False
-            try:
-                current_year = datetime.now(UTC).year
-                if int(release_year) >= current_year - 1:
-                    is_reissue = True
-            except (ValueError, TypeError):
-                self.console_logger.warning(
-                    "[itunes] Cannot parse release year '%s' for reissue detection - skipping reissue penalty for %s - %s",
-                    release_year,
-                    artist_name,
-                    collection_name,
-                )
-            # Score the release using the injected scoring function
-            # IMPORTANT: is_reissue must be in the release dict for penalty to apply
-            try:
-                score = self.score_release_func(
-                    release={
-                        "title": collection_name,
-                        "artist": artist_name,
-                        "year": release_year,
-                        "album_type": result.get("collectionType", ""),
-                        # The storefront searched is not where the release came from, so it earns no country bonus
-                        "country": None,
-                        "status": "official",  # iTunes only has official releases
-                        "format": "Digital",  # iTunes is digital distribution
-                        "label": result.get("copyright", ""),
-                        "genre": result.get("primaryGenreName", ""),
-                        "is_reissue": is_reissue,  # For reissue_penalty (-30)
-                    },
-                    artist_norm=target_artist_norm,
-                    album_norm=target_album_norm,
-                    artist_context=artist_context,
-                    source="itunes",
-                )
-            except (KeyError, ValueError, TypeError, AttributeError) as e:
-                self.console_logger.debug(
-                    "[itunes] Failed to score release '%s - %s': %s",
-                    artist_name,
-                    collection_name,
-                    e,
-                )
-                return None
-
-            # Create scored release
-            # Note: iTunes API does not provide a dedicated label/publisher field.
-            # The copyright field is used as label, which may contain full legal text.
-            # This field is primarily used for scoring, not display.
-            scored_release: ScoredRelease = {
-                "title": collection_name,
-                "year": release_year,
-                "score": score,
-                "artist": artist_name,
-                "album_type": result.get("collectionType", ""),
-                "country": None,
-                "status": "official",
-                "format": "Digital",
-                "label": result.get("copyright") or None,
-                "catalog_number": None,  # iTunes doesn't provide catalog numbers
-                "barcode": None,  # iTunes doesn't provide barcodes
-                "disambiguation": result.get("collectionCensoredName") or None,
-                "source": "itunes",
-            }
-
-            # Include is_reissue flag if set (reissue detection done before scoring)
-            if is_reissue:
-                scored_release["is_reissue"] = True
-
-            # Filter out releases with zero or negative scores (same as MusicBrainz, Discogs, Last.fm)
-            if score <= 0:
-                self.console_logger.debug(
-                    "[itunes] Filtered out '%s - %s' (%s): score %.2f <= 0",
-                    artist_name,
-                    collection_name,
-                    release_year,
-                    score,
-                )
-                return None
-
-            self.console_logger.debug(
-                "Scored iTunes Release: '%s' (%s) Score: %.2f",
-                collection_name,
-                release_year,
-                score,
-            )
-
-        except (KeyError, ValueError, TypeError) as e:
-            self.error_logger.warning("[itunes] Error processing result: %s", e)
+        artist_name = result.get("artistName", "").strip()
+        collection_name = result.get("collectionName", "").strip()
+        if not artist_name or not collection_name:
+            self.console_logger.debug("[itunes] Skipping result: missing artist or album name")
             return None
 
-        return scored_release
+        release_year = self._parse_release_year(result.get("releaseDate", "").strip())
+        if not release_year:
+            self.console_logger.debug("[itunes] Skipping '%s - %s': no valid release year", artist_name, collection_name)
+            return None
+
+        return {
+            "title": collection_name,
+            "artist": artist_name,
+            "year": release_year,
+            "album_type": result.get("collectionType", ""),
+            "copyright": result.get("copyright", ""),
+            "genre": result.get("primaryGenreName", ""),
+            "disambiguation": result.get("collectionCensoredName", ""),
+        }
 
     async def get_artist_start_year(self, artist_norm: str) -> int | None:
         """Get artist's earliest release year from iTunes.
