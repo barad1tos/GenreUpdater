@@ -50,6 +50,14 @@ CacheableValue = str | int | float | bool | dict[str, Any] | list[Any] | list[Tr
 CacheableKey = str | int
 
 
+class YearLookupUnavailableError(ConnectionError):
+    """No year provider could be reached for an album, so the lookup says nothing about it.
+
+    `get_album_year` raises it instead of answering "no year", so callers neither record the album as unknown nor
+    fall back to its library year; the next run asks again.
+    """
+
+
 # noinspection PyMissingOrEmptyDocstring
 @runtime_checkable
 class CacheServiceProtocol(Protocol):

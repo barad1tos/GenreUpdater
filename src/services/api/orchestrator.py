@@ -458,6 +458,7 @@ class ExternalApiOrchestrator:
             discogs_client=self.discogs_client,
             applemusic_client=self.applemusic_client,
             release_scorer=self.release_scorer,
+            discogs_enabled=bool(self.discogs_token),
         )
 
         # Scoring function is now properly injected during API client initialization

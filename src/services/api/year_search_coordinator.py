@@ -7,11 +7,14 @@ information from multiple providers (MusicBrainz, Discogs, Apple Music).
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from core.debug_utils import debug
+from core.models.protocols import YearLookupUnavailableError
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.models.search_strategy import SearchStrategy, detect_search_strategy
+from services.api.request_executor import ApiRequestError
 
 if TYPE_CHECKING:
     import logging
@@ -33,6 +36,13 @@ class _ReleaseSource(Protocol):
         ...
 
 
+@dataclass(slots=True)
+class ProviderTally:
+    """Whether any provider failed during one album's search; created per search because searches run concurrently."""
+
+    failed: bool = False
+
+
 class YearSearchCoordinator:
     """Coordinates API calls to fetch release year information.
 
@@ -52,6 +62,7 @@ class YearSearchCoordinator:
         release_scorer: Release scoring service
         max_concurrent_api_calls: Maximum concurrent API requests (default 50).
             Prevents socket exhaustion on large libraries.
+        discogs_enabled: Whether Discogs has a token; without one it is not queried, which is not a failure
 
     """
 
@@ -67,6 +78,7 @@ class YearSearchCoordinator:
         applemusic_client: AppleMusicClient,
         release_scorer: ReleaseScorer,
         max_concurrent_api_calls: int = 50,
+        discogs_enabled: bool = True,
     ) -> None:
         self.console_logger = console_logger
         self.error_logger = error_logger
@@ -76,6 +88,7 @@ class YearSearchCoordinator:
         self.discogs_client = discogs_client
         self.applemusic_client = applemusic_client
         self.release_scorer = release_scorer
+        self.discogs_enabled = discogs_enabled
         self._api_semaphore = asyncio.Semaphore(max_concurrent_api_calls)
 
     async def fetch_all_api_results(
@@ -86,8 +99,23 @@ class YearSearchCoordinator:
         log_artist: str,
         log_album: str,
     ) -> list[ScoredRelease]:
-        """Fetch scored releases from all API providers with script-aware logic."""
+        """Fetch scored releases from all API providers with script-aware logic.
+
+        Args:
+            artist_norm: Normalized artist name
+            album_norm: Normalized album name
+            artist_context: Artist region and activity period for scoring
+            log_artist: Artist name as shown in logs
+            log_album: Album name as shown in logs
+
+        Returns:
+            Scored releases, or an empty list when every queried provider answered without a match
+
+        Raises:
+            YearLookupUnavailableError: No provider returned releases and at least one failed
+        """
         self._log_api_search_start(artist_norm, album_norm, artist_context, log_artist, log_album)
+        tally = ProviderTally()
 
         # Try script-optimized search first
         artist_script = detect_primary_script(log_artist)
@@ -95,17 +123,21 @@ class YearSearchCoordinator:
         primary_script = artist_script if artist_script != ScriptType.UNKNOWN else album_script
 
         if primary_script not in (ScriptType.LATIN, ScriptType.UNKNOWN):
-            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_context)
+            script_results = await self._try_script_optimized_search(primary_script, artist_norm, album_norm, artist_context, tally=tally)
             if script_results:
                 return script_results
 
         # Standard API search (all providers concurrently)
-        results = await self._execute_standard_api_search(artist_norm, album_norm, artist_context, log_artist, log_album)
+        results = await self._execute_standard_api_search(artist_norm, album_norm, artist_context, log_artist, log_album, tally=tally)
         if results:
             return results
 
         # Fallback: try alternative search strategy
-        return await self._try_alternative_search(album_norm, artist_context, log_artist, log_album)
+        results = await self._try_alternative_search(album_norm, artist_context, log_artist, log_album, tally=tally)
+        if not results and tally.failed:
+            message = f"No year provider could be reached for '{log_artist} - {log_album}'"
+            raise YearLookupUnavailableError(message)
+        return results
 
     def _log_api_search_start(
         self,
@@ -133,6 +165,8 @@ class YearSearchCoordinator:
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
+        *,
+        tally: ProviderTally,
     ) -> list[ScoredRelease] | None:
         """Try script-optimized API search based on detected script type."""
         if debug.api:
@@ -148,6 +182,7 @@ class YearSearchCoordinator:
             artist_context=artist_context,
             script_type=script_type,
             is_fallback=False,
+            tally=tally,
         )
         if results:
             return results
@@ -162,6 +197,7 @@ class YearSearchCoordinator:
             artist_context=artist_context,
             script_type=script_type,
             is_fallback=True,
+            tally=tally,
         )
 
     def _get_script_api_priorities(self, script_type: ScriptType) -> dict[str, list[str]]:
@@ -214,6 +250,7 @@ class YearSearchCoordinator:
         artist_context: ArtistContext,
         script_type: ScriptType,
         is_fallback: bool,
+        tally: ProviderTally,
     ) -> list[ScoredRelease] | None:
         """Try a list of API names and return the first successful result."""
         normalized_names = [self._normalize_api_name(name) for name in api_names]
@@ -225,6 +262,7 @@ class YearSearchCoordinator:
                 artist_context=artist_context,
                 script_type=script_type,
                 is_fallback=is_fallback,
+                tally=tally,
             )
             if results:
                 return results
@@ -239,6 +277,7 @@ class YearSearchCoordinator:
         artist_context: ArtistContext,
         script_type: ScriptType,
         is_fallback: bool,
+        tally: ProviderTally,
     ) -> list[ScoredRelease] | None:
         """Try a single API and return results if successful."""
         try:
@@ -264,8 +303,9 @@ class YearSearchCoordinator:
                     )
                 return results
 
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
-            # Logged whatever the debug flags: the search goes on as if this provider found nothing
+        except (ApiRequestError, OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as e:
+            # Logged whatever the debug flags; the search goes on, and the tally keeps "failed" apart from "found nothing"
+            tally.failed = True
             self._log_api_error(api_name, artist_norm, album_norm, e)
             if debug.api:
                 self.console_logger.warning("%s failed for %s: %s", api_name, script_type.value, e)
@@ -285,9 +325,9 @@ class YearSearchCoordinator:
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
         """Get API client by name."""
-        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | AppleMusicClient] = {
+        api_mapping: dict[str, MusicBrainzClient | DiscogsClient | AppleMusicClient | None] = {
             "musicbrainz": self.musicbrainz_client,
-            "discogs": self.discogs_client,
+            "discogs": self.discogs_client if self.discogs_enabled else None,
             "itunes": self.applemusic_client,
             "applemusic": self.applemusic_client,
         }
@@ -300,6 +340,8 @@ class YearSearchCoordinator:
         artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
+        *,
+        tally: ProviderTally,
     ) -> list[ScoredRelease]:
         """Execute standard concurrent API search across all providers."""
         api_order = self._apply_preferred_order(["musicbrainz", "discogs", "itunes"])
@@ -318,7 +360,7 @@ class YearSearchCoordinator:
         results = list(await asyncio.gather(*api_tasks, return_exceptions=True))
 
         # Process results (active_api_names matches results 1:1)
-        return self._process_api_task_results(results, active_api_names, log_artist, log_album)
+        return self._process_api_task_results(results, active_api_names, log_artist, log_album, tally=tally)
 
     async def _try_alternative_search(
         self,
@@ -326,6 +368,8 @@ class YearSearchCoordinator:
         artist_context: ArtistContext,
         log_artist: str,
         log_album: str,
+        *,
+        tally: ProviderTally,
     ) -> list[ScoredRelease]:
         """Try alternative search strategy when standard search fails."""
         strategy_info = detect_search_strategy(log_artist, log_album, self.config)
@@ -354,6 +398,7 @@ class YearSearchCoordinator:
             artist_context,
             alt_artist or log_artist,
             alt_album or log_album,
+            tally=tally,
         )
 
     def _process_api_task_results(
@@ -362,12 +407,15 @@ class YearSearchCoordinator:
         api_order: list[str],
         log_artist: str,
         log_album: str,
+        *,
+        tally: ProviderTally,
     ) -> list[ScoredRelease]:
         """Process results from concurrent API tasks."""
         all_releases: list[ScoredRelease] = []
 
         for api_name, result in zip(api_order, results, strict=True):
             if isinstance(result, BaseException):
+                tally.failed = True
                 self._log_api_error(api_name, log_artist, log_album, result)
             elif result:
                 all_releases.extend(result)
