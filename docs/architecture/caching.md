@@ -17,8 +17,9 @@ flowchart TB
     end
 
 subgraph L2["Tier 2: Disk"]
-AC[Album Cache<br/>TTL: ∞]
-NC[Negative Cache<br/>TTL: 30 days]
+AC[Album Year Cache<br/>TTL: 30 days]
+PC[Provider Result Cache<br/>found: kept, not found: 30 days]
+RC[Request Cache<br/>TTL: 30 days]
 LS[Library Snapshot<br/>TTL: 24h]
 end
 
@@ -55,13 +56,10 @@ When `delta_enabled: true`, only fetches tracks modified since snapshot creation
 
 ### 2. Album Year Cache
 
-Persistent cache for album release years (essentially permanent).
+The year determined for each album, with the confidence it was determined at. A cached year is used without asking the providers only when its confidence is at least 90; entries expire after 30 days.
 
 ```yaml
 album_years_cache_file: cache/album_years.csv
-year_retrieval:
-  processing:
-    cache_ttl_days: 36500  # 100 years
 ```
 
 **Format** (CSV):
@@ -71,22 +69,34 @@ artist,album,year,source,confidence,timestamp
 Pink Floyd,The Wall,1979,musicbrainz,95,2024-01-15T10:30:00
 ```
 
-### 3. Negative Result Cache
+### 3. Provider Result Cache
 
-Remembers "album not found" to avoid repeated API calls.
+What each provider (MusicBrainz, Discogs, iTunes) answered for an album: its release records, before scoring. The year search reads this cache first and asks the provider only on a miss.
+
+| Answer                          | Kept                                |
+|---------------------------------|-------------------------------------|
+| Releases found                  | For good                            |
+| Nothing found                   | `negative_result_ttl` (30 days)     |
+| Request failed or token refused | Not cached; the next run asks again |
+
+The records are scored when they are read, with the current search's artist region and activity period, so a cached answer never carries another search's context. Removing or renaming a track drops the album's entries for all three providers when the names match; the search rewrites some names before it asks (an `&` becomes `and`, a parenthetical edition such as `(Remastered)` is dropped), and for those the old entry stays behind unused.
 
 ```yaml
 caching:
   negative_result_ttl: 2592000  # 30 days
 ```
 
-**Why 30 days?**
+**Why 30 days for "nothing found"?**
 
 - Albums in external DBs rarely appear suddenly
 - Prevents hammering APIs for unknown albums
 - Still allows retry after reasonable period
 
-### 4. In-Memory Cache
+### 4. Request Cache
+
+Each provider response by URL and query, so repeated requests within and across runs are answered locally (for example, pressings of one Discogs album share their master). Responses are kept for `negative_result_ttl`; a 404 and a failed request are not cached. It lives in the generic cache file.
+
+### 5. In-Memory Cache
 
 Hot data cache for current session. Default TTL is 5 minutes, configurable via `cache_ttl_seconds`.
 
@@ -101,34 +111,27 @@ cache_ttl_seconds: 1800  # Override default 5 min to 30 min for long sessions
 
 ## Cache Key Generation
 
-All caches use consistent key generation:
+Cache keys are SHA-256 hashes of the names after `normalize_for_matching` (trimmed and lowercased), so an album matches whatever its case or spacing:
 
 ```python test="skip"
+"""Cache keys for one album."""
+
 from services.cache.hash_service import UnifiedHashService
 
-key = UnifiedHashService.generate_key(
-    artist="Pink Floyd",
-    album="The Wall"
-)
-# Returns: "pink_floyd__the_wall"
+UnifiedHashService.hash_album_key("Pink Floyd", "The Wall")  # album year cache
+UnifiedHashService.hash_api_key("Pink Floyd", "The Wall", "musicbrainz")  # provider result cache
 ```
-
-**Normalization**:
-
-- Lowercase
-- Whitespace → underscore
-- Special chars removed
-- Consistent across all cache layers
 
 ## Cache Invalidation
 
 ### Automatic
 
-| Trigger        | Cache Affected         |
-|----------------|------------------------|
-| TTL expiry     | Memory cache           |
-| Track modified | Library snapshot delta |
-| Force flag     | All caches bypassed    |
+| Trigger                  | Cache Affected                                                          |
+|--------------------------|-------------------------------------------------------------------------|
+| TTL expiry               | Memory cache, album year cache, provider "nothing found", request cache |
+| Track removed or renamed | Provider result cache for the album (names as the search writes them)   |
+| Track modified           | Library snapshot delta                                                  |
+| Force flag               | All caches bypassed                                                     |
 
 ### Manual
 
@@ -154,7 +157,7 @@ caching:
   cleanup_interval_seconds: 300      # GC every 5 min
   cleanup_error_retry_delay: 60      # Retry after error
 
-  # Negative results
+  # Provider "nothing found" answers and the request cache
   negative_result_ttl: 2592000       # 30 days
 
   # Library snapshot
@@ -190,8 +193,9 @@ caching:
 ```
 cache/
 ├── library_snapshot.json      # Compressed track data
-├── album_years.csv           # Year cache
-└── cache.json                # API response cache
+├── album_years.csv           # Album year cache
+├── cache.json                # Provider result cache
+└── generic_cache.json        # Request cache and other generic entries
 ```
 
 ## Troubleshooting
@@ -231,32 +235,8 @@ cache_ttl_seconds: 300  # 5 minutes
 
 ### Snapshot Compression
 
-Library snapshots use gzip compression:
+Library snapshots are gzip-compressed when `compress: true`, at `compress_level` (default 6). On a real library the snapshot shrinks about 15:1, from 12.5 MB to 0.8 MB.
 
-```python test="skip"
-import gzip
-import json
+### Write Safety
 
-# Write
-with gzip.open(path, 'wt', compresslevel=6) as f:
-    json.dump(data, f)
-
-# Read
-with gzip.open(path, 'rt') as f:
-    data = json.load(f)
-```
-
-**Compression ratio**: ~10:1 for track data
-
-### Thread Safety
-
-Disk caches use file locking:
-
-```python test="skip"
-import fcntl
-
-with open(cache_file, 'r+') as f:
-    fcntl.flock(f, fcntl.LOCK_EX)
-    # ... read/write ...
-    fcntl.flock(f, fcntl.LOCK_UN)
-```
+The album year cache, the generic cache (which holds the request cache), the library snapshot and the provider result cache are written to a temporary file in the cache directory, which then replaces the old file, so a crash in the middle of a write leaves the previous file whole. The album year and provider result caches also guard their entries with an asyncio lock while a run reads and writes them.
