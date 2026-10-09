@@ -38,7 +38,7 @@ from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
-from services.api.request_executor import ApiRequestExecutor
+from services.api.request_executor import ApiRequestError, ApiRequestExecutor
 from services.api.year_score_resolver import YearScoreResolver
 from services.api.year_scoring import ArtistContext, ArtistPeriodContext, create_release_scorer
 from services.api.year_search_coordinator import YearSearchCoordinator
@@ -821,6 +821,9 @@ class ExternalApiOrchestrator:
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
+        A lookup that no provider answered lets the coordinator's YearLookupUnavailableError through: the year is unknown, so
+        neither the library year nor a verification mark stands in for it.
+
         Args:
             artist: Artist name
             album: Album name
@@ -1065,7 +1068,7 @@ class ExternalApiOrchestrator:
 
             return ArtistContext(region=str(artist_region) if artist_region else None, period=period)
 
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
+        except (ApiRequestError, OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as context_err:
             self.error_logger.warning("Error fetching artist context for '%s': %s", log_artist, context_err, exc_info=context_err)
             return ArtistContext(period=period)
 
@@ -1320,8 +1323,15 @@ class ExternalApiOrchestrator:
             )
             return cached_year
 
-        # 2. Try MusicBrainz (primary source)
-        begin_year, _ = await self.get_artist_activity_period(artist_norm)
+        # 2. Try MusicBrainz (primary source), then iTunes as the fallback
+        try:
+            begin_year, _ = await self.get_artist_activity_period(artist_norm)
+            itunes_year = None if begin_year else await self.applemusic_client.get_artist_start_year(artist_norm)
+        except ApiRequestError as error:
+            # Unknown, not absent: caching -1 would switch off the plausibility checks for a day after the outage
+            self.console_logger.debug("[orchestrator] Artist start year unavailable for %s: %s", artist_norm, error)
+            return None
+
         if begin_year:
             self.cache_service.generic_service.set(cache_key, begin_year, ttl=31536000)
             self.console_logger.debug(
@@ -1331,8 +1341,7 @@ class ExternalApiOrchestrator:
             )
             return begin_year
 
-        # 3. Fallback to iTunes
-        itunes_year = await self.applemusic_client.get_artist_start_year(artist_norm)
+        # 3. iTunes fallback answer
         if itunes_year:
             self.cache_service.generic_service.set(cache_key, itunes_year, ttl=31536000)
             self.console_logger.debug(
