@@ -1028,3 +1028,18 @@ class TestRejectedCredentials:
 
         assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "other", "record", ArtistContext()) == []
         assert mock_discogs_client.get_scored_releases.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_rejection_takes_effect_before_the_search_finishes(
+        self,
+        coordinator: YearSearchCoordinator,
+        mock_discogs_client: AsyncMock,
+    ) -> None:
+        """The first rejected Discogs call switches Discogs off at once, so calls queued by other searches are not sent."""
+        mock_discogs_client.get_scored_releases.side_effect = ApiRequestError("discogs", "u", "HTTP 401", status=401)
+
+        with pytest.raises(ApiRequestError):
+            await coordinator._call_api_with_proper_params(coordinator.discogs_client, "artist", "album", ArtistContext())
+
+        assert await coordinator._call_api_with_proper_params(coordinator.discogs_client, "other", "record", ArtistContext()) == []
+        assert mock_discogs_client.get_scored_releases.await_count == 1

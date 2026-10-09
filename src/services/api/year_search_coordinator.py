@@ -327,22 +327,28 @@ class YearSearchCoordinator:
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
         """Ask one provider for scored releases, holding the semaphore that limits concurrent API requests."""
+        is_discogs = api_client is self.discogs_client
         async with self._api_semaphore:
-            if api_client is self.discogs_client and self._discogs_rejected:
+            if is_discogs and self._discogs_rejected:
                 # Queued before the token was rejected; sending it now would only be refused again
                 return []
-            return await api_client.get_scored_releases(artist_norm, album_norm, artist_context)
+            try:
+                return await api_client.get_scored_releases(artist_norm, album_norm, artist_context)
+            except ApiRequestError as error:
+                # Switch Discogs off here, not when the search ends, so calls queued by other searches are not sent
+                if is_discogs and error.status in _REJECTED_TOKEN and not self._discogs_rejected:
+                    self._discogs_rejected = True
+                    self.console_logger.warning(
+                        "discogs rejected the token (HTTP %d); it is not queried again this run, so check discogs_token", error.status
+                    )
+                raise
 
-    def _record_failure(self, api_name: str, error: BaseException, tally: ProviderTally) -> None:
-        """Count a provider failure toward an unavailable lookup, or switch Discogs off when it rejected its token."""
-        if not isinstance(error, ApiRequestError) or api_name != "discogs" or error.status not in _REJECTED_TOKEN:
-            tally.failed = True
+    @staticmethod
+    def _record_failure(api_name: str, error: BaseException, tally: ProviderTally) -> None:
+        """Count a provider failure toward an unavailable lookup; a rejected Discogs token makes Discogs inactive instead."""
+        if isinstance(error, ApiRequestError) and api_name == "discogs" and error.status in _REJECTED_TOKEN:
             return
-        if self._discogs_rejected:
-            # Another search met the same rejection first and already said so
-            return
-        self._discogs_rejected = True
-        self.console_logger.warning("discogs rejected the token (HTTP %d); it is not queried again this run, so check discogs_token", error.status)
+        tally.failed = True
 
     def _get_api_client(self, api_name: str) -> MusicBrainzClient | DiscogsClient | AppleMusicClient | None:
         """Get an active API client by name: none for Discogs without a token or with a rejected one."""
