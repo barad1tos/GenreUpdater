@@ -1219,3 +1219,21 @@ class TestArtistIdMatch:
         )
 
         assert await client._find_artist_id("Pink Floyd") == 487143
+
+    @pytest.mark.asyncio
+    async def test_ampersand_artist_is_found(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
+        """The search name spells "&" as "and"; iTunes keeps the "&"."""
+        client = AppleMusicClient(
+            console_logger=console_logger,
+            error_logger=error_logger,
+            make_api_request_func=AsyncMock(return_value={"results": [{"artistName": "Earth, Wind & Fire", "artistId": 1}]}),
+            score_release_func=MagicMock(return_value=0.0),
+            analytics=MagicMock(),
+        )
+
+        assert await client._find_artist_id("Earth, Wind and Fire") == 1
+
+    def test_start_year_counts_an_ampersand_artist(self, client: AppleMusicClient) -> None:
+        results = [{"artistName": "Earth, Wind & Fire", "releaseDate": "1971-01-01T08:00:00Z"}]
+
+        assert client._extract_release_years(results, "Earth, Wind and Fire") == [1971]

@@ -19,7 +19,6 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 from core.analytics_decorator import track_instance_method
-from core.models.normalization import normalize_for_matching
 from services.api.api_base import BaseApiClient
 from services.api.request_executor import ApiRequestError
 
@@ -393,10 +392,12 @@ class AppleMusicClient(BaseApiClient):
             return None
 
         results = _results_of(response_data, self.base_url)
-        # The search name keeps the library's case, so it is normalized like the result names
-        target = normalize_for_matching(artist_norm)
+        # The search name keeps the library's case and spells "&" as "and", so both sides are normalized alike
+        target = self._normalize_name(artist_norm)
+        if not target:
+            return None
         for result in results:
-            result_artist = normalize_for_matching(result.get("artistName", ""))
+            result_artist = self._normalize_name(result.get("artistName", ""))
             # Exact match only - no substring matching to avoid cross-artist pollution
             # e.g., "madonna" should NOT match "madonna remixers"
             if result_artist == target:
@@ -467,7 +468,7 @@ class AppleMusicClient(BaseApiClient):
 
         """
         years: list[int] = []
-        artist_normalized = normalize_for_matching(artist_norm)
+        artist_normalized = self._normalize_name(artist_norm)
 
         for result in results:
             year = self._extract_year_from_result(result, artist_normalized)
@@ -488,7 +489,7 @@ class AppleMusicClient(BaseApiClient):
             Release year as int, or None if not valid/matching
 
         """
-        artist_name = normalize_for_matching(result.get("artistName", ""))
+        artist_name = cls._normalize_name(result.get("artistName", ""))
         release_date = result.get("releaseDate", "").strip()
 
         # Filter by artist name (fuzzy match)

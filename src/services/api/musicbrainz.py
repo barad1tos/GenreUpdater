@@ -284,6 +284,8 @@ class MusicBrainzClient(BaseApiClient):
         """
         # The search name keeps the library's case and punctuation, so it is normalized like the credited names
         target = self._normalize_name(artist_norm)
+        if not target:
+            return False
         for ac in artist_credits:
             artist_info = ac.get("artist", {})
             artist_name = artist_info.get("name", "")
