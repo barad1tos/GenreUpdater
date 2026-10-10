@@ -16,7 +16,6 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any, TYPE_CHECKING
 
 from core.analytics_decorator import track_instance_method
@@ -150,10 +149,7 @@ class AppleMusicClient(BaseApiClient):
         album_norm: str,
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Score release records with this search's artist context and today's date.
-
-        iTunes gives catalog dates rather than original ones, so a release from this year or the last is scored as a
-        possible reissue; the flag is decided here, at scoring time, because it depends on the clock.
+        """Score release records with this search's artist context.
 
         Args:
             records: Release records from fetch_release_records
@@ -164,10 +160,8 @@ class AppleMusicClient(BaseApiClient):
         Returns:
             Releases with a positive score, in iTunes order
         """
-        current_year = datetime.now(UTC).year
         scored_releases: list[ScoredRelease] = []
         for record in records:
-            is_reissue = int(record["year"]) >= current_year - 1
             score = self.score_release_func(
                 release={
                     "title": record["title"],
@@ -180,7 +174,6 @@ class AppleMusicClient(BaseApiClient):
                     "format": "Digital",  # iTunes is digital distribution
                     "label": record["copyright"],
                     "genre": record["genre"],
-                    "is_reissue": is_reissue,  # For reissue_penalty (-30)
                 },
                 artist_norm=artist_norm,
                 album_norm=album_norm,
@@ -209,8 +202,6 @@ class AppleMusicClient(BaseApiClient):
                 "disambiguation": record["disambiguation"] or None,
                 "source": "itunes",
             }
-            if is_reissue:
-                release["is_reissue"] = True
             self.console_logger.debug("Scored iTunes Release: '%s' (%s) Score: %.2f", record["title"], record["year"], score)
             scored_releases.append(release)
         return scored_releases

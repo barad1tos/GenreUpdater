@@ -1104,20 +1104,16 @@ class TestRecordsAndScoring:
         assert [release["score"] for release in without_region] == [60]
 
     @pytest.mark.asyncio
-    async def test_reissue_flag_follows_the_scoring_year(self, sample_itunes_result: dict[str, Any]) -> None:
-        """A record fetched one year is a reissue only while its year is recent at scoring time."""
+    async def test_a_recent_release_is_not_marked_as_a_reissue(self, sample_itunes_result: dict[str, Any]) -> None:
+        """A new album on iTunes is not a reissue just because it is recent; the scorer judges reissues by title."""
         score_release = MagicMock(return_value=50)
-        client, _ = self.create_client(score_release, {"results": [{**sample_itunes_result, "releaseDate": "2025-05-01T00:00:00Z"}]})
+        this_year = datetime.now(UTC).year
+        client, _ = self.create_client(score_release, {"results": [{**sample_itunes_result, "releaseDate": f"{this_year}-01-01T00:00:00Z"}]})
         records = await client.fetch_release_records("pink floyd", "the dark side of the moon")
 
-        with patch("services.api.applemusic.datetime") as clock:
-            clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
-            recent = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
-            clock.now.return_value = datetime(2030, 1, 1, tzinfo=UTC)
-            later = client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
+        client.score_records(records, "pink floyd", "the dark side of the moon", ArtistContext())
 
-        assert recent[0].get("is_reissue") is True
-        assert "is_reissue" not in later[0]
+        assert "is_reissue" not in score_release.call_args.kwargs["release"]
 
     @pytest.mark.asyncio
     async def test_broken_fetch_propagates(self) -> None:

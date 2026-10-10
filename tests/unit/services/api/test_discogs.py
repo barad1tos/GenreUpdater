@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import urlparse
 
 import pytest
@@ -12,7 +12,6 @@ import pytest
 from services.api.discogs import DiscogsClient, DiscogsRelease
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
-from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 
 
@@ -32,7 +31,6 @@ class TestDiscogsClientAllure:
             mock_score_release = MagicMock(return_value=0.85)
 
         test_api_token = "test_token"  # noqa: S105
-        app_config = create_test_app_config()
         return DiscogsClient(
             token=test_api_token,
             console_logger=MockLogger(),
@@ -40,8 +38,6 @@ class TestDiscogsClientAllure:
             analytics=MockAnalytics(),
             make_api_request_func=mock_api_request,
             score_release_func=mock_score_release,
-            scoring_config=app_config.year_retrieval,
-            config=app_config,
         )
 
     @staticmethod
@@ -505,31 +501,6 @@ class TestRecordsAndScoring:
     def test_client_keeps_no_cache_of_its_own(self) -> None:
         """Discogs relies on the shared caches like the other providers, so it takes no cache service."""
         assert "cache_service" not in inspect.signature(DiscogsClient).parameters
-
-    @pytest.mark.asyncio
-    async def test_reissue_keywords_apply_at_scoring_time(self) -> None:
-        """Records are kept for good, so the reissue keywords in force when scoring decide the flag, not those at fetch time."""
-        response = TestDiscogsClientAllure.create_mock_discogs_response(album_name="Test Album (Remastered)")
-        response["results"][0]["master_id"] = 0
-        seen: list[dict[str, Any]] = []
-
-        def score_release(release: dict[str, Any], *_args: Any, **_kwargs: Any) -> int:
-            """Record what the scorer was given."""
-            seen.append(release)
-            return 50
-
-        client = TestDiscogsClientAllure.create_discogs_client(
-            mock_api_request=AsyncMock(return_value=response), mock_score_release=MagicMock(side_effect=score_release)
-        )
-        with patch.object(client, "_get_reissue_keywords", return_value=[]):
-            records = await client.fetch_release_records("test artist", "test album")
-        with patch.object(client, "_get_reissue_keywords", return_value=["remaster"]):
-            client.score_records(records, "test artist", "test album", ArtistContext())
-        with patch.object(client, "_get_reissue_keywords", return_value=[]):
-            client.score_records(records, "test artist", "test album", ArtistContext())
-
-        assert seen[0].get("is_reissue") is True
-        assert "is_reissue" not in seen[1]
 
     @pytest.mark.asyncio
     async def test_missing_master_is_requested_once_per_search(self) -> None:

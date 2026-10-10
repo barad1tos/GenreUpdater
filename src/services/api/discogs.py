@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Awaitable, Callable
 
-    from core.models.track_models import AppConfig, YearRetrievalConfig
     from metrics import Analytics
     from services.api.year_scoring import ArtistContext
 
@@ -115,8 +114,6 @@ class DiscogsClient(BaseApiClient):
         analytics: Analytics service for performance tracking
         make_api_request_func: Function to make API requests with rate-limiting
         score_release_func: Function to score releases for originality
-        scoring_config: Year retrieval configuration with scoring rules
-        config: Typed application configuration
 
     """
 
@@ -129,16 +126,12 @@ class DiscogsClient(BaseApiClient):
         make_api_request_func: Callable[..., Awaitable[dict[str, Any] | None]],
         *,
         score_release_func: Callable[..., float],
-        scoring_config: YearRetrievalConfig,
-        config: AppConfig,
     ) -> None:
         super().__init__(console_logger, error_logger)
         self.analytics = analytics
         self.token = token
         self._make_api_request = make_api_request_func
         self._score_original_release = score_release_func
-        self.scoring_config = scoring_config
-        self.config = config
 
     @track_instance_method("discogs_release_details")
     async def _fetch_discogs_release_details(self, release_id: int) -> dict[str, Any] | None:
@@ -282,18 +275,6 @@ class DiscogsClient(BaseApiClient):
 
         # Check both with and without "The" prefix
         return target_normalized in title_normalized or target_no_the in title_normalized
-
-    def _get_reissue_keywords(self) -> list[str]:
-        """Get reissue detection keywords from configuration.
-
-        Returns:
-            List of keywords used to detect reissues
-
-        """
-        reissue_keywords = list(self.scoring_config.reissue_detection.reissue_keywords)
-        remaster_keywords = list(self.config.cleaning.remaster_keywords)
-        # Use concatenation to avoid mutating the original config lists
-        return reissue_keywords + remaster_keywords
 
     async def _execute_search(
         self,
@@ -531,7 +512,7 @@ class DiscogsClient(BaseApiClient):
         """Build a release record from a Discogs item, the way the scorer reads it, without scoring.
 
         The record holds the ScoredRelease fields except the score, plus the master year as the release-group date.
-        Nothing in it depends on the artist context, the clock or the configured reissue keywords.
+        Nothing in it depends on the artist context or the clock.
 
         Args:
             item: Discogs release item
@@ -571,9 +552,7 @@ class DiscogsClient(BaseApiClient):
         album_norm: str,
         artist_context: ArtistContext,
     ) -> list[ScoredRelease]:
-        """Score release records with this search's artist context and the configured reissue keywords.
-
-        Records are cached for good, so the reissue flag is decided here from the keywords in force, not stored.
+        """Score release records with this search's artist context.
 
         Args:
             records: Release records from fetch_release_records
@@ -584,14 +563,11 @@ class DiscogsClient(BaseApiClient):
         Returns:
             Releases with a positive score, highest first
         """
-        reissue_keywords = [keyword.lower() for keyword in self._get_reissue_keywords()]
         scored_releases: list[ScoredRelease] = []
         for record in records:
-            title = str(record["title"]).lower()
-            to_score = {**record, "is_reissue": True} if any(keyword in title for keyword in reissue_keywords) else record
-            score = self._score_original_release(to_score, artist_norm, album_norm, artist_context=artist_context, source="discogs")
+            score = self._score_original_release(record, artist_norm, album_norm, artist_context=artist_context, source="discogs")
             if score > 0:
-                release = {key: value for key, value in record.items() if key not in {"is_reissue", "releasegroup_first_date"}}
+                release = {key: value for key, value in record.items() if key != "releasegroup_first_date"}
                 scored_releases.append(cast("ScoredRelease", {**release, "score": score}))
                 self.console_logger.info("Scored Discogs Release: '%s' (%s) Score: %.2f", release["title"], release["year"], score)
         return sorted(scored_releases, key=lambda scored: scored["score"], reverse=True)

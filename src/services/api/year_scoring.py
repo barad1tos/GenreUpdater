@@ -92,6 +92,7 @@ class ReleaseScorer:
         console_logger: Optional logger for debug output
         remaster_keywords: Keywords to identify edition suffixes
         major_market_codes: Country codes for major market bonus
+        reissue_keywords: Title keywords that mark a release as a reissue, for every provider
 
     """
 
@@ -107,6 +108,7 @@ class ReleaseScorer:
         console_logger: logging.Logger | None = None,
         remaster_keywords: list[str] | None = None,
         major_market_codes: list[str] | None = None,
+        reissue_keywords: list[str] | None = None,
     ) -> None:
         self.scoring_config: ScoringConfig = scoring_config or ScoringConfig(
             base_score=10,
@@ -141,6 +143,7 @@ class ReleaseScorer:
         self.console_logger = console_logger or logging.getLogger(__name__)
         self.remaster_keywords = remaster_keywords or []
         self.major_market_codes = major_market_codes or self._DEFAULT_MARKET_CODES
+        self.reissue_keywords = [keyword.lower() for keyword in reissue_keywords or []]
 
         # Constants from the original implementation
         self.YEAR_LENGTH = 4
@@ -597,7 +600,8 @@ class ReleaseScorer:
         char_score += self._score_release_status(release, score_components)
 
         # Reissue penalty
-        if release.get("is_reissue", False):
+        title = str(release.get("title") or "").lower()
+        if any(keyword in title for keyword in self.reissue_keywords):
             penalty = cfg.reissue_penalty
             char_score += penalty
             score_components.append(f"Reissue Indicator: {penalty}")
@@ -914,6 +918,7 @@ def create_release_scorer(
     console_logger: logging.Logger | None = None,
     remaster_keywords: list[str] | None = None,
     major_market_codes: list[str] | None = None,
+    reissue_keywords: list[str] | None = None,
 ) -> ReleaseScorer:
     """Create a configured ReleaseScorer instance.
 
@@ -924,6 +929,7 @@ def create_release_scorer(
         console_logger: Optional logger for debug output
         remaster_keywords: Keywords to identify edition suffixes
         major_market_codes: Country codes for major market bonus
+        reissue_keywords: Title keywords that mark a release as a reissue
 
     Returns:
         Configured ReleaseScorer instance
@@ -936,4 +942,5 @@ def create_release_scorer(
         console_logger=console_logger,
         remaster_keywords=remaster_keywords,
         major_market_codes=major_market_codes,
+        reissue_keywords=reissue_keywords,
     )
