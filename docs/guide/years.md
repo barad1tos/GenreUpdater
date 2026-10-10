@@ -33,9 +33,9 @@ flowchart TD
 
 1. A fresh, confident entry in the album-year cache.
 2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints, never applied on their own: Apple rewrites both without notice.
-3. When no provider knows the album, the year most of its tracks carry fills in the others.
+3. When no provider knows the album, the year most of its tracks carry fills in the others, unless that year is this year on tracks the library received earlier: that is Apple's placeholder, and the album is left alone.
 
-An album whose tracks all agree is skipped; a year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`), and the album is skipped until that year changes.
+An album whose tracks all agree is skipped (a single track agrees with itself); a year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`), and the album is skipped until that year changes.
 
 ## Running Year Updates
 
