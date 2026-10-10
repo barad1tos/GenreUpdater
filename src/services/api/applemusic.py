@@ -24,6 +24,7 @@ from services.api.api_base import BaseApiClient
 from services.api.request_executor import ApiRequestError
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     import logging
 
     from metrics.analytics import Analytics
@@ -106,7 +107,7 @@ class AppleMusicClient(BaseApiClient):
         )
 
     @track_instance_method("itunes_release_search")
-    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[dict[str, Any]]:
+    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[ReleaseRecord]:
         """Fetch iTunes release records for an album, falling back to the artist's albums when the search finds nothing.
 
         Any error propagates: a failed lookup must not read as an album iTunes does not know.
@@ -144,7 +145,7 @@ class AppleMusicClient(BaseApiClient):
 
     def score_records(
         self,
-        records: list[dict[str, Any]],
+        records: list[ReleaseRecord],
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
@@ -163,47 +164,15 @@ class AppleMusicClient(BaseApiClient):
         scored_releases: list[ScoredRelease] = []
         for record in records:
             score = self.score_release_func(
-                release={
-                    "title": record["title"],
-                    "artist": record["artist"],
-                    "year": record["year"],
-                    "album_type": record["album_type"],
-                    # The storefront searched is not where the release came from, so it earns no country bonus
-                    "country": None,
-                    "status": "official",  # iTunes only has official releases
-                    "format": "Digital",  # iTunes is digital distribution
-                    "label": record["copyright"],
-                    "genre": record["genre"],
-                },
-                artist_norm=artist_norm,
-                album_norm=album_norm,
-                artist_context=artist_context,
-                source="itunes",
+                release=record, artist_norm=artist_norm, album_norm=album_norm, artist_context=artist_context, source="itunes"
             )
             if score <= 0:
                 self.console_logger.debug(
                     "[itunes] Filtered out '%s - %s' (%s): score %.2f <= 0", record["artist"], record["title"], record["year"], score
                 )
                 continue
-
-            # iTunes has no label field; the copyright text stands in for it
-            release: ScoredRelease = {
-                "title": record["title"],
-                "year": record["year"],
-                "score": score,
-                "artist": record["artist"],
-                "album_type": record["album_type"],
-                "country": None,
-                "status": "official",
-                "format": "Digital",
-                "label": record["copyright"] or None,
-                "catalog_number": None,  # iTunes doesn't provide catalog numbers
-                "barcode": None,  # iTunes doesn't provide barcodes
-                "disambiguation": record["disambiguation"] or None,
-                "source": "itunes",
-            }
             self.console_logger.debug("Scored iTunes Release: '%s' (%s) Score: %.2f", record["title"], record["year"], score)
-            scored_releases.append(release)
+            scored_releases.append({**record, "score": score})
         return scored_releases
 
     async def get_scored_releases(
@@ -265,7 +234,7 @@ class AppleMusicClient(BaseApiClient):
             )
         return results
 
-    def _build_release_records(self, results: list[dict[str, Any]], search_term: str) -> list[dict[str, Any]]:
+    def _build_release_records(self, results: list[dict[str, Any]], search_term: str) -> list[ReleaseRecord]:
         """Turn iTunes results into release records, skipping results that cannot be read.
 
         Args:
@@ -275,7 +244,7 @@ class AppleMusicClient(BaseApiClient):
         Returns:
             Release records for the results with an artist, an album and a release year
         """
-        records: list[dict[str, Any]] = []
+        records: list[ReleaseRecord] = []
         for result in results:
             try:
                 if record := self._build_release_record(result):
@@ -287,7 +256,7 @@ class AppleMusicClient(BaseApiClient):
         self.console_logger.debug("[itunes] Built %d records from %d results", len(records), len(results))
         return records
 
-    def _build_release_record(self, result: dict[str, Any]) -> dict[str, Any] | None:
+    def _build_release_record(self, result: dict[str, Any]) -> ReleaseRecord | None:
         """Build a release record from one iTunes result: its raw fields, nothing that depends on the clock or context.
 
         Args:
@@ -307,14 +276,19 @@ class AppleMusicClient(BaseApiClient):
             self.console_logger.debug("[itunes] Skipping '%s - %s': no valid release year", artist_name, collection_name)
             return None
 
+        # iTunes has no label field, so the copyright text stands in for it; the storefront searched is not where
+        # the release came from, so it carries no country
         return {
             "title": collection_name,
-            "artist": artist_name,
             "year": release_year,
+            "artist": artist_name,
             "album_type": result.get("collectionType", ""),
-            "copyright": result.get("copyright", ""),
+            "country": None,
+            "status": "official",  # iTunes only has official releases
+            "format": "Digital",
+            "label": result.get("copyright", "") or None,
+            "source": "itunes",
             "genre": result.get("primaryGenreName", ""),
-            "disambiguation": result.get("collectionCensoredName", ""),
         }
 
     @track_instance_method("itunes_artist_period")

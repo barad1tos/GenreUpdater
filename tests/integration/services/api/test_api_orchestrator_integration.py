@@ -47,9 +47,6 @@ def make_scored_release(
         "status": None,
         "format": None,
         "label": None,
-        "catalog_number": None,
-        "barcode": None,
-        "disambiguation": None,
     }
 
 

@@ -13,7 +13,7 @@ import pytest
 from core.models.track_models import TrackDict
 from services.cache.orchestrator import CacheOrchestrator
 
-from tests.factories import create_test_app_config
+from tests.factories import create_test_app_config, release_record
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -219,7 +219,7 @@ class TestCacheOrchestrator:
     async def test_own_track_write_keeps_provider_results(self) -> None:
         """Writing a year or genre to a track does not change what providers answered, so their records stay cached."""
         orchestrator = self.create_orchestrator()
-        records = [{"title": "Kid A", "year": "2000"}]
+        records = [release_record(title="Kid A", year="2000")]
         await orchestrator.set_cached_api_result("Radiohead", "Kid A", source="musicbrainz", records=records)
 
         await orchestrator.invalidate_for_track(TrackDict(id="123", name="Idioteque", artist="Radiohead", album="Kid A", genre="Rock"))
@@ -458,7 +458,7 @@ class TestCacheOrchestrator:
     async def test_set_cached_api_result_round_trip(self) -> None:
         """Records stored through the orchestrator come back from the API cache, an empty answer included."""
         orchestrator = self.create_orchestrator()
-        records = [{"title": "Album", "year": "2020"}]
+        records = [release_record(title="Album", year="2020")]
 
         await orchestrator.set_cached_api_result("Artist", "Album", source="discogs", records=records)
         await orchestrator.set_cached_api_result("Artist", "Other", source="discogs", records=[])

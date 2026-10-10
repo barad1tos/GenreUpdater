@@ -14,7 +14,9 @@ import re
 import time
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, TypedDict, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+
+from core.models.release_record import ReleaseRecord
 
 if TYPE_CHECKING:
     import logging
@@ -23,22 +25,10 @@ if TYPE_CHECKING:
 RATE_LIMIT_BUFFER_SECONDS: float = 0.01
 
 
-class ScoredRelease(TypedDict):
-    """Type definition for a scored release with metadata and scoring details."""
+class ScoredRelease(ReleaseRecord):
+    """A release record with the score the scorer gave it."""
 
-    title: str
-    year: str | None
     score: float
-    artist: str | None
-    album_type: str | None
-    country: str | None
-    status: str | None
-    format: str | None
-    label: str | None
-    catalog_number: str | None
-    barcode: str | None
-    disambiguation: str | None
-    source: str
 
 
 class ApiRateLimiter:

@@ -25,7 +25,7 @@ from services.cache.api_cache import ApiCacheService
 from services.cache.generic_cache import GenericCacheService
 from services.cache.fingerprint import FingerprintGenerator, FingerprintGenerationError
 from services.cache.hash_service import UnifiedHashService
-from tests.factories import create_test_app_config
+from tests.factories import create_test_app_config, release_record
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
@@ -205,7 +205,7 @@ class TestApiCacheServiceIntegration:
             artist="Test Artist",
             album="Test Album",
             source="musicbrainz",
-            records=[{"year": "2020", "score": 85}],
+            records=[release_record(year="2020")],
         )
 
         # Retrieve and verify
@@ -215,7 +215,7 @@ class TestApiCacheServiceIntegration:
             source="musicbrainz",
         )
         assert result is not None
-        assert result.api_response == {"records": [{"year": "2020", "score": 85}]}
+        assert result.api_response == {"records": [release_record(year="2020")]}
         assert result.source == "musicbrainz"
 
     @pytest.mark.asyncio
@@ -232,13 +232,13 @@ class TestApiCacheServiceIntegration:
             artist="Artist",
             album="Album",
             source="musicbrainz",
-            records=[{"year": "2018"}],
+            records=[release_record(year="2018")],
         )
         await cache.set_cached_result(
             artist="Artist",
             album="Album",
             source="discogs",
-            records=[{"year": "2019"}],
+            records=[release_record(year="2019")],
         )
 
         # Retrieve separately and verify isolation
@@ -247,8 +247,8 @@ class TestApiCacheServiceIntegration:
 
         assert mb_result is not None
         assert discogs_result is not None
-        assert mb_result.api_response == {"records": [{"year": "2018"}]}
-        assert discogs_result.api_response == {"records": [{"year": "2019"}]}
+        assert mb_result.api_response == {"records": [release_record(year="2018")]}
+        assert discogs_result.api_response == {"records": [release_record(year="2019")]}
 
     @pytest.mark.asyncio
     async def test_api_cache_failed_lookup(
@@ -291,7 +291,7 @@ class TestApiCacheServiceIntegration:
                 artist="Artist",
                 album="Album",
                 source=source,
-                records=[{"year": "2020"}],
+                records=[release_record(year="2020")],
             )
 
         # Invalidate all entries for this album
@@ -616,7 +616,7 @@ class TestCacheIntegrationScenarios:
             artist=artist,
             album=album,
             source="musicbrainz",
-            records=[{"year": year}],
+            records=[release_record(year=year)],
         )
 
         # Store in album cache (simulating resolved year)
@@ -633,7 +633,8 @@ class TestCacheIntegrationScenarios:
 
         assert api_result is not None
         assert album_result is not None
-        assert api_result.api_response == {"records": [{"year": album_result}]}
+        assert api_result.api_response is not None
+        assert [record["year"] for record in api_result.api_response["records"]] == [album_result]
 
     @pytest.mark.asyncio
     async def test_cache_stats_available(
@@ -648,7 +649,7 @@ class TestCacheIntegrationScenarios:
 
         # Add some data
         await album_cache.store_album_year("Artist", "Album", "2020", 80)
-        await api_cache.set_cached_result("Artist", "Album", source="musicbrainz", records=[{"year": "2020"}])
+        await api_cache.set_cached_result("Artist", "Album", source="musicbrainz", records=[release_record(year="2020")])
         generic_cache.set("key", "value")
 
         # Get stats

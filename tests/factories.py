@@ -6,10 +6,11 @@ that can be imported by any test module (including xdist workers).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     from core.models.track_models import AppConfig
 
 
@@ -135,3 +136,19 @@ def create_test_app_config(**overrides: Any) -> AppConfig:
 
     data = {**MINIMAL_CONFIG_DATA, **overrides}
     return AppConfig(**data)
+
+
+def release_record(**fields: Any) -> ReleaseRecord:
+    """Build a release record in the shared shape the provider clients produce; fields override the defaults."""
+    record: ReleaseRecord = {
+        "title": "Album",
+        "year": "2000",
+        "artist": "Artist",
+        "album_type": "Album",
+        "country": None,
+        "status": "official",
+        "format": None,
+        "label": None,
+        "source": "musicbrainz",
+    }
+    return cast("ReleaseRecord", {**record, **fields})
