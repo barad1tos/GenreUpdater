@@ -576,30 +576,46 @@ class TestInvalidationEventsUseGroupArtist:
 class TestBulkRescanEvents:
     """A bulk rescan replaces the snapshot, so it reports what disappeared or was renamed since the last one."""
 
-    def test_rescan_reports_removed_and_renamed_tracks(self) -> None:
-        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+    @staticmethod
+    def _updater(library_ids: list[str]) -> tuple[MusicUpdater, MagicMock]:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        deps.ap_client.fetch_all_track_ids = AsyncMock(return_value=library_ids)
         api_cache = MagicMock()
-        updater.deps.cache_service.api_service = api_cache
+        deps.cache_service.api_service = api_cache
+        return MusicUpdater(deps), api_cache
+
+    @pytest.mark.asyncio
+    async def test_rescan_reports_removed_and_renamed_tracks(self) -> None:
+        updater, api_cache = self._updater(["A"])
         previous = [
             TrackDict(id="A", name="Song", artist="Artist", album="Old Album"),
             TrackDict(id="B", name="Song", artist="Gone", album="Album"),
         ]
         current = [TrackDict(id="A", name="Song", artist="Artist", album="New Album")]
 
-        updater._emit_rescan_events(previous, current)
+        await updater._emit_rescan_events(previous, current)
 
         api_cache.emit_track_removed.assert_called_once_with("B", "Gone", "Album")
         api_cache.emit_track_modified.assert_called_once_with("A", "Artist", "Old Album")
 
-    def test_first_scan_reports_nothing(self) -> None:
-        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
-        api_cache = MagicMock()
-        updater.deps.cache_service.api_service = api_cache
+    @pytest.mark.asyncio
+    async def test_first_scan_reports_nothing(self) -> None:
+        updater, api_cache = self._updater(["A"])
 
-        updater._emit_rescan_events(None, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
+        await updater._emit_rescan_events(None, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
 
         api_cache.emit_track_removed.assert_not_called()
         api_cache.emit_track_modified.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_incomplete_rescan_reports_nothing(self) -> None:
+        """A rescan cut short by a failed batch would report every unread track as removed."""
+        updater, api_cache = self._updater(["A", "B"])
+        previous = [TrackDict(id="A", name="Song", artist="Artist", album="Album"), TrackDict(id="B", name="Song", artist="Other", album="Album")]
+
+        await updater._emit_rescan_events(previous, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
+
+        api_cache.emit_track_removed.assert_not_called()
 
 
 class TestRescanBaseline:

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from app.music_updater import MusicUpdater
+from app.id_migration import TrackListMigrationError
 from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from tests.factories import create_test_app_config
 
@@ -246,6 +247,22 @@ class TestOrchestratorAllure:
             await orchestrator.run_command(self.create_mock_args())
 
         assert calls == ["migrate", "workflow"]
+
+    @pytest.mark.asyncio
+    async def test_failed_migration_stops_the_run(self) -> None:
+        """A list that still needs migrating must not reach auto-verify, which would drop its rows."""
+        orchestrator = Orchestrator(self.create_mock_deps())
+        orchestrator.music_updater = Mock()
+
+        with (
+            patch("app.orchestrator.is_music_app_running", return_value=True),
+            patch("app.orchestrator.migrate_to_persistent_ids", AsyncMock(side_effect=TrackListMigrationError("short fetch"))),
+            patch.object(orchestrator, "_run_main_workflow", AsyncMock()) as workflow,
+            pytest.raises(TrackListMigrationError),
+        ):
+            await orchestrator.run_command(self.create_mock_args())
+
+        workflow.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_dry_run_skips_migration(self) -> None:

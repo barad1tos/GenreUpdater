@@ -44,6 +44,7 @@ class BatchTrackFetcher:
         snapshot_loader: Async callback to load tracks from snapshot
         snapshot_persister: Async callback to persist tracks to snapshot
         can_use_snapshot: Callback to check if snapshot can be used
+        missed_track_fetcher: Async callback to fetch tracks by persistent ID
         dry_run: Whether running in dry-run mode
         analytics: Optional analytics instance for batch mode logging
     """
@@ -61,6 +62,7 @@ class BatchTrackFetcher:
         snapshot_loader: Callable[[], Awaitable[list[TrackDict] | None]],
         snapshot_persister: Callable[[list[TrackDict], list[str] | None], Awaitable[None]],
         can_use_snapshot: Callable[[str | None], bool],
+        missed_track_fetcher: Callable[[list[str]], Awaitable[list[TrackDict]]],
         dry_run: bool = False,
         analytics: AnalyticsProtocol | None = None,
     ) -> None:
@@ -74,6 +76,7 @@ class BatchTrackFetcher:
         self._snapshot_loader = snapshot_loader
         self._snapshot_persister = snapshot_persister
         self._can_use_snapshot = can_use_snapshot
+        self._missed_track_fetcher = missed_track_fetcher
         self.dry_run = dry_run
         self.analytics = analytics
 
@@ -104,11 +107,31 @@ class BatchTrackFetcher:
 
         # Snapshot not available - proceed with batch processing
         all_tracks = await self._fetch_tracks_in_batches(batch_size)
+        all_tracks += await self._fetch_missed_tracks(all_tracks)
 
         # Cache and persist results
         await self._cache_and_persist_results(all_tracks)
 
         return all_tracks
+
+    async def _fetch_missed_tracks(self, batched_tracks: list[TrackDict]) -> list[TrackDict]:
+        """Fetch the tracks Music.app lists that no batch returned.
+
+        Index ranges also count deleted tracks, so they drift from the library's track order and the last tracks
+        of the library fall past the final batch.
+
+        Args:
+            batched_tracks: Tracks the batches returned
+
+        Returns:
+            The missed tracks
+        """
+        batched_ids = {str(track.id) for track in batched_tracks}
+        missed_ids = [track_id for track_id in await self.ap_client.fetch_all_track_ids() if track_id not in batched_ids]
+        if not missed_ids:
+            return []
+        self.console_logger.info("Batches missed %d tracks Music.app lists; fetching them by persistent ID", len(missed_ids))
+        return await self._missed_track_fetcher(missed_ids)
 
     async def _fetch_tracks_in_batches(self, batch_size: int) -> list[TrackDict]:
         """Execute the batch fetching loop.

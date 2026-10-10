@@ -10,9 +10,9 @@ import pytest
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
-    from core.models.track_models import AppConfig
     from core.models.types import AppleScriptClientProtocol
 
+from core.models.track_models import AppConfig, TrackDict
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from metrics.analytics import Analytics, LoggerContainer
 from tests.factories import create_test_app_config
@@ -23,6 +23,7 @@ def mock_ap_client() -> MagicMock:
     """Create mock AppleScript client."""
     client = MagicMock()
     client.run_script = AsyncMock(return_value=None)
+    client.fetch_all_track_ids = AsyncMock(return_value=[])
     return client
 
 
@@ -70,6 +71,8 @@ def create_batch_fetcher(
     loggers: tuple[logging.Logger, logging.Logger],
     config: AppConfig,
     analytics: Analytics | None = None,
+    *,
+    missed_track_fetcher: AsyncMock | None = None,
 ) -> BatchTrackFetcher:
     """Factory to create BatchTrackFetcher with common dependencies."""
     console_logger, error_logger = loggers
@@ -84,6 +87,7 @@ def create_batch_fetcher(
         snapshot_loader=AsyncMock(return_value=None),
         snapshot_persister=AsyncMock(),
         can_use_snapshot=lambda x: False,
+        missed_track_fetcher=missed_track_fetcher or AsyncMock(return_value=[]),
         analytics=analytics,
     )
 
@@ -113,6 +117,49 @@ class TestBatchFetcherInit:
         """Should initialize with analytics parameter."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
         assert fetcher.analytics is analytics
+
+
+class TestMissedTracks:
+    """Music.app's index ranges include deleted tracks, so the batches can miss the last tracks of the library."""
+
+    @pytest.mark.asyncio
+    async def test_tracks_the_batches_missed_are_fetched_by_id(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        batched = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        missed = TrackDict(id="00000000000000B2", name="Tail", artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[batched.id, missed.id])
+        missed_fetcher = AsyncMock(return_value=[missed])
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=missed_fetcher)
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[batched])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert [track.id for track in tracks] == [batched.id, missed.id]
+        missed_fetcher.assert_awaited_once_with([missed.id])
+
+    @pytest.mark.asyncio
+    async def test_complete_batches_fetch_nothing_more(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        batched = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[batched.id])
+        missed_fetcher = AsyncMock(return_value=[])
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=missed_fetcher)
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[batched])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [batched]
+        missed_fetcher.assert_not_awaited()
 
 
 class TestFetchTracksInBatchesRouting:
@@ -374,6 +421,7 @@ class TestCacheAndPersistResults:
             snapshot_loader=AsyncMock(return_value=None),
             snapshot_persister=failing_persister,
             can_use_snapshot=lambda _x: True,
+            missed_track_fetcher=AsyncMock(return_value=[]),
         )
 
         track = MagicMock()

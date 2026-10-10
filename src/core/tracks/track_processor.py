@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from core.models.cache_types import SNAPSHOT_VERSION
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from core.tracks.cache_manager import TrackCacheManager
 from core.tracks.update_executor import TrackUpdateExecutor
@@ -73,7 +74,7 @@ class TrackProcessor:
         self.artist_renamer: ArtistRenamer | None = None
 
         # Initialize cache manager for snapshot/cache operations
-        self.cache_manager = TrackCacheManager(
+        self.cache_manager: TrackCacheManager = TrackCacheManager(
             cache_service=cache_service,
             snapshot_service=library_snapshot_service,
             console_logger=console_logger,
@@ -104,6 +105,7 @@ class TrackProcessor:
             snapshot_loader=self._load_tracks_from_snapshot,
             snapshot_persister=self._persist_full_scan,
             can_use_snapshot=self._can_use_snapshot,
+            missed_track_fetcher=self.fetch_tracks_by_ids,
             dry_run=dry_run,
             analytics=analytics,
         )
@@ -238,6 +240,12 @@ class TrackProcessor:
         # Snapshot is invalid
         if not service.is_delta_enabled():
             self.console_logger.warning("Snapshot stale and delta updates disabled; full rescan required")
+            return None
+
+        # A snapshot in another format keys tracks by other ids; merging a delta into it would save mixed ids
+        metadata = await service.get_snapshot_metadata()
+        if metadata is not None and metadata.version != SNAPSHOT_VERSION:
+            self.console_logger.info("Snapshot format %s is outdated; full rescan required", metadata.version)
             return None
 
         # Delta enabled - attempt incremental refresh

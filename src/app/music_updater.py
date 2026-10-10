@@ -681,12 +681,22 @@ class MusicUpdater:
             return None
         return await snapshot_service.load_snapshot()
 
-    def _emit_rescan_events(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> None:
-        """Emit cache invalidation for tracks a bulk rescan no longer finds, or finds renamed, since the last snapshot."""
+    async def _emit_rescan_events(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> None:
+        """Emit cache invalidation for tracks a bulk rescan no longer finds, or finds renamed, since the last snapshot.
+
+        A rescan cut short by a failed batch would report every unread track as removed, so the events go out only when
+        the rescan holds every id Music.app lists.
+        """
         if not previous:
             return
-        previous_map = {str(track.id): track for track in previous if track.id}
         current_ids = {str(track.id) for track in current if track.id}
+        library_ids = set(await self.deps.ap_client.fetch_all_track_ids())
+        if current_ids != library_ids:
+            self.console_logger.warning(
+                "Bulk rescan read %d of %d tracks; not reporting removed or renamed tracks from it", len(current_ids), len(library_ids)
+            )
+            return
+        previous_map = {str(track.id): track for track in previous if track.id}
         api_cache = self.deps.cache_service.api_service
         self._emit_removed_track_events(sorted(set(previous_map) - current_ids), previous_map, api_cache)
         self._emit_identity_change_events(sorted(current_ids & set(previous_map)), previous_map, current, api_cache)
@@ -775,7 +785,7 @@ class MusicUpdater:
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Already validated in Smart Delta
             )
-            self._emit_rescan_events(previous_tracks, tracks)
+            await self._emit_rescan_events(previous_tracks, tracks)
             self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)
             return tracks
 

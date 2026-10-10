@@ -8,7 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.id_migration import BACKUP_NAME, carry_year_history, is_persistent_id, migrate_to_persistent_ids, needs_migration
+from app.id_migration import (
+    BACKUP_NAME,
+    TrackListMigrationError,
+    carry_year_history,
+    is_persistent_id,
+    migrate_to_persistent_ids,
+    needs_migration,
+)
 from core.logger import get_full_log_path
 from core.models.track_models import AppConfig, TrackDict
 from metrics.track_sync import load_track_list, save_track_map_to_csv
@@ -75,6 +82,14 @@ class TestCarryYearHistory:
         assert carry_year_history([_old_row("1")], tracks) == 0
 
 
+def _processor(tracks: list[TrackDict], library_ids: list[str] | None = None) -> MagicMock:
+    """A track processor whose library holds `library_ids` (by default the ids of `tracks`) and whose fetch returns `tracks`."""
+    processor = MagicMock()
+    processor.fetch_tracks_in_batches = AsyncMock(return_value=tracks)
+    processor.ap_client.fetch_all_track_ids = AsyncMock(return_value=library_ids if library_ids is not None else [str(t.id) for t in tracks])
+    return processor
+
+
 class TestMigrate:
     """The migration rewrites the track list once, and changes nothing unless the library fetch worked."""
 
@@ -89,8 +104,7 @@ class TestMigrate:
     @pytest.mark.asyncio
     async def test_migration_backs_up_and_rewrites_the_track_list(self, tmp_path: Path) -> None:
         config, csv_path = self._write_old_list(tmp_path)
-        processor = MagicMock()
-        processor.fetch_tracks_in_batches = AsyncMock(return_value=[_fresh_track()])
+        processor = _processor([_fresh_track()])
         snapshot_service = MagicMock()
 
         migrated = await migrate_to_persistent_ids(
@@ -104,35 +118,48 @@ class TestMigrate:
         assert rows[_PERSISTENT_ID].year_set_by_mgu == "2001"
         snapshot_service.clear_delta.assert_called_once()
 
+    @pytest.mark.parametrize(
+        ("fetched", "library_ids"),
+        [
+            ([], None),  # Music.app did not answer
+            ([TrackDict(id="111701", name="Song", artist="A", album="B")], None),  # scripts still emit old ids
+            ([_fresh_track()], [_PERSISTENT_ID, "0A1B2C3D4E5F6071"]),  # a batch failed, so the fetch is short
+        ],
+        ids=["empty", "old-ids", "incomplete"],
+    )
     @pytest.mark.asyncio
-    async def test_failed_fetch_changes_nothing(self, tmp_path: Path) -> None:
+    async def test_unusable_fetch_stops_the_run_and_changes_nothing(
+        self, tmp_path: Path, fetched: list[TrackDict], library_ids: list[str] | None
+    ) -> None:
+        """Without the whole library keyed by persistent ID, nothing is written and the run stops before any reader."""
         config, csv_path = self._write_old_list(tmp_path)
-        processor = MagicMock()
-        processor.fetch_tracks_in_batches = AsyncMock(return_value=[])
         snapshot_service = MagicMock()
 
-        migrated = await migrate_to_persistent_ids(
-            config=config, track_processor=processor, snapshot_service=snapshot_service, console_logger=_LOGGER, error_logger=_LOGGER
-        )
+        with pytest.raises(TrackListMigrationError):
+            await migrate_to_persistent_ids(
+                config=config,
+                track_processor=_processor(fetched, library_ids),
+                snapshot_service=snapshot_service,
+                console_logger=_LOGGER,
+                error_logger=_LOGGER,
+            )
 
-        assert not migrated
         assert not (csv_path.parent / BACKUP_NAME).exists()
         assert list(load_track_list(str(csv_path))) == ["111701"]
         snapshot_service.clear_delta.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_fetch_with_old_ids_changes_nothing(self, tmp_path: Path) -> None:
-        """Scripts that still emit old ids must not be mistaken for a migrated library."""
+    async def test_existing_backup_is_kept(self, tmp_path: Path) -> None:
+        """A second migration must not replace the original list's backup."""
         config, csv_path = self._write_old_list(tmp_path)
-        processor = MagicMock()
-        processor.fetch_tracks_in_batches = AsyncMock(return_value=[TrackDict(id="111701", name="Song", artist="A", album="B")])
+        backup = csv_path.parent / BACKUP_NAME
+        backup.write_text("original", encoding="utf-8")
 
-        migrated = await migrate_to_persistent_ids(
-            config=config, track_processor=processor, snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
+        await migrate_to_persistent_ids(
+            config=config, track_processor=_processor([_fresh_track()]), snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
         )
 
-        assert not migrated
-        assert not (csv_path.parent / BACKUP_NAME).exists()
+        assert backup.read_text(encoding="utf-8") == "original"
 
     @pytest.mark.asyncio
     async def test_migrated_list_is_left_alone(self, tmp_path: Path) -> None:

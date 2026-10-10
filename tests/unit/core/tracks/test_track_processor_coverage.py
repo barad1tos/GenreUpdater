@@ -296,6 +296,25 @@ class TestLoadTracksFromSnapshot:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_snapshot_in_another_format_is_not_refreshed(
+        self,
+        processor: TrackProcessor,
+        mock_snapshot_service: AsyncMock,
+        sample_track: TrackDict,
+    ) -> None:
+        """A snapshot keyed by old ids must not be merged with a delta and saved again under the current format."""
+        processor.snapshot_service = mock_snapshot_service
+        mock_snapshot_service.load_snapshot.return_value = [sample_track]
+        mock_snapshot_service.is_snapshot_valid.return_value = False
+        mock_snapshot_service.is_delta_enabled.return_value = True
+        mock_snapshot_service.get_snapshot_metadata.return_value = MagicMock(version="1.0")
+
+        with patch.object(processor, "_refresh_snapshot_from_delta", AsyncMock()) as refresh:
+            assert await processor._load_tracks_from_snapshot() is None
+
+        refresh.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_returns_tracks_when_snapshot_valid(
         self,
         processor: TrackProcessor,
@@ -647,3 +666,12 @@ class TestUpdateArtistAsync:
         )
 
         assert result is False
+
+
+@pytest.mark.asyncio
+async def test_batch_fetch_persists_as_a_full_scan(processor: TrackProcessor, sample_track: TrackDict) -> None:
+    """The batch fetcher reads the whole library, so its snapshot save stamps the scan times."""
+    with patch.object(processor.cache_manager, "update_snapshot", AsyncMock()) as update:
+        await processor._persist_full_scan([sample_track], ["1"])
+
+    assert update.call_args.kwargs["full_scan"] is True
