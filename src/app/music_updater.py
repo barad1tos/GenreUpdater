@@ -131,7 +131,7 @@ class MusicUpdater:
         )
 
         # Track cleaning service
-        self.cleaning_service = TrackCleaningService(
+        self.cleaning_service: TrackCleaningService = TrackCleaningService(
             track_processor=self.track_processor,
             config=deps.app_config,
             console_logger=deps.console_logger,
@@ -508,8 +508,9 @@ class MusicUpdater:
         # Execute the main steps with incremental scope and collect changes
         all_changes: list[ChangeLogEntry] = []
 
-        # Step 1: Clean metadata
-        cleaning_changes = await self.cleaning_service.clean_all_metadata_with_logs(incremental_tracks)
+        # Step 1: Clean metadata (use ALL tracks like the genre and year steps, so a track cleaning once missed is cleaned
+        # later; only tracks whose cleaned names differ are written)
+        cleaning_changes = await self.cleaning_service.clean_all_metadata_with_logs(tracks)
         all_changes.extend(cleaning_changes)
 
         # Step 2: Rename artists (if configured)

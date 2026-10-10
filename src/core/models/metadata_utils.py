@@ -653,14 +653,6 @@ def clean_names(
         Tuple of (cleaned_track_name, cleaned_album_name).
 
     """
-    if track_name or album_name:
-        console_logger.debug(
-            "clean_names called with: artist='%s', track_name='%s', album_name='%s'",
-            artist,
-            track_name,
-            album_name,
-        )
-
     exceptions_list = [{"artist": exc.artist, "album": exc.album} for exc in config.exceptions.track_cleaning]
     if _is_cleaning_exception(artist, album_name, exceptions_list):
         # Log only once per artist/album combination

@@ -571,3 +571,29 @@ class TestInvalidationEventsUseGroupArtist:
         updater._emit_identity_change_events(["1"], {"1": self._track("Various Artists")}, [self._track("Some Band")], api_cache)
 
         api_cache.emit_track_modified.assert_called_once_with("1", "Various Artists", "Now 47")
+
+
+class TestPipelineCleaningScope:
+    """Cleaning checks every track, as the genre and year steps do, so a track it once missed is cleaned later."""
+
+    @pytest.mark.asyncio
+    async def test_cleaning_sees_tracks_outside_the_incremental_scope(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        new_track = TrackDict(id="1", name="New", artist="Artist", album="Album", genre="Metal")
+        missed_track = TrackDict(id="2", name="Old", artist="Artist", album="Album (Deluxe Edition)", genre="Metal")
+        cleaning = AsyncMock(return_value=[])
+
+        with (
+            patch.object(updater, "_fetch_tracks_for_pipeline_mode", AsyncMock(return_value=[new_track, missed_track])),
+            patch.object(updater, "_compute_incremental_scope", AsyncMock(return_value=([new_track], False))),
+            patch.object(updater, "_get_last_run_time", AsyncMock(return_value=None)),
+            patch.object(updater.cleaning_service, "clean_all_metadata_with_logs", cleaning),
+            patch.object(updater, "_update_all_genres", AsyncMock(return_value=[])),
+            patch.object(updater, "_update_all_years_with_logs", AsyncMock(return_value=[])),
+            patch.object(updater, "_save_pipeline_results", AsyncMock()),
+            patch.object(updater, "_should_update_run_timestamp", MagicMock(return_value=False)),
+            patch.object(updater.snapshot_manager, "persist_to_disk", AsyncMock()),
+        ):
+            await updater.run_main_pipeline()
+
+        cleaning.assert_awaited_once_with([new_track, missed_track])

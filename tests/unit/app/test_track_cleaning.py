@@ -231,6 +231,14 @@ class TestProcessSingleTrack:
         assert result == (None, None)
 
     @pytest.mark.asyncio
+    async def test_clean_track_is_not_written(self, service: TrackCleaningService, mock_track_processor: MagicMock, sample_track: TrackDict) -> None:
+        """Every track is checked on each run, so one that is already clean must not reach Music.app."""
+        with patch("app.track_cleaning.clean_names", return_value=("Track Name", "Album Name")):
+            await service.process_single_track(sample_track)
+
+        mock_track_processor.update_track_async.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_updates_track_when_changes_needed(
         self,
         service: TrackCleaningService,
