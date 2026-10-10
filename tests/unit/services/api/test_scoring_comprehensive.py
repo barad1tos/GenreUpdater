@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.models.normalization import search_names
 from core.models.track_models import ScoringConfig
 from services.api.year_scoring import (
     ArtistContext,
@@ -171,12 +172,29 @@ class TestReleaseScorer:
             ("Battles (Deluxe)", "Battles"),
             ("Battles", "Battles (Deluxe Edition)"),
             ("Battles Live", "Battles"),  # substring: penalized, still a candidate
+            ("III:Trauma", search_names("Dry the River", "III:Trauma")[1]),  # the search rewrites ":" to a space
+            ("Fire&Water", search_names("Free", "Fire&Water")[1]),  # and "&" to "and"
+            ("Split w/ Band", search_names("A", "Split w/ Band")[1]),  # and "w/" to "with"
+            ("Café Bleu", "Cafe Bleu"),  # accents
+            ("Déjà Vu", "deja vu"),
         ],
     )
     def test_related_titles_stay_candidates(self, scorer: ReleaseScorer, title: str, album: str) -> None:
         release = {"title": title, "artist": "In Flames", "year": "2016", "album_type": "Album", "status": "Official", "source": "musicbrainz"}
 
         assert scorer.score_original_release(release, "in flames", album.lower(), artist_context=ArtistContext(), source="musicbrainz") > 0
+
+    @pytest.mark.parametrize(
+        ("title", "album"),
+        [
+            ("", "Battles"),  # a release without a title tells nothing about any album
+            ("Plastilinovaya Balerina", "Пластилиновая Балерина"),  # transliterated: left to verification, not guessed
+        ],
+    )
+    def test_titles_that_cannot_be_matched_drop_the_release(self, scorer: ReleaseScorer, title: str, album: str) -> None:
+        release = {"title": title, "artist": "A", "year": "2016", "album_type": "Album", "status": "Official", "source": "musicbrainz"}
+
+        assert scorer.score_original_release(release, "a", album.lower(), artist_context=ArtistContext(), source="musicbrainz") == 0
 
     def test_score_invalid_year(self, scorer: ReleaseScorer) -> None:
         """Test scoring with invalid year."""

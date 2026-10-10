@@ -311,6 +311,52 @@ async def test_marks_before_the_recheck_are_not_new_attempts(service: PendingVer
 
 
 @pytest.mark.asyncio
+async def test_alternating_reasons_before_the_recheck_are_not_new_attempts(service: PendingVerificationService) -> None:
+    """One lookup marks the album twice, from the year search and from the fallback, with different reasons."""
+    await service.initialize()
+    for _run in range(3):
+        await service.mark_for_verification("Artist", "Album", reason="no_year_found")
+        await service.mark_for_verification("Artist", "Album", reason="very_low_confidence_no_existing", metadata={"proposed_year": "2015"})
+
+    entry = await _entry(service)
+    assert entry.attempt_count == 1
+    assert entry.reason.value == "very_low_confidence_no_existing"
+    assert json.loads(entry.metadata)["proposed_year"] == "2015"
+
+
+@pytest.mark.asyncio
+async def test_every_mark_is_an_attempt_without_a_recheck_interval(service: PendingVerificationService) -> None:
+    await service.initialize()
+    service.verification_interval_days = 0
+
+    await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+
+    assert await service.get_attempt_count("Artist", "Album") == 2
+
+
+@pytest.mark.parametrize(("days_since_mark", "attempts"), [(2, 1), (4, 2)])
+@pytest.mark.asyncio
+async def test_a_prerelease_recheck_follows_its_own_days(service: PendingVerificationService, days_since_mark: int, attempts: int) -> None:
+    await service.initialize()
+    await service.mark_for_verification("Artist", "Album", reason="prerelease", recheck_days=3)
+    key = service.generate_album_key("Artist", "Album")
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=days_since_mark),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
+        attempt_count=entry.attempt_count,
+    )
+
+    await service.mark_for_verification("Artist", "Album", reason="prerelease", recheck_days=3)
+
+    assert await service.get_attempt_count("Artist", "Album") == attempts
+
+
+@pytest.mark.asyncio
 async def test_a_mark_once_the_recheck_is_due_is_another_attempt(service: PendingVerificationService) -> None:
     await service.initialize()
     await service.mark_for_verification("Artist", "Album")

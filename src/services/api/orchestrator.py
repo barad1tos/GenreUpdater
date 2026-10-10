@@ -1150,7 +1150,7 @@ class ExternalApiOrchestrator:
                     )
                     # Don't mark again - it's already in pending with attempt count
             else:
-                # Under the limit - mark for verification (increments attempt count)
+                # Under the limit - mark for verification (the attempt count goes up once the recheck is due)
                 await self._safe_mark_for_verification(artist, album)
         else:
             await self._safe_remove_from_pending(artist, album)

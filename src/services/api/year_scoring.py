@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime as dt
 from typing import Any, ClassVar, TypedDict
 
 from core.models.metadata_utils import remove_parentheses_with_keywords
-from core.models.normalization import normalize_for_matching
+from core.models.normalization import normalize_for_matching, normalize_search_name
 from core.models.script_detection import ScriptType, detect_primary_script
 
 from core.models.track_models import ScoringConfig
@@ -41,24 +42,36 @@ def _normalize_for_comparison(text: str) -> str:
     return re.sub(_NON_ALPHANUM_PATTERN, "", text.lower()).strip()
 
 
-def _is_album_substring_match(album1: str, album2: str) -> bool:
-    """Check if two album names match via substring comparison.
+def _title_key(title: str) -> str:
+    """Reduce a title to the letters and digits two titles are compared by.
 
-    Uses normalized comparison to handle variations like:
-    - "Aladdin" matching "Aladdin - Original Soundtrack"
-    - "Album" matching "Album (Deluxe Edition)"
+    The search's own rewrites apply ("III:Trauma" and "III Trauma", "Fire&Water" and "Fire and Water"), accents are
+    folded, and spaces and punctuation are dropped, so the same title spelled two ways gives the same key.
 
     Args:
-        album1: First album name (raw, will be normalized internally)
-        album2: Second album name (raw, will be normalized internally)
+        title: Album or release title
 
     Returns:
-        True if one album name contains the other
-
+        The comparison key
     """
-    comp1 = _normalize_for_comparison(album1)
-    comp2 = _normalize_for_comparison(album2)
-    return comp1 in comp2 or comp2 in comp1
+    folded = unicodedata.normalize("NFKD", normalize_search_name(title).casefold())
+    return "".join(char for char in folded if char.isalnum())
+
+
+def _titles_related(release_title: str, album: str) -> bool:
+    """Return True when one title contains the other, compared by _title_key.
+
+    A release without a title is related to no album; an album without a name accepts any release.
+
+    Args:
+        release_title: Title the provider gave the release
+        album: Album name searched for
+
+    Returns:
+        Whether the release can be this album or an edition of it
+    """
+    release_key, album_key = _title_key(release_title), _title_key(album)
+    return bool(release_key) and (album_key in release_key or release_key in album_key)
 
 
 # Type definitions for scoring context
@@ -457,9 +470,8 @@ class ReleaseScorer:
         if not self._is_soundtrack_artist(target_artist_norm):
             return 0
 
-        # Condition 2: Album names must match (substring matching)
-        # Uses shared helper to avoid duplication with _calculate_album_match
-        if not _is_album_substring_match(release_title_norm, target_album_norm):
+        # Condition 2: Album names must match (one contains the other)
+        if not _titles_related(release_title_norm, target_album_norm):
             return 0
 
         # Condition 3: API must confirm this is a soundtrack
@@ -544,7 +556,7 @@ class ReleaseScorer:
             score_components.append(f"Album Variation (Search Suffix): +{bonus}")
             return bonus
 
-        # score_original_release drops unrelated titles first, so what is left contains the other title
+        # score_original_release drops releases whose title is unrelated (by _title_key), so the rest only partly match
         penalty = cfg.album_substring_penalty
         score_components.append(f"Album Substring Mismatch: {penalty}")
         return penalty
@@ -822,7 +834,8 @@ class ReleaseScorer:
             album_orig: Original album name with parentheses for edition stripping
 
         Returns:
-            Integer score (0-100+) indicating release quality/originality
+            Integer score (0-100+) indicating release quality/originality; 0 for an invalid year or a title unrelated
+            to the album
 
         """
         cfg = self.scoring_config
@@ -854,7 +867,7 @@ class ReleaseScorer:
         year: int = validated_year
 
         # Another release by the artist says nothing about this album's year, however well the rest matches
-        if not _is_album_substring_match(release_title_norm, self._normalize_name(album_norm)):
+        if not _titles_related(release_title_stripped, album_norm):
             self.console_logger.debug("Skipping '%s' (%s) [%s]: its title is unrelated to the album", release_title_orig, year_str, source)
             return 0
 

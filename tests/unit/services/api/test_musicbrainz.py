@@ -241,6 +241,17 @@ class TestMusicBrainzClientAllure:
         assert [release["year"] for release in scored] == ["1969", "1969"]
         assert all(release["score"] > 0 for release in scored)
 
+    def test_another_release_by_the_artist_is_dropped(self) -> None:
+        """A broad search returns the artist's other releases; only the album itself may date it."""
+        client = TestMusicBrainzClientAllure.create_scoring_client()
+        records = client._build_release_records([TestMusicBrainzClientAllure.create_release_group_result()])
+        other = records[0].copy()
+        other["title"], other["year"] = "Let It Be", "1970"
+
+        scored = client.score_records([*records, other], "the beatles", "abbey road", ArtistContext())
+
+        assert {release["title"] for release in scored} == {"Abbey Road"}
+
     def test_artist_region_matches_release_country(self) -> None:
         """A release from the artist's country scores higher once the region is an ISO code."""
         client = TestMusicBrainzClientAllure.create_scoring_client()

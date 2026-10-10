@@ -416,7 +416,8 @@ class PendingVerificationService:
         """Mark an album for future verification with reason and optional metadata.
 
         Uses a hash key for storage. Saves asynchronously.
-        If the album is already pending, increments the attempt counter.
+        If the album is already pending and its recheck is not due yet, the reason and metadata are replaced but the
+        attempt count and the time of the attempt stay; otherwise the attempt counter goes up and the recheck restarts.
 
         Args:
             artist: Artist name
@@ -440,10 +441,13 @@ class PendingVerificationService:
 
             # Check if entry already exists to get previous attempt count
             existing_entry = self.pending_albums.get(key_hash)
-            # The year step marks a pending album on every run; until its recheck is due that is the same attempt
-            if existing_entry and existing_entry.reason == reason_enum and datetime.now(UTC) < self._recheck_time(existing_entry):
-                return
-            new_attempt_count = (existing_entry.attempt_count + 1) if existing_entry else 1
+            now = datetime.now(UTC)
+            # The year search and its fallback mark a pending album on every run, each under its own reason; until the
+            # recheck is due that is the same attempt, so the reason and metadata are refreshed and the count and time kept
+            if existing_entry and now < self._recheck_time(existing_entry):
+                marked_at, new_attempt_count = existing_entry.timestamp, existing_entry.attempt_count
+            else:
+                marked_at, new_attempt_count = now, (existing_entry.attempt_count + 1) if existing_entry else 1
 
             # Serialize metadata dict to JSON string to preserve type information
             metadata_payload: dict[str, Any] = {}
@@ -457,7 +461,7 @@ class PendingVerificationService:
 
             # Store the entry using PendingAlbumEntry with updated attempt count
             self.pending_albums[key_hash] = PendingAlbumEntry(
-                timestamp=datetime.now(UTC),
+                timestamp=marked_at,
                 artist=artist.strip(),
                 album=album.strip(),
                 reason=reason_enum,
