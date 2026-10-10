@@ -209,10 +209,14 @@ class TestMusicBrainzIntegration:
         api_orchestrator: ExternalApiOrchestrator,
     ) -> None:
         """Test returns (None, False) for non-existent album."""
-        result = await api_orchestrator.get_album_year(
-            artist="Completely Fake Artist Name XYZ123",
-            album="This Album Does Not Exist ABC456",
-        )
+        try:
+            result = await api_orchestrator.get_album_year(
+                artist="Completely Fake Artist Name XYZ123",
+                album="This Album Does Not Exist ABC456",
+            )
+        except YearLookupUnavailableError as error:
+            # A provider that is down (MusicBrainz answers 503 under load) says nothing about a non-existent album
+            pytest.skip(f"a year provider could not be reached: {error}")
 
         # Should return (None, False, 0, {}) for non-existent album
         assert result is not None
