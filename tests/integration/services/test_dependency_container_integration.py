@@ -195,7 +195,6 @@ def _get_complete_config_data(
                 "perfect_match_bonus": 10,
                 "album_variation_bonus": 10,
                 "album_substring_penalty": -5,
-                "album_unrelated_penalty": -40,
                 "artist_cross_script_penalty": -10,
                 "soundtrack_compensation_bonus": 75,
                 "mb_release_group_match_bonus": 50,

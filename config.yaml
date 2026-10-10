@@ -205,7 +205,6 @@ year_retrieval:
     perfect_match_bonus: 10
     album_variation_bonus: 10
     album_substring_penalty: -5
-    album_unrelated_penalty: -40
     # Cross-script penalty: when comparing different scripts (e.g., Cyrillic vs Latin)
     # Used for iTunes results where artist is Latinized but album is in original script
     artist_cross_script_penalty: -10

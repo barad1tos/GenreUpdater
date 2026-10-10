@@ -339,7 +339,6 @@ class ScoringConfig(BaseModel):
     perfect_match_bonus: int
     album_variation_bonus: int
     album_substring_penalty: int = Field(le=0)
-    album_unrelated_penalty: int = Field(le=0)
 
     # Soundtrack compensation
     soundtrack_compensation_bonus: int = 75

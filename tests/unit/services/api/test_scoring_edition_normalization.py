@@ -433,18 +433,6 @@ class TestCalculateAlbumMatch:
         # So this tests variation matching
         assert score != 0  # Should have some match score
 
-    def test_unrelated_albums_get_penalty(self, scorer: ReleaseScorer) -> None:
-        """Test that unrelated albums get penalty."""
-        score_components: list[str] = []
-        score = scorer._calculate_album_match(
-            "dark side of the moon",
-            "abbey road",
-            artist_match_bonus=0,
-            score_components=score_components,
-        )
-        assert score < 0
-        assert any("unrelated" in comp.lower() for comp in score_components)
-
 
 class TestNormalizeName:
     """Tests for _normalize_name static method."""

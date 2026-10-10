@@ -124,7 +124,6 @@ def _create_orchestrator_config(**overrides: object) -> AppConfig:
             "perfect_match_bonus": 0,
             "album_variation_bonus": 0,
             "album_substring_penalty": 0,
-            "album_unrelated_penalty": 0,
             "mb_release_group_match_bonus": 0,
             "type_album_bonus": 0,
             "type_ep_single_penalty": 0,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import csv
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -75,7 +76,6 @@ def config(tmp_path: Path) -> AppConfig:
                 "perfect_match_bonus": 0,
                 "album_variation_bonus": 0,
                 "album_substring_penalty": 0,
-                "album_unrelated_penalty": 0,
                 "mb_release_group_match_bonus": 0,
                 "type_album_bonus": 0,
                 "type_ep_single_penalty": 0,
@@ -289,21 +289,101 @@ async def test_attempt_count_starts_at_one(service: PendingVerificationService) 
     assert count == 1
 
 
+async def _entry(service: PendingVerificationService) -> PendingAlbumEntry:
+    """The pending entry for the test album, which the test has marked."""
+    entry = await service.get_entry("Artist", "Album")
+    assert entry is not None
+    return entry
+
+
 @pytest.mark.asyncio
-async def test_attempt_count_increments_on_subsequent_marks(
-    service: PendingVerificationService,
-) -> None:
-    """Each mark_for_verification should increment attempt_count."""
+async def test_marks_before_the_recheck_are_not_new_attempts(service: PendingVerificationService) -> None:
+    """The year step marks a pending album on every run; only a mark once the recheck is due is another attempt."""
     await service.initialize()
+    await service.mark_for_verification("Artist", "Album")
+    first_mark = (await _entry(service)).timestamp
 
     await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+
     assert await service.get_attempt_count("Artist", "Album") == 1
+    assert (await _entry(service)).timestamp == first_mark
+
+
+@pytest.mark.asyncio
+async def test_alternating_reasons_before_the_recheck_are_not_new_attempts(service: PendingVerificationService) -> None:
+    """One lookup marks the album twice, from the year search and from the fallback, with different reasons."""
+    await service.initialize()
+    for _run in range(3):
+        await service.mark_for_verification("Artist", "Album", reason="no_year_found")
+        await service.mark_for_verification("Artist", "Album", reason="very_low_confidence_no_existing", metadata={"proposed_year": "2015"})
+
+    entry = await _entry(service)
+    assert entry.attempt_count == 1
+    assert entry.reason.value == "very_low_confidence_no_existing"
+    assert json.loads(entry.metadata)["proposed_year"] == "2015"
+
+
+@pytest.mark.asyncio
+async def test_every_mark_is_an_attempt_without_a_recheck_interval(service: PendingVerificationService) -> None:
+    await service.initialize()
+    service.verification_interval_days = 0
 
     await service.mark_for_verification("Artist", "Album")
+    await service.mark_for_verification("Artist", "Album")
+
     assert await service.get_attempt_count("Artist", "Album") == 2
 
+
+@pytest.mark.parametrize(("days_since_mark", "attempts"), [(2, 1), (4, 2)])
+@pytest.mark.asyncio
+async def test_a_prerelease_recheck_follows_its_own_days(service: PendingVerificationService, days_since_mark: int, attempts: int) -> None:
+    await service.initialize()
+    await service.mark_for_verification("Artist", "Album", reason="prerelease", recheck_days=3)
+    key = service.generate_album_key("Artist", "Album")
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=days_since_mark),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
+        attempt_count=entry.attempt_count,
+    )
+
+    await service.mark_for_verification("Artist", "Album", reason="prerelease", recheck_days=3)
+
+    assert await service.get_attempt_count("Artist", "Album") == attempts
+
+
+@pytest.mark.asyncio
+async def test_a_mark_once_the_recheck_is_due_is_another_attempt(service: PendingVerificationService) -> None:
+    await service.initialize()
     await service.mark_for_verification("Artist", "Album")
-    assert await service.get_attempt_count("Artist", "Album") == 3
+    key = service.generate_album_key("Artist", "Album")
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=service.verification_interval_days + 1),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
+        attempt_count=entry.attempt_count,
+    )
+
+    await service.mark_for_verification("Artist", "Album")
+
+    assert await service.get_attempt_count("Artist", "Album") == 2
+
+
+@pytest.mark.asyncio
+async def test_a_new_reason_is_recorded_at_once(service: PendingVerificationService) -> None:
+    await service.initialize()
+    await service.mark_for_verification("Artist", "Album", reason="no_year_found")
+
+    await service.mark_for_verification("Artist", "Album", reason="prerelease")
+
+    assert (await _entry(service)).reason.value == "prerelease"
 
 
 @pytest.mark.asyncio
@@ -322,33 +402,45 @@ async def test_attempt_count_persisted_to_csv(service: PendingVerificationServic
     """attempt_count should be persisted and loaded from CSV."""
     await service.initialize()
 
-    # Mark multiple times to increment counter
     await service.mark_for_verification("Artist", "Album")
-    await service.mark_for_verification("Artist", "Album")
+    key = service.generate_album_key("Artist", "Album")
+    entry = service.pending_albums[key]
+    service.pending_albums[key] = PendingAlbumEntry(
+        timestamp=entry.timestamp - timedelta(days=service.verification_interval_days + 1),
+        artist=entry.artist,
+        album=entry.album,
+        reason=entry.reason,
+        metadata=entry.metadata,
+        attempt_count=entry.attempt_count,
+    )
     await service.mark_for_verification("Artist", "Album")
 
-    # Read CSV content directly
-    csv_content = Path(service.pending_file_path).read_text(encoding="utf-8")
-    assert "attempt_count" in csv_content  # Column should exist
-    assert ",3" in csv_content or ",3\n" in csv_content  # Value should be 3
+    with Path(service.pending_file_path).open(encoding="utf-8") as pending_file:
+        assert [row["verification_attempts"] for row in csv.DictReader(pending_file)] == ["2"]
 
 
+@pytest.mark.parametrize(
+    ("column", "saved", "loaded"),
+    [
+        ("verification_attempts", "6", 6),  # counted per recheck: kept
+        ("attempt_count", "3", 1),  # the old per-run column: a count says nothing about rechecks
+        ("attempt_count", "6920", 1),
+        ("attempt_count", "0", 0),
+    ],
+)
 @pytest.mark.asyncio
-async def test_attempt_count_loaded_from_csv(
-    service: PendingVerificationService,
-) -> None:
-    """attempt_count should be loaded correctly from existing CSV."""
+async def test_attempt_count_loaded_from_csv(service: PendingVerificationService, column: str, saved: str, loaded: int) -> None:
+    """The old attempt_count column counted runs, so a count there restarts at one."""
     pending_file = Path(service.pending_file_path)
     pending_file.parent.mkdir(parents=True, exist_ok=True)
     pending_file.write_text(
-        "artist,album,timestamp,reason,metadata,attempt_count\nArtist,Album,2024-01-01 00:00:00,no_year_found,,5\n",
+        f"artist,album,timestamp,reason,metadata,{column}\nArtist,Album,2024-01-01 00:00:00,no_year_found,,{saved}\n",
         encoding="utf-8",
     )
 
     await service.initialize()
 
-    count = await service.get_attempt_count("Artist", "Album")
-    assert count == 5
+    assert await service.get_attempt_count("Artist", "Album") == loaded
 
 
 @pytest.mark.asyncio
@@ -378,8 +470,7 @@ async def test_remove_from_pending_resets_attempt_count(
     await service.initialize()
 
     await service.mark_for_verification("Artist", "Album")
-    await service.mark_for_verification("Artist", "Album")
-    assert await service.get_attempt_count("Artist", "Album") == 2
+    assert await service.get_attempt_count("Artist", "Album") == 1
 
     await service.remove_from_pending("Artist", "Album")
     assert await service.get_attempt_count("Artist", "Album") == 0

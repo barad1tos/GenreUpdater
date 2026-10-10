@@ -225,7 +225,10 @@ class PendingVerificationService:
         timestamp_str = row.get("timestamp", "").strip()
         reason_str = row.get("reason", "").strip()
         metadata = row.get("metadata", "").strip()
-        attempt_count_str = row.get("attempt_count", "0").strip()
+        # verification_attempts counts rechecks; the attempt_count column it replaced counted every run
+        per_recheck = "verification_attempts" in row
+        attempt_count_str = (row.get("verification_attempts") if per_recheck else row.get("attempt_count")) or ""
+        attempt_count_str = attempt_count_str.strip()
 
         if not (artist and album and timestamp_str):
             self._error_callback(f"WARNING: Skipping malformed row in pending file: {row}")
@@ -240,6 +243,9 @@ class PendingVerificationService:
             attempt_count = int(attempt_count_str) if attempt_count_str else 0
         except ValueError:
             attempt_count = 0
+        # A per-run count says nothing about how often the album was rechecked, so it restarts at the first attempt
+        if not per_recheck:
+            attempt_count = min(attempt_count, 1)
 
         try:
             key_hash = self.generate_album_key(artist, album)
@@ -338,7 +344,7 @@ class PendingVerificationService:
             Path(self.pending_file_path).parent.mkdir(parents=True, exist_ok=True)
 
             with Path(temp_file).open("w", newline="", encoding="utf-8") as f:
-                fieldnames = ["artist", "album", "timestamp", "reason", "metadata", "attempt_count"]
+                fieldnames = ["artist", "album", "timestamp", "reason", "metadata", "verification_attempts"]
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
 
@@ -350,7 +356,7 @@ class PendingVerificationService:
                             "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                             "reason": entry.reason.value,
                             "metadata": entry.metadata,
-                            "attempt_count": str(entry.attempt_count),
+                            "verification_attempts": str(entry.attempt_count),
                         }
                     )
 
@@ -416,7 +422,8 @@ class PendingVerificationService:
         """Mark an album for future verification with reason and optional metadata.
 
         Uses a hash key for storage. Saves asynchronously.
-        If the album is already pending, increments the attempt counter.
+        If the album is already pending and its recheck is not due yet, the reason and metadata are replaced but the
+        attempt count and the time of the attempt stay; otherwise the attempt counter goes up and the recheck restarts.
 
         Args:
             artist: Artist name
@@ -440,7 +447,13 @@ class PendingVerificationService:
 
             # Check if entry already exists to get previous attempt count
             existing_entry = self.pending_albums.get(key_hash)
-            new_attempt_count = (existing_entry.attempt_count + 1) if existing_entry else 1
+            now = datetime.now(UTC)
+            # The year search and its fallback mark a pending album on every run, each under its own reason; until the
+            # recheck is due that is the same attempt, so the reason and metadata are refreshed and the count and time kept
+            if existing_entry and now < self._recheck_time(existing_entry):
+                marked_at, new_attempt_count = existing_entry.timestamp, existing_entry.attempt_count
+            else:
+                marked_at, new_attempt_count = now, (existing_entry.attempt_count + 1) if existing_entry else 1
 
             # Serialize metadata dict to JSON string to preserve type information
             metadata_payload: dict[str, Any] = {}
@@ -454,7 +467,7 @@ class PendingVerificationService:
 
             # Store the entry using PendingAlbumEntry with updated attempt count
             self.pending_albums[key_hash] = PendingAlbumEntry(
-                timestamp=datetime.now(UTC),
+                timestamp=marked_at,
                 artist=artist.strip(),
                 album=album.strip(),
                 reason=reason_enum,
@@ -542,16 +555,8 @@ class PendingVerificationService:
 
             # Get the entry
             entry = self.pending_albums[key_hash]
-            metadata = self._parse_metadata(entry.metadata)
-            interval_days = self.verification_interval_days
 
-            if entry.reason == VerificationReason.PRERELEASE:
-                override = self._normalize_recheck_days(metadata.get("recheck_days"))
-                interval_days = override if override is not None else self.prerelease_recheck_days
-
-            verification_time = entry.timestamp + timedelta(days=interval_days)
-
-            if datetime.now(UTC) >= verification_time:
+            if datetime.now(UTC) >= self._recheck_time(entry):
                 # Verification period has elapsed
                 self.console_logger.info(
                     "Verification period elapsed for '%s - %s'",
@@ -561,6 +566,14 @@ class PendingVerificationService:
                 return True
 
             return False
+
+    def _recheck_time(self, entry: PendingAlbumEntry) -> datetime:
+        """Return when a pending entry is due for its next verification."""
+        interval_days = self.verification_interval_days
+        if entry.reason == VerificationReason.PRERELEASE:
+            override = self._normalize_recheck_days(self._parse_metadata(entry.metadata).get("recheck_days"))
+            interval_days = override if override is not None else self.prerelease_recheck_days
+        return entry.timestamp + timedelta(days=interval_days)
 
     # remove_from_pending is now an async method because it calls async _save_pending_albums
     async def remove_from_pending(self, artist: str, album: str) -> None:
