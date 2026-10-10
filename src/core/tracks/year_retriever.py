@@ -57,25 +57,19 @@ class YearRetriever:
 
     Attributes:
         MIN_VALID_YEAR: Minimum year considered valid
-        PARITY_THRESHOLD: Max difference for parity detection
-        TOP_YEARS_COUNT: Number of top years to consider for parity
-        DOMINANCE_MIN_SHARE: Min share of tracks for dominance (0.0-1.0)
+        DOMINANCE_MIN_SHARE: Share of all tracks a year needs to be the album's majority (0.0-1.0)
         SUSPICIOUS_ALBUM_MIN_LEN: Album names with length <= this are suspicious
         SUSPICIOUS_MANY_YEARS: If >= this many unique years present, skip auto updates
         MAX_RETRY_DELAY_SECONDS: Maximum delay in seconds between retry attempts
         DEFAULT_YEAR_DIFFERENCE_THRESHOLD: Max allowed year difference before dramatic change
         DEFAULT_FALLBACK_ENABLED: Whether fallback logic is enabled by default
         DEFAULT_ABSURD_YEAR_THRESHOLD: Years below this are considered absurd
-        DEFAULT_SUSPICION_THRESHOLD_YEARS: If dominant year is this many years older
-            than earliest track added date, trigger API verification
         normalize_collaboration_artist: Static helper that normalizes collaboration
             artist names to the main artist for grouping
     """
 
     # Public constants (API contract - do not change)
     MIN_VALID_YEAR = 1900
-    PARITY_THRESHOLD = 2
-    TOP_YEARS_COUNT = 2
     DOMINANCE_MIN_SHARE = 0.6
     SUSPICIOUS_ALBUM_MIN_LEN = 3
     SUSPICIOUS_MANY_YEARS = 3
@@ -83,7 +77,6 @@ class YearRetriever:
     DEFAULT_YEAR_DIFFERENCE_THRESHOLD = 5
     DEFAULT_FALLBACK_ENABLED = True
     DEFAULT_ABSURD_YEAR_THRESHOLD = 1970
-    DEFAULT_SUSPICION_THRESHOLD_YEARS = 10
 
     normalize_collaboration_artist = staticmethod(normalize_collaboration_artist)
 
@@ -122,17 +115,10 @@ class YearRetriever:
         self.fallback_enabled = fallback_cfg.enabled
         self.year_difference_threshold = fallback_cfg.year_difference_threshold
         self.absurd_year_threshold = logic_cfg.absurd_year_threshold
-        self.suspicion_threshold_years = logic_cfg.suspicion_threshold_years
         self.min_confidence_for_new_year = int(logic_cfg.min_confidence_for_new_year)
 
         # Initialize consistency checker
-        self.year_consistency_checker = YearConsistencyChecker(
-            console_logger=self.console_logger,
-            top_years_count=self.TOP_YEARS_COUNT,
-            parity_threshold=self.PARITY_THRESHOLD,
-            dominance_min_share=self.DOMINANCE_MIN_SHARE,
-            suspicion_threshold_years=self.suspicion_threshold_years,
-        )
+        self.year_consistency_checker = YearConsistencyChecker(console_logger=self.console_logger, dominance_min_share=self.DOMINANCE_MIN_SHARE)
 
         # Initialize fallback handler
         self.year_fallback_handler = YearFallbackHandler(

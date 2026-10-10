@@ -56,7 +56,8 @@ def _create_mock_pending_verification() -> MagicMock:
 def _create_mock_consistency_checker() -> MagicMock:
     """Create a mock consistency checker."""
     checker = MagicMock()
-    checker.get_dominant_year = MagicMock(return_value=None)
+    checker.get_majority_year = MagicMock(return_value=None)
+    checker.get_most_common_year = MagicMock(return_value=None)
     checker.get_consensus_release_year = MagicMock(return_value=None)
     return checker
 
@@ -462,9 +463,7 @@ class TestPreCheckUnparseableYear:
     @pytest.mark.asyncio
     async def test_unparseable_dominant_year_forces_api_verification(self) -> None:
         """Should force API verification when dominant year is not a valid integer."""
-        consistency_checker = _create_mock_consistency_checker()
-        consistency_checker.get_dominant_year.return_value = "not_a_year"
-        determinator = _create_year_determinator(consistency_checker=consistency_checker)
+        determinator = _create_year_determinator()
 
         tracks = [create_test_track(year="2020")]
 

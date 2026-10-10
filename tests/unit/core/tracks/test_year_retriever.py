@@ -218,7 +218,6 @@ class TestYearRetrieverAllure:
 
         # Verify constants
         assert YearRetriever.MIN_VALID_YEAR == 1900
-        assert YearRetriever.PARITY_THRESHOLD == 2
         assert YearRetriever.DOMINANCE_MIN_SHARE == 0.6
 
     def test_extract_future_years_comprehensive(self) -> None:

@@ -172,7 +172,6 @@ def _get_complete_config_data(
             "logic": {
                 "min_valid_year": 1900,
                 "absurd_year_threshold": 1970,
-                "suspicion_threshold_years": 10,
                 "definitive_score_threshold": 50,
                 "definitive_score_diff": 15,
                 "min_confidence_for_new_year": 30,

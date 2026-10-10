@@ -1,6 +1,6 @@
 """Tests for YearDeterminator private helper methods.
 
-Tests for _try_local_sources() and _fetch_from_api() methods
+Tests for the determinator's cached-year, provider-query and validation steps
 extracted during cognitive complexity refactoring.
 """
 
@@ -24,7 +24,7 @@ from core.models.types import TrackDict
 from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import (
     CACHE_TRUST_THRESHOLD,
-    CONSENSUS_YEAR_CONFIDENCE,
+    ProviderAnswer,
     YearDeterminator,
 )
 from core.tracks.year_fallback import YearFallbackHandler
@@ -83,10 +83,12 @@ def _create_mock_pending_verification() -> MagicMock:
 
 
 def _create_mock_consistency_checker() -> MagicMock:
-    """Create a mock consistency checker."""
+    """Create a mock consistency checker whose local hints say nothing."""
     checker = MagicMock()
-    checker.get_dominant_year = MagicMock(return_value=None)
+    checker.get_majority_year = MagicMock(return_value=None)
+    checker.get_most_common_year = MagicMock(return_value=None)
     checker.get_consensus_release_year = MagicMock(return_value=None)
+    checker.get_earliest_track_added_year = MagicMock(return_value=None)
     return checker
 
 
@@ -123,129 +125,124 @@ def _create_year_determinator(
 
 
 @pytest.mark.unit
-class TestTryLocalSources:
-    """Tests for _try_local_sources() helper method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_dominant_year_when_present(self) -> None:
-        """Should return dominant year from tracks if available."""
-        consistency_checker = _create_mock_consistency_checker()
-        consistency_checker.get_dominant_year = MagicMock(return_value="2020")
-
-        determinator = _create_year_determinator(consistency_checker=consistency_checker)
-        tracks = [_create_track(year="2020")]
-
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result == "2020"
-        consistency_checker.get_dominant_year.assert_called_once_with(tracks)
+class TestTryCachedYear:
+    """The album-year cache is the only local answer; it must be fresh and confident."""
 
     @pytest.mark.asyncio
     async def test_returns_cached_year_with_high_confidence(self) -> None:
-        """Should return cached year when confidence >= threshold."""
         cache_service = _create_mock_cache_service()
-        cache_entry = AlbumCacheEntry(
-            artist="Artist",
-            album="Album",
-            year="2019",
-            timestamp=0.0,
-            confidence=CACHE_TRUST_THRESHOLD,
-        )
+        cache_entry = AlbumCacheEntry(artist="Artist", album="Album", year="2019", timestamp=0.0, confidence=CACHE_TRUST_THRESHOLD)
         cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
-
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track()]
 
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result == "2019"
+        assert await determinator._try_cached_year("Artist", "Album") == "2019"
         cache_service.get_album_year_entry_from_cache.assert_called_once_with("Artist", "Album")
 
     @pytest.mark.asyncio
     async def test_ignores_cached_year_with_low_confidence(self) -> None:
-        """Should ignore cached year when confidence < threshold."""
         cache_service = _create_mock_cache_service()
-        cache_entry = AlbumCacheEntry(
-            artist="Artist",
-            album="Album",
-            year="2019",
-            timestamp=0.0,
-            confidence=CACHE_TRUST_THRESHOLD - 1,
-        )
+        cache_entry = AlbumCacheEntry(artist="Artist", album="Album", year="2019", timestamp=0.0, confidence=CACHE_TRUST_THRESHOLD - 1)
         cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
-
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [_create_track()]
 
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result is None
+        assert await determinator._try_cached_year("Artist", "Album") is None
 
     @pytest.mark.asyncio
-    async def test_returns_consensus_release_year(self) -> None:
-        """Should return consensus release_year and cache it."""
-        cache_service = _create_mock_cache_service()
-        consistency_checker = _create_mock_consistency_checker()
-        consistency_checker.get_consensus_release_year = MagicMock(return_value="2018")
+    async def test_returns_none_without_an_entry(self) -> None:
+        assert await _create_year_determinator()._try_cached_year("Artist", "Album") is None
 
+
+class TestProvidersDecide:
+    """A library-internal year is a hint; the providers' verdict is the answer."""
+
+    @staticmethod
+    def _passthrough_fallback() -> MagicMock:
+        handler = _create_mock_fallback_handler()
+        handler.apply_year_fallback = AsyncMock(side_effect=lambda proposed_year, *_, **__: proposed_year)
+        return handler
+
+    @pytest.mark.asyncio
+    async def test_tracks_that_disagree_ask_the_providers(self) -> None:
+        """13 of 14 tracks at 2019 (Apple's catalog) and one at 2016: the providers say 2016."""
+        checker = _create_mock_consistency_checker()
+        checker.get_most_common_year = MagicMock(return_value="2019")
+        checker.get_majority_year = MagicMock(return_value="2019")
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=("2016", True, 90, {"2016": 90}))
         determinator = _create_year_determinator(
-            cache_service=cache_service,
-            consistency_checker=consistency_checker,
+            consistency_checker=checker, external_api=external_api, fallback_handler=self._passthrough_fallback()
         )
-        tracks = [_create_track(release_year="2018")]
+        tracks = [_create_track(year="2019") for _ in range(13)] + [_create_track(year="2016")]
 
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result == "2018"
-        cache_service.store_album_year_in_cache.assert_called_once_with(
-            "Artist",
-            "Album",
-            "2018",
-            confidence=CONSENSUS_YEAR_CONFIDENCE,
-        )
+        assert await determinator.determine_album_year("In Flames", "Battles", tracks) == "2016"
+        provider_call = external_api.get_album_year.await_args
+        assert provider_call is not None
+        assert provider_call.kwargs["current_library_year"] == "2019"
+        checker.get_majority_year.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_local_sources(self) -> None:
-        """Should return None when no local sources have year data."""
-        determinator = _create_year_determinator()
-        tracks = [_create_track()]
+    async def test_apples_release_date_is_a_hint_not_a_verdict(self) -> None:
+        """One track, library 1995, Apple release date 1991, providers 1996: 1996, with 1991 handed to the fallback."""
+        checker = _create_mock_consistency_checker()
+        checker.get_most_common_year = MagicMock(return_value="1995")
+        checker.get_consensus_release_year = MagicMock(return_value="1991")
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=("1996", True, 85, {"1996": 85}))
+        fallback = self._passthrough_fallback()
+        determinator = _create_year_determinator(consistency_checker=checker, external_api=external_api, fallback_handler=fallback)
 
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result is None
+        assert (
+            await determinator.determine_album_year("Royal Crown Revue", "Mugzy's Move", [_create_track(year="1995", release_year="1991")]) == "1996"
+        )
+        assert fallback.apply_year_fallback.await_args.kwargs["release_year"] == "1991"
 
     @pytest.mark.asyncio
-    async def test_priority_dominant_over_cache(self) -> None:
-        """Dominant year should take priority over cached year."""
+    async def test_majority_fills_outliers_when_no_provider_knows_the_album(self) -> None:
+        checker = _create_mock_consistency_checker()
+        checker.get_majority_year = MagicMock(return_value="2016")
+        fallback = _create_mock_fallback_handler()
+        determinator = _create_year_determinator(consistency_checker=checker, fallback_handler=fallback)
+
+        assert await determinator.determine_album_year("Artist", "Album", [_create_track(year="2016"), _create_track(year="2026")]) == "2016"
+        fallback.apply_year_fallback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_lookup_counts_as_no_provider_answer(self) -> None:
+        checker = _create_mock_consistency_checker()
+        checker.get_majority_year = MagicMock(return_value="2016")
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(side_effect=OSError("boom"))
+        determinator = _create_year_determinator(consistency_checker=checker, external_api=external_api)
+
+        assert await determinator.determine_album_year("Artist", "Album", [_create_track(year="2016")]) == "2016"
+
+    @pytest.mark.asyncio
+    async def test_a_rejected_provider_year_is_not_replaced_by_the_majority(self) -> None:
+        checker = _create_mock_consistency_checker()
+        checker.get_majority_year = MagicMock(return_value="2016")
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=("1999", False, 20, {"1999": 20}))
+        determinator = _create_year_determinator(
+            consistency_checker=checker, external_api=external_api, fallback_handler=_create_mock_fallback_handler()
+        )
+
+        assert await determinator.determine_album_year("Artist", "Album", [_create_track(year="2016"), _create_track(year="2026")]) is None
+        checker.get_majority_year.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_fresh_confident_cache_entry_answers_first(self) -> None:
         cache_service = _create_mock_cache_service()
-        cache_entry = AlbumCacheEntry(
-            artist="Artist",
-            album="Album",
-            year="2019",
-            timestamp=0.0,
-            confidence=100,
-        )
+        cache_entry = AlbumCacheEntry(artist="Artist", album="Album", year="2010", timestamp=0.0, confidence=CACHE_TRUST_THRESHOLD)
         cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
+        external_api = _create_mock_external_api()
+        determinator = _create_year_determinator(cache_service=cache_service, external_api=external_api)
 
-        consistency_checker = _create_mock_consistency_checker()
-        consistency_checker.get_dominant_year = MagicMock(return_value="2020")
-
-        determinator = _create_year_determinator(
-            cache_service=cache_service,
-            consistency_checker=consistency_checker,
-        )
-        tracks = [_create_track(year="2020")]
-
-        result = await determinator._try_local_sources("Artist", "Album", tracks)
-
-        assert result == "2020"
-        # Cache should NOT be checked if dominant year exists
-        cache_service.get_album_year_entry_from_cache.assert_not_called()
+        assert await determinator.determine_album_year("Artist", "Album", [_create_track(year="2012")]) == "2010"
+        external_api.get_album_year.assert_not_awaited()
 
 
-@pytest.mark.unit
-class TestFetchFromApi:
-    """Tests for _fetch_from_api() helper method."""
+class TestValidateProviderYear:
+    """The fallback rules judge a provider answer; a confident result is cached."""
 
     @pytest.mark.asyncio
     async def test_returns_validated_year_from_api(self) -> None:
@@ -264,7 +261,7 @@ class TestFetchFromApi:
         )
         tracks = [_create_track()]
 
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
+        result = await determinator._validate_provider_year("Artist", "Album", tracks, ProviderAnswer("2021", True, 95, {"2021": 95}))
 
         assert result == "2021"
         cache_service.store_album_year_in_cache.assert_called_once_with(
@@ -273,19 +270,6 @@ class TestFetchFromApi:
             "2021",
             confidence=95,
         )
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_api_returns_no_year(self) -> None:
-        """Should return None when API returns no year."""
-        external_api = _create_mock_external_api()
-        external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
-
-        determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track()]
-
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
-
-        assert result is None
 
     @pytest.mark.asyncio
     async def test_returns_none_when_fallback_rejects(self) -> None:
@@ -305,7 +289,7 @@ class TestFetchFromApi:
         )
         tracks = [_create_track()]
 
-        result = await determinator._fetch_from_api("Artist", "Album", tracks, None)
+        result = await determinator._validate_provider_year("Artist", "Album", tracks, ProviderAnswer("2021", False, 50, {"2021": 50}))
 
         assert result is None
         # Should NOT cache rejected year
@@ -336,7 +320,7 @@ class TestFetchFromApi:
         determinator = _create_year_determinator(external_api=external_api)
 
         with caplog.at_level(logging.WARNING):
-            result = await determinator._fetch_from_api("Artist", "Album", [_create_track()], None)
+            result = await determinator._query_providers("Artist", "Album", [_create_track()], None)
 
         assert result is None
         error_records = [record for record in caplog.records if record.name == "test.error"]
@@ -362,7 +346,7 @@ class TestFetchFromApi:
         determinator = _create_year_determinator(external_api=external_api)
         determinator.console_logger = console_logger
 
-        result = await determinator._fetch_from_api("Artist [live]", "Mixes [/edit]", [_create_track()], None)
+        result = await determinator._query_providers("Artist [live]", "Mixes [/edit]", [_create_track()], None)
 
         assert result is None
         assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
@@ -375,7 +359,7 @@ class TestFetchFromApi:
         determinator = _create_year_determinator(external_api=external_api)
         tracks = [_create_track(date_added="2020-01-01")]
 
-        await determinator._fetch_from_api("Artist", "Album", tracks, "2019")
+        await determinator._query_providers("Artist", "Album", tracks, "2019")
 
         external_api.get_album_year.assert_called_once()
         call_kwargs = external_api.get_album_year.call_args
@@ -395,7 +379,7 @@ class TestFetchFromApi:
         )
         tracks = [_create_track()]
 
-        await determinator._fetch_from_api("Artist", "Album", tracks, "2020")
+        await determinator._validate_provider_year("Artist", "Album", tracks, ProviderAnswer("2021", True, 95, {"2021": 95, "2020": 80}))
 
         fallback_handler.apply_year_fallback.assert_called_once()
         call_kwargs = fallback_handler.apply_year_fallback.call_args[1]
@@ -405,6 +389,26 @@ class TestFetchFromApi:
         assert call_kwargs["artist"] == "Artist"
         assert call_kwargs["album"] == "Album"
         assert call_kwargs["year_scores"] == {"2021": 95, "2020": 80}
+
+
+class TestQueryProviders:
+    """What the providers said, before any judgement."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_provider_knows_the_album(self) -> None:
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
+        determinator = _create_year_determinator(external_api=external_api)
+
+        assert await determinator._query_providers("Artist", "Album", [_create_track()], None) is None
+
+    @pytest.mark.asyncio
+    async def test_returns_the_answer_as_given(self) -> None:
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=("2021", True, 95, {"2021": 95}))
+        determinator = _create_year_determinator(external_api=external_api)
+
+        assert await determinator._query_providers("Artist", "Album", [_create_track()], "2020") == ProviderAnswer("2021", True, 95, {"2021": 95})
 
 
 class TestFetchFromApiUnavailable:
@@ -420,7 +424,7 @@ class TestFetchFromApiUnavailable:
         determinator = _create_year_determinator(cache_service=cache_service, external_api=external_api, fallback_handler=fallback_handler)
 
         with pytest.raises(YearLookupUnavailableError):
-            await determinator._fetch_from_api("Artist", "Album", [_create_track()], "1999")
+            await determinator._query_providers("Artist", "Album", [_create_track()], "1999")
 
         fallback_handler.apply_year_fallback.assert_not_called()
         cache_service.store_album_year_in_cache.assert_not_called()

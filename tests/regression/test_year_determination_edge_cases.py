@@ -14,10 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.models.validators import is_empty_year, is_valid_year
-from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import (
     CACHE_TRUST_THRESHOLD,
-    CONSENSUS_YEAR_CONFIDENCE,
     MIN_CONFIDENCE_TO_CACHE,
     SUSPICIOUS_ALBUM_MIN_LEN,
     SUSPICIOUS_MANY_YEARS,
@@ -25,8 +23,6 @@ from core.tracks.year_determination import (
 )
 
 if TYPE_CHECKING:
-    import logging
-
     from core.models.track_models import TrackDict
 
 
@@ -239,60 +235,6 @@ class TestCacheConfidenceThresholds:
     def test_min_confidence_to_cache_constant(self) -> None:
         """Verify minimum confidence to cache is set correctly."""
         assert MIN_CONFIDENCE_TO_CACHE == 50, "Min confidence to cache should be 50%"
-
-    def test_consensus_year_confidence_constant(self) -> None:
-        """Verify consensus year confidence is set correctly."""
-        assert CONSENSUS_YEAR_CONFIDENCE == 80, "Consensus year confidence should be 80%"
-
-
-@pytest.mark.regression
-class TestDominantYearEdgeCases:
-    """Test edge cases in dominant year calculation."""
-
-    def test_all_invalid_years_returns_none(
-        self,
-        console_logger: logging.Logger,
-    ) -> None:
-        """Albums with all invalid years should return None for dominant year."""
-        checker = YearConsistencyChecker(console_logger=console_logger)
-
-        # Create mock tracks with invalid years
-        mock_tracks: list[Any] = [
-            MagicMock(year="", date_added="2020-01-01"),
-            MagicMock(year="0", date_added="2020-01-01"),
-            MagicMock(year=None, date_added="2020-01-01"),
-        ]
-
-        result = checker.get_dominant_year(mock_tracks)
-        assert result is None, "Album with all invalid years should return None"
-
-    def test_tie_breaker_behavior(
-        self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        console_logger: logging.Logger,
-    ) -> None:
-        """Test behavior when multiple years have equal counts."""
-        checker = YearConsistencyChecker(console_logger=console_logger)
-        tie_albums: list[tuple[str, str, list[tuple[str, int]]]] = []
-
-        for (artist, album), tracks in albums_with_tracks.items():
-            years = [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]
-            if not years:
-                continue
-
-            year_counts = Counter(years)
-            most_common = year_counts.most_common()
-
-            # Check for ties (first and second most common have same count)
-            if len(most_common) >= 2 and most_common[0][1] == most_common[1][1]:
-                tie_albums.append((artist, album, most_common[:3]))
-
-        # For tie cases, just verify we get a consistent result
-        for artist, album, _ in tie_albums[:5]:
-            tracks = albums_with_tracks[(artist, album)]
-            result1 = checker.get_dominant_year(tracks)
-            result2 = checker.get_dominant_year(tracks)
-            assert result1 == result2, f"Dominant year should be deterministic for '{artist} - {album}'"
 
 
 @pytest.mark.regression

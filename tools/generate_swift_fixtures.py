@@ -1158,8 +1158,8 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
 
     test_cases: list[dict[str, Any]] = [
         {
-            "id": "valid_dominant_clear",
-            "description": "Clear dominant year (>50% of tracks)",
+            "id": "valid_majority_clear",
+            "description": "Clear majority year (>50% of tracks)",
             "tracks": [
                 {"id": "1", "name": "T1", "artist": "A", "album": "Al", "year": "2020", "date_added": "2020-06-01 00:00:00"},
                 {"id": "2", "name": "T2", "artist": "A", "album": "Al", "year": "2020", "date_added": "2020-06-01 00:00:00"},
@@ -1168,8 +1168,8 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
             ],
         },
         {
-            "id": "valid_no_dominant",
-            "description": "No clear dominant year (50/50 split)",
+            "id": "valid_no_majority",
+            "description": "No majority year (50/50 split)",
             "tracks": [
                 {"id": "1", "name": "T1", "artist": "A", "album": "Al", "year": "2020", "date_added": "2020-06-01 00:00:00"},
                 {"id": "2", "name": "T2", "artist": "A", "album": "Al", "year": "2019", "date_added": "2020-06-01 00:00:00"},
@@ -1220,7 +1220,7 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
         },
         {
             "id": "valid_suspicious_year",
-            "description": "Dominant year suspiciously old compared to date_added",
+            "description": "An old year on tracks added recently is still the majority",
             "tracks": [
                 {"id": "1", "name": "T1", "artist": "A", "album": "Al", "year": "1960", "date_added": "2023-06-01 00:00:00"},
                 {"id": "2", "name": "T2", "artist": "A", "album": "Al", "year": "1960", "date_added": "2023-06-01 00:00:00"},
@@ -1268,7 +1268,7 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
         },
         {
             "id": "valid_three_way_split",
-            "description": "Three different years, no dominant",
+            "description": "Three different years, no majority",
             "tracks": [
                 {"id": "1", "name": "T1", "artist": "A", "album": "Al", "year": "2018", "date_added": "2020-06-01 00:00:00"},
                 {"id": "2", "name": "T2", "artist": "A", "album": "Al", "year": "2019", "date_added": "2020-06-01 00:00:00"},
@@ -1281,7 +1281,7 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
         raw_tracks: list[dict[str, Any]] = case["tracks"]
         track_dicts = [td for td in (_build_track_dict(t) for t in raw_tracks) if td is not None]
 
-        dominant = checker.get_dominant_year(track_dicts) if track_dicts else None
+        majority = checker.get_majority_year(track_dicts) if track_dicts else None
         most_common = YearConsistencyChecker.get_most_common_year(track_dicts) if track_dicts else None
 
         # Consensus release year
@@ -1295,7 +1295,7 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
                 "description": str(case["description"]),
                 "tracks": [_track_to_fixture(t) for t in raw_tracks],
                 "expected": {
-                    "dominantYear": int(dominant) if dominant else None,
+                    "majorityYear": int(majority) if majority else None,
                     "mostCommonYear": int(most_common) if most_common else None,
                     "consensusReleaseYear": int(consensus_release) if consensus_release else None,
                 },
