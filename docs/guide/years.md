@@ -18,7 +18,7 @@ Music Genre Updater fetches album release years from multiple external APIs and 
 
 ```mermaid
 flowchart TD
-    A[Album without Year] --> B[Query MusicBrainz]
+    A[Album without a year, or whose tracks disagree] --> B[Query MusicBrainz]
     A --> C[Query Discogs]
     A --> D[Query iTunes]
     B --> E[Score Results]
@@ -28,6 +28,14 @@ flowchart TD
     F -->|High Confidence| G[Apply Year]
     F -->|Low Confidence| H[Mark for Verification]
 ```
+
+## What decides an album's year
+
+1. A fresh, confident entry in the album-year cache.
+2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints, never applied on their own: Apple rewrites both without notice.
+3. When no provider knows the album, the year most of its tracks carry fills in the others.
+
+An album whose tracks all agree is skipped; a year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`), and the album is skipped until that year changes.
 
 ## Running Year Updates
 

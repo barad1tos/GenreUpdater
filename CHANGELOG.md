@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The year most of an album's tracks carry, and the release date Apple stores on them, are no longer applied as the album's year on their own: an album whose tracks disagree asks the providers, which get both as hints, and only when no provider knows the album does the majority of its tracks fill in the others. `year_retrieval.logic.suspicion_threshold_years` is no longer read and can be removed from `config.yaml`
+
+### Fixed
+
+- A year the tool wrote was never recorded in `track_list.csv`: the sync copied the row's own (empty) `year_set_by_mgu` back over it. The record now survives the sync, so an album the tool set is skipped until its year changes, and a change that is not the tool's shows in the log as changed outside the tool
+- Apple's catalog put 2019 on 13 of 14 tracks of In Flames "Battles", and the tool moved the last track to 2019 as well; providers say 2016. Royal Crown Revue "Mugzy's Move" got 1991 from the release date Apple stores on the track while the providers say 1996. Both rules are gone (see Changed)
+
 ## [3.1.0] - 2026-10-10
 
 ### Changed

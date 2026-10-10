@@ -174,12 +174,12 @@ flowchart LR
 ```mermaid
 flowchart TD
     A[Changed Track] --> B{Has Genre?}
-    B -->|No| C[Calculate Dominant]
+    B -->|No| C[Calculate Dominant Genre]
     B -->|Yes| D{Has Year?}
 
     C --> D
 
-    D -->|No| E[Fetch from APIs]
+    D -->|No or tracks disagree| E[Ask providers]
     D -->|Yes| F{Year Valid?}
 
     E --> F
