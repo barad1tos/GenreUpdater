@@ -330,6 +330,40 @@ class ApiCacheService:
         # Run in thread to avoid blocking
         await asyncio.to_thread(blocking_save)
 
+    def _parse_cache_entry(self, key: str, item: Any) -> CachedApiResult | None:
+        """Build a cached result from one saved API cache entry.
+
+        Args:
+            key: Cache key of the entry
+            item: Saved entry
+
+        Returns:
+            The cached result, or None when the entry is unusable and is dropped
+        """
+        # An entry without a records list would fail every lookup of its album, so it is dropped
+        response = item.get("api_response") if isinstance(item, dict) else None
+        if not isinstance(response, dict) or not isinstance(response.get("records"), list):
+            self.logger.warning("Skipping API cache entry %s without records", key)
+            return None
+        # A record without the shared release fields is from an older format; dropping it fetches it again
+        if not all(isinstance(record, dict) and ReleaseRecord.__required_keys__ <= record.keys() for record in response["records"]):
+            self.logger.info("Skipping API cache entry %s with records in an older format", key)
+            return None
+        try:
+            return CachedApiResult(
+                artist=item["artist"],
+                album=item["album"],
+                year=item.get("year"),
+                source=item["source"],
+                timestamp=item.get("timestamp", 0.0),
+                ttl=item.get("ttl"),
+                metadata=item.get("metadata", {}),
+                api_response=response,
+            )
+        except (KeyError, ValueError, TypeError) as e:
+            self.logger.warning("Skipping invalid API cache entry %s: %s", key, e)
+            return None
+
     async def _load_api_cache(self) -> None:
         """Load API cache from JSON file."""
         if not self.api_cache_file.exists():
@@ -343,34 +377,9 @@ class ApiCacheService:
                     cache_data = json.load(file)
 
                 cache_entries: dict[str, CachedApiResult] = {}
-
                 for key, item in cache_data.items():
-                    # An entry without a records list would fail every lookup of its album, so it is dropped
-                    response = item.get("api_response") if isinstance(item, dict) else None
-                    if not isinstance(response, dict) or not isinstance(response.get("records"), list):
-                        self.logger.warning("Skipping API cache entry %s without records", key)
-                        continue
-                    # A record without the shared release fields is from an older format; dropping it fetches it again
-                    if not all(isinstance(record, dict) and ReleaseRecord.__required_keys__ <= record.keys() for record in response["records"]):
-                        self.logger.info("Skipping API cache entry %s with records in an older format", key)
-                        continue
-                    try:
-                        # Create CachedApiResult object with proper fields
-                        cached_result = CachedApiResult(
-                            artist=item["artist"],
-                            album=item["album"],
-                            year=item.get("year"),
-                            source=item["source"],
-                            timestamp=item.get("timestamp", 0.0),
-                            ttl=item.get("ttl"),
-                            metadata=item.get("metadata", {}),
-                            api_response=item.get("api_response"),
-                        )
-
+                    if (cached_result := self._parse_cache_entry(key, item)) is not None:
                         cache_entries[key] = cached_result
-
-                    except (KeyError, ValueError, TypeError) as e:
-                        self.logger.warning("Skipping invalid API cache entry %s: %s", key, e)
 
                 self.logger.info("Loaded %d API cache entries from %s", len(cache_entries), self.api_cache_file)
                 return cache_entries
