@@ -1237,3 +1237,10 @@ class TestArtistIdMatch:
         results = [{"artistName": "Earth, Wind & Fire", "releaseDate": "1971-01-01T08:00:00Z"}]
 
         assert client._extract_release_years(results, "Earth, Wind and Fire") == [1971]
+
+    @pytest.mark.parametrize(("artist_name", "target"), [("!!!", "Metallica"), ("Metallica", "!!!")], ids=["letterless-result", "letterless-target"])
+    def test_start_year_ignores_letterless_names(self, client: AppleMusicClient, artist_name: str, target: str) -> None:
+        """An empty normalized name is a substring of every name, so it must not count as a match."""
+        results = [{"artistName": artist_name, "releaseDate": "1990-01-01T08:00:00Z"}]
+
+        assert client._extract_release_years(results, target) == []

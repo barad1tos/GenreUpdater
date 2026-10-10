@@ -490,6 +490,9 @@ class AppleMusicClient(BaseApiClient):
 
         """
         artist_name = cls._normalize_name(result.get("artistName", ""))
+        # An empty name is a substring of every name, so it cannot tell artists apart
+        if not artist_name or not artist_normalized:
+            return None
         release_date = result.get("releaseDate", "").strip()
 
         # Filter by artist name (fuzzy match)
