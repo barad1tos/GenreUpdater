@@ -2,9 +2,9 @@
 -- It validates the inputs and handles errors gracefully, providing feedback on success or failure.
 --
 -- Usage:
--- update_property.applescript TrackID PropertyName PropertyValue
+-- update_property.applescript TrackPersistentID PropertyName PropertyValue
 -- Example:
--- update_property.applescript 12345 name "New Track Name"
+-- update_property.applescript 6342D31846D0E960 name "New Track Name"
 -- Note: This script is designed to be run from the command line with arguments.
 -- The script will return success or error messages based on the operation's outcome.
 
@@ -80,14 +80,8 @@ on run argv
         -- Parse arguments with validation
         set tID to item 1 of argv
 
-        -- Verify track ID is a valid number
-        if tID is not missing value and tID is not "" then
-            try
-                set tIDnum to (tID as integer)
-            on error
-                return "Error: Invalid track ID '" & tID & "'. Must be a number."
-            end try
-        else
+        -- The track ID is Music.app's persistent ID (16 hex characters), which survives id renumbering
+        if tID is missing value or tID is "" then
             return "Error: Missing track ID"
         end if
 
@@ -120,7 +114,7 @@ on run argv
             -- First verify track exists to avoid wasting time
             try
                 set trackExists to false
-                set trackRef to (first track of library playlist 1 whose id is tIDnum)
+                set trackRef to (first track of library playlist 1 whose persistent ID is tID)
                 set trackExists to true
             on error errMsg
                 return "Error: Track " & tID & " not found: " & errMsg

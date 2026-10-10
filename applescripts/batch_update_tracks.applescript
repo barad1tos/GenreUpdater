@@ -4,7 +4,9 @@
 --   ASCII 30 (Record Separator) - separates fields within a command (trackID, propertyName, value)
 --   ASCII 29 (Group Separator) - separates individual commands
 --
--- Example input: "123<RS>genre<RS>Rock: Classic<GS>456<RS>year<RS>2022"
+-- Example input: "6342D31846D0E960<RS>genre<RS>Rock: Classic<GS>0A1B2C3D4E5F6071<RS>year<RS>2022"
+-- Track IDs are Music.app persistent IDs, which survive id renumbering.
+-- Returns "Success: …" only when every command applied, otherwise "Error: <failed> of <total> batch commands failed".
 -- where <RS> = ASCII 30, <GS> = ASCII 29
 --
 -- Benefits over URL-encoding:
@@ -35,11 +37,14 @@ on run argv
         -- Split the entire string into individual commands
         set AppleScript's text item delimiters to commandSeparator
         set commandList to text items of updateString
+        set failedCount to 0
+        set totalCount to 0
 
         tell application "Music"
             -- Iterate over each command
             repeat with aCommand in commandList
                 if aCommand is not "" then
+                    set totalCount to totalCount + 1
                     -- Split the command into parts: ID, property, value
                     set AppleScript's text item delimiters to fieldSeparator
                     set commandParts to text items of aCommand
@@ -51,7 +56,7 @@ on run argv
 
                     try
                         -- Find track by ID
-                        set the_track to (first track of library playlist 1 whose id is trackID)
+                        set the_track to (first track of library playlist 1 whose persistent ID is trackID)
 
                         -- Perform update based on property name
                         if propName is "genre" then
@@ -61,6 +66,7 @@ on run argv
                             -- Validate year range
                             if propValueInt < 1900 or propValueInt > maxValidYear then
                                 log "Year " & propValue & " out of range for track " & trackID
+                                set failedCount to failedCount + 1
                             else
                                 set year of the_track to propValueInt
                             end if
@@ -77,6 +83,7 @@ on run argv
                     on error errMsg number errNum
                         -- If track not found or other error, log it
                         log "Error updating track ID " & trackID & ": " & errMsg
+                        set failedCount to failedCount + 1
                     end try
                 end if
             end repeat
@@ -84,6 +91,9 @@ on run argv
 
         -- Restore original delimiters
         set AppleScript's text item delimiters to old_delimiters
+        if failedCount > 0 then
+            return "Error: " & failedCount & " of " & totalCount & " batch commands failed"
+        end if
         return "Success: Batch update process completed."
 
     on error e

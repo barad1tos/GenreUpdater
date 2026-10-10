@@ -7,7 +7,7 @@
     - Handles AppleScript raw enum constants (e.g., «constant ****kSub»)
     - Per-track fetch (required for ID-based lookup)
 
-    Expected argument 1: comma-separated list of track IDs.
+    Expected argument 1: comma-separated list of track persistent IDs.
 *)
 
 on run argv
@@ -32,7 +32,7 @@ on run argv
                 set finalResult to finalResult
             else
                 try
-                    set currentTrack to track id trackIdText
+                    set currentTrack to (first track of library playlist 1 whose persistent ID is trackIdText)
                     set trackLine to my serializeTrack(currentTrack, fieldSeparator)
                     if trackLine is not "" then
                         set end of finalResult to trackLine
@@ -51,7 +51,7 @@ end run
 on serializeTrack(trackRef, fieldSeparator)
     try
         tell application "Music"
-            set track_id to (id of trackRef) as text
+            set track_id to (persistent ID of trackRef) as text
             if track_id is "" then return ""
 
             set track_name to my safeText(name of trackRef)

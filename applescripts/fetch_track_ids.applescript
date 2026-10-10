@@ -1,5 +1,6 @@
 -- fetch_track_ids.applescript
--- Lightweight script that returns only track IDs (~1.4s for 37K tracks)
+-- Lightweight script that returns only track persistent IDs (~1.4s for 37K tracks)
+-- Persistent IDs survive Music.app renumbering its track ids, so the tool keys every track by them
 -- Used by Smart Delta to detect new/removed tracks without fetching full metadata
 
 on run argv
@@ -9,7 +10,7 @@ on run argv
 			set trackCount to count of trackObjects
 
 			-- Bulk fetch IDs and cloud status
-			set idList to id of every track of library playlist 1
+			set idList to persistent ID of every track of library playlist 1
 			set statusList to cloud status of every track of library playlist 1
 
 			-- Filter by valid cloud status (same as fetch_tracks.scpt)
