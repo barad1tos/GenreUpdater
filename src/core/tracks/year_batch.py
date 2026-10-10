@@ -393,7 +393,7 @@ class YearBatchProcessor:
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
 
-        # Detect user manual changes (year_set_by_mgu is set but differs from current year)
+        # Log a year that changed outside the tool since it was set (year_set_by_mgu differs from year)
         self._detect_user_year_changes(artist, album, album_tracks)
 
         # Check if we should skip this album (force=True bypasses this)
@@ -452,12 +452,13 @@ class YearBatchProcessor:
         for track in album_tracks:
             if track.year_set_by_mgu and track.year and track.year_set_by_mgu != track.year:
                 self.console_logger.info(
-                    "Year of '%s - %s' changed outside the tool: was %s, the tool set %s, now %s - will re-process",
+                    "Year of '%s - %s' changed outside the tool: was %s, the tool set %s, now %s",
                     artist,
                     album,
                     track.year_before_mgu or "unknown",
                     track.year_set_by_mgu,
                     track.year,
+                    extra=PLAIN_TEXT,
                 )
                 return  # Only log once per album
 

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.protocols import YearLookupUnavailableError
 from services.api.orchestrator import ExternalApiOrchestrator
 from tests.factories import create_test_app_config
 
@@ -499,8 +500,8 @@ class TestNoAnswerStaysNoAnswer:
         assert result == (None, False, 0, {})
 
     @pytest.mark.asyncio
-    async def test_releases_without_a_usable_year_return_no_year(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Releases that score no year are no answer either."""
+    async def test_no_releases_return_no_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Releases that score no year are no answer either (an empty list scores none)."""
         result = await orchestrator._process_api_results(
             [], artist="Test Artist", album="Test Album", log_artist="Test Artist", log_album="Test Album", current_library_year="2016"
         )
@@ -508,8 +509,11 @@ class TestNoAnswerStaysNoAnswer:
         assert result == (None, False, 0, {})
 
     @pytest.mark.asyncio
-    async def test_search_error_returns_no_year(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """A failed search is not a verdict on the library year."""
-        result = orchestrator._handle_year_search_error("Test Artist", "Test Album")
+    async def test_search_error_leaves_the_lookup_unavailable(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """A failed search is no verdict on the library year: the caller retries on the next run."""
+        error = ValueError("boom")
 
-        assert result == (None, False, 0, {})
+        with pytest.raises(YearLookupUnavailableError) as raised:
+            orchestrator._handle_year_search_error("Test Artist", "Test Album", error)
+
+        assert raised.value.__cause__ is error

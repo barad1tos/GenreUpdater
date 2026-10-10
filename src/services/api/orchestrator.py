@@ -23,7 +23,7 @@ import random
 import ssl
 from datetime import UTC
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import aiohttp
 import certifi
@@ -31,6 +31,7 @@ import certifi
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT, LogFormat
 from core.models.normalization import search_names
+from core.models.protocols import YearLookupUnavailableError
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from services.api.api_base import ApiRateLimiter, ScoredRelease
@@ -782,6 +783,9 @@ class ExternalApiOrchestrator:
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
             year_scores: dict mapping each year found by APIs to its max score
+
+        Raises:
+            YearLookupUnavailableError: The search could not be set up or failed with an error, so the album waits for the next run
         """
         # Initialize and prepare inputs
         try:
@@ -789,12 +793,13 @@ class ExternalApiOrchestrator:
             if not inputs:
                 return None, False, 0, {}
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-            # Logged whatever the debug flags: the caller only sees an album without a year
+            # Logged whatever the debug flags; the caller leaves the album for the next run
             self.error_logger.exception("Year search setup failed for '%s - %s'", artist, album)
             self.console_logger.warning(
                 "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
-            return None, False, 0, {}
+            message = f"Year search setup failed for '{artist} - {album}' ({type(error).__name__})"
+            raise YearLookupUnavailableError(message) from error
 
         artist_norm, album_norm, log_artist, log_album, artist_context = inputs
 
@@ -816,11 +821,10 @@ class ExternalApiOrchestrator:
             )
 
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError) as error:
-            # The fallback below reaches the caller as an ordinary result, so the console hears about the failure here
             self.console_logger.warning(
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__, extra=PLAIN_TEXT
             )
-            return self._handle_year_search_error(log_artist, log_album)
+            self._handle_year_search_error(log_artist, log_album, error)
 
     async def _initialize_year_search(
         self, artist: str, album: str, current_library_year: str | None
@@ -886,18 +890,20 @@ class ExternalApiOrchestrator:
             current_library_year or "none",
         )
 
-    def _handle_year_search_error(self, log_artist: str, log_album: str) -> tuple[str | None, bool, int, dict[str, int]]:
-        """Log an unexpected search error and report no answer.
+    def _handle_year_search_error(self, log_artist: str, log_album: str, error: Exception) -> NoReturn:
+        """Log an unexpected search error and leave the lookup unavailable: a failure is no verdict on the album.
 
         Args:
             log_artist: Artist name formatted for logging
             log_album: Album name formatted for logging
+            error: The error that ended the search
 
-        Returns:
-            Tuple of (year, is_definitive, confidence_score, year_scores), all empty
+        Raises:
+            YearLookupUnavailableError: Always, so the caller retries the album on the next run
         """
         self.error_logger.exception("Unexpected error in get_album_year for '%s - %s'", log_artist, log_album)
-        return None, False, 0, {}
+        message = f"Year lookup failed for '{log_artist} - {log_album}' ({type(error).__name__})"
+        raise YearLookupUnavailableError(message) from error
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:

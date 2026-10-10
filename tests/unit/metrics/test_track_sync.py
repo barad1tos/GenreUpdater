@@ -437,6 +437,24 @@ class TestMergeMusicappIntoCsv:
 
         assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2026", "2017")
 
+    def test_a_first_write_onto_an_empty_year_records_no_old_year(self) -> None:
+        """A track that had no year before the tool wrote one keeps an empty history, not the year just written."""
+        csv_track = _create_test_track("9", year="", year_before_mgu="", year_set_by_mgu="")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="2017")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("", "2017")
+
+    def test_a_second_write_keeps_the_first_old_year(self) -> None:
+        """The year before the tool's first write stays through later writes."""
+        csv_track = _create_test_track("9", year="2017", year_before_mgu="2026", year_set_by_mgu="2017")
+        musicapp_track = _create_test_track("9", year="2018", year_before_mgu="2026", year_set_by_mgu="2018")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year, csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2018", "2026", "2018")
+
     def test_initializes_empty_year_before_mgu_from_musicapp(self) -> None:
         """Should initialize empty year_before_mgu from Music.app year.
 
@@ -912,7 +930,7 @@ class TestUpdateTrackWithCachedFieldsForSync:
 
     def test_updates_empty_fields_from_cache(self) -> None:
         """Should update empty fields from cache."""
-        track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None)
+        track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None, year_set_by_mgu=None)
         tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",

@@ -18,7 +18,7 @@ from core.models.track_models import ChangeLogEntry, TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.track_updater import TrackUpdater
-from core.models.protocols import AnalyticsProtocol
+from core.models.protocols import AnalyticsProtocol, YearLookupUnavailableError
 from core.tracks import year_consistency as year_consistency_module
 from core.tracks.year_determination import CACHE_TRUST_THRESHOLD
 from core.tracks.year_retriever import YearRetriever
@@ -1429,23 +1429,19 @@ class TestDetermineAlbumYearBranches:
         mock_external_api.get_album_year.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_api_exception(
+    async def test_raises_unavailable_on_api_exception(
         self,
         year_retriever: YearRetriever,
         mock_cache_service: AsyncMock,
         mock_external_api: AsyncMock,
     ) -> None:
-        """Test returns None when API raises exception."""
+        """An API exception leaves the lookup unavailable, so the album waits for the next run."""
         tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         mock_external_api.get_album_year.side_effect = OSError("API error")
 
-        with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-        ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-            assert result is None
+        with pytest.raises(YearLookupUnavailableError):
+            await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
 
 
 class TestIdentifyTracksNeedingUpdateBranches:
@@ -1678,7 +1674,7 @@ class TestDetermineAlbumYearApiFailure:
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """An API failure returns no year and leaves its traceback in the error log, with year debugging off."""
+        """An API failure leaves the lookup unavailable and its traceback in the error log, with year debugging off."""
         # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
         year_debugging_off = debug_utils.DebugConfig()
         year_debugging_off.year = False
@@ -1692,10 +1688,10 @@ class TestDetermineAlbumYearApiFailure:
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
             caplog.at_level(logging.ERROR, logger=error_logger.name),
+            pytest.raises(YearLookupUnavailableError),
         ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
+            await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
 
-        assert result is None
         failures = [record for record in caplog.records if record.name == error_logger.name]
         assert len(failures) == 1
         logged_exception = failures[0].exc_info

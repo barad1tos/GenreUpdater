@@ -1,7 +1,8 @@
 """What an album's own tracks say about its year: the majority year, Apple's release dates and when it was added.
 
-None of it is a verdict; the year step hands it to the providers as hints, and the majority fills outliers only when no
-provider knows the album.
+None of it is a verdict: the most common year goes to the providers for a match, Apple's release date to the fallback
+rules that judge their answer, the date added to the placeholder check, and the majority fills outliers only when the
+providers have no year.
 """
 
 from __future__ import annotations
@@ -17,8 +18,8 @@ if TYPE_CHECKING:
     from core.models.track_models import TrackDict
 
 
-# Share of all album tracks a year needs to count as the majority
-DOMINANCE_MIN_SHARE = 0.5
+# Share of all album tracks a year needs to count as the majority; YearRetriever ships this value
+DOMINANCE_MIN_SHARE = 0.6
 
 
 def _is_reasonable_year(year: str) -> bool:
@@ -80,7 +81,7 @@ class YearConsistencyChecker:
 
     @staticmethod
     def _collect_valid_years(tracks: list[TrackDict]) -> list[str]:
-        """Collect non-empty, non-placeholder years from tracks."""
+        """Collect non-empty years other than "0" from tracks."""
         years: list[str] = []
         for track in tracks:
             year = track.get("year")
@@ -148,8 +149,8 @@ class YearConsistencyChecker:
     def get_earliest_track_added_year(tracks: list[TrackDict]) -> int | None:
         """Extract earliest year any track was added to library.
 
-        Useful for detecting current year contamination - if tracks were added
-        this year and library year is current year, it's likely legitimate.
+        The placeholder check reads it: a current-year majority on tracks added this year is a real release, on tracks
+        added earlier Apple's placeholder.
 
         Args:
             tracks: List of tracks to analyze

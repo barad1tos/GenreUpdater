@@ -32,10 +32,10 @@ flowchart TD
 ## What decides an album's year
 
 1. A fresh, confident entry in the album-year cache.
-2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints rather than applied on their own, since Apple rewrites both without notice. One fallback rule still sides with Apple: when its release date is this year and a provider offers an older year, the album counts as fresh and keeps Apple's date.
-3. When no provider knows the album, the year most of its tracks carry fills in the others, unless that year is this year on tracks the library received earlier: that is Apple's placeholder, and the album is left alone.
+2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints rather than applied on their own, since Apple rewrites both without notice. Two fallback rules still side with Apple when the providers are not sure of their answer: an album whose release date is this year keeps Apple's date over an older provider year, and a provider year more than `year_difference_threshold` years from Apple's release date is rejected and the album marked for verification.
+3. When no provider knows the album, the year most of its tracks carry (at least 60% of them) fills in the others, unless that year is this year and no track was added this year (Apple's placeholder for a date it lacks, or no date to tell): then the album is left alone.
 
-An album whose tracks all agree is skipped (a single track agrees with itself); a year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`), and the album is skipped until that year changes.
+A lookup that fails, or that no provider could be reached for, leaves the album for the next run. An album whose tracks all agree is skipped (a single track agrees with itself), unless the cache holds another year, or the shared year is this year or last and no track carries Apple's release date, a reissue sign; then the providers are asked. A year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`); telling a later outside change from the tool's own write is the next release's job.
 
 ## Running Year Updates
 

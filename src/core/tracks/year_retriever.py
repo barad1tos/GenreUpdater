@@ -16,6 +16,7 @@ from core.analytics_decorator import track_instance_method
 from core.models.validators import is_empty_year
 
 from .year_batch import YearBatchProcessor
+from .year_consistency import DOMINANCE_MIN_SHARE as MAJORITY_SHARE
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
 from .year_fallback import YearFallbackHandler
@@ -68,9 +69,9 @@ class YearRetriever:
             artist names to the main artist for grouping
     """
 
-    # Public constants (API contract - do not change)
+    # Thresholds the year step reads
     MIN_VALID_YEAR = 1900
-    DOMINANCE_MIN_SHARE = 0.6
+    DOMINANCE_MIN_SHARE = MAJORITY_SHARE
     SUSPICIOUS_ALBUM_MIN_LEN = 3
     SUSPICIOUS_MANY_YEARS = 3
     MAX_RETRY_DELAY_SECONDS = 10.0

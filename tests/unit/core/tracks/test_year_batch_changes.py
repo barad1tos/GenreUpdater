@@ -4,6 +4,7 @@ Tests the year_before_mgu population and conflict detection added in Issue #85.
 - year_before_mgu: original year before first update (preserved, set once)
 - year_set_by_mgu: year after last update (updated each time)
 - Conflict detection: when the year changed outside the tool since it set it
+- The record reaches the snapshot copy and the CSV row
 """
 
 from __future__ import annotations

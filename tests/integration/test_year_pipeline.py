@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -197,7 +198,7 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        # (artist, album, current library year, year the earliest track was added)
+        # (artist, album, current library year)
         assert external_api.get_album_year_calls == [("The Beatles", "Abbey Road", None)]
         assert _written_years(track_processor) == [("1", "1969"), ("2", "1969"), ("3", "1969")]
         assert _failures_logged(year_retriever) == []
@@ -416,3 +417,66 @@ class TestYearPipelineIntegration:
         assert _written_years(track_processor) == [("1", "2020"), ("3", "2020")]
         assert pending_verification.marked_albums == []
         assert _failures_logged(year_retriever) == []
+
+
+class TestYearPipelineNoProviderYear:
+    """What the real retriever writes when the providers have no year for an album."""
+
+    @staticmethod
+    def _album(years: list[str], date_added: str = "2024-01-01 10:00:00") -> list[TrackDict]:
+        return TestYearPipelineIntegration.create_test_tracks(
+            [
+                {"id": str(i), "artist": "Split Artist", "album": "Split Album", "year": year, "date_added": date_added}
+                for i, year in enumerate(years, 1)
+            ]
+        )
+
+    @staticmethod
+    def _run(external_api: MockExternalApiService) -> tuple[YearRetriever, AsyncMock]:
+        track_processor = create_mock_track_processor()
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
+        return year_retriever, track_processor
+
+    @pytest.mark.asyncio
+    async def test_a_real_majority_fills_the_outliers(self) -> None:
+        """Three tracks at 2016 and one at 2026, no provider year: the one outlier gets 2016."""
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        year_retriever, track_processor = self._run(external_api)
+
+        assert await year_retriever.process_album_years(self._album(["2016", "2016", "2016", "2026"])) is True
+        assert external_api.get_album_year_calls == [("Split Artist", "Split Album", "2016")]
+        assert _written_years(track_processor) == [("4", "2016")]
+
+    @pytest.mark.asyncio
+    async def test_a_split_writes_nothing(self) -> None:
+        """Two tracks at 2016 and two at 2019 have no majority, so nothing is written."""
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        year_retriever, track_processor = self._run(external_api)
+
+        assert await year_retriever.process_album_years(self._album(["2016", "2016", "2019", "2019"])) is True
+        assert _written_years(track_processor) == []
+
+    @pytest.mark.asyncio
+    async def test_a_placeholder_current_year_majority_writes_nothing(self) -> None:
+        """Eight tracks at this year on an album added in 2024 carry Apple's placeholder: the two at 2004 stay."""
+        this_year = str(datetime.now(UTC).year)
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = (None, False, 0, {})
+        tracks = self._album([this_year] * 8 + ["2004", "2004"])
+        year_retriever, track_processor = self._run(external_api)
+
+        assert await year_retriever.process_album_years(tracks) is True
+        assert _written_years(track_processor) == []
+
+    @pytest.mark.asyncio
+    async def test_a_failed_lookup_writes_nothing(self) -> None:
+        """A lookup that fails leaves the album for the next run: no majority write."""
+        external_api = MockExternalApiService()
+        external_api.get_album_year = AsyncMock(side_effect=OSError("boom"))  # type: ignore[method-assign]
+        tracks = self._album(["2016", "2016", "2016", "2026"])
+        year_retriever, track_processor = self._run(external_api)
+
+        assert await year_retriever.process_album_years(tracks) is True
+        assert _written_years(track_processor) == []

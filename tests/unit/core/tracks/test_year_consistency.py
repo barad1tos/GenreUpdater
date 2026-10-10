@@ -1,4 +1,4 @@
-"""Tests for the majority year an album's own tracks can supply."""
+"""Tests for the majority year an album's own tracks can supply and the earliest year a track was added."""
 
 from __future__ import annotations
 
@@ -26,6 +26,14 @@ class TestMajorityYear:
     def test_most_of_the_tracks_decide(self, checker: YearConsistencyChecker) -> None:
         assert checker.get_majority_year(_tracks(*["2016"] * 13, "2026")) == "2016"
 
+    def test_four_of_seven_is_no_majority(self, checker: YearConsistencyChecker) -> None:
+        """The shipped share is 0.6: a plurality just over half does not fill in the others."""
+        assert checker.get_majority_year(_tracks(*["2016"] * 4, "2019", "2019", "2020")) is None
+
+    def test_three_of_five_is_the_majority(self, checker: YearConsistencyChecker) -> None:
+        """Exactly the shipped share counts."""
+        assert checker.get_majority_year(_tracks("2016", "2016", "2016", "2019", "2020")) == "2016"
+
     def test_a_split_has_no_majority(self, checker: YearConsistencyChecker) -> None:
         assert checker.get_majority_year(_tracks("2016", "2016", "2019", "2019")) is None
 
@@ -42,7 +50,7 @@ class TestMajorityYear:
 
 
 class TestGetEarliestTrackAddedYear:
-    """The earliest year a track was added, handed to the providers as a hint."""
+    """The earliest year a track was added; the placeholder check reads it."""
 
     @staticmethod
     def _track(index: int, date_added: str | None) -> TrackDict:
@@ -66,3 +74,45 @@ class TestGetEarliestTrackAddedYear:
 
     def test_reads_the_year_of_a_datetime(self) -> None:
         assert YearConsistencyChecker.get_earliest_track_added_year([self._track(1, "2025-10-01 00:19:04")]) == 2025
+
+
+def _tracks_with_release(*pairs: tuple[str, str | None]) -> list[TrackDict]:
+    return [
+        TrackDict(id=str(index), name=f"Track {index}", artist="A", album="B", year=year, release_year=release)
+        for index, (year, release) in enumerate(pairs)
+    ]
+
+
+class TestConsensusReleaseYear:
+    """Apple's release date is a hint only when every track that carries one agrees."""
+
+    def test_tracks_that_agree_give_their_year(self, checker: YearConsistencyChecker) -> None:
+        assert checker.get_consensus_release_year(_tracks_with_release(("2016", "2016"), ("2016", "2016"))) == "2016"
+
+    def test_tracks_that_disagree_give_nothing(self, checker: YearConsistencyChecker) -> None:
+        assert checker.get_consensus_release_year(_tracks_with_release(("2016", "2016"), ("2016", "2019"))) is None
+
+    def test_tracks_without_a_release_date_give_nothing(self, checker: YearConsistencyChecker) -> None:
+        assert checker.get_consensus_release_year(_tracks_with_release(("2016", None), ("2016", ""))) is None
+
+    def test_tracks_without_a_release_date_do_not_break_the_consensus(self, checker: YearConsistencyChecker) -> None:
+        assert checker.get_consensus_release_year(_tracks_with_release(("2016", "2016"), ("2016", None))) == "2016"
+
+    def test_an_unreasonable_release_year_gives_nothing(self, checker: YearConsistencyChecker) -> None:
+        assert checker.get_consensus_release_year(_tracks_with_release(("2016", "1850"), ("2016", "1850"))) is None
+
+
+class TestMostCommonYear:
+    """The most common year is the hint the providers get; it needs no share of the tracks."""
+
+    def test_the_most_common_year_wins(self) -> None:
+        assert YearConsistencyChecker.get_most_common_year(_tracks("2019", "2019", "2016")) == "2019"
+
+    def test_unset_years_are_ignored(self) -> None:
+        assert YearConsistencyChecker.get_most_common_year(_tracks("", "0", "2016")) == "2016"
+
+    def test_no_valid_year_gives_nothing(self) -> None:
+        assert YearConsistencyChecker.get_most_common_year(_tracks("", "0")) is None
+
+    def test_a_tie_goes_to_the_first_counted(self) -> None:
+        assert YearConsistencyChecker.get_most_common_year(_tracks("2019", "2016", "2016", "2019")) == "2019"

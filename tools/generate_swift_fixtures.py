@@ -1160,7 +1160,7 @@ def generate_validation_fixtures() -> list[dict[str, Any]]:
     test_cases: list[dict[str, Any]] = [
         {
             "id": "valid_majority_clear",
-            "description": "Clear majority year (>50% of tracks)",
+            "description": "Clear majority year (at least 60% of tracks)",
             "tracks": [
                 {"id": "1", "name": "T1", "artist": "A", "album": "Al", "year": "2020", "date_added": "2020-06-01 00:00:00"},
                 {"id": "2", "name": "T2", "artist": "A", "album": "Al", "year": "2020", "date_added": "2020-06-01 00:00:00"},

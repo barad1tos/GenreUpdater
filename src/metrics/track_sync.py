@@ -192,8 +192,8 @@ def get_musicapp_syncable_fields() -> list[str]:
     """Fields that sync FROM Music.app TO CSV during resync.
 
     year_before_mgu and year_set_by_mgu are not Music.app fields and are not listed: the year step records them on the
-    in-memory track, and merge_musicapp_into_csv copies that record into the row, initializing an empty year_before_mgu
-    from the track's year so the first write keeps the old year.
+    in-memory track, and merge_musicapp_into_csv copies that record into the row; a row still without year_before_mgu
+    takes the track's recorded one, or the track's current year when the tool never wrote it.
     """
     return [
         "name",
@@ -203,7 +203,7 @@ def get_musicapp_syncable_fields() -> list[str]:
         "year",  # Current year for delta detection
         "date_added",
         "track_status",
-        # year_before_mgu/year_set_by_mgu deliberately excluded - preserved from CSV
+        # year_before_mgu/year_set_by_mgu are not Music.app fields; merge_musicapp_into_csv carries the track's record into the row
     ]
 
 
@@ -273,11 +273,13 @@ def merge_musicapp_into_csv(
             update_csv_track_from_musicapp(csv_track, musicapp_track, syncable_fields)
             updated += 1
 
-        # The year step records the years it wrote on the in-memory track; the row is the only place they survive the run
+        # The year step records the years it wrote on the in-memory track; the row keeps them for whoever reads
+        # track_list.csv (the next run reads them from the library snapshot)
         if musicapp_track.year_set_by_mgu:
             csv_track.year_set_by_mgu = musicapp_track.year_set_by_mgu
         if not csv_track.year_before_mgu:
-            csv_track.year_before_mgu = musicapp_track.year_before_mgu or musicapp_track.year
+            # A track the tool wrote onto had the recorded year before, or none at all; one it never wrote has its current year
+            csv_track.year_before_mgu = musicapp_track.year_before_mgu or ("" if musicapp_track.year_set_by_mgu else musicapp_track.year)
 
     return updated
 
@@ -502,8 +504,8 @@ def update_track_with_cached_fields_for_sync(
         # Always update track.year (current state for delta detection)
         if not track.year:
             track.year = cached_year
-        # Set year_before_mgu only if empty (preserve original for rollback/audit)
-        if not track.year_before_mgu:
+        # Set year_before_mgu only if empty (preserve original for rollback/audit); a track the tool wrote onto had none
+        if not track.year_before_mgu and not track.year_set_by_mgu:
             track.year_before_mgu = cached_year
 
 
