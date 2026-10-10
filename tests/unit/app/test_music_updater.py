@@ -10,7 +10,7 @@ import pytest
 
 from app.music_updater import LibraryFetchError, MusicUpdater
 from core.logger import LogFormat
-from core.models.cache_types import LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
+from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
 from core.models.protocols import YearLookupUnavailableError
 from core.models.track_models import TrackDict
 from tests.factories import create_test_app_config
@@ -571,3 +571,60 @@ class TestInvalidationEventsUseGroupArtist:
         updater._emit_identity_change_events(["1"], {"1": self._track("Various Artists")}, [self._track("Some Band")], api_cache)
 
         api_cache.emit_track_modified.assert_called_once_with("1", "Various Artists", "Now 47")
+
+
+class TestBulkRescanEvents:
+    """A bulk rescan replaces the snapshot, so it reports what disappeared or was renamed since the last one."""
+
+    def test_rescan_reports_removed_and_renamed_tracks(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        api_cache = MagicMock()
+        updater.deps.cache_service.api_service = api_cache
+        previous = [
+            TrackDict(id="A", name="Song", artist="Artist", album="Old Album"),
+            TrackDict(id="B", name="Song", artist="Gone", album="Album"),
+        ]
+        current = [TrackDict(id="A", name="Song", artist="Artist", album="New Album")]
+
+        updater._emit_rescan_events(previous, current)
+
+        api_cache.emit_track_removed.assert_called_once_with("B", "Gone", "Album")
+        api_cache.emit_track_modified.assert_called_once_with("A", "Artist", "Old Album")
+
+    def test_first_scan_reports_nothing(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        api_cache = MagicMock()
+        updater.deps.cache_service.api_service = api_cache
+
+        updater._emit_rescan_events(None, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
+
+        api_cache.emit_track_removed.assert_not_called()
+        api_cache.emit_track_modified.assert_not_called()
+
+
+class TestRescanBaseline:
+    """The rescan compares against the previous snapshot only when it uses the same id format."""
+
+    @pytest.mark.asyncio
+    async def test_snapshot_in_another_format_is_not_a_baseline(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        snapshot_service = deps.library_snapshot_service
+        snapshot_service.is_enabled = MagicMock(return_value=True)
+        snapshot_service.get_snapshot_metadata = AsyncMock(return_value=MagicMock(version="1.0"))
+        snapshot_service.load_snapshot = AsyncMock(return_value=[TrackDict(id="111701", name="s", artist="a", album="b")])
+        updater = MusicUpdater(deps)
+
+        assert await updater._load_rescan_baseline() is None
+        snapshot_service.load_snapshot.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_snapshot_in_the_current_format_is_the_baseline(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        snapshot_service = deps.library_snapshot_service
+        snapshot_service.is_enabled = MagicMock(return_value=True)
+        snapshot_service.get_snapshot_metadata = AsyncMock(return_value=MagicMock(version=SNAPSHOT_VERSION))
+        previous = [TrackDict(id="6342D31846D0E960", name="s", artist="a", album="b")]
+        snapshot_service.load_snapshot = AsyncMock(return_value=previous)
+        updater = MusicUpdater(deps)
+
+        assert await updater._load_rescan_baseline() == previous
