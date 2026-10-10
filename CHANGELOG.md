@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-10-11
+
 ### Changed
 
 - The year most of an album's tracks carry, and the release date Apple stores on them, are no longer applied as the album's year on their own: an album whose tracks disagree asks the providers, which get both as hints (the fallback rules that side with Apple's release date when the providers are not sure are unchanged), and only when no provider knows the album does the majority of its tracks fill in the others, and never when that majority is this year but the album's earliest track was added in an earlier year or carries no date, Apple's placeholder for a date it lacks. `year_retrieval.logic.suspicion_threshold_years` is no longer read and can be removed from `config.yaml`
@@ -293,7 +295,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - `update` → `update_genres`
    - New: `update_years`, `restore_release_years`
 
-[Unreleased]: https://github.com/barad1tos/GenreUpdater/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/barad1tos/GenreUpdater/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/barad1tos/GenreUpdater/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.0...v3.0.1
