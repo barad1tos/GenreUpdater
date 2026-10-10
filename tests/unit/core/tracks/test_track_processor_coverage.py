@@ -296,6 +296,25 @@ class TestLoadTracksFromSnapshot:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_snapshot_in_another_format_is_not_refreshed(
+        self,
+        processor: TrackProcessor,
+        mock_snapshot_service: AsyncMock,
+        sample_track: TrackDict,
+    ) -> None:
+        """A snapshot keyed by old ids must not be merged with a delta and saved again under the current format."""
+        processor.snapshot_service = mock_snapshot_service
+        mock_snapshot_service.load_snapshot.return_value = [sample_track]
+        mock_snapshot_service.is_snapshot_valid.return_value = False
+        mock_snapshot_service.is_delta_enabled.return_value = True
+        mock_snapshot_service.get_snapshot_metadata.return_value = MagicMock(version="1.0")
+
+        with patch.object(processor, "_refresh_snapshot_from_delta", AsyncMock()) as refresh:
+            assert await processor._load_tracks_from_snapshot() is None
+
+        refresh.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_returns_tracks_when_snapshot_valid(
         self,
         processor: TrackProcessor,
@@ -451,7 +470,7 @@ class TestUpdateSnapshot:
         processor.cache_manager = AsyncMock()
         processor.cache_manager.update_snapshot = AsyncMock()
 
-        await processor._update_snapshot([sample_track], ["123"])
+        await processor._update_snapshot([sample_track], ["123"], full_scan=True)
 
         processor.cache_manager.update_snapshot.assert_called_once()
 
@@ -647,3 +666,28 @@ class TestUpdateArtistAsync:
         )
 
         assert result is False
+
+
+def test_missed_tracks_are_read_parsed_for_the_fetcher_to_validate(processor: TrackProcessor) -> None:
+    """The batch fetcher validates missed tracks itself, so it must get them before validation."""
+    assert processor.batch_fetcher._missed_track_fetcher == processor._fetch_parsed_tracks_by_ids
+
+
+@pytest.mark.parametrize(("missed_tracks_read", "full_scan"), [(True, True), (False, False)], ids=["whole-library", "tracks-missing"])
+@pytest.mark.asyncio
+async def test_batch_fetch_counts_as_a_full_scan_only_when_whole(
+    processor: TrackProcessor, sample_track: TrackDict, *, missed_tracks_read: bool, full_scan: bool
+) -> None:
+    """Only a read of every listed track may stamp the scan times; a partial one would push the next full scan back a week."""
+    missed = TrackDict(id="00000000000000B2", name="Tail", artist="A", album="B")
+    fetcher = processor.batch_fetcher
+    with (
+        patch.object(processor.cache_manager, "update_snapshot", AsyncMock()) as update,
+        patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[sample_track])),
+        patch.object(fetcher, "_can_use_snapshot", return_value=True),
+        patch.object(fetcher.ap_client, "fetch_all_track_ids", AsyncMock(return_value=[str(sample_track.id), str(missed.id)]), create=True),
+        patch.object(fetcher, "_missed_track_fetcher", AsyncMock(return_value=[missed] if missed_tracks_read else [])),
+    ):
+        await processor.fetch_tracks_in_batches(1000, skip_snapshot_check=True)
+
+    assert update.call_args.kwargs["full_scan"] is full_scan

@@ -85,6 +85,7 @@ class TestFullApplicationPipelineE2E:
             return "" if "fetch_track_summaries" in script_name else "[]"
 
         mock_deps.ap_client.run_script = AsyncMock(side_effect=smart_run_script)
+        mock_deps.ap_client.fetch_all_track_ids = AsyncMock(return_value=[])
 
         # Cache service mock
         mock_deps.cache_service = MagicMock()

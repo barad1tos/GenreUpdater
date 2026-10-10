@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import yaml
 
+from app.id_migration import migrate_to_persistent_ids
 from app.features.batch.batch_processor import BatchProcessor
 from app.music_updater import MusicUpdater
 from core.models.metadata_utils import is_music_app_running, reset_cleaning_exceptions_log
@@ -79,6 +80,16 @@ class Orchestrator:
         # Check if Music app is running for commands that depend on it
         if self._requires_music_app(command) and not is_music_app_running(self.error_logger):
             raise MusicAppNotRunningError(command or "default")
+
+        # Before anything reads the track list: auto-verify would drop every row keyed by an old Music.app id
+        if self._requires_music_app(command) and not args.dry_run:
+            await migrate_to_persistent_ids(
+                config=self.config,
+                track_processor=self.music_updater.track_processor,
+                snapshot_service=self.deps.library_snapshot_service,
+                console_logger=self.console_logger,
+                error_logger=self.error_logger,
+            )
 
         # Set dry-run context if needed
         if args.dry_run or getattr(args, "test_mode", False):

@@ -117,22 +117,6 @@ def is_valid_track_item(item: Any) -> TypeGuard[TrackDict]:
     return track_data is not None and _validate_track_fields(track_data)
 
 
-def validate_track_ids(track_ids: list[str], year: str) -> list[str]:
-    """Return list of numeric track IDs that are not equal to the year value.
-
-    Args:
-        track_ids: List of track IDs to validate
-        year: Year value to check against
-
-    Returns:
-        List of valid track IDs
-
-    """
-    valid_ids: list[str] = []
-    valid_ids.extend(track_id for track_id in track_ids if track_id.isdigit() and track_id != year)
-    return valid_ids
-
-
 def validate_artist_name(artist: str | None) -> bool:
     """Validate artist name.
 

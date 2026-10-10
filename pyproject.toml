@@ -365,7 +365,6 @@ ignore-names = [
     "is_primarily_cyrillic",
     "get_all_scripts",
     # Validators used only in tests
-    "validate_track_ids",
     "validate_artist_name",
     "validate_album_name",
     # Analytics methods used in tests and main.py

@@ -9,6 +9,7 @@
     - Bulk property fetching via reference approach
     - Handles AppleScript raw enum constants (e.g., «constant ****kSub»)
     - Filters tracks at the source, returning ONLY those with modifiable statuses
+    - Emits each track's persistent ID as its id: it survives Music.app renumbering its track ids
 *)
 
 on run argv
@@ -84,7 +85,7 @@ on run argv
 
 		-- BULK FETCH all properties at once (this is the major optimization)
 		-- Using reference allows fetching all N tracks' properties in a single Apple Event
-		set idList to id of trackRef
+		set idList to persistent ID of trackRef
 		set nameList to name of trackRef
 		set artistList to artist of trackRef
 		set albumArtistList to album artist of trackRef

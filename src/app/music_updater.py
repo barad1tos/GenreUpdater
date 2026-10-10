@@ -23,6 +23,7 @@ from core.tracks.genre_manager import GenreManager
 from core.tracks.incremental_filter import IncrementalFilterService
 from core.tracks.track_delta import has_identity_changed
 from core.tracks.track_processor import TrackProcessor
+from core.models.cache_types import SNAPSHOT_VERSION
 from core.tracks.year_retriever import YearRetriever
 from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import (
@@ -63,7 +64,7 @@ class MusicUpdater:
         self.analytics = deps.analytics
 
         # Initialize components
-        self.track_processor = TrackProcessor(
+        self.track_processor: TrackProcessor = TrackProcessor(
             ap_client=deps.ap_client,
             cache_service=deps.cache_service,
             library_snapshot_service=deps.library_snapshot_service,
@@ -625,7 +626,7 @@ class MusicUpdater:
                 force=force,
             )
             if delta is None:
-                self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
+                self.console_logger.info("Smart Delta handed over to a full library scan")
                 return None
 
             snapshot_tracks = await snapshot_service.load_snapshot()
@@ -665,6 +666,42 @@ class MusicUpdater:
             result = None
 
         return result
+
+    async def _load_rescan_baseline(self) -> list[TrackDict] | None:
+        """Return the previous snapshot to compare a bulk rescan with, when it uses the current id format.
+
+        A snapshot from another format names tracks by other ids, so comparing with it would report the whole library
+        as removed and wipe the provider result cache.
+        """
+        snapshot_service = self.deps.library_snapshot_service
+        if not snapshot_service or not snapshot_service.is_enabled():
+            return None
+        metadata = await snapshot_service.get_snapshot_metadata()
+        if metadata is None or metadata.version != SNAPSHOT_VERSION:
+            return None
+        return await snapshot_service.load_snapshot()
+
+    async def _emit_rescan_events(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> None:
+        """Emit cache invalidation for tracks a bulk rescan no longer finds, or finds renamed, since the last snapshot.
+
+        A rescan cut short by a failed batch would report every unread track as removed, so the events go out only when
+        the rescan holds every id Music.app lists.
+        """
+        if not previous:
+            return
+        current_ids = {str(track.id) for track in current if track.id}
+        # Tracks validation rejected were read and are still in the library, so they are neither missing nor removed
+        rejected_ids = self.track_processor.rejected_track_ids
+        library_ids = set(await self.deps.ap_client.fetch_all_track_ids()) - rejected_ids
+        if current_ids != library_ids:
+            self.console_logger.warning(
+                "Bulk rescan read %d of %d tracks; not reporting removed or renamed tracks from it", len(current_ids), len(library_ids)
+            )
+            return
+        previous_map = {str(track.id): track for track in previous if track.id}
+        api_cache = self.deps.cache_service.api_service
+        self._emit_removed_track_events(sorted(set(previous_map) - current_ids - rejected_ids), previous_map, api_cache)
+        self._emit_identity_change_events(sorted(current_ids & set(previous_map)), previous_map, current, api_cache)
 
     def _emit_removed_track_events(
         self,
@@ -741,14 +778,15 @@ class MusicUpdater:
                 )
                 return smart_delta_tracks
 
-            # Fall back to batch processing for full library
-            # Skip snapshot check since Smart Delta already validated it
+            # Full scan: Smart Delta found the snapshot unusable or a full scan due, so read the whole library in bulk
             self.console_logger.info("Using batch processing for full library fetch")
+            previous_tracks = await self._load_rescan_baseline()
             batch_size = self.app_config.batch_processing.batch_size
             tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(
                 batch_size=batch_size,
-                skip_snapshot_check=True,  # Already validated in Smart Delta
+                skip_snapshot_check=True,  # Smart Delta already declined the snapshot
             )
+            await self._emit_rescan_events(previous_tracks, tracks)
             self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)
             return tracks
 

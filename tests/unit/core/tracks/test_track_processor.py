@@ -92,6 +92,7 @@ class _MockAppleScriptClient:
         self.should_fail = False
         self.failure_message = "AppleScript Error"
         self.is_initialized = False
+        self.library_track_ids: list[str] = []
 
     async def initialize(self) -> None:
         """Initialize the AppleScript client."""
@@ -151,6 +152,11 @@ class _MockAppleScriptClient:
     def set_response(self, script_name: str, response: str | None) -> None:
         """Set a predefined response for a specific script."""
         self.script_responses[script_name] = response
+
+    async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
+        """Return the persistent IDs the library lists."""
+        del timeout
+        return self.library_track_ids
 
 
 class _MockCacheService:

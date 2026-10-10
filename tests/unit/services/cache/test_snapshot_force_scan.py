@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.models.cache_types import LibraryCacheMetadata
+from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata
 from services.cache.snapshot import LibrarySnapshotService
 from tests.factories import create_test_app_config
 
@@ -43,19 +43,18 @@ class TestShouldForceScan:
 
     @pytest.mark.asyncio
     async def test_no_metadata_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
-        """First run (no metadata) should NOT trigger force scan - nothing to compare."""
+        """Without a snapshot there is nothing to scan against; the caller reads the whole library anyway."""
         mock_get = AsyncMock(return_value=None)
         with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
-            assert should_force is False
-            assert "first run" in reason
+            assert (should_force, reason) == (False, "no snapshot yet")
             mock_get.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_no_last_force_scan_time_returns_false(self, snapshot_service: LibrarySnapshotService) -> None:
-        """Missing last_force_scan_time should NOT trigger force scan - nothing to compare."""
+    async def test_no_last_force_scan_time_is_due(self, snapshot_service: LibrarySnapshotService) -> None:
+        """A snapshot that never had a full scan gets one, instead of staying in fast mode for good."""
         metadata = LibraryCacheMetadata(
-            version="1.0",
+            version=SNAPSHOT_VERSION,
             last_full_scan=datetime.now(UTC),
             library_mtime=datetime.now(UTC),
             track_count=100,
@@ -65,8 +64,7 @@ class TestShouldForceScan:
         mock_get = AsyncMock(return_value=metadata)
         with patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get):
             should_force, reason = await snapshot_service.should_force_scan(force_flag=False)
-            assert should_force is False
-            assert "first run" in reason
+            assert (should_force, reason) == (True, "no full scan recorded")
             mock_get.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -75,7 +73,7 @@ class TestShouldForceScan:
         now = datetime.now(UTC)
         three_days_ago = now - timedelta(days=3)
         metadata = LibraryCacheMetadata(
-            version="1.0",
+            version=SNAPSHOT_VERSION,
             last_full_scan=datetime.now(UTC),
             library_mtime=datetime.now(UTC),
             track_count=100,
@@ -95,7 +93,7 @@ class TestShouldForceScan:
         now = datetime.now(UTC)
         eight_days_ago = now - timedelta(days=8)
         metadata = LibraryCacheMetadata(
-            version="1.0",
+            version=SNAPSHOT_VERSION,
             last_full_scan=datetime.now(UTC),
             library_mtime=datetime.now(UTC),
             track_count=100,
@@ -108,34 +106,3 @@ class TestShouldForceScan:
             assert should_force is True
             assert "weekly" in reason
             mock_get.assert_awaited_once()
-
-
-class TestUpdateForceScanTime:
-    """Tests for _update_force_scan_time method."""
-
-    @pytest.mark.asyncio
-    async def test_updates_metadata_with_current_time(self, snapshot_service: LibrarySnapshotService) -> None:
-        """Should update metadata with current timestamp."""
-        existing_metadata = LibraryCacheMetadata(
-            version="1.0",
-            last_full_scan=datetime.now(UTC),
-            library_mtime=datetime.now(UTC),
-            track_count=100,
-            snapshot_hash="abc",
-            last_force_scan_time=None,
-        )
-        mock_get = AsyncMock(return_value=existing_metadata)
-        mock_update = AsyncMock()
-        with (
-            patch.object(snapshot_service, "get_snapshot_metadata", new=mock_get),
-            patch.object(snapshot_service, "update_snapshot_metadata", new=mock_update),
-        ):
-            await snapshot_service._update_force_scan_time()
-
-            mock_get.assert_awaited_once()
-            mock_update.assert_awaited_once()
-            updated_metadata = mock_update.call_args[0][0]
-            assert updated_metadata.last_force_scan_time is not None
-            # Verify it's a valid ISO timestamp
-            parsed = datetime.fromisoformat(updated_metadata.last_force_scan_time)
-            assert parsed.date() == datetime.now(UTC).date()

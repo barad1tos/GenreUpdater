@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 # Snapshot versioning
-SNAPSHOT_VERSION: str = "1.0"
+SNAPSHOT_VERSION: str = "2.0"  # 2.0: tracks keyed by Music.app persistent ID
 
 # Delta cache limits
 DELTA_MAX_TRACKED_IDS: int = 50_000

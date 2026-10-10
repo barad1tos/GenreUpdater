@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from core.models.cache_types import SNAPSHOT_VERSION
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from core.tracks.cache_manager import TrackCacheManager
 from core.tracks.update_executor import TrackUpdateExecutor
@@ -73,7 +74,7 @@ class TrackProcessor:
         self.artist_renamer: ArtistRenamer | None = None
 
         # Initialize cache manager for snapshot/cache operations
-        self.cache_manager = TrackCacheManager(
+        self.cache_manager: TrackCacheManager = TrackCacheManager(
             cache_service=cache_service,
             snapshot_service=library_snapshot_service,
             console_logger=console_logger,
@@ -104,6 +105,7 @@ class TrackProcessor:
             snapshot_loader=self._load_tracks_from_snapshot,
             snapshot_persister=self._update_snapshot,
             can_use_snapshot=self._can_use_snapshot,
+            missed_track_fetcher=self._fetch_parsed_tracks_by_ids,
             dry_run=dry_run,
             analytics=analytics,
         )
@@ -240,6 +242,12 @@ class TrackProcessor:
             self.console_logger.warning("Snapshot stale and delta updates disabled; full rescan required")
             return None
 
+        # A snapshot in another format keys tracks by other ids; merging a delta into it would save mixed ids
+        metadata = await service.get_snapshot_metadata()
+        if metadata is not None and metadata.version != SNAPSHOT_VERSION:
+            self.console_logger.info("Snapshot format %s is outdated; full rescan required", metadata.version)
+            return None
+
         # Delta enabled - attempt incremental refresh
         self.console_logger.info(
             "Attempting delta update: %d cached tracks + new changes since last scan",
@@ -272,7 +280,7 @@ class TrackProcessor:
 
         merged_tracks = self._merge_tracks(snapshot_tracks, delta_tracks)
         if not self.dry_run:
-            await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks])
+            await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks], full_scan=False)
         self.console_logger.info(
             "Updated snapshot from delta window starting %s (+%d tracks)",
             min_date.isoformat(),
@@ -280,9 +288,9 @@ class TrackProcessor:
         )
         return merged_tracks
 
-    async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
-        """Persist the latest snapshot, metadata, and delta state."""
-        await self.cache_manager.update_snapshot(tracks, processed_track_ids)
+    async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None, *, full_scan: bool) -> None:
+        """Persist the latest snapshot, metadata, and delta state; a full scan also stamps the scan times."""
+        await self.cache_manager.update_snapshot(tracks, processed_track_ids, full_scan=full_scan)
 
     @staticmethod
     def _merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
@@ -412,7 +420,13 @@ class TrackProcessor:
     @track_instance_method("track_fetch_by_ids")
     async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
         """Fetch detailed track metadata for the provided track IDs."""
+        parsed_tracks = await self._fetch_parsed_tracks_by_ids(track_ids)
+        validated_tracks = self._validate_tracks_security(parsed_tracks)
+        await self._apply_artist_renames(validated_tracks)
+        return validated_tracks
 
+    async def _fetch_parsed_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
+        """Fetch and parse tracks by persistent ID, before security validation."""
         if not track_ids:
             return []
 
@@ -438,12 +452,10 @@ class TrackProcessor:
             )
 
             if not raw_output:
+                self.error_logger.warning("Fetch by persistent ID returned nothing for batch %d/%d (%d ids)", batch_num, total_batches, len(batch))
                 continue
 
-            parsed_tracks = parse_tracks(raw_output, self.error_logger)
-            validated_tracks = self._validate_tracks_security(parsed_tracks)
-            await self._apply_artist_renames(validated_tracks)
-            collected.extend(validated_tracks)
+            collected.extend(parse_tracks(raw_output, self.error_logger))
 
         return collected
 
@@ -491,7 +503,7 @@ class TrackProcessor:
             tracks = await self._fetch_tracks_from_applescript(artist=artist)
 
             if use_snapshot and tracks and not self.dry_run:
-                await self._update_snapshot(tracks, [track.id for track in tracks])
+                await self._update_snapshot(tracks, [track.id for track in tracks], full_scan=True)
 
             if tracks:
                 await self.cache_service.set_async(cache_key, tracks)
@@ -506,6 +518,11 @@ class TrackProcessor:
             )
 
         return result or []
+
+    @property
+    def rejected_track_ids(self) -> frozenset[str]:
+        """Ids the last full library read returned but security validation rejected."""
+        return frozenset(self.batch_fetcher.rejected_ids)
 
     @track_instance_method("track_fetch_batches")
     async def fetch_tracks_in_batches(

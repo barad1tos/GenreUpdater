@@ -29,6 +29,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Import after path setup to avoid import errors
+from app.id_migration import migrate_to_persistent_ids  # noqa: E402
 from app.music_updater import MusicUpdater  # noqa: E402
 from core.logger import get_full_log_path  # noqa: E402
 from core.models.metadata_utils import is_music_app_running  # noqa: E402
@@ -66,7 +67,7 @@ async def run_full_resync(
 
     Raises:
         OSError: If reading tracks or writing the synchronized database fails
-        RuntimeError: If the synchronization process fails unexpectedly
+        RuntimeError: If the track list cannot be moved to persistent IDs, or the synchronization process fails unexpectedly
         ValueError: If synchronization data is invalid
 
     """
@@ -79,6 +80,15 @@ async def run_full_resync(
             return
 
         console_logger.info("Music.app is running")
+
+        # The sync drops rows whose ids Music.app no longer lists, so a list still keyed by old ids moves first
+        await migrate_to_persistent_ids(
+            config=config,
+            track_processor=track_processor,
+            snapshot_service=None,
+            console_logger=console_logger,
+            error_logger=error_logger,
+        )
 
         # Fetch ALL current tracks from Music.app
         console_logger.info("Fetching all tracks from Music.app...")

@@ -147,8 +147,14 @@ class TrackCacheManager:
         processed_track_ids: Sequence[str] | None = None,
         *,
         library_mtime_override: datetime | None = None,
+        full_scan: bool = False,
     ) -> None:
         """Persist the latest snapshot, metadata, and delta state.
+
+        Only a full scan (or the first persist, when no metadata exists) moves last_full_scan, and only a full scan
+        sets last_force_scan_time: an incremental persist keeps them, so
+        max_age_hours can expire a snapshot that only incremental runs have touched, and the weekly scan is measured
+        from the last full one.
 
         Args:
             tracks: Full list of tracks to save
@@ -156,6 +162,7 @@ class TrackCacheManager:
             library_mtime_override: If provided, use this as the library modification time
                 instead of the current mtime. This should be captured BEFORE fetching tracks
                 to prevent race conditions where new tracks are added during the fetch.
+            full_scan: True when the tracks come from a full read of the library
         """
         if self.snapshot_service is None or not self.snapshot_service.is_enabled():
             return
@@ -165,12 +172,16 @@ class TrackCacheManager:
         # Use override if provided (captured before fetch), otherwise get current mtime
         library_mtime = library_mtime_override or await self.snapshot_service.get_library_mtime()
 
-        # Preserve last_force_scan_time from existing metadata
         existing_metadata = await self.snapshot_service.get_snapshot_metadata()
-        last_force_scan_time = existing_metadata.last_force_scan_time if existing_metadata else None
+        if full_scan or existing_metadata is None:
+            last_full_scan = current_time
+            last_force_scan_time = current_time.isoformat() if full_scan else None
+        else:
+            last_full_scan = existing_metadata.last_full_scan
+            last_force_scan_time = existing_metadata.last_force_scan_time
 
         metadata = LibraryCacheMetadata(
-            last_full_scan=current_time,
+            last_full_scan=last_full_scan,
             library_mtime=library_mtime,
             track_count=len(tracks),
             snapshot_hash=snapshot_hash,

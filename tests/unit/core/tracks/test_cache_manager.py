@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.cache_types import LibraryCacheMetadata
 from core.models.track_models import TrackDict
 from core.tracks.cache_manager import TrackCacheManager
 
@@ -359,6 +360,45 @@ class TestUpdateSnapshot:
         call_args = mock_snapshot_service.update_snapshot_metadata.call_args
         metadata = call_args[0][0]
         assert metadata.library_mtime == current_mtime
+
+
+class TestScanTimes:
+    """Only a full scan moves the scan times, so max_age_hours can expire the snapshot and the weekly scan is measured."""
+
+    @pytest.mark.asyncio
+    async def test_incremental_persist_keeps_the_scan_times(
+        self, cache_manager: TrackCacheManager, mock_snapshot_service: AsyncMock, sample_tracks: list[TrackDict]
+    ) -> None:
+        earlier = datetime(2026, 10, 1, tzinfo=UTC)
+        mock_snapshot_service.get_snapshot_metadata.return_value = LibraryCacheMetadata(
+            last_full_scan=earlier, library_mtime=earlier, track_count=1, snapshot_hash="h", last_force_scan_time=earlier.isoformat()
+        )
+
+        await cache_manager.update_snapshot(sample_tracks)
+
+        metadata = mock_snapshot_service.update_snapshot_metadata.call_args.args[0]
+        assert (metadata.last_full_scan, metadata.last_force_scan_time) == (earlier, earlier.isoformat())
+
+    @pytest.mark.asyncio
+    async def test_full_scan_stamps_both_scan_times(
+        self, mock_cache_service: AsyncMock, mock_snapshot_service: AsyncMock, logger: logging.Logger, sample_tracks: list[TrackDict]
+    ) -> None:
+        now = datetime(2026, 10, 10, 12, tzinfo=UTC)
+        earlier = datetime(2026, 10, 1, tzinfo=UTC)
+        mock_snapshot_service.get_snapshot_metadata.return_value = LibraryCacheMetadata(
+            last_full_scan=earlier, library_mtime=earlier, track_count=1, snapshot_hash="h", last_force_scan_time=None
+        )
+        manager = TrackCacheManager(
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
+            snapshot_service=mock_snapshot_service,
+            console_logger=logger,
+            current_time_func=lambda: now,
+        )
+
+        await manager.update_snapshot(sample_tracks, full_scan=True)
+
+        metadata = mock_snapshot_service.update_snapshot_metadata.call_args.args[0]
+        assert (metadata.last_full_scan, metadata.last_force_scan_time) == (now, now.isoformat())
 
 
 class TestCanUseSnapshot:

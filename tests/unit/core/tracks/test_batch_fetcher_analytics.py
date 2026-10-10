@@ -10,9 +10,9 @@ import pytest
 
 if TYPE_CHECKING:
     from core.models.protocols import CacheServiceProtocol
-    from core.models.track_models import AppConfig
     from core.models.types import AppleScriptClientProtocol
 
+from core.models.track_models import AppConfig, TrackDict
 from core.tracks.batch_fetcher import BatchTrackFetcher
 from metrics.analytics import Analytics, LoggerContainer
 from tests.factories import create_test_app_config
@@ -23,6 +23,7 @@ def mock_ap_client() -> MagicMock:
     """Create mock AppleScript client."""
     client = MagicMock()
     client.run_script = AsyncMock(return_value=None)
+    client.fetch_all_track_ids = AsyncMock(return_value=[])
     return client
 
 
@@ -70,6 +71,8 @@ def create_batch_fetcher(
     loggers: tuple[logging.Logger, logging.Logger],
     config: AppConfig,
     analytics: Analytics | None = None,
+    *,
+    missed_track_fetcher: AsyncMock | None = None,
 ) -> BatchTrackFetcher:
     """Factory to create BatchTrackFetcher with common dependencies."""
     console_logger, error_logger = loggers
@@ -84,6 +87,7 @@ def create_batch_fetcher(
         snapshot_loader=AsyncMock(return_value=None),
         snapshot_persister=AsyncMock(),
         can_use_snapshot=lambda x: False,
+        missed_track_fetcher=missed_track_fetcher or AsyncMock(return_value=[]),
         analytics=analytics,
     )
 
@@ -113,6 +117,119 @@ class TestBatchFetcherInit:
         """Should initialize with analytics parameter."""
         fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, analytics=analytics)
         assert fetcher.analytics is analytics
+
+
+class TestMissedTracks:
+    """Music.app's index ranges include deleted tracks, so the batches can miss the last tracks of the library."""
+
+    @pytest.mark.asyncio
+    async def test_tracks_the_batches_missed_are_fetched_by_id(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        batched = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        missed = TrackDict(id="00000000000000B2", name="Tail", artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[batched.id, missed.id])
+        missed_fetcher = AsyncMock(return_value=[missed])
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=missed_fetcher)
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[batched])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert [track.id for track in tracks] == [batched.id, missed.id]
+        missed_fetcher.assert_awaited_once_with([missed.id])
+
+    @pytest.mark.asyncio
+    async def test_complete_batches_fetch_nothing_more(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        batched = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[batched.id])
+        missed_fetcher = AsyncMock(return_value=[])
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=missed_fetcher)
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[batched])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [batched]
+        missed_fetcher.assert_not_awaited()
+
+
+class TestRejectedTracks:
+    """A track the scripts return but validation rejects is read; re-reading it by id cannot change that."""
+
+    @pytest.mark.asyncio
+    async def test_rejected_tracks_count_as_read(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        kept = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        rejected = TrackDict(id="00000000000000C3", name="x" * 2000, artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[kept.id, rejected.id])
+        missed_fetcher = AsyncMock(return_value=[])
+        persister = AsyncMock()
+        console_logger, error_logger = loggers
+        fetcher = BatchTrackFetcher(
+            ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
+            console_logger=console_logger,
+            error_logger=error_logger,
+            config=config,
+            track_validator=lambda tracks: [track for track in tracks if track.id != rejected.id],
+            artist_processor=AsyncMock(),
+            snapshot_loader=AsyncMock(return_value=None),
+            snapshot_persister=persister,
+            can_use_snapshot=lambda _artist: True,
+            missed_track_fetcher=missed_fetcher,
+        )
+        raw = f"{kept.id}\x1eSong\x1eA\x1eA\x1eB\x1d{rejected.id}\x1e{rejected.name}\x1eA\x1eA\x1eB"
+
+        with patch("core.tracks.batch_fetcher.parse_tracks", return_value=[kept, rejected]):
+            mock_ap_client.run_script = AsyncMock(side_effect=[raw, None])
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [kept]
+        assert fetcher.rejected_ids == {rejected.id}
+        missed_fetcher.assert_not_awaited()
+        persister.assert_awaited_once_with([kept], [kept.id], full_scan=True)
+
+
+class TestRejectedMissedTracks:
+    """A missed track read by id goes through the same validation as a batch, so its rejection is recorded too."""
+
+    @pytest.mark.asyncio
+    async def test_a_missed_track_validation_rejects_counts_as_read(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        kept = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        rejected = TrackDict(id="00000000000000C3", name="x" * 2000, artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[kept.id, rejected.id])
+        persister = AsyncMock()
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=AsyncMock(return_value=[rejected]))
+        fetcher._track_validator = lambda tracks: [track for track in tracks if track.id != rejected.id]
+        fetcher._snapshot_persister = persister
+        fetcher._can_use_snapshot = lambda _artist: True
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[kept])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [kept]
+        assert fetcher.rejected_ids == {rejected.id}
+        persister.assert_awaited_once_with([kept], [kept.id], full_scan=True)
 
 
 class TestFetchTracksInBatchesRouting:
@@ -374,12 +491,13 @@ class TestCacheAndPersistResults:
             snapshot_loader=AsyncMock(return_value=None),
             snapshot_persister=failing_persister,
             can_use_snapshot=lambda _x: True,
+            missed_track_fetcher=AsyncMock(return_value=[]),
         )
 
         track = MagicMock()
         track.id = "1"
         tracks_arg = cast(Any, [track])
-        await fetcher._cache_and_persist_results(tracks_arg)
+        await fetcher._cache_and_persist_results(tracks_arg, full_scan=True)
 
         cast(MagicMock, loggers[1]).warning.assert_called_once()
         assert "Disk full" in str(cast(MagicMock, loggers[1]).warning.call_args)
