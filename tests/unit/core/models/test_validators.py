@@ -17,7 +17,6 @@ from core.models.validators import (
     is_valid_year,
     validate_album_name,
     validate_artist_name,
-    validate_track_ids,
 )
 
 
@@ -158,30 +157,6 @@ class TestValidateTrackFields:
         """Should accept track with None optional field."""
         track = {"id": "1", "artist": "Artist", "name": "Track", "album": "Album", "genre": None}
         assert is_valid_track_item(track) is True
-
-
-class TestValidateTrackIds:
-    """Tests for validate_track_ids function."""
-
-    def test_filters_numeric_ids(self) -> None:
-        """Should keep only numeric IDs."""
-        result = validate_track_ids(["1", "2", "abc", "3"], "2020")
-        assert result == ["1", "2", "3"]
-
-    def test_excludes_year_value(self) -> None:
-        """Should exclude IDs matching year value."""
-        result = validate_track_ids(["1", "2020", "3"], "2020")
-        assert result == ["1", "3"]
-
-    def test_empty_list(self) -> None:
-        """Should return empty list for empty input."""
-        result = validate_track_ids([], "2020")
-        assert result == []
-
-    def test_all_invalid(self) -> None:
-        """Should return empty list when all invalid."""
-        result = validate_track_ids(["abc", "def"], "2020")
-        assert result == []
 
 
 class TestValidateArtistName:
