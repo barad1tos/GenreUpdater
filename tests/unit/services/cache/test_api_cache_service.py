@@ -559,14 +559,22 @@ class TestCacheFileShape:
         entry = {"artist": "artist", "album": "album", "year": None, "source": "itunes", "timestamp": 0.0, "ttl": None, "metadata": {}}
         current = dict.fromkeys(ReleaseRecord.__required_keys__) | {"title": "Album", "source": "itunes"}
         older = {"title": "Album", "artist": "Artist", "year": "1999", "album_type": "Album", "copyright": "", "genre": "Rock", "disambiguation": ""}
+        # MusicBrainz and Discogs records of the older format carried extra fields on top of the shared ones
+        with_extras = {**current, "source": "discogs", "catalog_number": None, "barcode": None, "disambiguation": None}
         service.api_cache_file.write_text(
-            json.dumps({"current": {**entry, "api_response": {"records": [current]}}, "older": {**entry, "api_response": {"records": [older]}}}),
+            json.dumps(
+                {
+                    "current": {**entry, "api_response": {"records": [current]}},
+                    "older": {**entry, "api_response": {"records": [older]}},
+                    "with_extras": {**entry, "api_response": {"records": [with_extras]}},
+                }
+            ),
             encoding="utf-8",
         )
 
         await service.initialize()
 
-        assert list(service.api_cache) == ["current"]
+        assert list(service.api_cache) == ["current", "with_extras"]
 
     def test_stats_do_not_claim_a_ttl_for_found_records(self) -> None:
         """Found records are kept for good, so the stats name no TTL for them."""
