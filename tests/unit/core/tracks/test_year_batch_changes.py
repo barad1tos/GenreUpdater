@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
+from app.pipeline_snapshot import PipelineSnapshotManager
 from core.tracks.track_updater import TrackUpdater
+from metrics.track_sync import build_musicapp_track_map, merge_musicapp_into_csv
 from tests.unit.core.tracks.conftest import create_test_track as _create_test_track
 from tests.unit.core.tracks.conftest import create_year_batch_processor as _create_year_batch_processor
 
@@ -344,6 +347,23 @@ class TestDetectUserYearChanges:
 @pytest.mark.unit
 class TestYearChangeTrackingEndToEnd:
     """End-to-end tests for year change tracking flow."""
+
+    def test_own_write_survives_the_snapshot_update_and_the_sync(self) -> None:
+        """The copy handed to the snapshot carries the tracking fields, so the row records the old year and the write."""
+        snapshot_track = create_test_track("1", year="2026")
+        snapshot = PipelineSnapshotManager(MagicMock(), logging.getLogger("test.snapshot"))
+        snapshot.set_snapshot([snapshot_track])
+        updated_tracks: list[TrackDict] = []
+        changes_log: list[ChangeLogEntry] = []
+
+        TrackUpdater.record_successful_updates(
+            tracks=[snapshot_track], year="2017", artist="Artist", album="Album", updated_tracks=updated_tracks, changes_log=changes_log
+        )
+        snapshot.update_tracks(updated_tracks)
+        csv_row = create_test_track("1", year="2026")
+        merge_musicapp_into_csv(build_musicapp_track_map(snapshot.get_snapshot() or []), {"1": csv_row})
+
+        assert (csv_row.year, csv_row.year_before_mgu, csv_row.year_set_by_mgu) == ("2017", "2026", "2017")
 
     def test_first_update_sets_year_before_mgu(self) -> None:
         """First update should set year_before_mgu from original value."""

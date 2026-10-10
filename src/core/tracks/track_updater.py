@@ -201,8 +201,6 @@ class TrackUpdater:
 
         """
         for track in tracks:
-            updated_tracks.append(track.copy(year=year))
-
             old_year_value = track.get("year")
             changes_log.append(
                 ChangeLogEntry(
@@ -224,6 +222,8 @@ class TrackUpdater:
             # Keep the in-memory snapshot aligned
             track.year = year
             track.year_set_by_mgu = year
+            # The snapshot update writes every field of the copy back onto the track, so the copy carries the record
+            updated_tracks.append(track.copy())
 
     @staticmethod
     def _track_needs_year_update(current_year: str | int | None, target_year: str) -> bool:
