@@ -58,6 +58,14 @@ class YearLookupUnavailableError(Exception):
     """
 
 
+class YearLookupFailedError(YearLookupUnavailableError):
+    """The lookup failed with an error, so it says nothing about the album either.
+
+    Callers that leave an unavailable album for the next run treat a failure the same way; callers that keep a
+    verification schedule count it as a failed check rather than as an outage.
+    """
+
+
 # noinspection PyMissingOrEmptyDocstring
 @runtime_checkable
 class CacheServiceProtocol(Protocol):
@@ -290,8 +298,9 @@ class ExternalApiServiceProtocol(Protocol):
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
-        A lookup that no provider answered raises YearLookupUnavailableError: the year is unknown, so callers must not
-        record the album as yearless or fall back to its library year.
+        A lookup that no provider answered raises YearLookupUnavailableError, and one that failed with an error its
+        subclass YearLookupFailedError: the year is unknown, so callers must not record the album as yearless or fall
+        back to its library year.
 
         Args:
             artist: Artist name

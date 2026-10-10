@@ -446,6 +446,24 @@ class TestMergeMusicappIntoCsv:
 
         assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("", "2017")
 
+    def test_a_fresh_read_keeps_a_first_writes_empty_history(self) -> None:
+        """A track read from Music.app carries its current year as year_before_mgu; the empty history a first write left stays."""
+        csv_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="2017")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="2017", year_set_by_mgu="")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("", "2017")
+
+    def test_a_row_the_tool_never_wrote_takes_the_current_year(self) -> None:
+        """Issue #126: a row without any record starts its history from the track's year."""
+        csv_track = _create_test_track("9", year="", year_before_mgu="", year_set_by_mgu="")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2017", "")
+
     def test_a_second_write_keeps_the_first_old_year(self) -> None:
         """The year before the tool's first write stays through later writes."""
         csv_track = _create_test_track("9", year="2017", year_before_mgu="2026", year_set_by_mgu="2017")
@@ -928,6 +946,18 @@ class TestUpdateTrackWithCachedFieldsForSync:
     This gets mapped to track.year_before_mgu (for new tracks) and track.year (for delta detection).
     """
 
+    def test_a_track_the_tool_wrote_onto_keeps_no_old_year(self) -> None:
+        """The re-fetched current year is the tool's own write, not the year before it."""
+        track = _create_test_track("6", date_added=None, year="2017", year_before_mgu=None, year_set_by_mgu="2017")
+        tracks_cache: dict[str, ParsedTrackFields] = {
+            "6": {"date_added": "2024-06-01", "last_modified": "2024-06-02", "track_status": "Playing", "year": "2017"}
+        }
+
+        update_track_with_cached_fields_for_sync(track, tracks_cache)
+
+        assert track.date_added == "2024-06-01"
+        assert not track.year_before_mgu
+
     def test_updates_empty_fields_from_cache(self) -> None:
         """Should update empty fields from cache."""
         track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None, year_set_by_mgu=None)
@@ -1153,6 +1183,18 @@ class TestFetchMissingTrackFieldsForSync:
         assert result == {}
 
     @pytest.mark.asyncio
+    async def test_does_not_fetch_for_a_first_writes_empty_history(self, console_logger: logging.Logger) -> None:
+        """A row whose empty year_before_mgu is the tool's own record is complete; no full fetch for it."""
+        from metrics.track_sync import fetch_missing_track_fields_for_sync
+
+        tracks = [_create_test_track("1", year_before_mgu="", year_set_by_mgu="2017")]
+        applescript_client = MagicMock()
+
+        result = await fetch_missing_track_fields_for_sync(tracks, applescript_client, console_logger)
+
+        assert result == {}
+        assert applescript_client.mock_calls == []
+
     async def test_fetches_when_fields_missing(
         self,
         console_logger: logging.Logger,

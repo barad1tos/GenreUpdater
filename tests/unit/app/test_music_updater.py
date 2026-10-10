@@ -11,7 +11,7 @@ import pytest
 from app.music_updater import LibraryFetchError, MusicUpdater
 from core.logger import LogFormat
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.models.track_models import TrackDict
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
@@ -510,6 +510,27 @@ class TestVerifyPendingUnavailable:
         assert any(f"unavailable: {LogFormat.dim('1')}" in message for message in deps.console_logger.info_messages)
 
     @pytest.mark.asyncio
+    async def test_a_failed_lookup_counts_as_failed_and_moves_the_timestamp(self) -> None:
+        """A lookup that failed is a failed check, so the run's timestamp still moves; only an outage holds it."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        entries = [
+            PendingAlbumEntry(timestamp=datetime(2026, 1, 1, tzinfo=UTC), artist="Down", album="Gone", reason=VerificationReason.NO_YEAR_FOUND),
+            PendingAlbumEntry(timestamp=datetime(2026, 1, 1, tzinfo=UTC), artist="Up", album="Here", reason=VerificationReason.NO_YEAR_FOUND),
+        ]
+        pending = MagicMock()
+        pending.get_all_pending_albums = AsyncMock(return_value=entries)
+        pending.is_verification_needed = AsyncMock(return_value=True)
+        pending.update_verification_timestamp = AsyncMock()
+        deps.pending_verification_service = pending
+        deps.external_api_service.get_album_year = AsyncMock(side_effect=[YearLookupFailedError("scoring blew up"), ("2001", True, 90, {"2001": 90})])
+        updater = MusicUpdater(deps)
+
+        with patch.object(updater, "_verify_single_pending_album", AsyncMock(return_value=True)):
+            await updater.run_verify_pending()
+
+        pending.update_verification_timestamp.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_all_unavailable_does_not_claim_no_years(self) -> None:
         """When no due album could be checked, the summary says the providers were unavailable, not that no years exist."""
         deps = TestMusicUpdaterAllure.create_mock_dependencies()
@@ -636,6 +657,7 @@ class TestBulkRescanEvents:
         current = [TrackDict(id="A", name="Song", artist="Artist", album="Album")]
 
         async def rescan(**_: object) -> list[TrackDict]:
+            """Replace the saved tracks with the current ones, as a full read does."""
             saved[:] = current
             return current
 

@@ -698,6 +698,6 @@ class TestUnavailableYearLookup:
         await processor._process_single_album("Artist", "Album", album_tracks=[create_test_track()], updated_tracks=[], changes_log=[])
 
         printed = console_output.getvalue()
-        assert "Year lookup unavailable for 'Artist - Album': no provider could be reached; it is retried on the next run" in printed
+        assert "Year lookup unavailable for 'Artist - Album'; it is retried on the next run" in printed
         assert "no year could be determined" not in printed
         update_tracks.assert_not_called()

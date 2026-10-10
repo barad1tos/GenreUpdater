@@ -31,7 +31,7 @@ import certifi
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT, LogFormat
 from core.models.normalization import search_names
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError
 from core.models.script_detection import ScriptType, detect_primary_script
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from services.api.api_base import ApiRateLimiter, ScoredRelease
@@ -785,7 +785,7 @@ class ExternalApiOrchestrator:
             year_scores: dict mapping each year found by APIs to its max score
 
         Raises:
-            YearLookupUnavailableError: The search could not be set up or failed with an error, so the album waits for the next run
+            YearLookupFailedError: The search could not be set up or failed with an error, so the album waits for the next run
         """
         # Initialize and prepare inputs
         try:
@@ -799,7 +799,7 @@ class ExternalApiOrchestrator:
                 "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
             message = f"Year search setup failed for '{artist} - {album}' ({type(error).__name__})"
-            raise YearLookupUnavailableError(message) from error
+            raise YearLookupFailedError(message) from error
 
         artist_norm, album_norm, log_artist, log_album, artist_context = inputs
 
@@ -899,11 +899,11 @@ class ExternalApiOrchestrator:
             error: The error that ended the search
 
         Raises:
-            YearLookupUnavailableError: Always, so the caller retries the album on the next run
+            YearLookupFailedError: Always, so the caller retries the album on the next run
         """
         self.error_logger.exception("Unexpected error in get_album_year for '%s - %s'", log_artist, log_album)
         message = f"Year lookup failed for '{log_artist} - {log_album}' ({type(error).__name__})"
-        raise YearLookupUnavailableError(message) from error
+        raise YearLookupFailedError(message) from error
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:

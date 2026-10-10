@@ -447,6 +447,7 @@ class TestYearPipelineNoProviderYear:
         assert await year_retriever.process_album_years(self._album(["2016", "2016", "2016", "2026"])) is True
         assert external_api.get_album_year_calls == [("Split Artist", "Split Album", "2016")]
         assert _written_years(track_processor) == [("4", "2016")]
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_a_split_writes_nothing(self) -> None:
@@ -457,6 +458,7 @@ class TestYearPipelineNoProviderYear:
 
         assert await year_retriever.process_album_years(self._album(["2016", "2016", "2019", "2019"])) is True
         assert _written_years(track_processor) == []
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
     async def test_a_placeholder_current_year_majority_writes_nothing(self) -> None:
@@ -469,14 +471,30 @@ class TestYearPipelineNoProviderYear:
 
         assert await year_retriever.process_album_years(tracks) is True
         assert _written_years(track_processor) == []
+        assert _failures_logged(year_retriever) == []
 
     @pytest.mark.asyncio
-    async def test_a_failed_lookup_writes_nothing(self) -> None:
-        """A lookup that fails leaves the album for the next run: no majority write."""
+    async def test_a_failed_lookup_writes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A lookup that fails leaves the album for the next run: no majority write, and no album crash."""
         external_api = MockExternalApiService()
-        external_api.get_album_year = AsyncMock(side_effect=OSError("boom"))  # type: ignore[method-assign]
+        monkeypatch.setattr(external_api, "get_album_year", AsyncMock(side_effect=OSError("boom")))
         tracks = self._album(["2016", "2016", "2016", "2026"])
         year_retriever, track_processor = self._run(external_api)
 
         assert await year_retriever.process_album_years(tracks) is True
         assert _written_years(track_processor) == []
+        failures = _failures_logged(year_retriever)
+        assert len(failures) == 1
+        assert "Year lookup failed" in failures[0]
+
+    @pytest.mark.asyncio
+    async def test_a_provider_answer_beats_a_real_majority(self) -> None:
+        """Thirteen tracks at 2019 and one at 2016 with the providers at 2016: the thirteen move, the majority never runs."""
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2016", True, 90, {"2016": 90})
+        tracks = self._album(["2019"] * 13 + ["2016"])
+        year_retriever, track_processor = self._run(external_api)
+
+        assert await year_retriever.process_album_years(tracks) is True
+        assert _written_years(track_processor) == sorted((str(i), "2016") for i in range(1, 14))
+        assert _failures_logged(year_retriever) == []

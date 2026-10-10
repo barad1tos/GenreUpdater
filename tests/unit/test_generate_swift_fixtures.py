@@ -11,4 +11,5 @@ def test_validation_fixtures_carry_the_apps_majority_rule() -> None:
 
     assert expected["valid_majority_clear"] == 2020
     assert expected["valid_no_majority"] is None
+    assert expected["valid_empty_years"] is None  # two of four at 0.6 is no majority; at the module's old 0.5 it was
     assert expected["valid_single_track"] == 2020

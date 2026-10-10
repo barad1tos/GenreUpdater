@@ -16,7 +16,7 @@ from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
 from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import is_music_app_running
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
@@ -404,6 +404,10 @@ class MusicUpdater:
         for entry in albums_to_verify:
             try:
                 year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            except YearLookupFailedError:
+                # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
+                failed_count += 1
+                continue
             except YearLookupUnavailableError:
                 # No provider answered: the entry stays as it was and is checked again on the next run
                 unavailable_count += 1

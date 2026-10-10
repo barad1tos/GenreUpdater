@@ -12,7 +12,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError
 from core.models.track_status import is_prerelease_status
 from core.models.validators import is_empty_year, is_valid_year
 
@@ -110,8 +110,9 @@ class YearDeterminator:
     async def _query_providers(self, artist: str, album: str, library_year: str | None) -> ProviderAnswer | None:
         """Ask the providers for the album's year.
 
-        Returns None when no provider knows the album. A lookup that no provider answered, or that failed with an
-        error, raises YearLookupUnavailableError so the caller leaves the album for the next run.
+        Returns None when no provider knows the album. A lookup that no provider answered raises
+        YearLookupUnavailableError and one that failed with an error YearLookupFailedError, so the caller leaves the
+        album for the next run.
         """
         try:
             year, is_definitive, confidence_score, year_scores = await self.external_api.get_album_year(
@@ -123,7 +124,7 @@ class YearDeterminator:
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
             message = f"Year lookup failed for '{artist} - {album}'"
-            raise YearLookupUnavailableError(message) from error
+            raise YearLookupFailedError(message) from error
         if not year:
             return None
         return ProviderAnswer(year, is_definitive, confidence_score, year_scores)
@@ -170,8 +171,8 @@ class YearDeterminator:
         """Determine the album's year.
 
         Order: cached year (fresh, confident) → providers, judged by the fallback rules → majority of the album's
-        tracks when the providers have no year for it, unless that majority is this year and no track was added this
-        year. `force` skips the cache.
+        tracks when the providers have no year for it, unless that majority is this year and the earliest track was added in
+        another year or carries no date. `force` skips the cache.
 
         Args:
             artist: Artist name
@@ -197,7 +198,7 @@ class YearDeterminator:
             majority = self.consistency_checker.get_majority_year(album_tracks)
             if majority and self._is_placeholder_current_year(majority, album_tracks):
                 self.console_logger.info(
-                    "No provider year for '%s - %s'; majority %s is this year with no track added this year (Apple's placeholder) - leaving it",
+                    "No provider year for '%s - %s'; majority %s is this year but its earliest track is older or undated (Apple's placeholder)",
                     artist,
                     album,
                     majority,
@@ -399,16 +400,14 @@ class YearDeterminator:
                         shared_year,
                         artist,
                         album,
+                        extra=PLAIN_TEXT,
                     )
                     return False, "invalid_year_format"
                 is_recent_year = shared_year_int >= datetime.now(UTC).year - 1
                 has_no_release_year = not any(t.get("release_year") for t in album_tracks)
                 if is_recent_year and has_no_release_year:
                     self.console_logger.info(
-                        "[PRE-CHECK] %s - %s: year %s needs API verification (no release_year)",
-                        artist,
-                        album,
-                        shared_year,
+                        "[PRE-CHECK] %s - %s: year %s needs API verification (no release_year)", artist, album, shared_year, extra=PLAIN_TEXT
                     )
                     return False, "needs_api_verification"  # Don't skip, force API query
             self.console_logger.debug(
@@ -485,7 +484,7 @@ class YearDeterminator:
 
     @staticmethod
     def _is_placeholder_current_year(year: str, album_tracks: list[TrackDict]) -> bool:
-        """Tell whether a year is this year on an album whose tracks were not added this year.
+        """Tell whether a year is this year on an album whose earliest track was not added this year.
 
         Apple stamps the current year on tracks it has no date for; a real release from this year reaches the
         library this year.

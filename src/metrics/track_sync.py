@@ -278,8 +278,12 @@ def merge_musicapp_into_csv(
         if musicapp_track.year_set_by_mgu:
             csv_track.year_set_by_mgu = musicapp_track.year_set_by_mgu
         if not csv_track.year_before_mgu:
-            # A track the tool wrote onto had the recorded year before, or none at all; one it never wrote has its current year
-            csv_track.year_before_mgu = musicapp_track.year_before_mgu or ("" if musicapp_track.year_set_by_mgu else musicapp_track.year)
+            if musicapp_track.year_set_by_mgu:
+                # The year step's own record: the year before its write, or "" when the track had none
+                csv_track.year_before_mgu = musicapp_track.year_before_mgu
+            elif not csv_track.year_set_by_mgu:
+                # A row the tool never wrote starts its history from the track's year (a fresh read carries it as year_before_mgu)
+                csv_track.year_before_mgu = musicapp_track.year_before_mgu or musicapp_track.year
 
     return updated
 
@@ -445,7 +449,11 @@ async def fetch_missing_track_fields_for_sync(
     """Fetch missing track fields via AppleScript if needed for sync operation."""
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
-    has_missing_fields = any(not track.date_added or not track.track_status or not track.year_before_mgu for track in final_list if track.id)
+    has_missing_fields = any(
+        not track.date_added or not track.track_status or (not track.year_before_mgu and not track.year_set_by_mgu)
+        for track in final_list
+        if track.id
+    )
 
     if has_missing_fields and applescript_client is not None:
         try:

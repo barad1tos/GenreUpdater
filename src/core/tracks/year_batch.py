@@ -410,9 +410,7 @@ class YearBatchProcessor:
             year = await self.year_determinator.determine_album_year(artist, album, album_tracks, force=force_api)
         except YearLookupUnavailableError:
             # Nothing is known about the album yet, so nothing is recorded; the next run asks the providers again
-            self.console_logger.warning(
-                "Year lookup unavailable for '%s - %s': no provider could be reached; it is retried on the next run", artist, album, extra=PLAIN_TEXT
-            )
+            self.console_logger.warning("Year lookup unavailable for '%s - %s'; it is retried on the next run", artist, album, extra=PLAIN_TEXT)
             return
 
         if not year:
