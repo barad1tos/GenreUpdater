@@ -171,8 +171,8 @@ class TestInitialization:
         assert client.limit == 1
 
 
-class TestGetScoredReleases:
-    """Tests for get_scored_releases method."""
+class TestFetchAndScore:
+    """Fetching and scoring iTunes releases."""
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_response(
@@ -946,13 +946,13 @@ class TestScoreFiltering:
         assert result["score"] == 0.01
 
     @pytest.mark.asyncio
-    async def test_get_scored_releases_filters_zero_scores(
+    async def test_filters_zero_scores(
         self,
         client: AppleMusicClient,
         mock_api_request_func: AsyncMock,
         mock_score_func: MagicMock,
     ) -> None:
-        """Test that get_scored_releases filters out zero-score results."""
+        """Zero-score results are filtered out."""
         # Two results: one with score 50, one with score 0
         results = [
             {
