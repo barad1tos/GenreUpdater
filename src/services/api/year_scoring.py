@@ -54,7 +54,7 @@ def _title_key(title: str) -> str:
     Returns:
         The comparison key
     """
-    folded = unicodedata.normalize("NFKD", normalize_search_name(title).casefold())
+    folded = unicodedata.normalize("NFKD", normalize_search_name(title.casefold()))
     return "".join(char for char in folded if char.isalnum())
 
 

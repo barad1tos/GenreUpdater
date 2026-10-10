@@ -45,7 +45,6 @@ from typing import TYPE_CHECKING, Any
 from core.logger import LogFormat, get_full_log_path
 from core.models.cache_types import PendingAlbumEntry, VerificationReason
 from core.models.metadata_utils import clean_names
-from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from services.cache.hash_service import UnifiedHashService
 
 if TYPE_CHECKING:
@@ -244,9 +243,9 @@ class PendingVerificationService:
             attempt_count = int(attempt_count_str) if attempt_count_str else 0
         except ValueError:
             attempt_count = 0
-        # A per-run count past the limit says nothing about how often the album was rechecked, so it restarts
-        if not per_recheck and attempt_count > MAX_VERIFICATION_ATTEMPTS:
-            attempt_count = 1
+        # A per-run count says nothing about how often the album was rechecked, so it restarts at the first attempt
+        if not per_recheck:
+            attempt_count = min(attempt_count, 1)
 
         try:
             key_hash = self.generate_album_key(artist, album)

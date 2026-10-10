@@ -175,6 +175,7 @@ class TestReleaseScorer:
             ("III:Trauma", search_names("Dry the River", "III:Trauma")[1]),  # the search rewrites ":" to a space
             ("Fire&Water", search_names("Free", "Fire&Water")[1]),  # and "&" to "and"
             ("Split w/ Band", search_names("A", "Split w/ Band")[1]),  # and "w/" to "with"
+            ("Split W/ Band", search_names("A", "Split w/ Band")[1]),  # whatever the case
             ("Café Bleu", "Cafe Bleu"),  # accents
             ("Déjà Vu", "deja vu"),
             ("Robot Hive / Exodus", "Exodus"),  # a split release dates its second side too
