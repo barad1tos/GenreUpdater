@@ -177,7 +177,7 @@ class BaseApiClient:
         normalized = name.casefold()
 
         # Replace '&' with 'and' for consistency
-        normalized = normalized.replace("&", "and")
+        normalized = normalized.replace("&", " and ")
 
         # Remove punctuation but keep Unicode word chars (\w includes non-ASCII letters)
         normalized = re.sub(r"[^\w\s]", "", normalized)

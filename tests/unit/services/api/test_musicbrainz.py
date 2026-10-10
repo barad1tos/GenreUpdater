@@ -640,3 +640,25 @@ class TestMalformedAnswers:
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=empty))
 
         assert await client.fetch_release_records("artist", "album") == []
+
+
+def test_fallback_filter_matches_the_artist_whatever_its_case() -> None:
+    """Fallback searches keep a release group credited to the artist as the library spells it, case and punctuation included."""
+    client = TestMusicBrainzClientAllure.create_musicbrainz_client()
+    artist_credits = [{"artist": {"name": "Earth, Wind & Fire"}}]
+
+    assert client._artist_matches_any_credit(artist_credits, "Earth, Wind and Fire")
+    assert client._artist_matches_any_credit([{"artist": {"name": "Pink Floyd"}}], "Pink Floyd")
+
+
+def test_fallback_filter_reads_an_unspaced_ampersand_as_and() -> None:
+    client = TestMusicBrainzClientAllure.create_musicbrainz_client()
+
+    assert client._artist_matches_any_credit([{"artist": {"name": "Fire&Water"}}], "Fire and Water")
+
+
+def test_fallback_filter_rejects_a_name_with_no_letters() -> None:
+    """A name that normalizes to nothing would match every credit without a name, so it matches none."""
+    client = TestMusicBrainzClientAllure.create_musicbrainz_client()
+
+    assert not client._artist_matches_any_credit([{"artist": {"name": "*"}}], "!!!")

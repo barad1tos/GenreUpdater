@@ -282,19 +282,23 @@ class MusicBrainzClient(BaseApiClient):
             True if artist matches any credit, False otherwise
 
         """
+        # The search name keeps the library's case and punctuation, so it is normalized like the credited names
+        target = self._normalize_name(artist_norm)
+        if not target:
+            return False
         for ac in artist_credits:
             artist_info = ac.get("artist", {})
             artist_name = artist_info.get("name", "")
 
             # Check direct name match
-            if self._normalize_name(artist_name) == artist_norm:
+            if self._normalize_name(artist_name) == target:
                 return True
 
             # Check aliases
             aliases = artist_info.get("aliases", [])
             for alias in aliases:
                 alias_name = alias.get("name", "")
-                if self._normalize_name(alias_name) == artist_norm:
+                if self._normalize_name(alias_name) == target:
                     return True
 
         return False

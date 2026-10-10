@@ -1203,3 +1203,44 @@ class TestParityWithOtherProviders:
         sample_itunes_result["releaseDate"] = "1850-01-01T00:00:00Z"
 
         assert client._build_release_record(sample_itunes_result) is None
+
+
+class TestArtistIdMatch:
+    """The artist lookup matches the search name whatever its case, as the library spells it."""
+
+    @pytest.mark.asyncio
+    async def test_mixed_case_artist_is_found(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
+        client = AppleMusicClient(
+            console_logger=console_logger,
+            error_logger=error_logger,
+            make_api_request_func=AsyncMock(return_value={"results": [{"artistName": "Pink Floyd", "artistId": 487143}]}),
+            score_release_func=MagicMock(return_value=0.0),
+            analytics=MagicMock(),
+        )
+
+        assert await client._find_artist_id("Pink Floyd") == 487143
+
+    @pytest.mark.asyncio
+    async def test_ampersand_artist_is_found(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
+        """The search name spells "&" as "and"; iTunes keeps the "&"."""
+        client = AppleMusicClient(
+            console_logger=console_logger,
+            error_logger=error_logger,
+            make_api_request_func=AsyncMock(return_value={"results": [{"artistName": "Earth, Wind & Fire", "artistId": 1}]}),
+            score_release_func=MagicMock(return_value=0.0),
+            analytics=MagicMock(),
+        )
+
+        assert await client._find_artist_id("Earth, Wind and Fire") == 1
+
+    def test_start_year_counts_an_ampersand_artist(self, client: AppleMusicClient) -> None:
+        results = [{"artistName": "Earth, Wind & Fire", "releaseDate": "1971-01-01T08:00:00Z"}]
+
+        assert client._extract_release_years(results, "Earth, Wind and Fire") == [1971]
+
+    @pytest.mark.parametrize(("artist_name", "target"), [("!!!", "Metallica"), ("Metallica", "!!!")], ids=["letterless-result", "letterless-target"])
+    def test_start_year_ignores_letterless_names(self, client: AppleMusicClient, artist_name: str, target: str) -> None:
+        """An empty normalized name is a substring of every name, so it must not count as a match."""
+        results = [{"artistName": artist_name, "releaseDate": "1990-01-01T08:00:00Z"}]
+
+        assert client._extract_release_years(results, target) == []
