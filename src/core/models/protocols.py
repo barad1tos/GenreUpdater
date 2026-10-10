@@ -24,6 +24,7 @@ from typing import (
 from core.models.track_models import TrackDict
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     import asyncio
     from collections.abc import Callable, Sequence
     from contextlib import AbstractAsyncContextManager
@@ -227,7 +228,7 @@ class CacheServiceProtocol(Protocol):
         """
         ...
 
-    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[ReleaseRecord]) -> None:
         """Cache a provider's release records for an artist/album.
 
         Found records are kept for good; an empty list records that the provider found nothing and expires after the

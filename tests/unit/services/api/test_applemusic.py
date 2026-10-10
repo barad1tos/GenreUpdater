@@ -15,6 +15,8 @@ from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
 from tests.mocks.csv_mock import MockAnalytics
 
+from core.models.release_record import ReleaseRecord
+
 if TYPE_CHECKING:
     from services.api.api_base import ScoredRelease
 
@@ -542,7 +544,6 @@ class TestProcessItunesResult:
         assert result is not None
         assert result["label"] == "℗ 1973 Pink Floyd Records"
         assert result["album_type"] == "Album"
-        assert result["disambiguation"] == "The Dark Side of the Moon"
 
     def test_handles_missing_optional_fields(
         self,
@@ -560,8 +561,6 @@ class TestProcessItunesResult:
         result = TestProcessItunesResult.score_one(client, result_data, "artist", "album", artist_context=ArtistContext())
 
         assert result is not None
-        assert result["catalog_number"] is None
-        assert result["barcode"] is None
 
 
 class TestReissueDetectionEdgeCases:
@@ -634,9 +633,6 @@ class TestScoredReleaseStructure:
         assert "status" in release
         assert "format" in release
         assert "label" in release
-        assert "catalog_number" in release
-        assert "barcode" in release
-        assert "disambiguation" in release
 
 
 class TestEdgeCases:
@@ -1065,6 +1061,25 @@ class TestRequestFailurePropagation:
 
         with pytest.raises(ApiRequestError):
             await client.get_scored_releases("artist", "album", artist_context=ArtistContext())
+
+
+class TestSharedRecordShape:
+    """iTunes records carry the same release fields as the MusicBrainz and Discogs records."""
+
+    @pytest.mark.asyncio
+    async def test_records_have_the_shared_release_fields(self, sample_itunes_result: dict[str, Any]) -> None:
+        client = AppleMusicClient(
+            console_logger=logging.getLogger("test.itunes.console"),
+            error_logger=logging.getLogger("test.itunes.error"),
+            make_api_request_func=AsyncMock(return_value={"results": [sample_itunes_result]}),
+            score_release_func=MagicMock(return_value=50),
+            analytics=MagicMock(),
+        )
+
+        [record] = await client.fetch_release_records("pink floyd", "the dark side of the moon")
+
+        assert ReleaseRecord.__required_keys__ <= record.keys()
+        assert (record["label"], record["source"], record["genre"]) == ("℗ 1973 Pink Floyd Records", "itunes", "Rock")
 
 
 class TestRecordsAndScoring:

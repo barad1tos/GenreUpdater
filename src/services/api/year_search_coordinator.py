@@ -17,6 +17,7 @@ from core.models.search_strategy import SearchStrategy, detect_search_strategy
 from services.api.request_executor import ApiRequestError
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     import logging
     from collections.abc import Coroutine
 
@@ -32,13 +33,13 @@ if TYPE_CHECKING:
 class _ReleaseSource(Protocol):
     """A provider client that fetches release records for an album and scores them against one search's artist context."""
 
-    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[dict[str, Any]]:
+    async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[ReleaseRecord]:
         """Fetch the provider's release records for the album, without the artist context."""
         ...
 
     def score_records(
         self,
-        records: list[dict[str, Any]],
+        records: list[ReleaseRecord],
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
@@ -371,7 +372,7 @@ class YearSearchCoordinator:
                 return []
             cached = await self.cache_service.get_cached_api_result(artist_norm, album_norm, source)
             if cached is not None and cached.api_response is not None:
-                records: list[dict[str, Any]] = cached.api_response["records"]
+                records: list[ReleaseRecord] = cached.api_response["records"]
             else:
                 try:
                     records = await api_client.fetch_release_records(artist_norm, album_norm)

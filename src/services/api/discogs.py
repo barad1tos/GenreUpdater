@@ -17,6 +17,7 @@ from .api_base import BaseApiClient, ScoredRelease
 from .request_executor import ApiRequestError
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     import logging
     from collections.abc import Awaitable, Callable
 
@@ -511,7 +512,7 @@ class DiscogsClient(BaseApiClient):
         *,
         year_str: str,
         master_year: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> ReleaseRecord:
         """Build a release record from a Discogs item, the way the scorer reads it, without scoring.
 
         The record holds the ScoredRelease fields except the score, plus the master year as the release-group date.
@@ -529,7 +530,7 @@ class DiscogsClient(BaseApiClient):
         title_artist, title_album = DiscogsClient._extract_artist_from_title(item.get("title", ""))
 
         # The master year is the original release year; the release's own year is the fallback
-        record: dict[str, Any] = {
+        record: ReleaseRecord = {
             "title": title_album if title_album is not None else item.get("title", ""),
             "year": str(master_year) if master_year else year_str,
             "artist": title_artist if title_artist is not None else artist_norm,
@@ -538,9 +539,6 @@ class DiscogsClient(BaseApiClient):
             "status": "Official",  # Discogs doesn't provide status
             "format": _get_format_details(item.get("formats", [])),
             "label": ", ".join(item.get("label", [])) if item.get("label") else None,
-            "catalog_number": None,  # Not in search results
-            "barcode": None,  # Not in search results
-            "disambiguation": None,
             "source": "discogs",
         }
         # The master year as the release-group date, so the year-difference penalty applies as for MusicBrainz
@@ -550,7 +548,7 @@ class DiscogsClient(BaseApiClient):
 
     def score_records(
         self,
-        records: list[dict[str, Any]],
+        records: list[ReleaseRecord],
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
@@ -583,7 +581,7 @@ class DiscogsClient(BaseApiClient):
         detail_fetch_count: int,
         detail_fetch_limit: int,
         master_years: dict[int, int | None],
-    ) -> tuple[dict[str, Any] | None, int]:
+    ) -> tuple[ReleaseRecord | None, int]:
         """Turn one Discogs search result into a release record.
 
         Args:
@@ -626,7 +624,7 @@ class DiscogsClient(BaseApiClient):
         self,
         results: list[DiscogsRelease],
         artist_norm: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ReleaseRecord]:
         """Turn Discogs search results into release records.
 
         Args:
@@ -637,7 +635,7 @@ class DiscogsClient(BaseApiClient):
             Release records for the items that match the artist and have a valid year
 
         """
-        records: list[dict[str, Any]] = []
+        records: list[ReleaseRecord] = []
         detail_fetch_count = 0
         detail_fetch_limit = 10
         master_years: dict[int, int | None] = {}
@@ -663,7 +661,7 @@ class DiscogsClient(BaseApiClient):
         *,
         artist_orig: str | None = None,
         album_orig: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ReleaseRecord]:
         """Fetch Discogs release records for an album.
 
         Any error propagates: a failed lookup must not read as an album Discogs does not know.

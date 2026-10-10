@@ -71,7 +71,7 @@ Pink Floyd,The Wall,1979,musicbrainz,95,2024-01-15T10:30:00
 
 ### 3. Provider Result Cache
 
-What each provider (MusicBrainz, Discogs, iTunes) answered for an album: its release records, before scoring. The year search reads this cache first and asks the provider only on a miss.
+What each provider (MusicBrainz, Discogs, iTunes) answered for an album: its release records, before scoring. The year search reads this cache first and asks the provider only on a miss. All three providers store their records in one shape (`ReleaseRecord` in `core/models/release_record.py`); an entry whose records lack its fields was written by an older version, so loading drops it and the next search asks the provider again.
 
 | Answer                          | Kept                                |
 |---------------------------------|-------------------------------------|

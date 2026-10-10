@@ -13,6 +13,7 @@ from core.models.track_models import CachedApiResult, TrackDict
 from core.models.cache_types import AlbumCacheEntry, PendingAlbumEntry, VerificationReason
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     from collections.abc import Awaitable, Callable
 
     from core.models.protocols import (
@@ -347,7 +348,7 @@ class MockCacheService:
         key = f"{self.generate_album_key(artist, album)}:{source}"
         return self.api_cache.get(key)
 
-    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[ReleaseRecord]) -> None:
         """Cache a provider's release records for an artist/album from a specific source.
 
         Args:

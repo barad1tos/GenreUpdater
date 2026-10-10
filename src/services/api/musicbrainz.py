@@ -18,6 +18,7 @@ from .api_base import BaseApiClient, ScoredRelease
 from .request_executor import ApiRequestError
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     from collections.abc import Awaitable, Callable
     import logging
 
@@ -591,7 +592,7 @@ class MusicBrainzClient(BaseApiClient):
 
         return processed_results
 
-    def _build_release_records(self, release_results: list[tuple[MBApiData | None, MBApiData]]) -> list[dict[str, Any]]:
+    def _build_release_records(self, release_results: list[tuple[MBApiData | None, MBApiData]]) -> list[ReleaseRecord]:
         """Turn fetched release groups into release records, the way the scorer reads them, without scoring.
 
         Each record holds the ScoredRelease fields except the score, the credited artist for name matching, and the
@@ -603,7 +604,7 @@ class MusicBrainzClient(BaseApiClient):
         Returns:
             Release records, one per distinct release
         """
-        records: list[dict[str, Any]] = []
+        records: list[ReleaseRecord] = []
         processed_release_ids: set[str] = set()
 
         for result, rg_info in release_results:
@@ -620,17 +621,13 @@ class MusicBrainzClient(BaseApiClient):
 
                 # Credited artist from the release, else from the release group
                 artist_name = self._extract_artist_from_credit(release) or self._extract_artist_from_credit(rg_info)
-                record: dict[str, Any] = {**self._create_scored_release(release, rg_info, 0.0, ""), "artist": artist_name}
-                del record["score"]
-                if rg_first_date := rg_info.get("first-release-date"):
-                    record["releasegroup_first_date"] = rg_first_date
-                records.append(record)
+                records.append(self._build_release_record(release, rg_info, artist_name))
 
         return records
 
     def score_records(
         self,
-        records: list[dict[str, Any]],
+        records: list[ReleaseRecord],
         artist_norm: str,
         album_norm: str,
         artist_context: ArtistContext,
@@ -683,24 +680,16 @@ class MusicBrainzClient(BaseApiClient):
         artist_info = first_credit.get("artist", {})
         return str(artist_info.get("name", ""))
 
-    def _create_scored_release(
-        self,
-        release: dict[str, Any],
-        rg_info: dict[str, Any],
-        score: float,
-        artist_norm: str,
-    ) -> ScoredRelease:
-        """Create a ScoredRelease from MusicBrainz release data.
+    def _build_release_record(self, release: dict[str, Any], rg_info: dict[str, Any], artist_name: str) -> ReleaseRecord:
+        """Build a release record from MusicBrainz release data.
 
         Args:
             release: MusicBrainz release data
             rg_info: Release group information
-            score: Calculated score for the release
-            artist_norm: Normalized artist name
+            artist_name: The credited artist, for name matching
 
         Returns:
-            ScoredRelease object with all fields populated
-
+            The release record, with the group's first date when MusicBrainz gives one
         """
         # Use release group's first-release-date as PRIMARY (original release year)
         # Fall back to individual release date only if RG date unavailable
@@ -708,21 +697,20 @@ class MusicBrainzClient(BaseApiClient):
             rg_info.get("first-release-date"),
         ) or self._extract_year_from_date(release.get("date"))
 
-        return {
+        record: ReleaseRecord = {
             "title": release.get("title", "") or "",
             "year": year_str,
-            "score": score,
-            "artist": artist_norm,
+            "artist": artist_name,
             "album_type": rg_info.get("primary-type", "Album"),
             "country": release.get("country", "") or "",
             "status": release.get("status", "Official"),
             "format": self._get_format_from_media(release.get("media")),
             "label": self._get_label_name(release.get("label-info")),
-            "catalog_number": self._get_catalog_number(release.get("label-info")),
-            "barcode": release.get("barcode"),
-            "disambiguation": release.get("disambiguation"),
             "source": "musicbrainz",
         }
+        if rg_first_date := rg_info.get("first-release-date"):
+            record["releasegroup_first_date"] = rg_first_date
+        return record
 
     @track_instance_method("musicbrainz_release_search")
     async def fetch_release_records(
@@ -732,7 +720,7 @@ class MusicBrainzClient(BaseApiClient):
         *,
         artist_orig: str | None = None,
         album_orig: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ReleaseRecord]:
         """Fetch MusicBrainz release records for an album, using fallback searches when the precise query finds nothing.
 
         Any error propagates: a failed lookup must not read as an album MusicBrainz does not know.
@@ -821,27 +809,5 @@ class MusicBrainzClient(BaseApiClient):
             label = info.get("label")
             if label and "name" in label and label["name"]:
                 return label["name"]
-
-        return None
-
-    @staticmethod
-    def _get_catalog_number(label_info: list[LabelInfo] | list[dict[str, Any]] | None) -> str | None:
-        """Extract a catalog number from label info.
-
-        Args:
-            label_info: List of label information
-
-        Returns:
-            Catalog number or None
-
-        """
-        if not label_info:
-            return None
-
-        for info in label_info:
-            if not isinstance(info, dict):
-                continue
-            if catalog := info.get("catalog-number"):
-                return str(catalog)
 
         return None

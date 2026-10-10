@@ -59,9 +59,6 @@ def create_scored_release(year: str | None, score: int, **kwargs: Any) -> Scored
         "status": kwargs.get("status", "official"),
         "format": kwargs.get("format", "CD"),
         "label": kwargs.get("label"),
-        "catalog_number": kwargs.get("catalog_number"),
-        "barcode": kwargs.get("barcode"),
-        "disambiguation": kwargs.get("disambiguation", ""),
         "source": kwargs.get("source", "musicbrainz"),
     }
     return release

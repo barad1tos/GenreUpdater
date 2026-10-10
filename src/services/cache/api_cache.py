@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.logger import LogFormat, ensure_directory, get_full_log_path
 from core.models.normalization import normalize_for_matching, search_names
+from core.models.release_record import ReleaseRecord
 from core.models.search_strategy import SearchStrategy, detect_search_strategy
 from core.models.track_models import CachedApiResult
 from services.cache.cache_config import CacheContentType, CacheEvent, CacheEventType, EventDrivenCacheManager, SmartCacheConfig
@@ -179,7 +180,7 @@ class ApiCacheService:
         age_seconds = datetime.now(UTC).timestamp() - cached_result.timestamp
         return age_seconds > cached_result.ttl
 
-    async def set_cached_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+    async def set_cached_result(self, artist: str, album: str, *, source: str, records: list[ReleaseRecord]) -> None:
         """Store a provider's answer for an album: its release records, or an empty list for "nothing found".
 
         Found records are kept for good; an empty answer expires after the negative-result TTL, so the provider is asked
@@ -348,6 +349,10 @@ class ApiCacheService:
                     response = item.get("api_response") if isinstance(item, dict) else None
                     if not isinstance(response, dict) or not isinstance(response.get("records"), list):
                         self.logger.warning("Skipping API cache entry %s without records", key)
+                        continue
+                    # A record without the shared release fields is from an older format; dropping it fetches it again
+                    if not all(isinstance(record, dict) and ReleaseRecord.__required_keys__ <= record.keys() for record in response["records"]):
+                        self.logger.info("Skipping API cache entry %s with records in an older format", key)
                         continue
                     try:
                         # Create CachedApiResult object with proper fields

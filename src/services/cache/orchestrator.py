@@ -26,6 +26,7 @@ from services.cache.generic_cache import GenericCacheService
 from services.cache.hash_service import UnifiedHashService
 
 if TYPE_CHECKING:
+    from core.models.release_record import ReleaseRecord
     from collections.abc import Awaitable, Callable
 
     from core.models.cache_types import AlbumCacheEntry
@@ -318,7 +319,7 @@ class CacheOrchestrator(CacheServiceProtocol):
         """Get cached API result for an artist/album from a specific source."""
         return await self.api_service.get_cached_result(artist, album, source)
 
-    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[dict[str, Any]]) -> None:
+    async def set_cached_api_result(self, artist: str, album: str, *, source: str, records: list[ReleaseRecord]) -> None:
         """Cache a provider's release records for an artist/album; an empty list records that it found nothing."""
         await self.api_service.set_cached_result(artist, album, source=source, records=records)
 

@@ -387,6 +387,7 @@ ignore-names-in-files = [
     "**/discogs.py",
     "**/year_scoring.py",
     "**/api_base.py",
+    "**/release_record.py",  # TypedDict keys are read by string subscript
     # Constants classes - namespace organization
     "**/change_reports.py",
     "**/cache_config.py",
