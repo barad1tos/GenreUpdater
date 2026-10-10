@@ -143,3 +143,44 @@ class TestEdgeCases:
         """Soundtrack takes priority over Various Artists."""
         info = detect_search_strategy("Various Artists", "Movie Soundtrack", config)
         assert info.strategy == SearchStrategy.SOUNDTRACK
+
+
+class TestSoundtrackTitle:
+    """The movie title is the text before the soundtrack label, whichever pattern matches first."""
+
+    @pytest.fixture
+    def config(self) -> AppConfig:
+        return create_test_app_config()
+
+    @pytest.mark.parametrize(
+        ("album", "title"),
+        [
+            ("Inception (Original Motion Picture Soundtrack)", "Inception"),
+            ("Inception - Original Motion Picture Soundtrack", "Inception"),
+            ("Inception (Music from the Motion Picture)", "Inception"),
+            ("Harry Potter: Original Motion Picture Soundtrack", "Harry Potter"),
+            ("Star Wars: Episode IV - A New Hope (Original Soundtrack)", "Star Wars: Episode IV - A New Hope"),
+            ("Interstellar OST", "Interstellar"),
+            ("Inception\u2014Soundtrack", "Inception"),
+            ("Mission: Impossible Soundtrack", "Mission: Impossible"),
+            ("Star Wars: The Force Awakens OST", "Star Wars: The Force Awakens"),
+            ("Star Trek: The Motion Picture (Original Soundtrack)", "Star Trek: The Motion Picture"),
+            ("Dune: Part Two (Original Motion Picture Soundtrack)", "Dune: Part Two"),
+            ("The Sound of Music Soundtrack", "The Sound of Music"),
+            ("The Last Song Soundtrack", "The Last Song"),
+            ("Grease: The Original Soundtrack from the Motion Picture", "Grease"),
+        ],
+    )
+    def test_title_is_cut_before_the_label(self, config: AppConfig, album: str, title: str) -> None:
+        info = detect_search_strategy("Hans Zimmer", album, config)
+        assert (info.modified_artist, info.modified_album) == (title, title)
+
+    @pytest.mark.parametrize("album", ["Ghost Stories", "Lost Highway", "Frost"])
+    def test_a_pattern_inside_a_word_is_not_a_soundtrack(self, config: AppConfig, album: str) -> None:
+        assert detect_search_strategy("Artist", album, config).strategy is SearchStrategy.NORMAL
+
+    @pytest.mark.parametrize(("pattern", "album"), [("(OST)", "Akira (OST)"), ("O.S.T.", "Akira O.S.T.")])
+    def test_a_configured_pattern_with_punctuation_matches(self, pattern: str, album: str) -> None:
+        config = create_test_app_config(album_type_detection={"soundtrack_patterns": [pattern]})
+        info = detect_search_strategy("Geinoh Yamashirogumi", album, config)
+        assert (info.strategy, info.modified_album) == (SearchStrategy.SOUNDTRACK, "Akira")

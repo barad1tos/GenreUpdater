@@ -78,18 +78,48 @@ def _get_patterns(config: AppConfig) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(soundtrack_list), frozenset(various_list)
 
 
-def _is_soundtrack(album: str, patterns: frozenset[str]) -> str | None:
-    """Check if album matches soundtrack patterns. Returns matched pattern.
+# Words that may join the parts of one label: "Soundtrack from the Motion Picture", "Motion Picture Original Score"
+_LEAD_IN: Final[str] = r"(?:original|official|music|songs?|from|the|and|inspired|by)"
+_LEAD_IN_GAP: Final[re.Pattern[str]] = re.compile(rf"(?:\s|\b{_LEAD_IN}\b)*", re.IGNORECASE)
+# The lead-in phrase before a label, stripped from the title: "The Original", "Music from the", "Songs Inspired by"
+_TRAILING_LEAD_IN: Final[re.Pattern[str]] = re.compile(
+    r"(?:\bthe\s+)?(?:\b(?:original|official)\s+)?(?:\b(?:music|songs?)\s+(?:from|inspired\s+by)\s+)?(?:\bthe\s+)?$",
+    re.IGNORECASE,
+)
+# What may sit between a movie title and its label: "Title (OST)", "Title - OST", "Title: OST", "Title\u2014OST"
+_TITLE_END: Final[str] = " \t([:-\u2013\u2014"
 
-    Uses simple substring matching (not word-boundary regex) because:
-    - Soundtrack patterns are distinctive enough to avoid false positives
-    - Simpler matching handles variations like "original-score" naturally
+
+def _find_soundtrack(album: str, patterns: frozenset[str]) -> tuple[str, int] | None:
+    """Find the soundtrack label: the run of patterns at the end of the album joined only by lead-in words.
+
+    A pattern earlier in the album belongs to the movie title ("Star Trek: The Motion Picture (Original Soundtrack)").
+
+    Args:
+        album: Album name
+        patterns: Soundtrack patterns, matched as whole words with an optional plural "s"
+
+    Returns:
+        The pattern that starts the label and where it starts, or None
     """
-    album_lower = album.lower()
-    return next(
-        (pattern for pattern in patterns if pattern.lower() in album_lower),
-        None,
+    matches = sorted(
+        (found.start(), found.end(), pattern)
+        for pattern in patterns
+        for found in re.finditer(rf"(?<!\w){re.escape(pattern)}s?(?!\w)", album, re.IGNORECASE)
     )
+    if not matches:
+        return None
+    label_start, _, label_pattern = matches[-1]
+    for start, end, pattern in reversed(matches[:-1]):
+        if end < label_start and not _LEAD_IN_GAP.fullmatch(album[end:label_start]):
+            break
+        label_start, label_pattern = start, pattern
+    return label_pattern, label_start
+
+
+def _movie_title(album: str, label_start: int) -> str:
+    """Return the movie title: the album text before the label, without lead-in words and separators."""
+    return _TRAILING_LEAD_IN.sub("", album[:label_start]).rstrip(_TITLE_END).strip()
 
 
 def _is_various_artists(artist: str, patterns: frozenset[str]) -> bool:
@@ -135,10 +165,9 @@ def detect_search_strategy(
     soundtrack_patterns, various_patterns = _get_patterns(config)
 
     # 1. Check for soundtrack
-    if pattern := _is_soundtrack(album, soundtrack_patterns):
-        album_lower = album.lower()
-        idx = album_lower.find(pattern.lower())
-        if idx > 0 and (movie_name := album[:idx].strip().rstrip("([-\u2013\u2014")):
+    if soundtrack := _find_soundtrack(album, soundtrack_patterns):
+        pattern, label_start = soundtrack
+        if movie_name := _movie_title(album, label_start):
             return SearchStrategyInfo(
                 strategy=SearchStrategy.SOUNDTRACK,
                 detected_pattern=pattern,

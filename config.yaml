@@ -256,6 +256,7 @@ album_type_detection:
     - anniversary
 
   # Soundtrack patterns - for extracting movie name from album
+  # Matched as whole words; only a plural "s" is added, so list other inflections (e.g. Саундтреки) explicitly
   soundtrack_patterns:
     - soundtrack
     - original score
