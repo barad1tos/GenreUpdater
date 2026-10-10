@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The year most of an album's tracks carry, and the release date Apple stores on them, are no longer applied as the album's year on their own: an album whose tracks disagree asks the providers, which get both as hints, and only when no provider knows the album does the majority of its tracks fill in the others, and never when that majority is this year on tracks added earlier, Apple's placeholder for a date it lacks. `year_retrieval.logic.suspicion_threshold_years` is no longer read and can be removed from `config.yaml`
+- The year most of an album's tracks carry, and the release date Apple stores on them, are no longer applied as the album's year on their own: an album whose tracks disagree asks the providers, which get both as hints (the fallback rule that keeps Apple's release date for an album released this year is unchanged), and only when no provider knows the album does the majority of its tracks fill in the others, and never when that majority is this year on tracks added earlier, Apple's placeholder for a date it lacks. `year_retrieval.logic.suspicion_threshold_years` is no longer read and can be removed from `config.yaml`
 
 ### Fixed
 

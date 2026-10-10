@@ -29,6 +29,7 @@ from core.models.metadata_utils import determine_dominant_genre_for_artist  # no
 from core.models.normalization import normalize_for_matching  # noqa: E402
 from core.models.track_models import ScoringConfig, TrackDict  # noqa: E402
 from core.tracks.year_consistency import YearConsistencyChecker  # noqa: E402
+from core.tracks.year_retriever import YearRetriever  # noqa: E402
 from services.api.year_score_resolver import YearScoreResolver  # noqa: E402
 from services.api.year_scoring import ArtistContext, ReleaseScorer  # noqa: E402
 
@@ -1152,7 +1153,7 @@ def generate_resolution_fixtures() -> list[dict[str, Any]]:
 # 4. Year Validation Reference Fixtures
 def generate_validation_fixtures() -> list[dict[str, Any]]:
     """Generate year consistency/validation fixtures."""
-    checker = YearConsistencyChecker(console_logger=_logger)
+    checker = YearConsistencyChecker(console_logger=_logger, dominance_min_share=YearRetriever.DOMINANCE_MIN_SHARE)
 
     fixtures: list[dict[str, Any]] = []
 

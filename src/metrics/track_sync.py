@@ -191,14 +191,9 @@ def create_normalized_track_dict(
 def get_musicapp_syncable_fields() -> list[str]:
     """Fields that sync FROM Music.app TO CSV during resync.
 
-    Note: year_before_mgu and year_set_by_mgu are EXCLUDED because:
-    - They are tracking fields managed by year_batch.py, not sync
-    - AppleScript doesn't provide them (only Music.app's current year)
-    - During sync, we preserve CSV's historical tracking data
-
-    However, _merge_musicapp_into_csv() will initialize empty year_before_mgu
-    from musicapp_track.year to prevent redundant fetches in sync_track_list_with_current.
-    See Issue #126 for context.
+    year_before_mgu and year_set_by_mgu are not Music.app fields and are not listed: the year step records them on the
+    in-memory track, and merge_musicapp_into_csv copies that record into the row, initializing an empty year_before_mgu
+    from the track's year so the first write keeps the old year.
     """
     return [
         "name",

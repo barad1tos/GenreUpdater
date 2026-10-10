@@ -304,8 +304,8 @@ class TestYearRetrieverAllure:
         assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None)
 
     @pytest.mark.asyncio
-    async def test_determine_album_year_force_mode_passes_dominant_year(self) -> None:
-        """Test that force mode still passes dominant_year for year-match comparison.
+    async def test_determine_album_year_force_mode_passes_the_library_year(self) -> None:
+        """Test that force mode still passes the library year for year-match comparison.
 
         Regression test: When force=True, the orchestrator needs to know the existing
         year to apply the year-match rule (skip verification if API year == existing year).

@@ -361,10 +361,10 @@ class TestStaticMethodBehavior:
         result = YearDeterminator._has_consistent_year(tracks)
         assert result is False
 
-    def test_get_dominant_year_returns_most_common(self) -> None:
+    def test_get_consistent_year_returns_most_common(self) -> None:
         """Should return the most common year among tracks."""
         tracks = self._create_mock_tracks("2020", "2020", "2019")
-        result = YearDeterminator._get_dominant_year(tracks)
+        result = YearDeterminator._get_consistent_year(tracks)
         assert result == "2020"
 
     def test_extract_future_years_identifies_future(self) -> None:

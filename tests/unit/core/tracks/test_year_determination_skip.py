@@ -478,10 +478,10 @@ class TestPreCheckUnparseableYear:
         tracks = [create_test_track(year="2020")]
 
         # Mock _has_consistent_year to return True so we reach the int(dominant) path
-        # and mock _get_dominant_year to return unparseable value
+        # and mock _get_consistent_year to return unparseable value
         with (
             patch.object(determinator, "_has_consistent_year", return_value=True),
-            patch.object(determinator, "_get_dominant_year", return_value="not_a_year"),
+            patch.object(determinator, "_get_consistent_year", return_value="not_a_year"),
         ):
             should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 

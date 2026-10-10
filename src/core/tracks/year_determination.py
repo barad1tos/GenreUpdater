@@ -371,7 +371,7 @@ class YearDeterminator:
         """
         # Check year consistency when no cache - can skip API if years are uniform
         if self._has_consistent_year(album_tracks):
-            dominant = self._get_dominant_year(album_tracks)
+            dominant = self._get_consistent_year(album_tracks)
 
             # Reissue detection: current year without release_year validation is suspicious
             # iTunes returns reissue/catalog dates, not original release dates
@@ -489,8 +489,8 @@ class YearDeterminator:
         return YearConsistencyChecker.get_earliest_track_added_year(album_tracks) != this_year
 
     @staticmethod
-    def _get_dominant_year(tracks: list[TrackDict]) -> str | None:
-        """Get the dominant year from tracks.
+    def _get_consistent_year(tracks: list[TrackDict]) -> str | None:
+        """Get the year the tracks share, as the most common valid year.
 
         Args:
             tracks: List of tracks to analyze

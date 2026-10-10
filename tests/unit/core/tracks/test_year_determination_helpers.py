@@ -220,6 +220,17 @@ class TestProvidersDecide:
         assert await determinator.determine_album_year("Artist", "Album", tracks) is None
 
     @pytest.mark.asyncio
+    async def test_a_current_year_majority_without_dates_is_not_applied(self) -> None:
+        """Without a date added, nothing vouches for this year, so the placeholder reading stands."""
+        this_year = str(datetime.now(UTC).year)
+        checker = _create_mock_consistency_checker()
+        checker.get_majority_year = MagicMock(return_value=this_year)
+        determinator = _create_year_determinator(consistency_checker=checker, external_api=_create_mock_external_api())
+        tracks = [_create_track(year=this_year) for _ in range(8)] + [_create_track(year="2004") for _ in range(2)]
+
+        assert await determinator.determine_album_year("Artist", "Album", tracks) is None
+
+    @pytest.mark.asyncio
     async def test_a_current_year_majority_on_tracks_added_this_year_is_applied(self) -> None:
         """An album added this year can really be from this year."""
         this_year = str(datetime.now(UTC).year)
