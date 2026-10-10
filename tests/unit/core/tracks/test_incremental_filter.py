@@ -196,10 +196,25 @@ class TestIncrementalFilterService:
         assert mock_loader.load_called
         assert mock_get_full_log_path.get_called
 
+    def test_track_synced_in_with_an_older_date_added_is_new(self) -> None:
+        """A track that arrives through library sync keeps the date it was added elsewhere, so its new id marks it."""
+        known = _create_track(track_id="1", genre="Metal", date_added="2023-12-31 12:00:00")
+        mock_loader = _MockLoadTrackList([known])
+        service = TestIncrementalFilterService.create_service(track_list_loader=mock_loader)
+        synced = _create_track(track_id="2", genre="Metal", date_added="2023-12-31 12:00:00")
+
+        with patch("core.tracks.incremental_filter.get_full_log_path", _MockGetFullLogPath()):
+            result = service.filter_tracks_for_incremental_update(tracks=[known, synced], last_run_time=datetime(2024, 1, 1, 12, tzinfo=UTC))
+
+        assert [track.id for track in result] == ["2"]
+
     def test_filter_tracks_combined_criteria(self) -> None:
         """Test filtering with multiple criteria combined."""
+        # The track list knows every track seen before; track 2 is the only one it does not know
         old_tracks = [
             _create_track(track_id="1", track_status="prerelease"),  # Status changed
+            _create_track(track_id="3", date_added="2023-12-31 12:00:00", genre=""),
+            _create_track(track_id="4", date_added="2023-12-31 12:00:00", genre="Pop"),
         ]
 
         mock_loader = _MockLoadTrackList(old_tracks)

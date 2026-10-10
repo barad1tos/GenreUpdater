@@ -79,13 +79,13 @@ class IncrementalFilterService(BaseProcessor):
             if date_added and date_added > last_run_time:
                 new_tracks.append(track)
 
-        # Check for tracks with changed status (e.g., prerelease -> subscription)
-        # Now works directly with TrackDict objects, no need for separate fetch
-        status_changed_tracks = self._find_status_changed_tracks(tracks)
+        # Tracks the track list does not know yet, or whose status, genre or year changed (e.g., prerelease -> subscription).
+        # A track that arrives through library sync keeps the date it was added elsewhere, so only its new id marks it
+        listed_changes = self._find_tracks_changed_since_list(tracks)
 
         seen: set[str] = set()
         combined: list[TrackDict] = []
-        for candidate in itertools.chain(new_tracks, missing_genre_tracks, status_changed_tracks):
+        for candidate in itertools.chain(new_tracks, missing_genre_tracks, listed_changes):
             track_id = str(candidate.get("id", ""))
             if not track_id or track_id in seen:
                 continue
@@ -93,20 +93,20 @@ class IncrementalFilterService(BaseProcessor):
             combined.append(candidate)
 
         self.console_logger.info(
-            "Found %d new tracks since %s; including %d with missing/unknown genre and %d with changed status (combined %d)",
+            "Found %d new tracks since %s; including %d with missing/unknown genre and %d new or changed since the track list (combined %d)",
             len(new_tracks),
             last_run_time.strftime("%Y-%m-%d %H:%M:%S"),
             len(missing_genre_tracks),
-            len(status_changed_tracks),
+            len(listed_changes),
             len(combined),
         )
         return combined
 
-    def _find_status_changed_tracks(
+    def _find_tracks_changed_since_list(
         self,
         tracks: list[TrackDict],
     ) -> list[TrackDict]:
-        """Find tracks that have changed status since last run.
+        """Find tracks missing from the saved track list or changed against it.
 
         Uses TrackDict objects directly, eliminating need for separate TrackSummary fetch.
         """
@@ -121,10 +121,7 @@ class IncrementalFilterService(BaseProcessor):
 
             # Compute delta using TrackDict objects directly
             delta = compute_track_delta(tracks, existing_tracks)
-            if not delta.updated_ids:
-                return []
-
-            return self._collect_updated_tracks(tracks, delta.updated_ids)
+            return self._collect_updated_tracks(tracks, [*delta.new_ids, *delta.updated_ids])
 
         except (OSError, ValueError) as e:
             self.console_logger.warning("Failed to check status changes: %s", e)
@@ -132,7 +129,7 @@ class IncrementalFilterService(BaseProcessor):
 
     @staticmethod
     def _collect_updated_tracks(tracks: list[TrackDict], updated_ids: list[str]) -> list[TrackDict]:
-        """Pick the current tracks whose ids appear in the updated-id list."""
+        """Pick the current tracks whose ids appear in the given list."""
         tracks_by_id = {str(t.get("id", "")): t for t in tracks if t.get("id")}
         return [tracks_by_id[track_id] for track_id in updated_ids if track_id in tracks_by_id]
 
