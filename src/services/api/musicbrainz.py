@@ -749,30 +749,6 @@ class MusicBrainzClient(BaseApiClient):
             return []
         return self._build_release_records(await self._fetch_releases_for_groups(all_release_groups))
 
-    async def get_scored_releases(
-        self,
-        artist_norm: str,
-        album_norm: str,
-        artist_context: ArtistContext,
-        *,
-        artist_orig: str | None = None,
-        album_orig: str | None = None,
-    ) -> list[ScoredRelease]:
-        """Fetch MusicBrainz release records and score them with the artist context.
-
-        Args:
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
-            artist_orig: Original artist name (before normalization)
-            album_orig: Original album name (before normalization)
-
-        Returns:
-            Releases with a positive score, highest first
-        """
-        records = await self.fetch_release_records(artist_norm, album_norm, artist_orig=artist_orig, album_orig=album_orig)
-        return self.score_records(records, artist_norm, album_norm, artist_context)
-
     @staticmethod
     def _get_format_from_media(media: list[Medium] | list[dict[str, Any]] | None) -> str | None:
         """Extract format information from a media list.

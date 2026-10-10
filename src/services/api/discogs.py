@@ -679,27 +679,3 @@ class DiscogsClient(BaseApiClient):
         if discogs_response is None:
             return []
         return await self._process_discogs_results(discogs_response.get("results", []), artist_norm)
-
-    async def get_scored_releases(
-        self,
-        artist_norm: str,
-        album_norm: str,
-        artist_context: ArtistContext,
-        *,
-        artist_orig: str | None = None,
-        album_orig: str | None = None,
-    ) -> list[ScoredRelease]:
-        """Fetch Discogs release records and score them with the artist context.
-
-        Args:
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
-            artist_orig: Original artist name (before normalization)
-            album_orig: Original album name (before normalization)
-
-        Returns:
-            Releases with a positive score, highest first
-        """
-        records = await self.fetch_release_records(artist_norm, album_norm, artist_orig=artist_orig, album_orig=album_orig)
-        return self.score_records(records, artist_norm, album_norm, artist_context)
