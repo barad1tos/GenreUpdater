@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import inspect
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -542,3 +543,11 @@ class TestRecordsAndScoring:
 
         assert len(records) == 3
         assert [call.args[1] for call in request.call_args_list] == ["https://api.discogs.com/masters/654321"]
+
+
+def test_numbered_suffix_strip_is_linear_on_long_whitespace() -> None:
+    """A name padded with whitespace is normalized in linear time, not by backtracking over every space."""
+    started = time.perf_counter()
+    DiscogsClient._normalize_artist_for_matching("a" + " " * 100_000 + "b")
+    assert time.perf_counter() - started < 0.5
+    assert DiscogsClient._normalize_artist_for_matching("Artist  (12)") == "artist"

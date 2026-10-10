@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -184,3 +185,16 @@ class TestSoundtrackTitle:
         config = create_test_app_config(album_type_detection={"soundtrack_patterns": [pattern]})
         info = detect_search_strategy("Geinoh Yamashirogumi", album, config)
         assert (info.strategy, info.modified_album) == (SearchStrategy.SOUNDTRACK, "Akira")
+
+
+class TestUnusualBrackets:
+    """Stripping unusual bracket content keeps the words around it apart and runs in linear time."""
+
+    def test_words_around_the_brackets_stay_apart(self) -> None:
+        info = detect_search_strategy("Ghost", "Prequelle [MESSAGE FROM THE CLERGY] Remix", create_test_app_config())
+        assert info.modified_album == "Prequelle Remix"
+
+    def test_long_whitespace_is_stripped_in_linear_time(self) -> None:
+        started = time.perf_counter()
+        detect_search_strategy("Artist", "Album" + " " * 100_000 + "Remix [MESSAGE FROM THE CLERGY]", create_test_app_config())
+        assert time.perf_counter() - started < 0.5
