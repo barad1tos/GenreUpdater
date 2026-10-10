@@ -373,6 +373,7 @@ class ExternalApiOrchestrator:
             error_logger=self.error_logger,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
+            analytics=self.analytics,
         )
 
     def _initialize_scoring_system(self) -> None:

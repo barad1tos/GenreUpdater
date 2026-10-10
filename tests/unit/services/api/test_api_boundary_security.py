@@ -308,6 +308,7 @@ class TestAppleMusicInputBoundary:
             error_logger=error_logger,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
+            analytics=MagicMock(),
         )
 
     async def test_special_chars_in_itunes_search(self) -> None:

@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.api.applemusic import AppleMusicClient, VALID_YEAR_LENGTH
+from services.api.applemusic import AppleMusicClient
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
+from tests.mocks.csv_mock import MockAnalytics
 
 if TYPE_CHECKING:
     from services.api.api_base import ScoredRelease
@@ -42,6 +43,7 @@ def client(
         error_logger=error_logger,
         make_api_request_func=mock_api_request_func,
         score_release_func=mock_score_func,
+        analytics=MagicMock(),
     )
 
 
@@ -75,6 +77,7 @@ class TestInitialization:
             error_logger=error_logger,
             make_api_request_func=mock_api_request_func,
             score_release_func=mock_score_func,
+            analytics=MagicMock(),
         )
 
         assert client.country_code == "US"
@@ -98,6 +101,7 @@ class TestInitialization:
             country_code="GB",
             entity="song",
             limit=100,
+            analytics=MagicMock(),
         )
 
         assert client.country_code == "GB"
@@ -118,6 +122,7 @@ class TestInitialization:
             make_api_request_func=mock_api_request_func,
             score_release_func=mock_score_func,
             limit=500,
+            analytics=MagicMock(),
         )
 
         assert client.limit == 200
@@ -136,6 +141,7 @@ class TestInitialization:
             make_api_request_func=mock_api_request_func,
             score_release_func=mock_score_func,
             limit=0,
+            analytics=MagicMock(),
         )
 
         assert client.limit == 1
@@ -154,6 +160,7 @@ class TestInitialization:
             make_api_request_func=mock_api_request_func,
             score_release_func=mock_score_func,
             limit=-10,
+            analytics=MagicMock(),
         )
 
         assert client.limit == 1
@@ -558,38 +565,6 @@ class TestProcessItunesResult:
 
 class TestReissueDetectionEdgeCases:
     """Tests for reissue detection with edge-case year values."""
-
-
-class TestParseReleaseYear:
-    """Tests for _parse_release_year helper method."""
-
-    def test_parses_standard_iso_date(self, client: AppleMusicClient) -> None:
-        """Standard iTunes ISO date returns 4-digit year."""
-        assert client._parse_release_year("2024-03-15T12:00:00Z") == "2024"
-
-    def test_returns_none_for_empty_string(self, client: AppleMusicClient) -> None:
-        """Empty string returns None."""
-        assert client._parse_release_year("") is None
-
-    def test_returns_none_for_non_digit_year(self, client: AppleMusicClient) -> None:
-        """Non-digit prefix returns None."""
-        assert client._parse_release_year("ABCD-01-01T00:00:00Z") is None
-
-    def test_returns_none_for_short_year(self, client: AppleMusicClient) -> None:
-        """Year shorter than 4 digits returns None."""
-        assert client._parse_release_year("20-01-01T00:00:00Z") is None
-
-    def test_handles_date_with_no_dash(self, client: AppleMusicClient) -> None:
-        """Date without dash — split produces full string, len != 4."""
-        assert client._parse_release_year("20240315") is None
-
-
-class TestConstants:
-    """Tests for module constants."""
-
-    def test_valid_year_length(self) -> None:
-        """Test VALID_YEAR_LENGTH constant."""
-        assert VALID_YEAR_LENGTH == 4
 
 
 class TestScoredReleaseStructure:
@@ -1064,23 +1039,6 @@ class TestExtractYearFromResult:
         assert year == 2000
 
 
-class TestExtractYearDebugLog:
-    """Cover the except (IndexError, ValueError) debug-log branch in _extract_year_from_result."""
-
-    def test_logs_debug_on_value_error(self, client: AppleMusicClient) -> None:
-        """ValueError during year parsing triggers _logger.debug and returns None."""
-        release_date = MagicMock()
-        release_date.strip.return_value.split.side_effect = ValueError("simulated split failure")
-        result = {"artistName": "Metallica", "releaseDate": release_date}
-
-        with patch("services.api.applemusic._logger") as mock_logger:
-            year = client._extract_year_from_result(result, "metallica")
-
-        assert year is None
-        mock_logger.debug.assert_called_once()
-        assert "Failed to parse year from release_date" in mock_logger.debug.call_args[0][0]
-
-
 class TestUnreadableResults:
     """A result iTunes sends in an unexpected shape is skipped, and the other results still become records."""
 
@@ -1120,6 +1078,7 @@ class TestRecordsAndScoring:
             error_logger=logging.getLogger("test.itunes.error"),
             make_api_request_func=request,
             score_release_func=score_release,
+            analytics=MagicMock(),
         )
         return client, request
 
@@ -1189,3 +1148,28 @@ class TestMalformedAnswers:
             await client._find_artist_id("artist")
         with pytest.raises(ApiRequestError):
             await client._lookup_artist_albums(1)
+
+
+class TestParityWithOtherProviders:
+    """iTunes behaves like the MusicBrainz and Discogs clients where they overlap."""
+
+    @pytest.mark.asyncio
+    async def test_release_search_is_tracked(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
+        analytics = MockAnalytics()
+        client = AppleMusicClient(
+            console_logger=console_logger,
+            error_logger=error_logger,
+            make_api_request_func=AsyncMock(return_value={"resultCount": 0, "results": []}),
+            score_release_func=MagicMock(return_value=0.0),
+            analytics=analytics,
+        )
+
+        with patch.object(analytics, "execute_async_wrapped_call", wraps=analytics.execute_async_wrapped_call) as tracked:
+            await client.fetch_release_records("pink floyd", "animals")
+
+        assert tracked.call_args.args[1] == "itunes_release_search"
+
+    def test_a_year_before_1900_is_not_a_release_year(self, client: AppleMusicClient, sample_itunes_result: dict[str, Any]) -> None:
+        sample_itunes_result["releaseDate"] = "1850-01-01T00:00:00Z"
+
+        assert client._build_release_record(sample_itunes_result) is None
