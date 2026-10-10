@@ -130,7 +130,7 @@ def _is_various_artists(artist: str, patterns: frozenset[str]) -> bool:
 
 def _has_unusual_brackets(album: str) -> tuple[bool, str | None]:
     """Check for unusual bracket content like [MESSAGE FROM THE CLERGY]."""
-    bracket_match = re.search(r"\[([^]]+)]", album)
+    bracket_match = re.search(r"\[([^][]+)]", album)
     if not bracket_match:
         return False, None
 
@@ -140,7 +140,8 @@ def _has_unusual_brackets(album: str) -> tuple[bool, str | None]:
         return False, None
 
     if len(content) > _UNUSUAL_BRACKET_MIN_LENGTH or content.isupper():
-        stripped = re.sub(r"\s*\[[^]]+]\s*", "", album).strip()
+        # Replace each bracket with a space and collapse the whitespace, which keeps the words around it apart
+        stripped = " ".join(re.sub(r"\[[^][]+]", " ", album).split())
         return True, stripped
 
     return False, None

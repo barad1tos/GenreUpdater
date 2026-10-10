@@ -227,8 +227,11 @@ class DiscogsClient(BaseApiClient):
         if normalized.endswith(", the"):
             normalized = f"the {normalized[:-5]}"
 
-        # Remove trailing numbered suffix like "(2)", "(3)" and return
-        return re.sub(r"\s*\(\d+\)\s*$", "", normalized)
+        # Remove trailing numbered suffix like "(2)", "(3)"; the search is anchored on "(" so it stays linear
+        stripped = normalized.rstrip()
+        if suffix := re.search(r"\(\d+\)$", stripped):
+            return stripped[: suffix.start()].rstrip()
+        return normalized
 
     def _is_artist_match(
         self,
