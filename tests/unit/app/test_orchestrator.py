@@ -4,14 +4,24 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from app.music_updater import MusicUpdater
 from app.orchestrator import MusicAppNotRunningError, Orchestrator
 from tests.factories import create_test_app_config
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 _TEST_PASSWORD = "test-password"  # noqa: S105 - test-only credential placeholder
+
+
+@pytest.fixture(autouse=True)
+def _no_migration() -> Iterator[AsyncMock]:
+    """Keep the startup migration out of tests that are not about it; those patch it themselves."""
+    with patch("app.orchestrator.migrate_to_persistent_ids", AsyncMock(return_value=False)) as migrate:
+        yield migrate
 
 
 class TestOrchestratorAllure:
@@ -122,6 +132,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_main_pipeline = AsyncMock()
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
@@ -146,6 +157,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_clean_artist = AsyncMock()
 
         args = self.create_mock_args(command="clean_artist", artist="Test Artist", force=True)
@@ -164,6 +176,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_update_years = AsyncMock()
 
         args = self.create_mock_args(command="update_years", artist="Test Artist", force=True)
@@ -181,6 +194,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_revert_years = AsyncMock()
 
         args = self.create_mock_args(command="revert_years", artist="Test Artist", album="Test Album", backup_csv="backup.csv")
@@ -199,6 +213,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_verify_database = AsyncMock()
 
         args = self.create_mock_args(command="verify_database", force=True)
@@ -210,11 +225,50 @@ class TestOrchestratorAllure:
         assert verify_kwargs["force"] is True
 
     @pytest.mark.asyncio
+    async def test_migration_runs_before_auto_verify(self) -> None:
+        """Auto-verify, the first step of the main workflow, drops track list rows keyed by old ids, so the migration comes first."""
+        orchestrator = Orchestrator(self.create_mock_deps())
+        orchestrator.music_updater = Mock()
+        calls: list[str] = []
+
+        async def migrate(**_kwargs: Any) -> bool:
+            calls.append("migrate")
+            return False
+
+        async def workflow(_args: argparse.Namespace) -> None:
+            calls.append("workflow")
+
+        with (
+            patch("app.orchestrator.is_music_app_running", return_value=True),
+            patch("app.orchestrator.migrate_to_persistent_ids", side_effect=migrate),
+            patch.object(orchestrator, "_run_main_workflow", side_effect=workflow),
+        ):
+            await orchestrator.run_command(self.create_mock_args())
+
+        assert calls == ["migrate", "workflow"]
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_migration(self) -> None:
+        """A dry run writes nothing, so it does not migrate."""
+        orchestrator = Orchestrator(self.create_mock_deps())
+        orchestrator.music_updater = Mock()
+
+        with (
+            patch("app.orchestrator.is_music_app_running", return_value=True),
+            patch("app.orchestrator.migrate_to_persistent_ids", AsyncMock()) as migrate,
+            patch.object(orchestrator, "_run_main_workflow", AsyncMock()),
+        ):
+            await orchestrator.run_command(self.create_mock_args(dry_run=True))
+
+        migrate.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_main_pipeline_default(self) -> None:
         """Test main pipeline execution when no command specified."""
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_main_pipeline = AsyncMock()
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
@@ -334,6 +388,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_main_pipeline = AsyncMock()
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
@@ -361,6 +416,7 @@ class TestOrchestratorAllure:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.run_main_pipeline = AsyncMock()
         orchestrator.music_updater.set_dry_run_context = Mock()
         orchestrator.music_updater.database_verifier = Mock()
@@ -418,6 +474,7 @@ class TestMaybeAutoVerifyPending:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.deps = Mock()
         orchestrator.music_updater.deps.pending_verification_service = Mock()
         orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=True)
@@ -433,6 +490,7 @@ class TestMaybeAutoVerifyPending:
         deps = self.create_mock_deps()
         orchestrator = Orchestrator(deps)
         orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()  # instance attribute the spec cannot see
         orchestrator.music_updater.deps = Mock()
         orchestrator.music_updater.deps.pending_verification_service = Mock()
         orchestrator.music_updater.deps.pending_verification_service.should_auto_verify = AsyncMock(return_value=False)
