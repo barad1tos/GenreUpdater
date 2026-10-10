@@ -26,6 +26,16 @@ if TYPE_CHECKING:
     from core.models.track_models import TrackDict
 
 
+def _numeric_years(tracks: list[TrackDict]) -> list[int]:
+    """Collect the set four-digit years of the tracks as numbers."""
+    years: list[int] = []
+    for track in tracks:
+        year = track.year
+        if year and year.isdigit() and year != "0":
+            years.append(int(year))
+    return years
+
+
 @pytest.mark.regression
 class TestSuspiciousAlbumDetection:
     """Test detection of suspicious albums that need manual verification."""
@@ -65,7 +75,7 @@ class TestSuspiciousAlbumDetection:
         variance_threshold = 20  # More than 20 years between min and max
 
         for (artist, album), tracks in albums_with_tracks.items():
-            years = [int(year) for t in tracks if (year := t.year) and year.isdigit() and year != "0"]
+            years = _numeric_years(tracks)
             if len(years) < 2:
                 continue
 
@@ -283,7 +293,7 @@ class TestRealWorldYearPatterns:
         library_tracks: list[TrackDict],
     ) -> None:
         """Analyze year distribution by decade for sanity check."""
-        years = [int(year) for t in library_tracks if (year := t.year) and year.isdigit() and year != "0"]
+        years = _numeric_years(library_tracks)
 
         if not years:
             pytest.skip("No valid years in test data")

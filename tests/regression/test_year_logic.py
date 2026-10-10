@@ -20,6 +20,16 @@ if TYPE_CHECKING:
     from core.models.track_models import TrackDict
 
 
+def _numeric_years(tracks: list[TrackDict]) -> list[int]:
+    """Collect the set four-digit years of the tracks as numbers."""
+    years: list[int] = []
+    for track in tracks:
+        year = track.year
+        if year and year.isdigit() and year != "0":
+            years.append(int(year))
+    return years
+
+
 @pytest.mark.regression
 class TestYearDataValidity:
     """Test that library data meets basic year requirements."""
@@ -151,7 +161,7 @@ class TestYearDistribution:
         library_tracks: list[TrackDict],
     ) -> None:
         """Years should cluster around recent decades (basic sanity check)."""
-        years = [int(year) for t in library_tracks if (year := t.year) and year.isdigit() and year != "0"]
+        years = _numeric_years(library_tracks)
 
         if not years:
             pytest.skip("No valid years in library")

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- When no provider knew an album, the lookup handed the library's own year back as if a provider had answered it, so an album whose tracks split evenly got its most common year written to the other half while the log said nothing changed. No provider answer is now no answer
+- When no provider knew an album, the lookup handed the library's own year back as if a provider had answered it. An album whose tracks split evenly then got its most common year written to the other half, while the log said nothing changed. No provider answer is now no answer
 - A year the tool wrote was never recorded in `track_list.csv`: the sync copied the row's own (empty) `year_set_by_mgu` back over it. The record now survives the sync, so an album the tool set is skipped until its year changes, and a change that is not the tool's shows in the log as changed outside the tool
 - Apple's catalog put 2019 on 13 of 14 tracks of In Flames "Battles", and the tool moved the last track to 2019 as well; providers say 2016. Royal Crown Revue "Mugzy's Move" got 1991 from the release date Apple stores on the track while the providers say 1996. Both rules are gone (see Changed)
 

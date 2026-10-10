@@ -377,12 +377,10 @@ class TestValidateProviderYear:
         assert "'Artist [live] - Mixes [/edit]'" in console_output.getvalue()
 
     @pytest.mark.asyncio
-    async def test_passes_dominant_year_to_api(self) -> None:
-        """Should pass dominant_year to API for contamination detection."""
+    async def test_passes_the_library_year_to_the_providers(self) -> None:
+        """The most common library year reaches the providers as a hint."""
         external_api = _create_mock_external_api()
-
         determinator = _create_year_determinator(external_api=external_api)
-        tracks = [_create_track(date_added="2020-01-01")]
 
         await determinator._query_providers("Artist", "Album", "2019")
 
