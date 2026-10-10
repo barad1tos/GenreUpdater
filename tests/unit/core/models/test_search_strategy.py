@@ -198,3 +198,9 @@ class TestUnusualBrackets:
         started = time.perf_counter()
         detect_search_strategy("Artist", "Album" + " " * 100_000 + "Remix [MESSAGE FROM THE CLERGY]", create_test_app_config())
         assert time.perf_counter() - started < 0.5
+
+    @pytest.mark.parametrize("album", ["[" * 100_000, "Album [MESSAGE FROM THE CLERGY] " + "[" * 100_000], ids=["only-open", "after-a-bracket"])
+    def test_unclosed_brackets_are_scanned_in_linear_time(self, album: str) -> None:
+        started = time.perf_counter()
+        detect_search_strategy("Artist", album, create_test_app_config())
+        assert time.perf_counter() - started < 0.5
