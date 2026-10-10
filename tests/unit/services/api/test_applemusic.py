@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from metrics.analytics import Analytics
 from services.api.applemusic import AppleMusicClient
 from services.api.request_executor import ApiRequestError
 from services.api.year_scoring import ArtistContext
@@ -1164,10 +1165,26 @@ class TestParityWithOtherProviders:
             analytics=analytics,
         )
 
-        with patch.object(analytics, "execute_async_wrapped_call", wraps=analytics.execute_async_wrapped_call) as tracked:
+        with patch.object(Analytics, "execute_async_wrapped_call", autospec=True, side_effect=Analytics.execute_async_wrapped_call) as tracked:
             await client.fetch_release_records("pink floyd", "animals")
 
-        assert tracked.call_args.args[1] == "itunes_release_search"
+        assert tracked.call_args.args[2] == "itunes_release_search"
+
+    @pytest.mark.asyncio
+    async def test_artist_start_year_lookup_is_tracked(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
+        analytics = MockAnalytics()
+        client = AppleMusicClient(
+            console_logger=console_logger,
+            error_logger=error_logger,
+            make_api_request_func=AsyncMock(return_value={"resultCount": 0, "results": []}),
+            score_release_func=MagicMock(return_value=0.0),
+            analytics=analytics,
+        )
+
+        with patch.object(Analytics, "execute_async_wrapped_call", autospec=True, side_effect=Analytics.execute_async_wrapped_call) as tracked:
+            await client.get_artist_start_year("pink floyd")
+
+        assert tracked.call_args.args[2] == "itunes_artist_period"
 
     def test_a_year_before_1900_is_not_a_release_year(self, client: AppleMusicClient, sample_itunes_result: dict[str, Any]) -> None:
         sample_itunes_result["releaseDate"] = "1850-01-01T00:00:00Z"

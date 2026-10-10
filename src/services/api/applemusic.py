@@ -326,6 +326,7 @@ class AppleMusicClient(BaseApiClient):
             "disambiguation": result.get("collectionCensoredName", ""),
         }
 
+    @track_instance_method("itunes_artist_period")
     async def get_artist_start_year(self, artist_norm: str) -> int | None:
         """Get artist's earliest release year from iTunes.
 
