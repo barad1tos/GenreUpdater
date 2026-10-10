@@ -150,6 +150,7 @@ class TestMigrate:
         snapshot_service = MagicMock()
 
         def refuse(_self: Path, _target: Path) -> Path:
+            """Fail the rename the way a full disk does."""
             raise OSError(28, "No space left on device")
 
         monkeypatch.setattr(Path, "replace", refuse)

@@ -85,7 +85,7 @@ class TestGenreEdgeCases:
         inconsistent_artists: list[tuple[str, set[str], str]] = []
 
         for artist, tracks in artists_with_tracks.items():
-            genres = {t.genre for t in tracks if t.genre}
+            genres = {genre for t in tracks if (genre := t.genre)}
 
             # Only test artists with multiple different genres
             if len(genres) < 2:

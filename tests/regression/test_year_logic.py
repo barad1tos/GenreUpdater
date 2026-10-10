@@ -151,7 +151,7 @@ class TestYearDistribution:
         library_tracks: list[TrackDict],
     ) -> None:
         """Years should cluster around recent decades (basic sanity check)."""
-        years = [int(t.year) for t in library_tracks if t.year and t.year.isdigit() and t.year != "0"]
+        years = [int(year) for t in library_tracks if (year := t.year) and year.isdigit() and year != "0"]
 
         if not years:
             pytest.skip("No valid years in library")

@@ -16,6 +16,7 @@ def _tracks(*years: str) -> list[TrackDict]:
 
 @pytest.fixture
 def checker() -> YearConsistencyChecker:
+    """A checker with the default majority share."""
     return YearConsistencyChecker(console_logger=logging.getLogger("test.year_consistency"))
 
 

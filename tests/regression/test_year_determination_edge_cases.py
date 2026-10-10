@@ -65,7 +65,7 @@ class TestSuspiciousAlbumDetection:
         variance_threshold = 20  # More than 20 years between min and max
 
         for (artist, album), tracks in albums_with_tracks.items():
-            years = [int(t.year) for t in tracks if t.year and t.year.isdigit() and t.year != "0"]
+            years = [int(year) for t in tracks if (year := t.year) and year.isdigit() and year != "0"]
             if len(years) < 2:
                 continue
 
@@ -287,7 +287,7 @@ class TestRealWorldYearPatterns:
         library_tracks: list[TrackDict],
     ) -> None:
         """Analyze year distribution by decade for sanity check."""
-        years = [int(t.year) for t in library_tracks if t.year and t.year.isdigit() and t.year != "0"]
+        years = [int(year) for t in library_tracks if (year := t.year) and year.isdigit() and year != "0"]
 
         if not years:
             pytest.skip("No valid years in test data")
