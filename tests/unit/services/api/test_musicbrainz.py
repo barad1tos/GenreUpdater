@@ -640,3 +640,12 @@ class TestMalformedAnswers:
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=AsyncMock(return_value=empty))
 
         assert await client.fetch_release_records("artist", "album") == []
+
+
+def test_fallback_filter_matches_the_artist_whatever_its_case() -> None:
+    """Fallback searches keep a release group credited to the artist as the library spells it, case and punctuation included."""
+    client = TestMusicBrainzClientAllure.create_musicbrainz_client()
+    artist_credits = [{"artist": {"name": "Earth, Wind & Fire"}}]
+
+    assert client._artist_matches_any_credit(artist_credits, "Earth, Wind and Fire")
+    assert client._artist_matches_any_credit([{"artist": {"name": "Pink Floyd"}}], "Pink Floyd")

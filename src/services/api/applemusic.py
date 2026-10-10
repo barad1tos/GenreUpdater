@@ -393,11 +393,13 @@ class AppleMusicClient(BaseApiClient):
             return None
 
         results = _results_of(response_data, self.base_url)
+        # The search name keeps the library's case, so it is normalized like the result names
+        target = normalize_for_matching(artist_norm)
         for result in results:
             result_artist = normalize_for_matching(result.get("artistName", ""))
             # Exact match only - no substring matching to avoid cross-artist pollution
             # e.g., "madonna" should NOT match "madonna remixers"
-            if result_artist == artist_norm:
+            if result_artist == target:
                 artist_id = result.get("artistId")
                 self.console_logger.debug(
                     "[itunes] Found artist ID %s for '%s' (matched: '%s')",
