@@ -30,6 +30,8 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+# pytest-html and coverage HTML, written by every pytest run (pyproject addopts)
+/reports/
 .tox/
 .nox/
 .coverage
