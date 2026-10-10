@@ -162,6 +162,48 @@ class TestMissedTracks:
         missed_fetcher.assert_not_awaited()
 
 
+class TestRejectedTracks:
+    """A track the scripts return but validation rejects is read; re-reading it by id cannot change that."""
+
+    @pytest.mark.asyncio
+    async def test_rejected_tracks_count_as_read(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        kept = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        rejected = TrackDict(id="00000000000000C3", name="x" * 2000, artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[kept.id, rejected.id])
+        missed_fetcher = AsyncMock(return_value=[])
+        persister = AsyncMock()
+        console_logger, error_logger = loggers
+        fetcher = BatchTrackFetcher(
+            ap_client=cast("AppleScriptClientProtocol", cast(object, mock_ap_client)),
+            cache_service=cast("CacheServiceProtocol", cast(object, mock_cache_service)),
+            console_logger=console_logger,
+            error_logger=error_logger,
+            config=config,
+            track_validator=lambda tracks: [track for track in tracks if track.id != rejected.id],
+            artist_processor=AsyncMock(),
+            snapshot_loader=AsyncMock(return_value=None),
+            snapshot_persister=persister,
+            can_use_snapshot=lambda _artist: True,
+            missed_track_fetcher=missed_fetcher,
+        )
+        raw = f"{kept.id}\x1eSong\x1eA\x1eA\x1eB\x1d{rejected.id}\x1e{rejected.name}\x1eA\x1eA\x1eB"
+
+        with patch("core.tracks.batch_fetcher.parse_tracks", return_value=[kept, rejected]):
+            mock_ap_client.run_script = AsyncMock(side_effect=[raw, None])
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [kept]
+        assert fetcher.rejected_ids == {rejected.id}
+        missed_fetcher.assert_not_awaited()
+        persister.assert_awaited_once_with([kept], [kept.id], full_scan=True)
+
+
 class TestFetchTracksInBatchesRouting:
     """Tests for _fetch_tracks_in_batches routing logic."""
 

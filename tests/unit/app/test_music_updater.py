@@ -619,6 +619,16 @@ class TestBulkRescanEvents:
         api_cache.emit_track_modified.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_a_rejected_track_is_neither_missing_nor_removed(self) -> None:
+        updater, api_cache = self._updater(["A", "R"])
+        updater.track_processor.batch_fetcher.rejected_ids = {"R"}
+        previous = [TrackDict(id="A", name="Song", artist="Artist", album="Album"), TrackDict(id="R", name="Long", artist="Odd", album="Album")]
+
+        await updater._emit_rescan_events(previous, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
+
+        api_cache.emit_track_removed.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_baseline_is_read_before_the_rescan_replaces_it(self) -> None:
         """The bulk fetch saves the new snapshot, so a baseline read after it would equal the rescan and report nothing."""
         updater, api_cache = self._updater(["A"])

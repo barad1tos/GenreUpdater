@@ -116,7 +116,8 @@ async def migrate_to_persistent_ids(
     console_logger.info("The saved track list uses Music.app ids, which Music.app can renumber; moving it to persistent IDs")
     tracks = await track_processor.fetch_tracks_in_batches(config.batch_processing.batch_size, skip_snapshot_check=True)
     fetched_ids = {str(track.id) for track in tracks}
-    library_ids = set(await track_processor.ap_client.fetch_all_track_ids())
+    # A track validation rejects reads back the same way on every run, so it cannot hold the migration up
+    library_ids = set(await track_processor.ap_client.fetch_all_track_ids()) - track_processor.rejected_track_ids
     if not tracks or not all(is_persistent_id(track_id) for track_id in fetched_ids) or fetched_ids != library_ids:
         error_logger.error(
             "Persistent ID migration stopped the run: read %d tracks, Music.app lists %d; the track list was not changed and the next run "

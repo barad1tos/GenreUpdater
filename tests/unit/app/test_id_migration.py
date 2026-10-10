@@ -93,9 +93,10 @@ class TestCarryYearHistory:
         assert carry_year_history([_old_row("1")], tracks) == 0
 
 
-def _processor(tracks: list[TrackDict], library_ids: list[str] | None = None) -> MagicMock:
+def _processor(tracks: list[TrackDict], library_ids: list[str] | None = None, rejected_ids: frozenset[str] = frozenset()) -> MagicMock:
     """A track processor whose library holds `library_ids` (by default the ids of `tracks`) and whose fetch returns `tracks`."""
     processor = MagicMock()
+    processor.rejected_track_ids = rejected_ids
     processor.fetch_tracks_in_batches = AsyncMock(return_value=tracks)
     processor.ap_client.fetch_all_track_ids = AsyncMock(return_value=library_ids if library_ids is not None else [str(t.id) for t in tracks])
     return processor
@@ -235,6 +236,22 @@ class TestMigrate:
         assert not (csv_path.parent / BACKUP_NAME).exists()
         assert list(load_track_list(str(csv_path))) == ["111701"]
         snapshot_service.clear_delta.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_track_validation_rejects_does_not_block_the_migration(self, tmp_path: Path) -> None:
+        """A rejected track reads the same way on every run, so waiting for it would block the tool for good."""
+        config, csv_path = self._write_old_list(tmp_path)
+
+        migrated = await migrate_to_persistent_ids(
+            config=config,
+            track_processor=_processor([_fresh_track()], [_PERSISTENT_ID, "0A1B2C3D4E5F6071"], frozenset({"0A1B2C3D4E5F6071"})),
+            snapshot_service=MagicMock(),
+            console_logger=_LOGGER,
+            error_logger=_LOGGER,
+        )
+
+        assert migrated
+        assert list(load_track_list(str(csv_path))) == [_PERSISTENT_ID]
 
     @pytest.mark.asyncio
     async def test_existing_backup_is_kept(self, tmp_path: Path) -> None:

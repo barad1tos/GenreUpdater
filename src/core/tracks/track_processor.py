@@ -516,6 +516,11 @@ class TrackProcessor:
 
         return result or []
 
+    @property
+    def rejected_track_ids(self) -> frozenset[str]:
+        """Ids the last full library read returned but security validation rejected."""
+        return frozenset(self.batch_fetcher.rejected_ids)
+
     @track_instance_method("track_fetch_batches")
     async def fetch_tracks_in_batches(
         self,

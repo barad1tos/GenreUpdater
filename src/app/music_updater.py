@@ -690,7 +690,9 @@ class MusicUpdater:
         if not previous:
             return
         current_ids = {str(track.id) for track in current if track.id}
-        library_ids = set(await self.deps.ap_client.fetch_all_track_ids())
+        # Tracks validation rejected were read and are still in the library, so they are neither missing nor removed
+        rejected_ids = self.track_processor.rejected_track_ids
+        library_ids = set(await self.deps.ap_client.fetch_all_track_ids()) - rejected_ids
         if current_ids != library_ids:
             self.console_logger.warning(
                 "Bulk rescan read %d of %d tracks; not reporting removed or renamed tracks from it", len(current_ids), len(library_ids)
@@ -698,7 +700,7 @@ class MusicUpdater:
             return
         previous_map = {str(track.id): track for track in previous if track.id}
         api_cache = self.deps.cache_service.api_service
-        self._emit_removed_track_events(sorted(set(previous_map) - current_ids), previous_map, api_cache)
+        self._emit_removed_track_events(sorted(set(previous_map) - current_ids - rejected_ids), previous_map, api_cache)
         self._emit_identity_change_events(sorted(current_ids & set(previous_map)), previous_map, current, api_cache)
 
     def _emit_removed_track_events(

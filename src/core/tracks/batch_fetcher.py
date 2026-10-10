@@ -84,6 +84,8 @@ class BatchTrackFetcher:
         self._snapshot_persister = snapshot_persister
         self._can_use_snapshot = can_use_snapshot
         self._missed_track_fetcher = missed_track_fetcher
+        # Ids the last library read returned but validation rejected: read, though not usable
+        self.rejected_ids: set[str] = set()
         self.dry_run = dry_run
         self.analytics = analytics
 
@@ -113,6 +115,7 @@ class BatchTrackFetcher:
                 return snapshot_tracks
 
         # Snapshot not available - proceed with batch processing
+        self.rejected_ids = set()
         all_tracks = await self._fetch_tracks_in_batches(batch_size)
         missed_tracks, whole_library = await self._fetch_missed_tracks(all_tracks)
         all_tracks += missed_tracks
@@ -136,21 +139,26 @@ class BatchTrackFetcher:
             The missed tracks, and whether every track Music.app lists was read
         """
         library_ids = await self.ap_client.fetch_all_track_ids()
-        batched_ids = {str(track.id) for track in batched_tracks}
-        missed_ids = [track_id for track_id in library_ids if track_id not in batched_ids]
+        if not library_ids:
+            self.error_logger.warning(
+                "Music.app listed no track ids, so the library read cannot be checked; its snapshot does not count as a full scan"
+            )
+            return [], False
+        read_ids = {str(track.id) for track in batched_tracks} | self.rejected_ids
+        missed_ids = [track_id for track_id in library_ids if track_id not in read_ids]
         missed_tracks: list[TrackDict] = []
         if missed_ids:
             self.console_logger.info("Batches missed %d tracks Music.app lists; fetching them by persistent ID", len(missed_ids))
             missed_tracks = await self._missed_track_fetcher(missed_ids)
-        unread = len(set(missed_ids) - {str(track.id) for track in missed_tracks})
-        whole_library = bool(library_ids) and not unread
-        if not whole_library:
+        unread_ids = sorted(set(missed_ids) - {str(track.id) for track in missed_tracks})
+        if unread_ids:
             self.error_logger.warning(
-                "Library read is incomplete (%d of %d listed tracks unread); its snapshot does not count as a full scan",
-                unread,
+                "Library read is incomplete (%d of %d listed tracks unread, e.g. %s); its snapshot does not count as a full scan",
+                len(unread_ids),
                 len(library_ids),
+                ", ".join(unread_ids[:10]),
             )
-        return missed_tracks, whole_library
+        return missed_tracks, not unread_ids
 
     async def _fetch_tracks_in_batches(self, batch_size: int) -> list[TrackDict]:
         """Execute the batch fetching loop.
@@ -346,6 +354,7 @@ class BatchTrackFetcher:
 
         # Validate and process tracks
         validated_tracks = self._track_validator(batch_tracks)
+        self.rejected_ids |= {str(track.id) for track in batch_tracks} - {str(track.id) for track in validated_tracks}
         await self._artist_processor(validated_tracks)
 
         self.console_logger.info(
