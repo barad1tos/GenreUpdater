@@ -177,6 +177,7 @@ class TestReleaseScorer:
             ("Split w/ Band", search_names("A", "Split w/ Band")[1]),  # and "w/" to "with"
             ("Café Bleu", "Cafe Bleu"),  # accents
             ("Déjà Vu", "deja vu"),
+            ("Robot Hive / Exodus", "Exodus"),  # a split release dates its second side too
         ],
     )
     def test_related_titles_stay_candidates(self, scorer: ReleaseScorer, title: str, album: str) -> None:

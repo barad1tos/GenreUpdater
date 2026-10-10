@@ -61,7 +61,8 @@ def _title_key(title: str) -> str:
 def _titles_related(release_title: str, album: str) -> bool:
     """Return True when one title contains the other, compared by _title_key.
 
-    A release without a title is related to no album; an album without a name accepts any release.
+    A release without a title is related to no album; an album without a name accepts any release. Each side of a
+    split release ("Robot Hive / Exodus") is tried on its own, since the search keeps only the first side of a name.
 
     Args:
         release_title: Title the provider gave the release
@@ -70,8 +71,9 @@ def _titles_related(release_title: str, album: str) -> bool:
     Returns:
         Whether the release can be this album or an edition of it
     """
-    release_key, album_key = _title_key(release_title), _title_key(album)
-    return bool(release_key) and (album_key in release_key or release_key in album_key)
+    album_key = _title_key(album)
+    release_keys = {_title_key(side) for side in release_title.split(" / ")} - {""}
+    return any(album_key in release_key or release_key in album_key for release_key in release_keys)
 
 
 # Type definitions for scoring context
