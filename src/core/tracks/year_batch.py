@@ -29,7 +29,6 @@ from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
 )
-from core.models.validators import is_empty_year
 
 from .prerelease_handler import PrereleaseHandler
 from .track_updater import TrackUpdater
@@ -430,68 +429,6 @@ class YearBatchProcessor:
             changes_log=changes_log,
         )
 
-    async def _process_dominant_year(
-        self,
-        artist: str,
-        album: str,
-        *,
-        album_tracks: list[TrackDict],
-        dominant_year: str,
-        updated_tracks: list[TrackDict],
-        changes_log: list[ChangeLogEntry],
-    ) -> bool:
-        """Process album using dominant year logic.
-
-        Args:
-            artist: Artist name
-            album: Album name
-            album_tracks: List of tracks in the album
-            dominant_year: Year to apply to empty or inconsistent tracks
-            updated_tracks: List to append updated tracks to
-            changes_log: List to append change entries to
-
-        Returns:
-            True if processing was completed, False if it should continue with regular year determination
-
-        """
-        non_empty_years = [str(year_value) for track in album_tracks if (year_value := track.get("year", "")) and str(year_value).strip()]
-        unique_years = set(non_empty_years) if non_empty_years else set()
-
-        # Apply dominant year if there are empty tracks OR inconsistent years
-        tracks_needing_update = [track for track in album_tracks if is_empty_year(track.get("year"))]
-
-        # Add tracks with inconsistent years
-        if len(unique_years) > 1:
-            tracks_needing_update.extend(
-                [track for track in album_tracks if (year_value := track.get("year", "")) and str(year_value).strip() != dominant_year]
-            )
-
-        # Deduplicate by track ID
-        if tracks_needing_update := list({track.get("id"): track for track in tracks_needing_update}.values()):
-            empty_count = len([track for track in tracks_needing_update if is_empty_year(track.get("year"))])
-            inconsistent_count = len(tracks_needing_update) - empty_count
-
-            self.console_logger.info(
-                "Applying dominant year %s to %d tracks (%d empty, %d inconsistent) in '%s - %s'",
-                dominant_year,
-                len(tracks_needing_update),
-                empty_count,
-                inconsistent_count,
-                artist,
-                album,
-            )
-            await self._track_updater.update_tracks_for_album(
-                artist,
-                album,
-                album_tracks=tracks_needing_update,
-                year=dominant_year,
-                updated_tracks=updated_tracks,
-                changes_log=changes_log,
-            )
-            return True
-
-        return False
-
     def _handle_no_year_found(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
         """Handle case when no year could be determined for the album."""
         if available_tracks := filter_available_tracks(album_tracks):
@@ -511,16 +448,11 @@ class YearBatchProcessor:
             )
 
     def _detect_user_year_changes(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
-        """Detect if user manually changed year in Music.app.
-
-        If year_set_by_mgu is set (we previously updated) but current year differs,
-        the user manually changed the year. Log this for visibility.
-
-        """
+        """Log a track whose year changed since the tool set it; Apple or a person may have changed it."""
         for track in album_tracks:
             if track.year_set_by_mgu and track.year and track.year_set_by_mgu != track.year:
                 self.console_logger.info(
-                    "User manually changed year for '%s - %s': was %s (we set %s), now %s - will re-process",
+                    "Year of '%s - %s' changed outside the tool: was %s, the tool set %s, now %s - will re-process",
                     artist,
                     album,
                     track.year_before_mgu or "unknown",

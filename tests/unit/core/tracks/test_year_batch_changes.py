@@ -3,7 +3,7 @@
 Tests the year_before_mgu population and conflict detection added in Issue #85.
 - year_before_mgu: original year before first update (preserved, set once)
 - year_set_by_mgu: year after last update (updated each time)
-- Conflict detection: when user manually changes year in Music.app
+- Conflict detection: when the year changed outside the tool since it set it
 """
 
 from __future__ import annotations
@@ -266,13 +266,13 @@ class TestDetectUserYearChanges:
         with caplog.at_level(logging.INFO):
             processor._detect_user_year_changes("Artist", "Album", tracks)
 
-    def test_detects_user_change(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should detect when user manually changed year."""
+    def test_detects_outside_change(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log when the year changed since the tool set it."""
         tracks = [create_test_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2020")]
 
         self._run_detection(caplog, tracks)
 
-        assert "User manually changed year" in caplog.text
+        assert "changed outside the tool" in caplog.text
         assert "Artist - Album" in caplog.text
         assert "2015" in caplog.text  # year_before_mgu
         assert "2020" in caplog.text  # year_set_by_mgu (we set)
@@ -284,7 +284,7 @@ class TestDetectUserYearChanges:
 
         self._run_detection(caplog, tracks)
 
-        assert "User manually changed year" not in caplog.text
+        assert "changed outside the tool" not in caplog.text
 
     def test_no_detection_when_year_set_by_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should NOT log when year_set_by_mgu is not set."""
@@ -292,7 +292,7 @@ class TestDetectUserYearChanges:
 
         self._run_detection(caplog, tracks)
 
-        assert "User manually changed year" not in caplog.text
+        assert "changed outside the tool" not in caplog.text
 
     def test_no_detection_when_current_year_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should NOT log when current year is not set."""
@@ -300,7 +300,7 @@ class TestDetectUserYearChanges:
 
         self._run_detection(caplog, tracks)
 
-        assert "User manually changed year" not in caplog.text
+        assert "changed outside the tool" not in caplog.text
 
     def test_logs_unknown_when_year_before_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
         """Should log 'unknown' when year_before_mgu is not set."""
@@ -320,7 +320,7 @@ class TestDetectUserYearChanges:
         self._run_detection(caplog, tracks)
 
         # Should only have one log entry
-        log_count = caplog.text.count("User manually changed year")
+        log_count = caplog.text.count("changed outside the tool")
         assert log_count == 1
 
     def test_empty_tracks_list(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -329,7 +329,16 @@ class TestDetectUserYearChanges:
 
         self._run_detection(caplog, tracks)
 
-        assert "User manually changed year" not in caplog.text
+        assert "changed outside the tool" not in caplog.text
+
+    def test_names_the_change_as_outside_the_tool(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Apple rewrites years as often as people do, so the log must not claim a person did it."""
+        tracks = [create_test_track("1", year="2019", year_before_mgu="2016", year_set_by_mgu="2016")]
+
+        self._run_detection(caplog, tracks)
+
+        assert "changed outside the tool" in caplog.text
+        assert "User manually" not in caplog.text
 
 
 @pytest.mark.unit
