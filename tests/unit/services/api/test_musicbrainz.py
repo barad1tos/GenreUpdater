@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.factories import fetch_and_score
+
 import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -421,7 +423,7 @@ class TestRetrieveAndScoreReleasesErrorHandling:
             patch.object(client, "_build_release_records", side_effect=IndexError("list index out of range")),
             pytest.raises(IndexError),
         ):
-            await client.get_scored_releases("artist", "album", ArtistContext())
+            await fetch_and_score(client, "artist", "album", ArtistContext())
 
 
 class TestGetArtistInfoExceptionHandler:
@@ -549,7 +551,7 @@ class TestRequestFailurePropagation:
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
 
         with pytest.raises(ApiRequestError):
-            await client.get_scored_releases("artist", "album", ArtistContext())
+            await fetch_and_score(client, "artist", "album", ArtistContext())
 
     @pytest.mark.asyncio
     async def test_failed_search_fails_the_lookup(self) -> None:
@@ -558,7 +560,7 @@ class TestRequestFailurePropagation:
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
 
         with pytest.raises(ApiRequestError):
-            await client.get_scored_releases("artist", "album", ArtistContext())
+            await fetch_and_score(client, "artist", "album", ArtistContext())
 
     @pytest.mark.asyncio
     async def test_cancelled_release_fetch_fails_the_lookup(self) -> None:
@@ -568,7 +570,7 @@ class TestRequestFailurePropagation:
         client = TestMusicBrainzClientAllure.create_musicbrainz_client(mock_api_request=request)
 
         with pytest.raises(ApiRequestError):
-            await client.get_scored_releases("artist", "album", ArtistContext())
+            await fetch_and_score(client, "artist", "album", ArtistContext())
 
 
 class TestRecordsAndScoring:
@@ -598,18 +600,6 @@ class TestRecordsAndScoring:
         assert with_region[0]["score"] > without_region[0]["score"]
         assert [release["artist"] for release in with_region] == ["the beatles", "the beatles"]
         assert all("releasegroup_first_date" not in release for release in with_region)
-
-    @pytest.mark.asyncio
-    async def test_scored_releases_match_records_then_scores(self) -> None:
-        """get_scored_releases is the fetched records scored with the given context."""
-        client = TestMusicBrainzClientAllure.create_scoring_client()
-        client._make_api_request = self.create_search_and_releases()
-        records = await client.fetch_release_records("the beatles", "abbey road")
-        client._make_api_request = self.create_search_and_releases()
-
-        scored = await client.get_scored_releases("the beatles", "abbey road", ArtistContext(region="GB"))
-
-        assert scored == client.score_records(records, "the beatles", "abbey road", ArtistContext(region="GB"))
 
     @pytest.mark.asyncio
     async def test_broken_fetch_propagates(self) -> None:

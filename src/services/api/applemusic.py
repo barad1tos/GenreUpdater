@@ -175,25 +175,6 @@ class AppleMusicClient(BaseApiClient):
             scored_releases.append({**record, "score": score})
         return scored_releases
 
-    async def get_scored_releases(
-        self,
-        artist_norm: str,
-        album_norm: str,
-        artist_context: ArtistContext,
-    ) -> list[ScoredRelease]:
-        """Fetch iTunes release records and score them with the artist context.
-
-        Args:
-            artist_norm: Normalized artist name
-            album_norm: Normalized album name
-            artist_context: Region and activity period of the artist, used in scoring
-
-        Returns:
-            Releases with a positive score, in iTunes order
-        """
-        records = await self.fetch_release_records(artist_norm, album_norm)
-        return self.score_records(records, artist_norm, album_norm, artist_context)
-
     async def _try_lookup_fallback(
         self,
         artist_norm: str,

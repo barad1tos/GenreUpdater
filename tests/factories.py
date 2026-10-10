@@ -7,9 +7,15 @@ that can be imported by any test module (including xdist workers).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+
+from services.api.year_scoring import ArtistContext
 from unittest.mock import AsyncMock
 
 if TYPE_CHECKING:
+    from services.api.api_base import ScoredRelease
+    from services.api.applemusic import AppleMusicClient
+    from services.api.discogs import DiscogsClient
+    from services.api.musicbrainz import MusicBrainzClient
     from core.models.release_record import ReleaseRecord
     from core.models.track_models import AppConfig
 
@@ -152,3 +158,11 @@ def release_record(**fields: Any) -> ReleaseRecord:
         "source": "musicbrainz",
     }
     return cast("ReleaseRecord", {**record, **fields})
+
+
+async def fetch_and_score(
+    client: AppleMusicClient | DiscogsClient | MusicBrainzClient, artist_norm: str, album_norm: str, artist_context: ArtistContext | None = None
+) -> list[ScoredRelease]:
+    """Fetch a provider's release records and score them, as the year search coordinator does."""
+    records = await client.fetch_release_records(artist_norm, album_norm)
+    return client.score_records(records, artist_norm, album_norm, artist_context or ArtistContext())

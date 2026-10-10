@@ -9,6 +9,8 @@ the clients can construct requests without crashing, not that the encoding is co
 
 from __future__ import annotations
 
+from tests.factories import fetch_and_score
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -51,7 +53,8 @@ class TestMusicBrainzInputBoundary:
         artist_with_control_chars = "Artist\x00\x01\x02\x03Name"
         album = "Normal Album"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_control_chars,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -66,7 +69,8 @@ class TestMusicBrainzInputBoundary:
         artist = "Normal Artist"
         album_with_nulls = "Album\x00With\x00Nulls"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist,
             album_norm=album_with_nulls,
             artist_context=ArtistContext(),
@@ -81,7 +85,8 @@ class TestMusicBrainzInputBoundary:
         extremely_long_artist = "A" * 10000
         album = "Normal Album"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=extremely_long_artist,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -96,7 +101,8 @@ class TestMusicBrainzInputBoundary:
         artist = "Normal Artist"
         extremely_long_album = "B" * 10000
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist,
             album_norm=extremely_long_album,
             artist_context=ArtistContext(),
@@ -111,7 +117,8 @@ class TestMusicBrainzInputBoundary:
         unicode_artist = "日本語アーティスト🎵"
         unicode_album = "中文專輯名稱🎶"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=unicode_artist,
             album_norm=unicode_album,
             artist_context=ArtistContext(),
@@ -123,7 +130,8 @@ class TestMusicBrainzInputBoundary:
         """Empty strings don't crash the client."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="",
             album_norm="",
             artist_context=ArtistContext(),
@@ -138,7 +146,8 @@ class TestMusicBrainzInputBoundary:
         artist_with_lucene_chars = 'Artist+-&|!(){}[]^"~*?:\\/Name'
         album = "Normal Album"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_lucene_chars,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -150,7 +159,8 @@ class TestMusicBrainzInputBoundary:
         """Whitespace-only inputs don't crash the client."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="   \t\n\r   ",
             album_norm="   \t\n\r   ",
             artist_context=ArtistContext(),
@@ -193,7 +203,8 @@ class TestDiscogsInputBoundary:
         artist_with_control = "Artist\x00\x01\x02Name"
         album = "Normal Album"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_control,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -205,7 +216,8 @@ class TestDiscogsInputBoundary:
         """Empty artist name doesn't crash Discogs search."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="",
             album_norm="Some Album",
             artist_context=ArtistContext(),
@@ -217,7 +229,8 @@ class TestDiscogsInputBoundary:
         """Empty album name doesn't crash Discogs search."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="Some Artist",
             album_norm="",
             artist_context=ArtistContext(),
@@ -232,7 +245,8 @@ class TestDiscogsInputBoundary:
         long_artist = "X" * 10000
         long_album = "Y" * 10000
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=long_artist,
             album_norm=long_album,
             artist_context=ArtistContext(),
@@ -247,7 +261,8 @@ class TestDiscogsInputBoundary:
         unicode_artist = "Артист🎵"
         unicode_album = "Альбом🎶"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=unicode_artist,
             album_norm=unicode_album,
             artist_context=ArtistContext(),
@@ -262,7 +277,8 @@ class TestDiscogsInputBoundary:
         artist_with_special = "Artist & The Band / Group"
         album = "Album: Subtitle (Deluxe)"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_special,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -274,7 +290,8 @@ class TestDiscogsInputBoundary:
         """Whitespace-only inputs don't crash."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="   \t\n   ",
             album_norm="   \r\n   ",
             artist_context=ArtistContext(),
@@ -314,7 +331,8 @@ class TestAppleMusicInputBoundary:
         artist_with_special = "Artist & The Band / Group"
         album = "Album: Subtitle (Deluxe)"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_special,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -329,7 +347,8 @@ class TestAppleMusicInputBoundary:
         artist_with_control = "Artist\x00\x01\x02Name"
         album = "Album\x03\x04Title"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_control,
             album_norm=album,
             artist_context=ArtistContext(),
@@ -344,7 +363,8 @@ class TestAppleMusicInputBoundary:
         long_artist = "Z" * 10000
         long_album = "W" * 10000
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=long_artist,
             album_norm=long_album,
             artist_context=ArtistContext(),
@@ -359,7 +379,8 @@ class TestAppleMusicInputBoundary:
         unicode_artist = "한국어🎵"
         unicode_album = "日本語🎶"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=unicode_artist,
             album_norm=unicode_album,
             artist_context=ArtistContext(),
@@ -371,7 +392,8 @@ class TestAppleMusicInputBoundary:
         """Empty inputs don't crash."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="",
             album_norm="",
             artist_context=ArtistContext(),
@@ -383,7 +405,8 @@ class TestAppleMusicInputBoundary:
         """Whitespace-only inputs don't crash."""
         client = self._create_mock_client()
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm="   \t\n   ",
             album_norm="   \r\n   ",
             artist_context=ArtistContext(),
@@ -398,7 +421,8 @@ class TestAppleMusicInputBoundary:
         artist_with_newline = "Artist\nName\rHere"
         album_with_newline = "Album\nTitle\rHere"
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=artist_with_newline,
             album_norm=album_with_newline,
             artist_context=ArtistContext(),
@@ -413,7 +437,8 @@ class TestAppleMusicInputBoundary:
         mixed_artist = "A" * 1000 + "\x00日本語\n" + "🎵" * 100
         mixed_album = "B" * 1000 + "\x01中文\r" + "🎶" * 100
 
-        releases = await client.get_scored_releases(
+        releases = await fetch_and_score(
+            client,
             artist_norm=mixed_artist,
             album_norm=mixed_album,
             artist_context=ArtistContext(),
