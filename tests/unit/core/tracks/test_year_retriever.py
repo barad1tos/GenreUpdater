@@ -301,7 +301,7 @@ class TestYearRetrieverAllure:
 
         # Verify API was called correctly
         assert len(mock_external_api.get_album_year_calls) == 1
-        assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None, None)
+        assert mock_external_api.get_album_year_calls[0] == ("Test Artist", "Test Album", None)
 
     @pytest.mark.asyncio
     async def test_determine_album_year_force_mode_passes_dominant_year(self) -> None:

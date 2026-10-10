@@ -107,23 +107,20 @@ class YearDeterminator:
             return cached_entry.year
         return None
 
-    async def _query_providers(self, artist: str, album: str, album_tracks: list[TrackDict], library_year: str | None) -> ProviderAnswer | None:
+    async def _query_providers(self, artist: str, album: str, library_year: str | None) -> ProviderAnswer | None:
         """Ask the providers for the album's year.
 
         Returns None when no provider knows the album or the lookup failed; a lookup no provider answered raises
         YearLookupUnavailableError so the caller leaves the album for the next run.
         """
-        earliest_added = YearConsistencyChecker.get_earliest_track_added_year(album_tracks)
         try:
             year, is_definitive, confidence_score, year_scores = await self.external_api.get_album_year(
-                artist, album, current_library_year=library_year, earliest_track_added_year=earliest_added
+                artist, album, current_library_year=library_year
             )
         except YearLookupUnavailableError:
             raise
         except (OSError, ValueError, RuntimeError) as error:
-            self.error_logger.exception(
-                "Year lookup failed for '%s - %s' (library year %s, earliest track added %s)", artist, album, library_year, earliest_added
-            )
+            self.error_logger.exception("Year lookup failed for '%s - %s' (library year %s)", artist, album, library_year)
             self.console_logger.warning(
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
@@ -182,10 +179,18 @@ class YearDeterminator:
         if not force and (cached_year := await self._try_cached_year(artist, album)):
             return cached_year
         library_year = self.consistency_checker.get_most_common_year(album_tracks)
-        answer = await self._query_providers(artist, album, album_tracks, library_year)
+        answer = await self._query_providers(artist, album, library_year)
         if answer is None:
             # No provider knows the album: the majority of its tracks is the best year its outliers can get
             majority = self.consistency_checker.get_majority_year(album_tracks)
+            if majority and self._is_placeholder_current_year(majority, album_tracks):
+                self.console_logger.info(
+                    "No provider knows '%s - %s'; its majority year %s is this year on tracks added earlier (Apple's placeholder) - leaving it",
+                    artist,
+                    album,
+                    majority,
+                )
+                return None
             if majority:
                 self.console_logger.info("No provider knows '%s - %s'; using the majority year %s of its tracks", artist, album, majority)
             return majority
@@ -462,6 +467,26 @@ class YearDeterminator:
         """
         years = [str(track_year or "") for t in tracks if (track_year := t.year) and is_valid_year(track_year)]
         return len(years) == len(tracks) and len(set(years)) == 1 if years else False
+
+    @staticmethod
+    def _is_placeholder_current_year(year: str, album_tracks: list[TrackDict]) -> bool:
+        """Tell whether a year is this year on an album whose tracks were not added this year.
+
+        Apple stamps the current year on tracks it has no date for; a real release from this year reaches the
+        library this year.
+
+        Args:
+            year: The year to judge
+            album_tracks: The album's tracks, whose date_added decides
+
+        Returns:
+            True when the year is this year and the earliest track was added in another year or carries no date
+
+        """
+        this_year = datetime.now(UTC).year
+        if year != str(this_year):
+            return False
+        return YearConsistencyChecker.get_earliest_track_added_year(album_tracks) != this_year
 
     @staticmethod
     def _get_dominant_year(tracks: list[TrackDict]) -> str | None:

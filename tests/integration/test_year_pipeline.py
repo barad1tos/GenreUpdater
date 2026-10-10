@@ -198,7 +198,7 @@ class TestYearPipelineIntegration:
 
         assert result is True
         # (artist, album, current library year, year the earliest track was added)
-        assert external_api.get_album_year_calls == [("The Beatles", "Abbey Road", None, 2024)]
+        assert external_api.get_album_year_calls == [("The Beatles", "Abbey Road", None)]
         assert _written_years(track_processor) == [("1", "1969"), ("2", "1969"), ("3", "1969")]
         assert _failures_logged(year_retriever) == []
 
@@ -223,7 +223,7 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert external_api.get_album_year_calls == [("Rare Artist", "Rare Album", None, 2024)]
+        assert external_api.get_album_year_calls == [("Rare Artist", "Rare Album", None)]
         assert _written_years(track_processor) == [("1", "2018"), ("2", "2018")]
         assert pending_verification.marked_albums == []
         assert _failures_logged(year_retriever) == []
@@ -250,7 +250,7 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert external_api.get_album_year_calls == [("Rare Artist", "Rare Album", None, 2024)]
+        assert external_api.get_album_year_calls == [("Rare Artist", "Rare Album", None)]
         assert _written_years(track_processor) == []
         assert pending_verification.marked_albums == [
             (
@@ -299,7 +299,7 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert external_api.get_album_year_calls == [("Unknown Artist", "Unknown Album", None, 2024)]
+        assert external_api.get_album_year_calls == [("Unknown Artist", "Unknown Album", None)]
         assert _written_years(track_processor) == []
         # The orchestrator queues such an album itself; a second mark here would count each attempt twice
         assert pending_verification.marked_albums == []
@@ -352,7 +352,7 @@ class TestYearPipelineIntegration:
         result = await year_retriever.process_album_years(tracks)
 
         assert result is True
-        assert external_api.get_album_year_calls == [("Test Artist", "Preview Album", None, 2024)]
+        assert external_api.get_album_year_calls == [("Test Artist", "Preview Album", None)]
         assert _written_years(track_processor) == [("3", "2024")]
         assert pending_verification.marked_albums == [
             (
@@ -411,7 +411,7 @@ class TestYearPipelineIntegration:
         assert result is True
         # The only test with an existing library year: each year appears once, and the tie goes to
         # the first track's 2019, since get_most_common_year keeps the order tracks were counted in
-        assert external_api.get_album_year_calls == [("Complex Artist", "Complex Album", "2019", 2024)]
+        assert external_api.get_album_year_calls == [("Complex Artist", "Complex Album", "2019")]
         # Track 2 already has 2020; the other two move to it, and nothing is queued for a recheck
         assert _written_years(track_processor) == [("1", "2020"), ("3", "2020")]
         assert pending_verification.marked_albums == []
