@@ -143,7 +143,7 @@ class ReleaseScorer:
         self.console_logger = console_logger or logging.getLogger(__name__)
         self.remaster_keywords = remaster_keywords or []
         self.major_market_codes = major_market_codes or self._DEFAULT_MARKET_CODES
-        self.reissue_keywords = [keyword.lower() for keyword in reissue_keywords or []]
+        self.reissue_keywords = [keyword.strip().lower() for keyword in reissue_keywords or [] if keyword.strip()]
 
         # Constants from the original implementation
         self.YEAR_LENGTH = 4

@@ -237,8 +237,8 @@ def _extract_rg_year(date_str: str | None) -> int | None:
         return None
 
 
-def _build_release_fixture(release: dict[str, Any]) -> dict[str, Any]:
-    """Build release fixture dict from raw release data."""
+def _build_release_fixture(release: dict[str, Any], reissue_keywords: list[str]) -> dict[str, Any]:
+    """Build release fixture dict from raw release data; a title with a reissue keyword marks a reissue, as the scorer reads it."""
     year_str = str(release.get("year", ""))
     return {
         "artist": str(release.get("artist", "")),
@@ -248,7 +248,7 @@ def _build_release_fixture(release: dict[str, Any]) -> dict[str, Any]:
         "releaseType": _map_release_type(str(release.get("album_type", ""))),
         "status": _map_release_status(str(release.get("status", ""))),
         "country": release.get("country"),
-        "isReissue": bool(release.get("is_reissue", False)),
+        "isReissue": any(keyword in str(release.get("title", "")).lower() for keyword in reissue_keywords),
         "mbReleaseGroupID": release.get("mb_release_group_id"),
         "mbReleaseGroupFirstYear": _extract_rg_year(release.get("releasegroup_first_date")),
         "genre": release.get("genre"),
@@ -384,6 +384,7 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
     scorer = ReleaseScorer(
         scoring_config=scoring_cfg,
         console_logger=_logger,
+        reissue_keywords=config["year_retrieval"]["reissue_detection"]["reissue_keywords"],
     )
 
     fixtures: list[dict[str, Any]] = []
@@ -565,13 +566,12 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
             "id": "score_reissue",
             "description": "Reissue penalty",
             "release": {
-                "title": _THRILLER,
+                "title": f"{_THRILLER} (Remastered)",
                 "artist": _MICHAEL_JACKSON,
                 "year": "2001",
                 "album_type": "Album",
                 "status": "Official",
                 "country": "US",
-                "is_reissue": True,
                 "source": "musicbrainz",
             },
             "queryArtist": _MICHAEL_JACKSON,
@@ -912,13 +912,12 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
             "description": "Original release should rank higher than reissue",
             "candidates": [
                 {
-                    "title": _DARK_SIDE,
+                    "title": f"{_DARK_SIDE} (Remastered)",
                     "artist": _PINK_FLOYD,
                     "year": "2003",
                     "album_type": "Album",
                     "status": "Official",
                     "country": "US",
-                    "is_reissue": True,
                     "source": "musicbrainz",
                 },
                 {
@@ -958,7 +957,7 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
             {
                 "id": str(case["id"]),
                 "description": str(case["description"]),
-                "release": _build_release_fixture(release),
+                "release": _build_release_fixture(release, scorer.reissue_keywords),
                 "query": {
                     "artist": query_artist,
                     "album": query_album,
@@ -992,7 +991,7 @@ def generate_scoring_fixtures() -> list[dict[str, Any]]:
             )
             scored.append(
                 {
-                    "release": _build_release_fixture(cand_release),
+                    "release": _build_release_fixture(cand_release, scorer.reissue_keywords),
                     "totalScore": score,
                 }
             )

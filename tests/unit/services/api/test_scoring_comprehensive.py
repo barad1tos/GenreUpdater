@@ -677,6 +677,10 @@ class TestScoringBranchCoverage:
 
         assert keyed - plain == ReleaseScorer().scoring_config.reissue_penalty
 
+    def test_an_empty_reissue_keyword_marks_nothing(self) -> None:
+        """An empty entry in the keyword list would match every title, so it is ignored."""
+        assert ReleaseScorer(reissue_keywords=["", "  ", "Remaster"]).reissue_keywords == ["remaster"]
+
     def test_rg_first_date_match_bonus(self, scorer: ReleaseScorer) -> None:
         """MusicBrainz release matching RG first date should get a bonus."""
         release_with_rg = {

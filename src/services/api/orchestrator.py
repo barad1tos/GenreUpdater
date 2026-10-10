@@ -389,7 +389,7 @@ class ExternalApiOrchestrator:
             console_logger=self.console_logger,
             remaster_keywords=remaster_keywords,
             major_market_codes=self.major_market_codes,
-            reissue_keywords=[*self.config.year_retrieval.reissue_detection.reissue_keywords, *remaster_keywords],
+            reissue_keywords=self.config.year_retrieval.reissue_detection.reissue_keywords,
         )
         self.year_score_resolver = YearScoreResolver(
             console_logger=self.console_logger,
