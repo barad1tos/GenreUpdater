@@ -32,7 +32,7 @@ from .pending_verification import PendingVerificationService
 
 if TYPE_CHECKING:
     import logging
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable
 
     from core.logger import SafeQueueListener
     from core.models.protocols import AppleScriptClientProtocol
@@ -226,14 +226,13 @@ class DependencyContainer:
             ValueError: If the underlying initialize call fails due to an invalid argument value.
 
         """
-        initialize_candidate: Callable[..., Any] | None = getattr(service, "initialize", None)
-        if initialize_candidate is None or not callable(initialize_candidate):
+        initialize_method = getattr(service, "initialize", None)
+        if not callable(initialize_method):
             self._error_logger.warning(
                 " %s instance has no initialize method",
                 LogFormat.entity(service_name),
             )
             return
-        initialize_method: Callable[..., Any] = initialize_candidate
 
         self._console_logger.debug(" Initializing %s...", LogFormat.entity(service_name))
         start = time.monotonic()
