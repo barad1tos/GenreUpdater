@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-10
+
 ### Changed
 
 - The first run after this update that works on the library (not `--dry-run`), or a `full_sync`, first rebuilds `track_list.csv` from Music.app keyed by persistent ID, before anything else reads it, and keeps the previous file as `csv/track_list.pre-persistent-id.csv`; year history moves to a track when the old rows with its artist, album and name agree on it. If Music.app cannot be read whole, that run stops with an error naming the unread tracks, the track list stays as it was, and the next run tries again
@@ -277,7 +279,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - `update` → `update_genres`
    - New: `update_years`, `restore_release_years`
 
-[Unreleased]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.2...HEAD
+[Unreleased]: https://github.com/barad1tos/GenreUpdater/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/barad1tos/GenreUpdater/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/barad1tos/GenreUpdater/releases/tag/v3.0.0
