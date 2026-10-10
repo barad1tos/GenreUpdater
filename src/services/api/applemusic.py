@@ -16,25 +16,24 @@ API Reference: https://developer.apple.com/library/archive/documentation/AudioVi
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import Any, TYPE_CHECKING
 
+from core.analytics_decorator import track_instance_method
 from core.models.normalization import normalize_for_matching
+from services.api.api_base import BaseApiClient
 from services.api.request_executor import ApiRequestError
 
 if TYPE_CHECKING:
+    import logging
+
+    from metrics.analytics import Analytics
     from services.api.api_base import ScoredRelease
     from services.api.year_scoring import ArtistContext
     from collections.abc import Callable, Coroutine
 
 # iTunes Search API base URL
 ITUNES_BASE_URL: str = "https://itunes.apple.com"
-
-# Constants for data validation
-VALID_YEAR_LENGTH = 4  # Expected length of a year string (e.g., "2025")
-
-_logger = logging.getLogger(__name__)
 
 
 def _results_of(response: dict[str, Any], url: str) -> list[dict[str, Any]]:
@@ -57,7 +56,7 @@ def _results_of(response: dict[str, Any], url: str) -> list[dict[str, Any]]:
     return results
 
 
-class AppleMusicClient:
+class AppleMusicClient(BaseApiClient):
     """Client for iTunes Search API operations.
 
     Provides album search and metadata retrieval using Apple's public iTunes Search API.
@@ -68,6 +67,7 @@ class AppleMusicClient:
         error_logger: Logger for error messages
         make_api_request_func: Injected function for making API requests
         score_release_func: Injected function for scoring releases
+        analytics: Analytics service for performance tracking
         country_code: Country code for search results (default: US)
         entity: Type of content to search for (default: album)
         limit: Maximum number of results to return (default: 50)
@@ -80,13 +80,14 @@ class AppleMusicClient:
         error_logger: logging.Logger,
         make_api_request_func: Callable[..., Coroutine[Any, Any, dict[str, Any] | None]],
         score_release_func: Callable[..., float],
+        analytics: Analytics,
         *,
         country_code: str = "US",
         entity: str = "album",
         limit: int = 50,
     ) -> None:
-        self.console_logger = console_logger
-        self.error_logger = error_logger
+        super().__init__(console_logger, error_logger)
+        self.analytics = analytics
         self.make_api_request_func = make_api_request_func
         self.score_release_func = score_release_func
 
@@ -105,6 +106,7 @@ class AppleMusicClient:
             self.limit,
         )
 
+    @track_instance_method("itunes_release_search")
     async def fetch_release_records(self, artist_norm: str, album_norm: str) -> list[dict[str, Any]]:
         """Fetch iTunes release records for an album, falling back to the artist's albums when the search finds nothing.
 
@@ -294,26 +296,6 @@ class AppleMusicClient:
         self.console_logger.debug("[itunes] Built %d records from %d results", len(records), len(results))
         return records
 
-    def _parse_release_year(self, release_date: str) -> str | None:
-        """Extract a 4-digit year from an iTunes ISO date string.
-
-        Args:
-            release_date: Date string like ``2024-03-15T12:00:00Z``
-
-        Returns:
-            Year string (e.g. ``"2024"``) or None if unparseable
-
-        """
-        if not release_date:
-            return None
-        try:
-            year = release_date.split("-", maxsplit=1)[0]
-            if year.isdigit() and len(year) == VALID_YEAR_LENGTH:
-                return year
-        except (IndexError, ValueError):
-            self.console_logger.debug("[itunes] Could not parse release date: '%s'", release_date)
-        return None
-
     def _build_release_record(self, result: dict[str, Any]) -> dict[str, Any] | None:
         """Build a release record from one iTunes result: its raw fields, nothing that depends on the clock or context.
 
@@ -329,7 +311,7 @@ class AppleMusicClient:
             self.console_logger.debug("[itunes] Skipping result: missing artist or album name")
             return None
 
-        release_year = self._parse_release_year(result.get("releaseDate", "").strip())
+        release_year = self._extract_year_from_date(result.get("releaseDate", "").strip())
         if not release_year:
             self.console_logger.debug("[itunes] Skipping '%s - %s': no valid release year", artist_name, collection_name)
             return None
@@ -344,6 +326,7 @@ class AppleMusicClient:
             "disambiguation": result.get("collectionCensoredName", ""),
         }
 
+    @track_instance_method("itunes_artist_period")
     async def get_artist_start_year(self, artist_norm: str) -> int | None:
         """Get artist's earliest release year from iTunes.
 
@@ -545,8 +528,8 @@ class AppleMusicClient:
 
         return years
 
-    @staticmethod
-    def _extract_year_from_result(result: dict[str, Any], artist_normalized: str) -> int | None:
+    @classmethod
+    def _extract_year_from_result(cls, result: dict[str, Any], artist_normalized: str) -> int | None:
         """Extract release year from a single iTunes result if it matches artist.
 
         Args:
@@ -564,13 +547,5 @@ class AppleMusicClient:
         if artist_normalized not in artist_name and artist_name not in artist_normalized:
             return None
 
-        if not release_date:
-            return None
-
-        try:
-            year_str = release_date.split("-", maxsplit=1)[0]
-            if year_str.isdigit() and len(year_str) == VALID_YEAR_LENGTH:
-                return int(year_str)
-        except (IndexError, ValueError) as exc:
-            _logger.debug("Failed to parse year from release_date '%s': %s", release_date, exc)
-        return None
+        year = cls._extract_year_from_date(release_date)
+        return int(year) if year else None

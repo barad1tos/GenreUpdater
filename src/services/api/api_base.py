@@ -164,10 +164,6 @@ class BaseApiClient:
     def __init__(self, console_logger: logging.Logger, error_logger: logging.Logger) -> None:
         self.console_logger = console_logger
         self.error_logger = error_logger
-        self.compilation_pattern = re.compile(
-            r"\b(compilation|greatest\s+hits|best\s+of|collection|anthology)\b",
-            re.IGNORECASE,
-        )
 
     @staticmethod
     def _normalize_name(name: str) -> str:
