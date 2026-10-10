@@ -204,6 +204,34 @@ class TestRejectedTracks:
         persister.assert_awaited_once_with([kept], [kept.id], full_scan=True)
 
 
+class TestRejectedMissedTracks:
+    """A missed track read by id goes through the same validation as a batch, so its rejection is recorded too."""
+
+    @pytest.mark.asyncio
+    async def test_a_missed_track_validation_rejects_counts_as_read(
+        self,
+        mock_ap_client: MagicMock,
+        mock_cache_service: MagicMock,
+        loggers: tuple[logging.Logger, logging.Logger],
+        config: AppConfig,
+    ) -> None:
+        kept = TrackDict(id="00000000000000A1", name="Song", artist="A", album="B")
+        rejected = TrackDict(id="00000000000000C3", name="x" * 2000, artist="A", album="B")
+        mock_ap_client.fetch_all_track_ids = AsyncMock(return_value=[kept.id, rejected.id])
+        persister = AsyncMock()
+        fetcher = create_batch_fetcher(mock_ap_client, mock_cache_service, loggers, config, missed_track_fetcher=AsyncMock(return_value=[rejected]))
+        fetcher._track_validator = lambda tracks: [track for track in tracks if track.id != rejected.id]
+        fetcher._snapshot_persister = persister
+        fetcher._can_use_snapshot = lambda _artist: True
+
+        with patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[kept])):
+            tracks = await fetcher.fetch_all_tracks(1000, skip_snapshot_check=True)
+
+        assert tracks == [kept]
+        assert fetcher.rejected_ids == {rejected.id}
+        persister.assert_awaited_once_with([kept], [kept.id], full_scan=True)
+
+
 class TestFetchTracksInBatchesRouting:
     """Tests for _fetch_tracks_in_batches routing logic."""
 

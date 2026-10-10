@@ -51,7 +51,7 @@ class BatchTrackFetcher:
         snapshot_loader: Async callback to load tracks from snapshot
         snapshot_persister: Async callback to persist tracks to snapshot; `full_scan` says the whole library was read
         can_use_snapshot: Callback to check if snapshot can be used
-        missed_track_fetcher: Async callback to fetch tracks by persistent ID
+        missed_track_fetcher: Async callback to fetch parsed, not yet validated tracks by persistent ID
         dry_run: Whether running in dry-run mode
         analytics: Optional analytics instance for batch mode logging
     """
@@ -149,8 +149,9 @@ class BatchTrackFetcher:
         missed_tracks: list[TrackDict] = []
         if missed_ids:
             self.console_logger.info("Batches missed %d tracks Music.app lists; fetching them by persistent ID", len(missed_ids))
-            missed_tracks = await self._missed_track_fetcher(missed_ids)
-        unread_ids = sorted(set(missed_ids) - {str(track.id) for track in missed_tracks})
+            missed_tracks = await self._validate_and_process(await self._missed_track_fetcher(missed_ids))
+        read_ids = {str(track.id) for track in missed_tracks} | self.rejected_ids
+        unread_ids = sorted(set(missed_ids) - read_ids)
         if unread_ids:
             self.error_logger.warning(
                 "Library read is incomplete (%d of %d listed tracks unread, e.g. %s); its snapshot does not count as a full scan",
@@ -159,6 +160,13 @@ class BatchTrackFetcher:
                 ", ".join(unread_ids[:10]),
             )
         return missed_tracks, not unread_ids
+
+    async def _validate_and_process(self, tracks: list[TrackDict]) -> list[TrackDict]:
+        """Validate parsed tracks, record the ids validation rejects, and apply artist renames to the rest."""
+        validated_tracks = self._track_validator(tracks)
+        self.rejected_ids |= {str(track.id) for track in tracks} - {str(track.id) for track in validated_tracks}
+        await self._artist_processor(validated_tracks)
+        return validated_tracks
 
     async def _fetch_tracks_in_batches(self, batch_size: int) -> list[TrackDict]:
         """Execute the batch fetching loop.
@@ -353,9 +361,7 @@ class BatchTrackFetcher:
             return [], True, True  # Empty tracks, should continue, parse failed
 
         # Validate and process tracks
-        validated_tracks = self._track_validator(batch_tracks)
-        self.rejected_ids |= {str(track.id) for track in batch_tracks} - {str(track.id) for track in validated_tracks}
-        await self._artist_processor(validated_tracks)
+        validated_tracks = await self._validate_and_process(batch_tracks)
 
         self.console_logger.info(
             "Batch %d: fetched %d tracks, validated %d/%d",

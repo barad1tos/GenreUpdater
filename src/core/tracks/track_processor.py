@@ -105,7 +105,7 @@ class TrackProcessor:
             snapshot_loader=self._load_tracks_from_snapshot,
             snapshot_persister=self._update_snapshot,
             can_use_snapshot=self._can_use_snapshot,
-            missed_track_fetcher=self.fetch_tracks_by_ids,
+            missed_track_fetcher=self._fetch_parsed_tracks_by_ids,
             dry_run=dry_run,
             analytics=analytics,
         )
@@ -420,7 +420,13 @@ class TrackProcessor:
     @track_instance_method("track_fetch_by_ids")
     async def fetch_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
         """Fetch detailed track metadata for the provided track IDs."""
+        parsed_tracks = await self._fetch_parsed_tracks_by_ids(track_ids)
+        validated_tracks = self._validate_tracks_security(parsed_tracks)
+        await self._apply_artist_renames(validated_tracks)
+        return validated_tracks
 
+    async def _fetch_parsed_tracks_by_ids(self, track_ids: list[str]) -> list[TrackDict]:
+        """Fetch and parse tracks by persistent ID, before security validation."""
         if not track_ids:
             return []
 
@@ -449,10 +455,7 @@ class TrackProcessor:
                 self.error_logger.warning("Fetch by persistent ID returned nothing for batch %d/%d (%d ids)", batch_num, total_batches, len(batch))
                 continue
 
-            parsed_tracks = parse_tracks(raw_output, self.error_logger)
-            validated_tracks = self._validate_tracks_security(parsed_tracks)
-            await self._apply_artist_renames(validated_tracks)
-            collected.extend(validated_tracks)
+            collected.extend(parse_tracks(raw_output, self.error_logger))
 
         return collected
 
