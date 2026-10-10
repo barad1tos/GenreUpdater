@@ -24,16 +24,9 @@ from core.models.track_models import TrackDict
 from core.tracks.track_delta import TrackDelta
 from services.cache.json_utils import dumps_json, loads_json
 
-DEFAULT_MAX_AGE_HOURS: int = 24
-DEFAULT_COMPRESS_LEVEL: int = 6
 JSON_SUFFIX: str = ".json"
 GZIP_SUFFIX: str = ".json.gz"
 FORCE_SCAN_INTERVAL_DAYS: int = 7
-
-# Minimum expected field count from fetch_tracks.applescript output
-MIN_FETCH_TRACKS_FIELDS: int = 11
-
-# Smart Delta force-scan batch settings
 
 
 def _utc_now_naive() -> datetime:

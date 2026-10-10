@@ -54,6 +54,12 @@ caching:
 **Delta Mode**:
 When `delta_enabled: true`, only fetches tracks modified since snapshot creation.
 
+**Track identity**: every track is keyed by Music.app's persistent ID. Music.app can renumber its plain track ids, so the snapshot, `track_list.csv` and every write use the persistent ID, which stays with the track.
+
+**Full scans**: between full scans, runs trust the snapshot for tracks they already know and fetch only new ids. A full scan reads the whole library in bulk (about 45 seconds) and replaces the snapshot. It runs when no full scan is recorded, a week after the last one, when the library changed and the snapshot is older than `max_age_hours`, or with `--force`. A full scan reports tracks that disappeared or were renamed since the previous snapshot, which drops their provider results.
+
+**Upgrading from ids**: the first run after the switch to persistent IDs rebuilds `track_list.csv` from the library and keeps the old file as `csv/track_list.pre-persistent-id.csv`. Year history moves to a track when the old rows with its artist, album and name agree on it.
+
 ### 2. Album Year Cache
 
 The year determined for each album, with the confidence it was determined at. A cached year is used without asking the providers only when its confidence is at least 90; entries expire after 30 days.

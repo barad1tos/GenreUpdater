@@ -18,7 +18,7 @@ See [Automation](automation.md) for detailed launchctl setup.
 
 Check `<logs_base_dir>/csv/changes_report.csv`. It contains:
 
-- Track ID, name, artist, album
+- Artist, album and track name
 - Old and new values for genre/year
 - Timestamp of change
 
