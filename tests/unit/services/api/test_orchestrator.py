@@ -374,6 +374,13 @@ class TestExternalApiOrchestratorAllure:
         assert logged_exception[1] is context_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
+    def test_reissues_are_judged_by_the_reissue_keywords_alone(self) -> None:
+        """Remaster keywords normalize titles for matching ("soundtrack", "deluxe"), so they must not carry the reissue penalty."""
+        orchestrator = TestExternalApiOrchestratorAllure.create_orchestrator()
+        configured = orchestrator.config.year_retrieval.reissue_detection.reissue_keywords
+
+        assert orchestrator.release_scorer.reissue_keywords == [keyword.lower() for keyword in configured]
+
     @pytest.mark.asyncio
     async def test_failed_region_keeps_the_artist_period(self) -> None:
         """A region lookup that fails after the period arrived still scores the search with that period."""

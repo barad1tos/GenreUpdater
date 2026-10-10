@@ -14,7 +14,7 @@ import re
 import time
 from datetime import UTC
 from datetime import datetime as dt
-from typing import Any, NotRequired, TypedDict, TYPE_CHECKING
+from typing import Any, TypedDict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
@@ -39,7 +39,6 @@ class ScoredRelease(TypedDict):
     barcode: str | None
     disambiguation: str | None
     source: str
-    is_reissue: NotRequired[bool]  # Optional: True if detected as reissue/remaster
 
 
 class ApiRateLimiter:

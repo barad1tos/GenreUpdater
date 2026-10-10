@@ -664,13 +664,22 @@ class TestScoringBranchCoverage:
             promo, "a", "x", artist_context=ArtistContext()
         )
 
-    def test_reissue_penalty(self, scorer: ReleaseScorer) -> None:
-        """Reissue indicator should reduce score."""
-        original = {"title": "X", "artist": "A", "year": "2020", "source": "test"}
-        reissue = {"title": "X", "artist": "A", "year": "2020", "source": "test", "is_reissue": True}
-        assert scorer.score_original_release(original, "a", "x", artist_context=ArtistContext()) > scorer.score_original_release(
-            reissue, "a", "x", artist_context=ArtistContext()
+    @pytest.mark.parametrize("source", ["musicbrainz", "discogs", "itunes"])
+    def test_reissue_keywords_in_the_title_are_penalized_for_every_source(self, source: str) -> None:
+        """The configured reissue keywords mark a reissue whichever provider the release came from."""
+        release = {"title": "Animals (2018 Remastered)", "artist": "Pink Floyd", "year": "2018", "source": source}
+        plain = ReleaseScorer(remaster_keywords=["Remastered"]).score_original_release(
+            release, "pink floyd", "animals", artist_context=ArtistContext(), source=source
         )
+        keyed = ReleaseScorer(remaster_keywords=["Remastered"], reissue_keywords=["Remaster"]).score_original_release(
+            release, "pink floyd", "animals", artist_context=ArtistContext(), source=source
+        )
+
+        assert keyed - plain == ReleaseScorer().scoring_config.reissue_penalty
+
+    def test_an_empty_reissue_keyword_marks_nothing(self) -> None:
+        """An empty entry in the keyword list would match every title, so it is ignored."""
+        assert ReleaseScorer(reissue_keywords=["", "  ", "Remaster"]).reissue_keywords == ["remaster"]
 
     def test_rg_first_date_match_bonus(self, scorer: ReleaseScorer) -> None:
         """MusicBrainz release matching RG first date should get a bonus."""

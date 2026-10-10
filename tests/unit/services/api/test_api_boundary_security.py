@@ -17,7 +17,6 @@ from services.api.applemusic import AppleMusicClient
 from services.api.discogs import DiscogsClient
 from services.api.musicbrainz import MusicBrainzClient
 from services.api.year_scoring import ArtistContext
-from tests.factories import create_test_app_config
 
 
 @pytest.mark.unit
@@ -178,7 +177,6 @@ class TestDiscogsInputBoundary:
         score_release_func = MagicMock(return_value=0.0)
 
         discogs_auth = "fake_value_for_testing"
-        test_config = create_test_app_config()
         return DiscogsClient(
             token=discogs_auth,
             console_logger=console_logger,
@@ -186,8 +184,6 @@ class TestDiscogsInputBoundary:
             analytics=analytics,
             make_api_request_func=make_api_request_func,
             score_release_func=score_release_func,
-            scoring_config=test_config.year_retrieval,
-            config=test_config,
         )
 
     async def test_control_chars_in_search_query_handled(self) -> None:

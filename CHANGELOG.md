@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The reissue penalty depended on the provider: only Discogs titles were checked for keywords, while every iTunes album from this year or the last was penalized as a reissue, new albums included. The configured `reissue_keywords` now mark reissues from MusicBrainz, Discogs and iTunes alike, and a new album is no longer penalized for being new. Discogs also checked the remaster keywords, which hold the soundtrack and edition words used to match titles, so an original soundtrack on Discogs lost the reissue penalty's 30 points; those words no longer count as reissue markers
 - A task canceled on its own while others ran beside it was mishandled: a track year update counted as done; an album's year processing, a MusicBrainz release fetch, a cache initialization or a cache save vanished without a log; and a genre update broke that artist's genre pass. Each now counts as a failure and is logged with its exception type, and a failed track update also logs its traceback
 - When some of an album's track year updates failed, the failed tracks were still recorded in the change log as updated to the new year; only the tracks that were updated are recorded now
 - A cache that failed to save at shutdown was followed by "All caches saved to disk"; shutdown now warns that the cache was not saved and names it

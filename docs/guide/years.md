@@ -88,7 +88,7 @@ Each API result receives a score based on:
 
 The system detects reissues via:
 
-1. **Keywords**: "remaster", "anniversary", "deluxe", etc.
+1. **Keywords**: a release title containing a `year_retrieval.reissue_detection.reissue_keywords` entry is scored as a reissue, whichever provider it came from
 2. **Year comparison**: Release year vs. release group date
 3. **Release count**: Albums with many releases likely have reissues
 
