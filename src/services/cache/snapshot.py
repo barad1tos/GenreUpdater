@@ -18,11 +18,10 @@ if TYPE_CHECKING:
     from core.models.protocols import AppleScriptClientProtocol
     from core.models.track_models import AppConfig, LibrarySnapshotConfig
 
-from core.apple_script_names import FETCH_TRACKS_BY_IDS
-from core.logger import ensure_directory, spinner
+from core.logger import ensure_directory
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, LibraryDeltaCache
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, TrackDelta, has_identity_changed, has_track_changed
+from core.tracks.track_delta import TrackDelta
 from services.cache.json_utils import dumps_json, loads_json
 
 DEFAULT_MAX_AGE_HOURS: int = 24
@@ -35,8 +34,6 @@ FORCE_SCAN_INTERVAL_DAYS: int = 7
 MIN_FETCH_TRACKS_FIELDS: int = 11
 
 # Smart Delta force-scan batch settings
-DELTA_BATCH_SIZE: int = 200  # tracks per batch for update detection
-DELTA_BATCH_TIMEOUT_SECONDS: int = 120  # timeout per batch (generous for 200 IDs)
 
 
 def _utc_now_naive() -> datetime:
@@ -238,76 +235,6 @@ class LibrarySnapshotService:
         # false "library changed" detections when compared to UTC-saved snapshots
         return datetime.fromtimestamp(stat_result.st_mtime, tz=UTC).replace(tzinfo=None)
 
-    @staticmethod
-    def _parse_raw_track(raw_track: dict[str, Any]) -> TrackDict:
-        """Parse raw track dict to TrackDict.
-
-        Note: year_set_by_mgu is a tracking field managed by MGU, not from AppleScript.
-        It's initialized to None here and populated by year_batch.py during processing.
-        """
-        year_value = raw_track.get("year")
-        return TrackDict(
-            id=raw_track.get("id", ""),
-            name=raw_track.get("name", ""),
-            artist=raw_track.get("artist", ""),
-            album_artist=raw_track.get("album_artist"),
-            album=raw_track.get("album", ""),
-            genre=raw_track.get("genre"),
-            date_added=raw_track.get("date_added"),
-            last_modified=raw_track.get("modification_date"),
-            track_status=raw_track.get("track_status"),
-            year=year_value if year_value and str(year_value or "").strip() else None,
-            release_year=raw_track.get("release_year"),
-            year_set_by_mgu=None,  # Tracking field, not from AppleScript
-        )
-
-    def _parse_fetch_tracks_output(self, raw_output: str) -> list[dict[str, str]]:
-        """Parse AppleScript fetch_tracks.applescript output into track dictionaries.
-
-        Args:
-            raw_output: Raw AppleScript output with ASCII 30/29 separators
-
-        Returns:
-            List of track dictionaries
-
-        """
-        tracks: list[dict[str, str]] = []
-        lines = raw_output.split(LINE_SEPARATOR)
-
-        for line in lines:
-            if not line.strip():
-                continue
-
-            fields = line.split(FIELD_SEPARATOR)
-
-            # Expected fields from AppleScript (fetch_tracks.applescript):
-            # id, name, artist, album_artist, album, genre, date_added,
-            # modification_date, track_status, year, release_year, ""
-            if len(fields) >= MIN_FETCH_TRACKS_FIELDS:
-                track = {
-                    "id": fields[0],
-                    "name": fields[1],
-                    "artist": fields[2],
-                    "album_artist": fields[3],
-                    "album": fields[4],
-                    "genre": fields[5],
-                    "date_added": fields[6],
-                    "modification_date": fields[7],
-                    "track_status": fields[8],
-                    "year": fields[9],
-                    "release_year": fields[10],
-                }
-                tracks.append(track)
-            else:
-                self.logger.warning(
-                    "Skipping line with insufficient fields (%d < %d): %s",
-                    len(fields),
-                    MIN_FETCH_TRACKS_FIELDS,
-                    line[:100] if len(line) > 100 else line,
-                )
-
-        return tracks
-
     async def compute_smart_delta(
         self,
         applescript_client: AppleScriptClientProtocol,
@@ -336,8 +263,11 @@ class LibrarySnapshotService:
 
         """
         is_force, reason = await self.should_force_scan(force)
-        mode_label = "force" if is_force else "fast"
-        self.logger.info("Smart Delta [cyan]%s[/cyan] mode: %s", mode_label, reason)
+        if is_force:
+            # A full scan reads the whole library in bulk, which the caller's fallback already does
+            self.logger.info("Full scan due (%s); handing over to the bulk fetch", reason)
+            return None
+        self.logger.info("Smart Delta [cyan]fast[/cyan] mode: %s", reason)
 
         # Load snapshot
         snapshot_tracks = await self.load_snapshot()
@@ -372,111 +302,10 @@ class LibrarySnapshotService:
             len(current_ids & snapshot_ids),
         )
 
-        # Updated detection depends on mode
-        if is_force:
-            updated_ids = await self._detect_updated_tracks(applescript_client, current_ids, snapshot_ids, snapshot_map)
-        else:
-            self.logger.info("Fast mode: skipping updated detection (trusting snapshot)")
-            updated_ids = []
+        self.logger.info("Smart Delta (fast): %d new, %d removed", len(new_ids), len(removed_ids))
 
-        self.logger.info(
-            "Smart Delta (%s): %d new, %d updated, %d removed",
-            mode_label,
-            len(new_ids),
-            len(updated_ids),
-            len(removed_ids),
-        )
-
-        return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
-
-    async def _detect_updated_tracks(
-        self,
-        applescript_client: AppleScriptClientProtocol,
-        current_ids: set[str],
-        snapshot_ids: set[str],
-        snapshot_map: dict[str, TrackDict],
-    ) -> list[str]:
-        """Detect tracks with changed metadata (force mode only).
-
-        Fetches only common tracks (exist in both current and snapshot) in batches
-        and compares metadata to detect changes.
-
-        This is much more efficient than fetching the entire library:
-        - Only fetches tracks that could potentially be "updated"
-        - New tracks are handled separately (not in common_ids)
-        - Removed tracks don't need fetching
-        """
-        # Only fetch tracks that exist in both - these are the only candidates for "updated"
-        common_ids = sorted(current_ids & snapshot_ids)
-
-        if not common_ids:
-            self.logger.info("No common tracks to check for updates")
-            await self._update_force_scan_time()
-            return []
-
-        # Fetch common tracks in batches using fetch_tracks_by_ids.applescript
-        current_map: dict[str, TrackDict] = {}
-        total_batches = (len(common_ids) + DELTA_BATCH_SIZE - 1) // DELTA_BATCH_SIZE
-
-        self.logger.info(
-            "Force mode: fetching %d common tracks in %d batches...",
-            len(common_ids),
-            total_batches,
-        )
-
-        async with spinner(f"Force mode: fetching {len(common_ids)} tracks for update detection..."):
-            for batch_index in range(0, len(common_ids), DELTA_BATCH_SIZE):
-                batch = common_ids[batch_index : batch_index + DELTA_BATCH_SIZE]
-                batch_num = batch_index // DELTA_BATCH_SIZE + 1
-                ids_param = ",".join(batch)
-
-                result = await applescript_client.run_script(
-                    FETCH_TRACKS_BY_IDS,
-                    arguments=[ids_param],
-                    timeout=DELTA_BATCH_TIMEOUT_SECONDS,
-                )
-
-                if not result:
-                    self.logger.warning(
-                        "Batch %d/%d returned empty, skipping",
-                        batch_num,
-                        total_batches,
-                    )
-                    continue
-
-                raw_tracks = self._parse_fetch_tracks_output(result)
-                for raw_track in raw_tracks:
-                    try:
-                        track_dict = self._parse_raw_track(raw_track)
-                        current_map[str(track_dict.id)] = track_dict
-                    except (KeyError, ValueError) as parse_error:
-                        self.logger.warning("Failed to parse track: %s", parse_error)
-
-        if not current_map:
-            self.logger.warning("Force scan: no tracks fetched successfully")
-            await self._update_force_scan_time()
-            return []
-
-        # Find updated tracks (metadata changed)
-        updated_ids = [
-            track_id
-            for track_id in common_ids
-            if track_id in current_map
-            and track_id in snapshot_map
-            and (
-                has_track_changed(current_map[track_id], snapshot_map[track_id])
-                or has_identity_changed(current_map[track_id], snapshot_map[track_id])
-            )
-        ]
-        self.logger.info(
-            "Force scan found %d updated tracks (checked %d/%d common)",
-            len(updated_ids),
-            len(current_map),
-            len(common_ids),
-        )
-
-        await self._update_force_scan_time()
-        return updated_ids
+        # Fast mode trusts the snapshot for existing tracks; the periodic full scan catches edits made in Music.app
+        return TrackDelta(new_ids=new_ids, updated_ids=[], removed_ids=removed_ids)
 
     def is_enabled(self) -> bool:
         """Check whether snapshot caching is enabled."""
@@ -522,10 +351,13 @@ class LibrarySnapshotService:
 
         metadata = await self.get_snapshot_metadata()
 
-        # First run or no previous force scan - use fast mode
-        # (nothing to compare against anyway)
-        if not metadata or not metadata.last_force_scan_time:
-            return False, "first run (use --force to detect manual edits)"
+        # No snapshot yet: the caller reads the whole library anyway
+        if not metadata:
+            return False, "no snapshot yet"
+
+        # A snapshot that never had a full scan gets one
+        if not metadata.last_force_scan_time:
+            return True, "no full scan recorded"
 
         last_scan = datetime.fromisoformat(metadata.last_force_scan_time)
         # Normalize to naive (strip timezone if present) for comparison with UTC now.
@@ -539,13 +371,6 @@ class LibrarySnapshotService:
             return True, f"weekly scan ({days_since} days since last force)"
 
         return False, f"fast mode ({days_since}d since last force scan)"
-
-    async def _update_force_scan_time(self) -> None:
-        """Update metadata with current force scan timestamp."""
-        metadata = await self.get_snapshot_metadata()
-        if metadata:
-            metadata.last_force_scan_time = _utc_now_naive().isoformat()
-            await self.update_snapshot_metadata(metadata)
 
     @staticmethod
     def compute_snapshot_hash(payload: Sequence[dict[str, Any]]) -> str:

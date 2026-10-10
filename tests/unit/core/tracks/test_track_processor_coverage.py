@@ -451,7 +451,7 @@ class TestUpdateSnapshot:
         processor.cache_manager = AsyncMock()
         processor.cache_manager.update_snapshot = AsyncMock()
 
-        await processor._update_snapshot([sample_track], ["123"])
+        await processor._update_snapshot([sample_track], ["123"], full_scan=True)
 
         processor.cache_manager.update_snapshot.assert_called_once()
 

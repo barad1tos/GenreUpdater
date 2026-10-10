@@ -355,7 +355,7 @@ class TestIsSnapshotValid:
             library_mtime=now,
             track_count=10,
             snapshot_hash="abc",
-            version="0.5",
+            version="1.0",  # the format keyed by renumbered Music.app ids
         )
         await service.update_snapshot_metadata(metadata)
 
@@ -666,80 +666,6 @@ class TestGetLibraryMtime:
 # ========================= Parse Fetch Tracks Output Tests =========================
 
 
-class TestParseFetchTracksOutput:
-    """Tests for _parse_fetch_tracks_output method."""
-
-    def test_parses_valid_output(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should parse valid AppleScript output.
-
-        AppleScript field order (from fetch_tracks.applescript):
-        id, name, artist, album_artist, album, genre, date_added,
-        modification_date, track_status, year, release_year
-        """
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-
-        # Fields: id, name, artist, album_artist, album, genre, date_added,
-        #         modification_date, track_status, year, release_year
-        raw_output = (
-            "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e"
-            "2024-01-01\x1e2024-01-15\x1ematched\x1e2020\x1e2020\x1d"
-            "2\x1eName2\x1eArtist2\x1e\x1eAlbum2\x1ePop\x1e"
-            "2024-01-02\x1e2024-01-16\x1epurchased\x1e2021\x1e2021\x1d"
-        )
-
-        result = service._parse_fetch_tracks_output(raw_output)
-
-        assert len(result) == 2
-        assert result[0]["id"] == "1"
-        assert result[0]["artist"] == "Artist"
-        assert result[0]["modification_date"] == "2024-01-15"
-        assert result[0]["track_status"] == "matched"
-        assert result[0]["year"] == "2020"
-        assert result[1]["id"] == "2"
-        assert result[1]["genre"] == "Pop"
-        assert result[1]["track_status"] == "purchased"
-
-    def test_skips_empty_lines(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should skip empty lines."""
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-
-        raw_output = "\x1d\x1d\x1d"
-
-        result = service._parse_fetch_tracks_output(raw_output)
-        assert result == []
-
-    def test_skips_lines_with_insufficient_fields(self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture) -> None:
-        """Should skip lines with insufficient fields and log warning."""
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-
-        raw_output = "1\x1eName\x1eArtist\x1d"
-
-        with caplog.at_level(logging.WARNING):
-            result = service._parse_fetch_tracks_output(raw_output)
-
-        assert result == []
-        assert "insufficient fields" in caplog.text
-
-    def test_parses_mixed_valid_and_invalid_lines(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should parse valid lines and skip invalid ones."""
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-
-        # Valid: id, name, artist, album_artist, album, genre, date_added,
-        #        modification_date, track_status, year, release_year (11 fields)
-        raw_output = (
-            "1\x1eName\x1eArtist\x1eAlbum Artist\x1eAlbum\x1eRock\x1e2024-01-01\x1e2024-01-15\x1ematched\x1e2020\x1e2020\x1dinvalid\x1eline\x1d"
-        )
-
-        result = service._parse_fetch_tracks_output(raw_output)
-        assert len(result) == 1
-        assert result[0]["id"] == "1"
-        assert result[0]["track_status"] == "matched"
-
-
 # ========================= Compute Smart Delta Tests =========================
 
 
@@ -825,7 +751,7 @@ class TestComputeSmartDelta:
         assert result.updated_ids == []
 
     @pytest.mark.asyncio
-    async def test_force_mode_detects_updated_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
+    async def test_due_full_scan_hands_over_to_the_bulk_fetch(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         """Should detect updated tracks in force mode."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
@@ -855,102 +781,11 @@ class TestComputeSmartDelta:
         )
         mock_client.set_run_script_result(raw_output)
 
-        result = await service.compute_smart_delta(mock_client, force=True)
-        assert result is not None
-        assert "1" in result.updated_ids
+        # A due full scan is the bulk fetch's job, so Smart Delta hands over
+        assert await service.compute_smart_delta(mock_client, force=True) is None
 
 
 # ========================= Detect Updated Tracks Tests =========================
-
-
-class TestDetectUpdatedTracks:
-    """Tests for _detect_updated_tracks method."""
-
-    @pytest.mark.asyncio
-    async def test_returns_empty_when_no_raw_tracks(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should return empty list when no raw tracks."""
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-        await service.initialize()
-
-        tracks = _make_tracks()
-        await service.save_snapshot(tracks)
-        snapshot_map = {str(t.id): t for t in tracks}
-
-        mock_client = MockAppleScriptClient()
-        mock_client.set_run_script_result("")
-
-        now = datetime.now()
-        metadata = LibraryCacheMetadata(
-            last_full_scan=now,
-            library_mtime=now,
-            track_count=len(tracks),
-            snapshot_hash="abc",
-        )
-        await service.update_snapshot_metadata(metadata)
-
-        with patch("services.cache.snapshot.spinner"):
-            result = await service._detect_updated_tracks(
-                mock_client,
-                {"1", "2"},
-                {"1", "2"},
-                snapshot_map,
-            )
-
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_logs_warning_on_parse_failure(self, tmp_path_factory: pytest.TempPathFactory, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log warning when track parsing fails."""
-        config = _make_config(tmp_path_factory)
-        service = LibrarySnapshotService(config, logging.getLogger("test"))
-        await service.initialize()
-
-        tracks = _make_tracks()
-        await service.save_snapshot(tracks)
-        snapshot_map = {str(t.id): t for t in tracks}
-
-        mock_client = MockAppleScriptClient()
-        raw_output = "invalid\x1eline\x1d"
-        mock_client.set_run_script_result(raw_output)
-
-        now = datetime.now()
-        metadata = LibraryCacheMetadata(
-            last_full_scan=now,
-            library_mtime=now,
-            track_count=len(tracks),
-            snapshot_hash="abc",
-        )
-        await service.update_snapshot_metadata(metadata)
-
-        with patch("services.cache.snapshot.spinner"), caplog.at_level(logging.WARNING):
-            result = await service._detect_updated_tracks(
-                mock_client,
-                {"1", "2"},
-                {"1", "2"},
-                snapshot_map,
-            )
-
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_renamed_track_is_updated(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """A track whose album was renamed is updated even when its genre and year stay the same."""
-        service = LibrarySnapshotService(_make_config(tmp_path_factory), logging.getLogger("test"))
-        await service.initialize()
-        tracks = _make_tracks()
-        renamed = TrackDict(id="1", name="Alpha", artist="Artist A", album="Album A (Deluxe)")
-        mock_client = MockAppleScriptClient()
-        mock_client.set_run_script_result("raw")
-
-        with (
-            patch("services.cache.snapshot.spinner"),
-            patch.object(service, "_parse_fetch_tracks_output", return_value=[{"id": "1"}]),
-            patch.object(service, "_parse_raw_track", return_value=renamed),
-        ):
-            result = await service._detect_updated_tracks(mock_client, {"1", "2"}, {"1", "2"}, {str(t.id): t for t in tracks})
-
-        assert result == ["1"]
 
 
 # ========================= Is Enabled / Is Delta Enabled Tests =========================
@@ -1248,14 +1083,12 @@ class TestShouldForceScan:
 
     @pytest.mark.asyncio
     async def test_returns_false_for_first_run(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should return False for first run."""
+        """Without a snapshot there is nothing to scan against; the caller reads the whole library anyway."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
 
-        result, reason = await service.should_force_scan()
-        assert result is False
-        assert "first run" in reason
+        assert await service.should_force_scan() == (False, "no snapshot yet")
 
     @pytest.mark.asyncio
     async def test_returns_true_for_weekly_scan(self, tmp_path_factory: pytest.TempPathFactory) -> None:
@@ -1406,69 +1239,6 @@ class TestMetadataWithForceScanTime:
 
 
 # ========================= Parse Raw Track Tests =========================
-
-
-class TestParseRawTrack:
-    """Tests for _parse_raw_track static method."""
-
-    def test_parses_complete_track(self) -> None:
-        """Should parse complete track data.
-
-        Note: year_set_by_mgu is a tracking field managed by MGU, not from AppleScript.
-        It's always None when parsing AppleScript output.
-        """
-        raw = {
-            "id": "123",
-            "name": "Track Name",
-            "artist": "Artist",
-            "album_artist": "Album Artist",
-            "album": "Album",
-            "genre": "Rock",
-            "date_added": "2024-01-01",
-            "modification_date": "2024-01-15",
-            "track_status": "matched",
-            "year": "2020",
-            "release_year": "2020",
-        }
-        result = LibrarySnapshotService._parse_raw_track(raw)
-        assert result.id == "123"
-        assert result.name == "Track Name"
-        assert result.year == "2020"
-        assert result.last_modified == "2024-01-15"
-        assert result.track_status == "matched"
-        assert result.year_set_by_mgu is None  # Tracking field, not from AppleScript
-
-    def test_handles_empty_year(self) -> None:
-        """Should handle empty year value."""
-        raw = {
-            "id": "123",
-            "name": "Track",
-            "artist": "Artist",
-            "album": "Album",
-            "year": "",
-        }
-        result = LibrarySnapshotService._parse_raw_track(raw)
-        assert result.year is None
-
-    def test_handles_whitespace_year(self) -> None:
-        """Should handle whitespace-only year."""
-        raw = {
-            "id": "123",
-            "name": "Track",
-            "artist": "Artist",
-            "album": "Album",
-            "year": "   ",
-        }
-        result = LibrarySnapshotService._parse_raw_track(raw)
-        assert result.year is None
-
-    def test_handles_missing_fields(self) -> None:
-        """Should handle missing optional fields."""
-        raw = {"id": "123"}
-        result = LibrarySnapshotService._parse_raw_track(raw)
-        assert result.id == "123"
-        assert result.name == ""
-        assert result.artist == ""
 
 
 # ========================= Compute Snapshot Hash Tests =========================

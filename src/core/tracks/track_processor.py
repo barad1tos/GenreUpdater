@@ -102,7 +102,7 @@ class TrackProcessor:
             track_validator=self._validate_tracks_security,
             artist_processor=self._apply_artist_renames,
             snapshot_loader=self._load_tracks_from_snapshot,
-            snapshot_persister=self._update_snapshot,
+            snapshot_persister=self._persist_full_scan,
             can_use_snapshot=self._can_use_snapshot,
             dry_run=dry_run,
             analytics=analytics,
@@ -272,7 +272,7 @@ class TrackProcessor:
 
         merged_tracks = self._merge_tracks(snapshot_tracks, delta_tracks)
         if not self.dry_run:
-            await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks])
+            await self._update_snapshot(merged_tracks, [track.id for track in delta_tracks], full_scan=False)
         self.console_logger.info(
             "Updated snapshot from delta window starting %s (+%d tracks)",
             min_date.isoformat(),
@@ -280,9 +280,13 @@ class TrackProcessor:
         )
         return merged_tracks
 
-    async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
-        """Persist the latest snapshot, metadata, and delta state."""
-        await self.cache_manager.update_snapshot(tracks, processed_track_ids)
+    async def _update_snapshot(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None, *, full_scan: bool) -> None:
+        """Persist the latest snapshot, metadata, and delta state; a full scan also stamps the scan times."""
+        await self.cache_manager.update_snapshot(tracks, processed_track_ids, full_scan=full_scan)
+
+    async def _persist_full_scan(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
+        """Persist tracks read from the whole library."""
+        await self._update_snapshot(tracks, processed_track_ids, full_scan=True)
 
     @staticmethod
     def _merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
@@ -491,7 +495,7 @@ class TrackProcessor:
             tracks = await self._fetch_tracks_from_applescript(artist=artist)
 
             if use_snapshot and tracks and not self.dry_run:
-                await self._update_snapshot(tracks, [track.id for track in tracks])
+                await self._update_snapshot(tracks, [track.id for track in tracks], full_scan=True)
 
             if tracks:
                 await self.cache_service.set_async(cache_key, tracks)
