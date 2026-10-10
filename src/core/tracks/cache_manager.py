@@ -151,7 +151,8 @@ class TrackCacheManager:
     ) -> None:
         """Persist the latest snapshot, metadata, and delta state.
 
-        Only a full scan moves last_full_scan and last_force_scan_time: an incremental persist keeps them, so
+        Only a full scan (or the first persist, when no metadata exists) moves last_full_scan, and only a full scan
+        sets last_force_scan_time: an incremental persist keeps them, so
         max_age_hours can expire a snapshot that only incremental runs have touched, and the weekly scan is measured
         from the last full one.
 

@@ -616,6 +616,28 @@ class TestBulkRescanEvents:
         await updater._emit_rescan_events(previous, [TrackDict(id="A", name="Song", artist="Artist", album="Album")])
 
         api_cache.emit_track_removed.assert_not_called()
+        api_cache.emit_track_modified.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_baseline_is_read_before_the_rescan_replaces_it(self) -> None:
+        """The bulk fetch saves the new snapshot, so a baseline read after it would equal the rescan and report nothing."""
+        updater, api_cache = self._updater(["A"])
+        saved = [TrackDict(id="A", name="Song", artist="Artist", album="Album"), TrackDict(id="B", name="Song", artist="Gone", album="Album")]
+        current = [TrackDict(id="A", name="Song", artist="Artist", album="Album")]
+
+        async def rescan(**_: object) -> list[TrackDict]:
+            saved[:] = current
+            return current
+
+        with (
+            patch.object(updater, "_try_smart_delta_fetch", AsyncMock(return_value=None)),
+            patch.object(updater, "_load_rescan_baseline", AsyncMock(side_effect=lambda: list(saved))),
+            patch.object(updater.track_processor, "fetch_tracks_in_batches", AsyncMock(side_effect=rescan)),
+            patch.object(updater.snapshot_manager, "set_snapshot"),
+        ):
+            await updater._fetch_tracks_for_pipeline_mode()
+
+        api_cache.emit_track_removed.assert_called_once_with("B", "Gone", "Album")
 
 
 class TestRescanBaseline:

@@ -668,10 +668,22 @@ class TestUpdateArtistAsync:
         assert result is False
 
 
+@pytest.mark.parametrize(("missed_tracks_read", "full_scan"), [(True, True), (False, False)], ids=["whole-library", "tracks-missing"])
 @pytest.mark.asyncio
-async def test_batch_fetch_persists_as_a_full_scan(processor: TrackProcessor, sample_track: TrackDict) -> None:
-    """The batch fetcher reads the whole library, so its snapshot save stamps the scan times."""
-    with patch.object(processor.cache_manager, "update_snapshot", AsyncMock()) as update:
-        await processor._persist_full_scan([sample_track], ["1"])
+async def test_batch_fetch_counts_as_a_full_scan_only_when_whole(
+    processor: TrackProcessor, sample_track: TrackDict, *, missed_tracks_read: bool, full_scan: bool
+) -> None:
+    """Only a read of every listed track may stamp the scan times; a partial one would push the next full scan back a week."""
+    missed = TrackDict(id="00000000000000B2", name="Tail", artist="A", album="B")
+    fetcher = processor.batch_fetcher
+    with (
+        patch.object(processor.cache_manager, "update_snapshot", AsyncMock()) as update,
+        patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[sample_track])),
+        patch.object(fetcher, "_can_use_snapshot", return_value=True),
+        patch.object(fetcher.ap_client, "fetch_all_track_ids", AsyncMock(return_value=[str(sample_track.id), str(missed.id)]), create=True),
+        patch.object(processor, "fetch_tracks_by_ids", AsyncMock(return_value=[missed] if missed_tracks_read else [])),
+    ):
+        fetcher._missed_track_fetcher = processor.fetch_tracks_by_ids
+        await processor.fetch_tracks_in_batches(1000, skip_snapshot_check=True)
 
-    assert update.call_args.kwargs["full_scan"] is True
+    assert update.call_args.kwargs["full_scan"] is full_scan

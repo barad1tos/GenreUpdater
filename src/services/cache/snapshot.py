@@ -233,26 +233,18 @@ class LibrarySnapshotService:
         applescript_client: AppleScriptClientProtocol,
         force: bool = False,
     ) -> TrackDelta | None:
-        """Compute track delta using Hybrid Smart Delta approach.
+        """Compute the track delta by comparing persistent IDs with the snapshot (about 1-2 s).
 
-        Two modes:
-        - Fast mode (default): Detects new/removed by ID comparison only (~1-2s)
-        - Force mode: Full metadata comparison for manual change detection (~30-60s)
-
-        Force mode triggers when:
-        - Force=True (CLI --force)
-        - Last force scan was 7+ days ago (weekly auto-force)
-
-        Fast mode (skips full scan) when:
-        - First run (nothing to compare against)
-        - Force scan was within last 7 days
+        A due full scan (--force, no full scan recorded, or 7+ days since the last one) is not computed here: the
+        method returns None, and the caller's bulk fetch reads the whole library.
 
         Args:
             applescript_client: AppleScriptClient instance for fetching tracks
             force: CLI --force flag
 
         Returns:
-            TrackDelta with new/updated/removed track IDs, or None if snapshot unavailable
+            TrackDelta with new and removed track IDs (updated_ids is always empty), or None when a full scan is due
+            or no snapshot or ids are available
 
         """
         is_force, reason = await self.should_force_scan(force)
@@ -326,15 +318,10 @@ class LibrarySnapshotService:
         return False
 
     async def should_force_scan(self, force_flag: bool = False) -> tuple[bool, str]:
-        """Determine if full metadata scan is needed.
+        """Decide whether a full library scan is due.
 
-        Force scan triggers when:
-        - Force_flag is True (CLI --force)
-        - Last force scan was 7+ days ago (weekly auto-force)
-
-        Fast mode (no full scan) when:
-        - First run (nothing to compare against)
-        - Force scan was within last 7 days
+        Due for --force, when the snapshot records no full scan, or 7+ days after the last one. Not due when there is
+        no snapshot metadata yet (the caller reads the whole library anyway) or the last full scan was within 7 days.
 
         Args:
             force_flag: CLI --force flag value

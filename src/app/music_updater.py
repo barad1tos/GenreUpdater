@@ -64,7 +64,7 @@ class MusicUpdater:
         self.analytics = deps.analytics
 
         # Initialize components
-        self.track_processor = TrackProcessor(
+        self.track_processor: TrackProcessor = TrackProcessor(
             ap_client=deps.ap_client,
             cache_service=deps.cache_service,
             library_snapshot_service=deps.library_snapshot_service,
@@ -626,7 +626,7 @@ class MusicUpdater:
                 force=force,
             )
             if delta is None:
-                self.console_logger.warning("Smart Delta returned None, falling back to batch scan")
+                self.console_logger.info("Smart Delta handed over to a full library scan")
                 return None
 
             snapshot_tracks = await snapshot_service.load_snapshot()
@@ -776,14 +776,13 @@ class MusicUpdater:
                 )
                 return smart_delta_tracks
 
-            # Fall back to batch processing for full library
-            # Skip snapshot check since Smart Delta already validated it
+            # Full scan: Smart Delta found the snapshot unusable or a full scan due, so read the whole library in bulk
             self.console_logger.info("Using batch processing for full library fetch")
             previous_tracks = await self._load_rescan_baseline()
             batch_size = self.app_config.batch_processing.batch_size
             tracks: list[TrackDict] = await self.track_processor.fetch_tracks_in_batches(
                 batch_size=batch_size,
-                skip_snapshot_check=True,  # Already validated in Smart Delta
+                skip_snapshot_check=True,  # Smart Delta already declined the snapshot
             )
             await self._emit_rescan_events(previous_tracks, tracks)
             self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)

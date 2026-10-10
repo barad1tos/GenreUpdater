@@ -103,7 +103,7 @@ class TrackProcessor:
             track_validator=self._validate_tracks_security,
             artist_processor=self._apply_artist_renames,
             snapshot_loader=self._load_tracks_from_snapshot,
-            snapshot_persister=self._persist_full_scan,
+            snapshot_persister=self._update_snapshot,
             can_use_snapshot=self._can_use_snapshot,
             missed_track_fetcher=self.fetch_tracks_by_ids,
             dry_run=dry_run,
@@ -292,10 +292,6 @@ class TrackProcessor:
         """Persist the latest snapshot, metadata, and delta state; a full scan also stamps the scan times."""
         await self.cache_manager.update_snapshot(tracks, processed_track_ids, full_scan=full_scan)
 
-    async def _persist_full_scan(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None) -> None:
-        """Persist tracks read from the whole library."""
-        await self._update_snapshot(tracks, processed_track_ids, full_scan=True)
-
     @staticmethod
     def _merge_tracks(existing: list[TrackDict], updates: list[TrackDict]) -> list[TrackDict]:
         """Merge delta updates into the existing snapshot while preserving order."""
@@ -450,6 +446,7 @@ class TrackProcessor:
             )
 
             if not raw_output:
+                self.error_logger.warning("Fetch by persistent ID returned nothing for batch %d/%d (%d ids)", batch_num, total_batches, len(batch))
                 continue
 
             parsed_tracks = parse_tracks(raw_output, self.error_logger)

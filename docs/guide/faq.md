@@ -18,8 +18,8 @@ See [Automation](automation.md) for detailed launchctl setup.
 
 Check `<logs_base_dir>/csv/changes_report.csv`. It contains:
 
-- Artist, album and track name
-- Old and new values for genre/year
+- Change type, artist, album and track name
+- Old and new values for genre, year, track name or album name
 - Timestamp of change
 
 Use this file with `revert_years` command to undo changes:

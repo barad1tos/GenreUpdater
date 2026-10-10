@@ -427,7 +427,7 @@ class TestCacheAndPersistResults:
         track = MagicMock()
         track.id = "1"
         tracks_arg = cast(Any, [track])
-        await fetcher._cache_and_persist_results(tracks_arg)
+        await fetcher._cache_and_persist_results(tracks_arg, full_scan=True)
 
         cast(MagicMock, loggers[1]).warning.assert_called_once()
         assert "Disk full" in str(cast(MagicMock, loggers[1]).warning.call_args)

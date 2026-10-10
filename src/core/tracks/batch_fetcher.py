@@ -6,7 +6,7 @@ timeouts when processing large libraries.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from core.logger import get_shared_console
 from core.models.metadata_utils import parse_tracks
@@ -15,10 +15,17 @@ from core.apple_script_names import FETCH_TRACKS, NO_TRACKS_FOUND
 
 if TYPE_CHECKING:
     import logging
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
     from core.models.protocols import AnalyticsProtocol, AppleScriptClientProtocol, CacheServiceProtocol
     from core.models.track_models import AppConfig, TrackDict
+
+
+class SnapshotPersister(Protocol):
+    """Saves fetched tracks as the library snapshot; a full scan also stamps the snapshot's scan times."""
+
+    async def __call__(self, tracks: list[TrackDict], processed_track_ids: Sequence[str] | None = None, *, full_scan: bool) -> None:
+        """Persist the tracks."""
 
 
 # Maximum consecutive parse failures before aborting batch processing
@@ -42,7 +49,7 @@ class BatchTrackFetcher:
         track_validator: Callback to validate tracks for security
         artist_processor: Async callback to process artist renames
         snapshot_loader: Async callback to load tracks from snapshot
-        snapshot_persister: Async callback to persist tracks to snapshot
+        snapshot_persister: Async callback to persist tracks to snapshot; `full_scan` says the whole library was read
         can_use_snapshot: Callback to check if snapshot can be used
         missed_track_fetcher: Async callback to fetch tracks by persistent ID
         dry_run: Whether running in dry-run mode
@@ -60,7 +67,7 @@ class BatchTrackFetcher:
         track_validator: Callable[[list[TrackDict]], list[TrackDict]],
         artist_processor: Callable[[list[TrackDict]], Awaitable[None]],
         snapshot_loader: Callable[[], Awaitable[list[TrackDict] | None]],
-        snapshot_persister: Callable[[list[TrackDict], list[str] | None], Awaitable[None]],
+        snapshot_persister: SnapshotPersister,
         can_use_snapshot: Callable[[str | None], bool],
         missed_track_fetcher: Callable[[list[str]], Awaitable[list[TrackDict]]],
         dry_run: bool = False,
@@ -107,31 +114,43 @@ class BatchTrackFetcher:
 
         # Snapshot not available - proceed with batch processing
         all_tracks = await self._fetch_tracks_in_batches(batch_size)
-        all_tracks += await self._fetch_missed_tracks(all_tracks)
+        missed_tracks, whole_library = await self._fetch_missed_tracks(all_tracks)
+        all_tracks += missed_tracks
 
         # Cache and persist results
-        await self._cache_and_persist_results(all_tracks)
+        await self._cache_and_persist_results(all_tracks, full_scan=whole_library)
 
         return all_tracks
 
-    async def _fetch_missed_tracks(self, batched_tracks: list[TrackDict]) -> list[TrackDict]:
+    async def _fetch_missed_tracks(self, batched_tracks: list[TrackDict]) -> tuple[list[TrackDict], bool]:
         """Fetch the tracks Music.app lists that no batch returned.
 
         Index ranges also count deleted tracks, so they drift from the library's track order and the last tracks
-        of the library fall past the final batch.
+        of the library fall past the final batch; a batch that failed and stopped the loop leaves the rest of the
+        library unread as well. Missed tracks are read one persistent ID lookup at a time, so a large gap is slow.
 
         Args:
             batched_tracks: Tracks the batches returned
 
         Returns:
-            The missed tracks
+            The missed tracks, and whether every track Music.app lists was read
         """
+        library_ids = await self.ap_client.fetch_all_track_ids()
         batched_ids = {str(track.id) for track in batched_tracks}
-        missed_ids = [track_id for track_id in await self.ap_client.fetch_all_track_ids() if track_id not in batched_ids]
-        if not missed_ids:
-            return []
-        self.console_logger.info("Batches missed %d tracks Music.app lists; fetching them by persistent ID", len(missed_ids))
-        return await self._missed_track_fetcher(missed_ids)
+        missed_ids = [track_id for track_id in library_ids if track_id not in batched_ids]
+        missed_tracks: list[TrackDict] = []
+        if missed_ids:
+            self.console_logger.info("Batches missed %d tracks Music.app lists; fetching them by persistent ID", len(missed_ids))
+            missed_tracks = await self._missed_track_fetcher(missed_ids)
+        unread = len(set(missed_ids) - {str(track.id) for track in missed_tracks})
+        whole_library = bool(library_ids) and not unread
+        if not whole_library:
+            self.error_logger.warning(
+                "Library read is incomplete (%d of %d listed tracks unread); its snapshot does not count as a full scan",
+                unread,
+                len(library_ids),
+            )
+        return missed_tracks, whole_library
 
     async def _fetch_tracks_in_batches(self, batch_size: int) -> list[TrackDict]:
         """Execute the batch fetching loop.
@@ -400,11 +419,12 @@ class BatchTrackFetcher:
 
         return updated_failures, True
 
-    async def _cache_and_persist_results(self, tracks: list[TrackDict]) -> None:
+    async def _cache_and_persist_results(self, tracks: list[TrackDict], *, full_scan: bool) -> None:
         """Cache fetched tracks in memory and persist to snapshot on disk.
 
         Args:
             tracks: List of fetched tracks to cache and persist
+            full_scan: Whether the tracks are the whole library, which stamps the snapshot's scan times
         """
         await self.cache_service.set_async("tracks_all", tracks)
         self.console_logger.info("Cached %d tracks for key: tracks_all", len(tracks))
@@ -415,6 +435,6 @@ class BatchTrackFetcher:
 
         try:
             track_ids = [track.id for track in tracks]
-            await self._snapshot_persister(tracks, track_ids)
+            await self._snapshot_persister(tracks, track_ids, full_scan=full_scan)
         except (OSError, TypeError, ValueError) as error:
             self.error_logger.warning("Failed to persist library snapshot after batch fetch: %s", error)

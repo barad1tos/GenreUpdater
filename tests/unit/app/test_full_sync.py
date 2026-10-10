@@ -118,6 +118,32 @@ class TestRunFullResync:
             assert "No tracks found" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_migrates_the_track_list_before_syncing(
+        self,
+        *,
+        console_logger: logging.Logger,
+        error_logger: logging.Logger,
+        config: AppConfig,
+        mock_cache_service: MagicMock,
+        mock_track_processor: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A sync over a list keyed by old ids would drop every row and its year history without a backup."""
+        calls: list[str] = []
+        with (
+            patch("app.full_sync.is_music_app_running", return_value=True),
+            patch("app.full_sync.get_full_log_path", return_value=str(tmp_path / "track_list.csv")),
+            patch("app.full_sync.migrate_to_persistent_ids", new_callable=AsyncMock, side_effect=lambda **_: calls.append("migrate")) as migrate,
+            patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock, side_effect=lambda *_, **__: calls.append("sync")),
+        ):
+            await run_full_resync(console_logger, error_logger, config, mock_cache_service, mock_track_processor)
+
+        assert calls == ["migrate", "sync"]
+        migrate.assert_awaited_once_with(
+            config=config, track_processor=mock_track_processor, snapshot_service=None, console_logger=console_logger, error_logger=error_logger
+        )
+
+    @pytest.mark.asyncio
     async def test_performs_full_sync_successfully(
         self,
         *,

@@ -5,9 +5,11 @@
 --   ASCII 29 (Group Separator) - separates individual commands
 --
 -- Example input: "6342D31846D0E960<RS>genre<RS>Rock: Classic<GS>0A1B2C3D4E5F6071<RS>year<RS>2022"
--- Track IDs are Music.app persistent IDs, which survive id renumbering.
--- Returns "Success: …" only when every command applied, otherwise "Error: <failed> of <total> batch commands failed".
 -- where <RS> = ASCII 30, <GS> = ASCII 29
+--
+-- Track IDs are Music.app persistent IDs, which survive id renumbering.
+-- Returns "Error: <failed> of <total> batch commands failed" when a command fails (a track not found or a write
+-- refused), otherwise "Success: …".
 --
 -- Benefits over URL-encoding:
 --   1. No external dependencies (no python3 shell call)

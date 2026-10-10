@@ -18,7 +18,7 @@ from app.id_migration import (
 )
 from core.logger import get_full_log_path
 from core.models.track_models import AppConfig, TrackDict
-from metrics.track_sync import load_track_list, save_track_map_to_csv
+from metrics.track_sync import load_track_list, save_track_map_to_csv, sync_track_list_with_current
 from tests.factories import create_test_app_config
 
 _LOGGER = logging.getLogger("test.id_migration")
@@ -76,6 +76,17 @@ class TestCarryYearHistory:
         assert carry_year_history([_old_row("1"), _old_row("2", before="1990", set_by_mgu="1991")], tracks) == 0
         assert (tracks[0].year_before_mgu, tracks[0].year_set_by_mgu) == (None, None)
 
+    def test_a_duplicate_without_history_makes_the_match_ambiguous(self) -> None:
+        tracks = [_fresh_track()]
+
+        assert carry_year_history([_old_row("1"), _old_row("2", before="", set_by_mgu="")], tracks) == 0
+
+    def test_a_year_before_alone_is_carried(self) -> None:
+        tracks = [_fresh_track()]
+
+        assert carry_year_history([_old_row("1", set_by_mgu="")], tracks) == 1
+        assert (tracks[0].year_before_mgu, tracks[0].year_set_by_mgu) == ("1999", None)
+
     def test_unmatched_track_gets_no_history(self) -> None:
         tracks = [TrackDict(id=_PERSISTENT_ID, name="Other", artist="A", album="B")]
 
@@ -115,8 +126,85 @@ class TestMigrate:
         assert (csv_path.parent / BACKUP_NAME).exists()
         rows = load_track_list(str(csv_path))
         assert list(rows) == [_PERSISTENT_ID]
-        assert rows[_PERSISTENT_ID].year_set_by_mgu == "2001"
+        assert (rows[_PERSISTENT_ID].year_before_mgu, rows[_PERSISTENT_ID].year_set_by_mgu) == ("1999", "2001")
         snapshot_service.clear_delta.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_carried_history_survives_the_next_sync(self, tmp_path: Path) -> None:
+        """The run after the migration syncs the list; the carried year before the tool must stay for revert."""
+        config, csv_path = self._write_old_list(tmp_path)
+        await migrate_to_persistent_ids(
+            config=config, track_processor=_processor([_fresh_track()]), snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
+        )
+        current = TrackDict(id=_PERSISTENT_ID, name="Song", artist="A", album="B", year="2001")
+
+        cache_service = MagicMock()
+        cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
+        cache_service.store_album_year_in_cache = AsyncMock()
+
+        await sync_track_list_with_current(
+            [current], str(csv_path), cache_service=cache_service, console_logger=_LOGGER, error_logger=_LOGGER, partial_sync=True
+        )
+
+        assert load_track_list(str(csv_path))[_PERSISTENT_ID].year_before_mgu == "1999"
+
+    @pytest.mark.asyncio
+    async def test_failed_write_stops_the_run(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A track list that could not be written must not count as migrated, or the next sync drops its history."""
+        config, csv_path = self._write_old_list(tmp_path)
+        snapshot_service = MagicMock()
+
+        def refuse(_self: Path, _target: Path) -> Path:
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(Path, "replace", refuse)
+        with pytest.raises(TrackListMigrationError):
+            await migrate_to_persistent_ids(
+                config=config,
+                track_processor=_processor([_fresh_track()]),
+                snapshot_service=snapshot_service,
+                console_logger=_LOGGER,
+                error_logger=_LOGGER,
+            )
+
+        monkeypatch.undo()
+        assert list(load_track_list(str(csv_path))) == ["111701"]
+        snapshot_service.clear_delta.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_run_is_retried_from_the_original_list(self, tmp_path: Path) -> None:
+        config, csv_path = self._write_old_list(tmp_path)
+        original = csv_path.read_bytes()
+        with pytest.raises(TrackListMigrationError):
+            await migrate_to_persistent_ids(
+                config=config,
+                track_processor=_processor([_fresh_track()], [_PERSISTENT_ID, "0A1B2C3D4E5F6071"]),
+                snapshot_service=MagicMock(),
+                console_logger=_LOGGER,
+                error_logger=_LOGGER,
+            )
+
+        assert await migrate_to_persistent_ids(
+            config=config, track_processor=_processor([_fresh_track()]), snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
+        )
+        assert (csv_path.parent / BACKUP_NAME).read_bytes() == original
+        assert load_track_list(str(csv_path))[_PERSISTENT_ID].year_before_mgu == "1999"
+
+    @pytest.mark.asyncio
+    async def test_unread_tracks_are_named_in_the_log(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """A track that never reads back blocks every run, so the log must say which one it is."""
+        config, _ = self._write_old_list(tmp_path)
+
+        with caplog.at_level(logging.ERROR, logger=_LOGGER.name), pytest.raises(TrackListMigrationError):
+            await migrate_to_persistent_ids(
+                config=config,
+                track_processor=_processor([_fresh_track()], [_PERSISTENT_ID, "0A1B2C3D4E5F6071"]),
+                snapshot_service=MagicMock(),
+                console_logger=_LOGGER,
+                error_logger=_LOGGER,
+            )
+
+        assert "0A1B2C3D4E5F6071" in caplog.text
 
     @pytest.mark.parametrize(
         ("fetched", "library_ids"),
@@ -155,10 +243,12 @@ class TestMigrate:
         backup = csv_path.parent / BACKUP_NAME
         backup.write_text("original", encoding="utf-8")
 
-        await migrate_to_persistent_ids(
+        migrated = await migrate_to_persistent_ids(
             config=config, track_processor=_processor([_fresh_track()]), snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
         )
 
+        assert migrated
+        assert list(load_track_list(str(csv_path))) == [_PERSISTENT_ID]
         assert backup.read_text(encoding="utf-8") == "original"
 
     @pytest.mark.asyncio

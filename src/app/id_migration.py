@@ -39,6 +39,11 @@ def is_persistent_id(value: str) -> bool:
     return _PERSISTENT_ID.fullmatch(value) is not None
 
 
+def _sample(track_ids: set[str], limit: int = 10) -> str:
+    """Return up to `limit` of the ids, sorted, for a log line."""
+    return ", ".join(sorted(track_ids)[:limit]) or "none"
+
+
 def needs_migration(rows: dict[str, TrackDict]) -> bool:
     """Return True when the saved track list still holds Music.app ids instead of persistent IDs."""
     return any(not is_persistent_id(track_id) for track_id in rows)
@@ -85,8 +90,9 @@ async def migrate_to_persistent_ids(
 
     The track list, its backup and the delta state change only when the fetch returned the whole library keyed by
     persistent ID: the fetched ids must equal the ids Music.app lists, so a fetch cut short by a failed batch is not
-    written as the new list. The fetch itself always saves a fresh library snapshot; the delta state, which still lists
-    old ids, is cleared. An existing backup is kept, so a second migration cannot replace the original list.
+    written as the new list. The fetch itself saves a library snapshot when snapshots are enabled; the delta state, which
+    still lists old ids, is cleared once the new list is on disk. An existing backup is kept, so a second migration
+    cannot replace the original list.
 
     Args:
         config: Application configuration, for the track list path and batch size
@@ -99,8 +105,8 @@ async def migrate_to_persistent_ids(
         True when the track list was migrated, False when it needed no migration
 
     Raises:
-        TrackListMigrationError: The list needs migrating and the library could not be read whole; the run must stop,
-            because readers of the old list (auto-verify) would drop its rows
+        TrackListMigrationError: The list needs migrating and the library could not be read whole, or the new list could
+            not be written; the run must stop, because readers of the old list (auto-verify) would drop its rows
     """
     csv_path = Path(get_full_log_path(config, "csv_output_file", "csv/track_list.csv"))
     old_rows = load_track_list(str(csv_path)) if csv_path.exists() else {}
@@ -113,9 +119,12 @@ async def migrate_to_persistent_ids(
     library_ids = set(await track_processor.ap_client.fetch_all_track_ids())
     if not tracks or not all(is_persistent_id(track_id) for track_id in fetched_ids) or fetched_ids != library_ids:
         error_logger.error(
-            "Persistent ID migration stopped the run: read %d tracks, Music.app lists %d; nothing was changed and the next run retries",
+            "Persistent ID migration stopped the run: read %d tracks, Music.app lists %d; the track list was not changed and the next run "
+            "retries. Not read: %s; not listed: %s. Tracks that stay in these lists on every run need a look in Music.app",
             len(fetched_ids),
             len(library_ids),
+            _sample(library_ids - fetched_ids),
+            _sample(fetched_ids - library_ids),
         )
         message = "the library could not be read whole for the persistent ID migration"
         raise TrackListMigrationError(message)
@@ -125,6 +134,9 @@ async def migrate_to_persistent_ids(
         shutil.copy2(csv_path, backup_path)
     carried = carry_year_history(old_rows.values(), tracks)
     save_track_map_to_csv({str(track.id): track for track in tracks}, str(csv_path), console_logger, error_logger)
+    if needs_migration(load_track_list(str(csv_path))):
+        message = f"the track list keyed by persistent ID could not be written to {csv_path}"
+        raise TrackListMigrationError(message)
     if snapshot_service is not None:
         snapshot_service.clear_delta()
 
