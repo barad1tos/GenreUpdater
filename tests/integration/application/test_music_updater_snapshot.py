@@ -238,16 +238,13 @@ async def test_main_pipeline_reuses_track_snapshot(
         all_current_tracks: list[TrackDict],
         file_path: str,
         *,
-        cache_service: DummyCacheService,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
-        partial_sync: bool = True,
     ) -> None:
         """Fake sync function for testing."""
-        _ = (cache_service, console_logger, error_logger)
+        _ = (console_logger, error_logger)
         captured["tracks"] = all_current_tracks
         captured["path"] = file_path
-        captured["partial"] = partial_sync
 
     monkeypatch.setattr("app.music_updater.sync_track_list_with_current", fake_sync)
 

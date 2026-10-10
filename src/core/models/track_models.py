@@ -303,7 +303,6 @@ class LogicConfig(BaseModel):
 
     min_valid_year: int = Field(ge=1000)
     absurd_year_threshold: int = Field(default=1970, ge=1000)
-    suspicion_threshold_years: int = Field(default=10, ge=0)
     definitive_score_threshold: int = Field(ge=0, le=100)
     definitive_score_diff: int = Field(ge=0)
     min_confidence_for_new_year: float = Field(default=30, ge=0, le=100)

@@ -14,10 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.models.validators import is_empty_year, is_valid_year
-from core.tracks.year_consistency import YearConsistencyChecker
 from core.tracks.year_determination import (
     CACHE_TRUST_THRESHOLD,
-    CONSENSUS_YEAR_CONFIDENCE,
     MIN_CONFIDENCE_TO_CACHE,
     SUSPICIOUS_ALBUM_MIN_LEN,
     SUSPICIOUS_MANY_YEARS,
@@ -25,9 +23,17 @@ from core.tracks.year_determination import (
 )
 
 if TYPE_CHECKING:
-    import logging
-
     from core.models.track_models import TrackDict
+
+
+def _numeric_years(tracks: list[TrackDict]) -> list[int]:
+    """Collect the set four-digit years of the tracks as numbers."""
+    years: list[int] = []
+    for track in tracks:
+        year = track.year
+        if year and year.isdigit() and year != "0":
+            years.append(int(year))
+    return years
 
 
 @pytest.mark.regression
@@ -69,7 +75,7 @@ class TestSuspiciousAlbumDetection:
         variance_threshold = 20  # More than 20 years between min and max
 
         for (artist, album), tracks in albums_with_tracks.items():
-            years = [int(t.year) for t in tracks if t.year and t.year.isdigit() and t.year != "0"]
+            years = _numeric_years(tracks)
             if len(years) < 2:
                 continue
 
@@ -166,20 +172,16 @@ class TestPrerealeaseHandling:
 class TestYearConsistencyEdgeCases:
     """Test edge cases in year consistency checking."""
 
-    def test_single_track_albums_not_skipped(
+    def test_single_track_albums_count_as_consistent(
         self,
         albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
     ) -> None:
-        """Single-track albums should not be skipped based on year consistency.
-
-        The _has_consistent_year method requires 2+ tracks to avoid skipping
-        single-track albums that need API validation.
-        """
-        single_track_albums = [(k, v) for k, v in albums_with_tracks.items() if len(v) == 1]
-
-        for (artist, album), tracks in single_track_albums:
-            result = YearDeterminator._has_consistent_year(tracks)
-            assert result is False, f"Single-track album '{artist} - {album}' should not be marked as consistent"
+        """A single track with a valid year agrees with itself and skips like any consistent album."""
+        for (artist, album), tracks in albums_with_tracks.items():
+            if len(tracks) != 1:
+                continue
+            expected = bool(tracks[0].year and is_valid_year(tracks[0].year))
+            assert YearDeterminator._has_consistent_year(tracks) is expected, f"'{artist} - {album}': consistency should follow its one year"
 
     def test_empty_year_handling(
         self,
@@ -240,60 +242,6 @@ class TestCacheConfidenceThresholds:
         """Verify minimum confidence to cache is set correctly."""
         assert MIN_CONFIDENCE_TO_CACHE == 50, "Min confidence to cache should be 50%"
 
-    def test_consensus_year_confidence_constant(self) -> None:
-        """Verify consensus year confidence is set correctly."""
-        assert CONSENSUS_YEAR_CONFIDENCE == 80, "Consensus year confidence should be 80%"
-
-
-@pytest.mark.regression
-class TestDominantYearEdgeCases:
-    """Test edge cases in dominant year calculation."""
-
-    def test_all_invalid_years_returns_none(
-        self,
-        console_logger: logging.Logger,
-    ) -> None:
-        """Albums with all invalid years should return None for dominant year."""
-        checker = YearConsistencyChecker(console_logger=console_logger)
-
-        # Create mock tracks with invalid years
-        mock_tracks: list[Any] = [
-            MagicMock(year="", date_added="2020-01-01"),
-            MagicMock(year="0", date_added="2020-01-01"),
-            MagicMock(year=None, date_added="2020-01-01"),
-        ]
-
-        result = checker.get_dominant_year(mock_tracks)
-        assert result is None, "Album with all invalid years should return None"
-
-    def test_tie_breaker_behavior(
-        self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        console_logger: logging.Logger,
-    ) -> None:
-        """Test behavior when multiple years have equal counts."""
-        checker = YearConsistencyChecker(console_logger=console_logger)
-        tie_albums: list[tuple[str, str, list[tuple[str, int]]]] = []
-
-        for (artist, album), tracks in albums_with_tracks.items():
-            years = [str(t.year) for t in tracks if t.year and is_valid_year(t.year)]
-            if not years:
-                continue
-
-            year_counts = Counter(years)
-            most_common = year_counts.most_common()
-
-            # Check for ties (first and second most common have same count)
-            if len(most_common) >= 2 and most_common[0][1] == most_common[1][1]:
-                tie_albums.append((artist, album, most_common[:3]))
-
-        # For tie cases, just verify we get a consistent result
-        for artist, album, _ in tie_albums[:5]:
-            tracks = albums_with_tracks[(artist, album)]
-            result1 = checker.get_dominant_year(tracks)
-            result2 = checker.get_dominant_year(tracks)
-            assert result1 == result2, f"Dominant year should be deterministic for '{artist} - {album}'"
-
 
 @pytest.mark.regression
 class TestYearValidatorIntegration:
@@ -345,7 +293,7 @@ class TestRealWorldYearPatterns:
         library_tracks: list[TrackDict],
     ) -> None:
         """Analyze year distribution by decade for sanity check."""
-        years = [int(t.year) for t in library_tracks if t.year and t.year.isdigit() and t.year != "0"]
+        years = _numeric_years(library_tracks)
 
         if not years:
             pytest.skip("No valid years in test data")
@@ -413,10 +361,10 @@ class TestStaticMethodBehavior:
         result = YearDeterminator._has_consistent_year(tracks)
         assert result is False
 
-    def test_get_dominant_year_returns_most_common(self) -> None:
+    def test_get_consistent_year_returns_most_common(self) -> None:
         """Should return the most common year among tracks."""
         tracks = self._create_mock_tracks("2020", "2020", "2019")
-        result = YearDeterminator._get_dominant_year(tracks)
+        result = YearDeterminator._get_consistent_year(tracks)
         assert result == "2020"
 
     def test_extract_future_years_identifies_future(self) -> None:

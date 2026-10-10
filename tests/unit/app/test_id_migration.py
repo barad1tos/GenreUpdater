@@ -139,13 +139,7 @@ class TestMigrate:
         )
         current = TrackDict(id=_PERSISTENT_ID, name="Song", artist="A", album="B", year="2001")
 
-        cache_service = MagicMock()
-        cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        cache_service.store_album_year_in_cache = AsyncMock()
-
-        await sync_track_list_with_current(
-            [current], str(csv_path), cache_service=cache_service, console_logger=_LOGGER, error_logger=_LOGGER, partial_sync=True
-        )
+        await sync_track_list_with_current([current], str(csv_path), console_logger=_LOGGER, error_logger=_LOGGER)
 
         assert load_track_list(str(csv_path))[_PERSISTENT_ID].year_before_mgu == "1999"
 
@@ -156,6 +150,7 @@ class TestMigrate:
         snapshot_service = MagicMock()
 
         def refuse(_self: Path, _target: Path) -> Path:
+            """Fail the rename the way a full disk does."""
             raise OSError(28, "No space left on device")
 
         monkeypatch.setattr(Path, "replace", refuse)

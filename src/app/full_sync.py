@@ -17,11 +17,10 @@ import asyncio
 import sys
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from core.core_config import load_config
 from core.logger import get_loggers
-from core.models.protocols import CacheServiceProtocol
 
 # Add project root to path if needed
 project_root = Path(__file__).parent.parent.parent
@@ -41,7 +40,6 @@ if TYPE_CHECKING:
 
     from core.models.track_models import AppConfig
     from core.tracks.track_processor import TrackProcessor
-    from services.cache.orchestrator import CacheOrchestrator
 
 
 # noinspection PyArgumentEqualDefault
@@ -49,7 +47,6 @@ async def run_full_resync(
     console_logger: logging.Logger,
     error_logger: logging.Logger,
     config: AppConfig,
-    cache_service: CacheOrchestrator,
     track_processor: TrackProcessor,
 ) -> None:
     """Run complete media library resynchronization.
@@ -61,8 +58,6 @@ async def run_full_resync(
         console_logger: Logger for console output
         error_logger: Logger for error output
         config: Typed application configuration
-        cache_service: Cache service instance
-
         track_processor: Track processor instance
 
     Raises:
@@ -111,10 +106,8 @@ async def run_full_resync(
         await sync_track_list_with_current(
             all_tracks,
             csv_path,
-            cache_service=cast(CacheServiceProtocol, cache_service),
             console_logger=console_logger,
             error_logger=error_logger,
-            partial_sync=False,
             applescript_client=track_processor.ap_client,
         )
 
@@ -179,7 +172,7 @@ async def main() -> None:
 
         # Run the full resync
         console_logger.info("Starting full media library resync...")
-        await run_full_resync(console_logger, error_logger, deps.app_config, deps.cache_service, music_updater.track_processor)
+        await run_full_resync(console_logger, error_logger, deps.app_config, music_updater.track_processor)
 
         console_logger.info("Full resync completed")
         console_logger.info("track_list.csv is now synchronized with Music.app")

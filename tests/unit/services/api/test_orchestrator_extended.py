@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.models.protocols import YearLookupUnavailableError
 from services.api.orchestrator import ExternalApiOrchestrator
 from tests.factories import create_test_app_config
 
@@ -488,69 +489,31 @@ class TestNormalizeApiName:
         assert orchestrator._normalize_api_name("itunes") == "itunes"
 
 
-class TestCurrentYearContamination:
-    """Tests for current year contamination detection logic."""
+class TestNoAnswerStaysNoAnswer:
+    """An album no provider knows gets no year from the orchestrator, whatever the library says."""
 
     @pytest.mark.asyncio
-    async def test_current_year_rejected_when_tracks_added_long_ago(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Tracks added years ago with current year should be rejected as contamination."""
-        current_year = orchestrator.current_year
-        # Tracks added 5 years ago, but library year is current year -> contamination
-        result = orchestrator._get_fallback_year_when_no_api_results(
-            current_library_year=str(current_year),
-            log_artist="Test Artist",
-            log_album="Test Album",
-            earliest_track_added_year=current_year - 5,
-        )
-        assert result is None, "Current year should be rejected when tracks were added long ago"
+    async def test_no_results_returns_no_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """A library year is a hint for the search, never the answer when the search found nothing."""
+        result = await orchestrator._handle_no_results("Test Artist", "Test Album", log_artist="Test Artist", log_album="Test Album")
+
+        assert result == (None, False, 0, {})
 
     @pytest.mark.asyncio
-    async def test_current_year_rejected_when_no_track_added_info(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Current year should be rejected when no track added date is available."""
-        current_year = orchestrator.current_year
-        result = orchestrator._get_fallback_year_when_no_api_results(
-            current_library_year=str(current_year),
-            log_artist="Test Artist",
-            log_album="Test Album",
+    async def test_no_releases_return_no_year(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """Releases that score no year are no answer either (an empty list scores none)."""
+        result = await orchestrator._process_api_results(
+            [], artist="Test Artist", album="Test Album", log_artist="Test Artist", log_album="Test Album", current_library_year="2016"
         )
-        assert result is None, "Current year should be rejected when track added date is unknown"
+
+        assert result == (None, False, 0, {})
 
     @pytest.mark.asyncio
-    async def test_current_year_accepted_when_tracks_added_this_year(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Tracks added this year with current year should be accepted as legitimate."""
-        current_year = orchestrator.current_year
-        result = orchestrator._get_fallback_year_when_no_api_results(
-            current_library_year=str(current_year),
-            log_artist="Test Artist",
-            log_album="Test Album",
-            earliest_track_added_year=current_year,
-        )
-        assert result == str(current_year), "Current year should be accepted when tracks were added this year"
+    async def test_search_error_leaves_the_lookup_unavailable(self, orchestrator: ExternalApiOrchestrator) -> None:
+        """A failed search is no verdict on the library year: the caller retries on the next run."""
+        error = ValueError("boom")
 
-    @pytest.mark.asyncio
-    async def test_non_current_year_always_accepted(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """Non-current years should always be accepted regardless of track added date."""
-        current_year = orchestrator.current_year
-        # Test with a past year - should always be accepted
-        result = orchestrator._get_fallback_year_when_no_api_results(
-            current_library_year=str(current_year - 1),
-            log_artist="Test Artist",
-            log_album="Test Album",
-            earliest_track_added_year=current_year - 10,
-        )
-        assert result == str(current_year - 1), "Past years should always be accepted"
+        with pytest.raises(YearLookupUnavailableError) as raised:
+            orchestrator._handle_year_search_error("Test Artist", "Test Album", error)
 
-    @pytest.mark.asyncio
-    async def test_handle_year_search_error_respects_track_added_year(self, orchestrator: ExternalApiOrchestrator) -> None:
-        """_handle_year_search_error should use earliest_track_added_year for contamination check."""
-        current_year = orchestrator.current_year
-        # Tracks added this year -> accept current year
-        result, is_def, conf, _scores = orchestrator._handle_year_search_error(
-            log_artist="Test Artist",
-            log_album="Test Album",
-            current_library_year=str(current_year),
-            earliest_track_added_year=current_year,
-        )
-        assert result == str(current_year), "Should accept current year when tracks added this year"
-        assert is_def is False
-        assert conf == 0
+        assert raised.value.__cause__ is error

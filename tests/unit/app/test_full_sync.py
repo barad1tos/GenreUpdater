@@ -42,12 +42,6 @@ def config(tmp_path: Path) -> AppConfig:
 
 
 @pytest.fixture
-def mock_cache_service() -> MagicMock:
-    """Create mock cache service."""
-    return MagicMock(spec=["get", "set", "clear"])
-
-
-@pytest.fixture
 def mock_track_processor() -> MagicMock:
     """Create mock track processor."""
     processor = MagicMock()
@@ -70,7 +64,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
     ) -> None:
         """Should exit early when Music.app is not running."""
@@ -79,7 +72,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -93,7 +85,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -109,7 +100,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -124,7 +114,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -136,7 +125,7 @@ class TestRunFullResync:
             patch("app.full_sync.migrate_to_persistent_ids", new_callable=AsyncMock, side_effect=lambda **_: calls.append("migrate")) as migrate,
             patch("app.full_sync.sync_track_list_with_current", new_callable=AsyncMock, side_effect=lambda *_, **__: calls.append("sync")),
         ):
-            await run_full_resync(console_logger, error_logger, config, mock_cache_service, mock_track_processor)
+            await run_full_resync(console_logger, error_logger, config, mock_track_processor)
 
         assert calls == ["migrate", "sync"]
         migrate.assert_awaited_once_with(
@@ -150,7 +139,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -168,7 +156,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -179,7 +166,6 @@ class TestRunFullResync:
             call_args = mock_sync.call_args
             assert len(call_args[0][0]) == 2  # Two tracks
             assert call_args[0][1] == csv_path
-            assert call_args[1]["partial_sync"] is False
 
     @pytest.mark.asyncio
     async def test_raises_on_os_error(
@@ -188,7 +174,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -209,7 +194,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -220,7 +204,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -241,7 +224,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -252,7 +234,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -270,7 +251,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -284,7 +264,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -305,7 +284,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -316,7 +294,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -339,7 +316,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -352,7 +328,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -367,7 +342,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -380,7 +354,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -393,7 +366,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -406,7 +378,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -424,7 +395,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -437,7 +407,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -455,7 +424,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 
@@ -468,7 +436,6 @@ class TestRunFullResync:
         console_logger: logging.Logger,
         error_logger: logging.Logger,
         config: AppConfig,
-        mock_cache_service: MagicMock,
         mock_track_processor: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -484,7 +451,6 @@ class TestRunFullResync:
                 console_logger,
                 error_logger,
                 config,
-                mock_cache_service,
                 mock_track_processor,
             )
 

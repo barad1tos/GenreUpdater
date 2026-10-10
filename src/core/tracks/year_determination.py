@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import NamedTuple, TYPE_CHECKING
 
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError
 from core.models.track_status import is_prerelease_status
 from core.models.validators import is_empty_year, is_valid_year
 
@@ -35,8 +35,16 @@ if TYPE_CHECKING:
 SUSPICIOUS_ALBUM_MIN_LEN = 3  # Album names with length <= 3 are suspicious
 SUSPICIOUS_MANY_YEARS = 3  # If >= 3 unique years present, skip auto updates
 CACHE_TRUST_THRESHOLD = 90  # Only trust cached year if confidence >= this value
-CONSENSUS_YEAR_CONFIDENCE = 80  # Confidence score for consensus release_year
 MIN_CONFIDENCE_TO_CACHE = 50  # Don't cache years with confidence below this (avoid BRITPOP→1987 bug)
+
+
+class ProviderAnswer(NamedTuple):
+    """What the providers said about an album, before the fallback rules judge it."""
+
+    year: str
+    is_definitive: bool
+    confidence_score: int
+    year_scores: dict[str, int]
 
 
 class YearDeterminator:
@@ -88,115 +96,69 @@ class YearDeterminator:
         self.future_year_threshold = processing.future_year_threshold
         self.prerelease_recheck_days = processing.prerelease_recheck_days
 
-    async def _try_local_sources(
-        self,
-        artist: str,
-        album: str,
-        album_tracks: list[TrackDict],
-    ) -> str | None:
-        """Try to get year from local sources (dominant, cache, consensus).
-
-        Returns year if found from any local source, None otherwise.
-        """
-        # 1. Check for dominant year from track metadata
-        if dominant_year := self.consistency_checker.get_dominant_year(album_tracks):
-            return dominant_year
-
-        # 2. Check cache — only trust if high confidence
+    async def _try_cached_year(self, artist: str, album: str) -> str | None:
+        """Return the album's cached year when the entry is fresh and confident, else None."""
         cached_entry = await self.cache_service.get_album_year_entry_from_cache(artist, album)
         if cached_entry and cached_entry.confidence >= CACHE_TRUST_THRESHOLD:
             if debug.year:
                 self.console_logger.debug(
-                    "Using cached year %s for %s - %s (confidence %d%%)",
-                    cached_entry.year,
-                    artist,
-                    album,
-                    cached_entry.confidence,
+                    "Using cached year %s for %s - %s (confidence %d%%)", cached_entry.year, artist, album, cached_entry.confidence
                 )
             return cached_entry.year
-
-        # 3. Check for consensus release_year
-        if consensus_year := self.consistency_checker.get_consensus_release_year(album_tracks):
-            await self.cache_service.store_album_year_in_cache(
-                artist,
-                album,
-                consensus_year,
-                confidence=CONSENSUS_YEAR_CONFIDENCE,
-            )
-            return consensus_year
-
         return None
 
-    async def _fetch_from_api(
-        self,
-        artist: str,
-        album: str,
-        album_tracks: list[TrackDict],
-        dominant_year: str | None,
-    ) -> str | None:
-        """Fetch year from external API and validate.
+    async def _query_providers(self, artist: str, album: str, library_year: str | None) -> ProviderAnswer | None:
+        """Ask the providers for the album's year.
 
-        Returns validated year or None; a lookup no provider answered raises YearLookupUnavailableError.
+        Returns None when no provider knows the album. A lookup that no provider answered raises
+        YearLookupUnavailableError and one that failed with an error YearLookupFailedError, so the caller leaves the
+        album for the next run.
         """
-        earliest_added = YearConsistencyChecker.get_earliest_track_added_year(album_tracks)
-
         try:
-            year_result, is_definitive, confidence_score, year_scores = await self.external_api.get_album_year(
-                artist,
-                album,
-                current_library_year=dominant_year,
-                earliest_track_added_year=earliest_added,
+            year, is_definitive, confidence_score, year_scores = await self.external_api.get_album_year(
+                artist, album, current_library_year=library_year
             )
-        except YearLookupUnavailableError:
-            # Not a failure of this album's data: no provider answered, so the caller skips the album until the next run
-            raise
         except (OSError, ValueError, RuntimeError) as error:
-            # The caller treats None like an album no API knows, so only these logs show the lookup failed
-            self.error_logger.exception(
-                "Year lookup failed for '%s - %s' (library year %s, earliest track added %s)",
-                artist,
-                album,
-                dominant_year,
-                earliest_added,
-            )
+            self.error_logger.exception("Year lookup failed for '%s - %s' (library year %s)", artist, album, library_year)
             self.console_logger.warning(
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
+            message = f"Year lookup failed for '{artist} - {album}'"
+            raise YearLookupFailedError(message) from error
+        if not year:
             return None
+        return ProviderAnswer(year, is_definitive, confidence_score, year_scores)
 
-        if not year_result:
-            return None
-
-        # Get consensus release_year from Apple Music (read-only, more authoritative than editable year field)
-        consensus_release_year = self.consistency_checker.get_consensus_release_year(album_tracks)
-
+    async def _validate_provider_year(self, artist: str, album: str, album_tracks: list[TrackDict], answer: ProviderAnswer) -> str | None:
+        """Run the fallback rules over a provider answer, cache a confident result, and return the year to apply or None."""
         validated_year = await self.fallback_handler.apply_year_fallback(
-            proposed_year=year_result,
+            proposed_year=answer.year,
             album_tracks=album_tracks,
-            is_definitive=is_definitive,
-            confidence_score=confidence_score,
+            is_definitive=answer.is_definitive,
+            confidence_score=answer.confidence_score,
             artist=artist,
             album=album,
-            year_scores=year_scores,
-            release_year=consensus_release_year,
+            year_scores=answer.year_scores,
+            release_year=self.consistency_checker.get_consensus_release_year(album_tracks),
         )
-
-        if validated_year is not None and confidence_score >= MIN_CONFIDENCE_TO_CACHE:
-            await self.cache_service.store_album_year_in_cache(
-                artist,
-                album,
-                validated_year,
-                confidence=confidence_score,
+        if validated_year is None:
+            return None
+        if validated_year != answer.year:
+            # The fallback kept another year (the library's, or Apple's date): the providers' confidence does not vouch for it
+            self.console_logger.info(
+                "Not caching '%s - %s': the fallback kept %s over the providers' %s", artist, album, validated_year, answer.year, extra=PLAIN_TEXT
             )
-        elif validated_year is not None:
+        elif answer.confidence_score >= MIN_CONFIDENCE_TO_CACHE:
+            await self.cache_service.store_album_year_in_cache(artist, album, answer.year, confidence=answer.confidence_score)
+        else:
             self.console_logger.warning(
                 "Skipping cache for '%s - %s': confidence %d < %d threshold",
                 artist,
                 album,
-                confidence_score,
+                answer.confidence_score,
                 MIN_CONFIDENCE_TO_CACHE,
+                extra=PLAIN_TEXT,
             )
-
         return validated_year
 
     async def determine_album_year(
@@ -206,39 +168,49 @@ class YearDeterminator:
         album_tracks: list[TrackDict],
         force: bool = False,
     ) -> str | None:
-        """Determine year for album using simplified Linus approach.
+        """Determine the album's year.
 
-        Order: dominant year -> cache (high confidence) -> consensus release_year -> API -> None
-        When force=True, skips local sources - always queries API.
+        Order: cached year (fresh, confident) → providers, judged by the fallback rules → majority of the album's
+        tracks when the providers have no year for it, unless that majority is this year and the earliest track was added in
+        another year or carries no date. `force` skips the cache.
 
         Args:
             artist: Artist name
             album: Album name
             album_tracks: List of tracks in the album
-            force: If True, bypass local data and always query API
+            force: If True, bypass the cache and always query the providers
 
         Returns:
             Year string if found, None otherwise
 
         """
         if debug.year:
-            self.console_logger.info(
-                "determine_album_year called: artist='%s' album='%s' force=%s",
-                artist,
-                album,
-                force,
-            )
+            self.console_logger.info("determine_album_year called: artist='%s' album='%s' force=%s", artist, album, force, extra=PLAIN_TEXT)
 
-        # Try local sources first (unless force mode)
-        if not force and (local_year := await self._try_local_sources(artist, album, album_tracks)):
-            return local_year
-
-        # Fallback to API - pass current year for year-match comparison
-        # Use get_most_common_year (not get_dominant_year) because:
-        # - get_dominant_year returns None for "suspicious" years (old albums added recently)
-        # - Orchestrator needs the actual year to detect year-match and skip verification
-        current_year = self.consistency_checker.get_most_common_year(album_tracks)
-        return await self._fetch_from_api(artist, album, album_tracks, current_year)
+        # A fresh, confident cache entry is the only local answer: the most common library year goes to the providers as
+        # a hint and Apple's release date to the fallback rules, since Apple rewrites both without notice
+        if not force and (cached_year := await self._try_cached_year(artist, album)):
+            return cached_year
+        library_year = self.consistency_checker.get_most_common_year(album_tracks)
+        answer = await self._query_providers(artist, album, library_year)
+        if answer is None:
+            # No provider year (none knows the album, or none scored a usable year): the majority of its tracks is the best year its outliers can get
+            majority = self.consistency_checker.get_majority_year(album_tracks)
+            if majority and self._is_placeholder_current_year(majority, album_tracks):
+                self.console_logger.info(
+                    "No provider year for '%s - %s'; majority %s is this year but its earliest track is older or undated (Apple's placeholder)",
+                    artist,
+                    album,
+                    majority,
+                    extra=PLAIN_TEXT,
+                )
+                return None
+            if majority:
+                self.console_logger.info(
+                    "No provider year for '%s - %s'; using the majority year %s of its tracks", artist, album, majority, extra=PLAIN_TEXT
+                )
+            return majority
+        return await self._validate_provider_year(artist, album, album_tracks, answer)
 
     async def should_skip_album(
         self,
@@ -415,36 +387,34 @@ class YearDeterminator:
         """
         # Check year consistency when no cache - can skip API if years are uniform
         if self._has_consistent_year(album_tracks):
-            dominant = self._get_dominant_year(album_tracks)
+            shared_year = self._get_consistent_year(album_tracks)
 
             # Reissue detection: current year without release_year validation is suspicious
             # iTunes returns reissue/catalog dates, not original release dates
-            if dominant is not None:
+            if shared_year is not None:
                 try:
-                    dominant_int = int(dominant)
+                    shared_year_int = int(shared_year)
                 except (ValueError, TypeError):
                     self.console_logger.warning(
-                        "[PRE-CHECK] Cannot parse dominant year '%s' for reissue check - forcing API verification for %s - %s",
-                        dominant,
+                        "[PRE-CHECK] Cannot parse the shared year '%s' for the reissue check - forcing API verification for %s - %s",
+                        shared_year,
                         artist,
                         album,
+                        extra=PLAIN_TEXT,
                     )
                     return False, "invalid_year_format"
-                is_recent_year = dominant_int >= datetime.now(UTC).year - 1
+                is_recent_year = shared_year_int >= datetime.now(UTC).year - 1
                 has_no_release_year = not any(t.get("release_year") for t in album_tracks)
                 if is_recent_year and has_no_release_year:
                     self.console_logger.info(
-                        "[PRE-CHECK] %s - %s: year %s needs API verification (no release_year)",
-                        artist,
-                        album,
-                        dominant,
+                        "[PRE-CHECK] %s - %s: year %s needs API verification (no release_year)", artist, album, shared_year, extra=PLAIN_TEXT
                     )
                     return False, "needs_api_verification"  # Don't skip, force API query
             self.console_logger.debug(
                 "[PRE-CHECK] Skip %s - %s: year consistent (%s)",
                 artist,
                 album,
-                dominant,
+                shared_year,
             )
             return True, "year_consistent"
 
@@ -500,8 +470,7 @@ class YearDeterminator:
     def _has_consistent_year(tracks: list[TrackDict]) -> bool:
         """Check if all tracks have the same non-empty valid year.
 
-        Requires at least 2 tracks to avoid skipping single-track albums
-        that need API validation.
+        A single track agrees with itself, so a single-track album with a valid year is consistent too.
 
         Args:
             tracks: List of tracks to check
@@ -510,16 +479,32 @@ class YearDeterminator:
             True if all tracks have the same valid year, False otherwise.
 
         """
-        # Single-track albums need API validation, don't skip
-        if len(tracks) < 2:
-            return False
-
         years = [str(track_year or "") for t in tracks if (track_year := t.year) and is_valid_year(track_year)]
         return len(years) == len(tracks) and len(set(years)) == 1 if years else False
 
     @staticmethod
-    def _get_dominant_year(tracks: list[TrackDict]) -> str | None:
-        """Get the dominant year from tracks.
+    def _is_placeholder_current_year(year: str, album_tracks: list[TrackDict]) -> bool:
+        """Tell whether a year is this year on an album whose earliest track was not added this year.
+
+        Apple stamps the current year on tracks it has no date for; a real release from this year reaches the
+        library this year.
+
+        Args:
+            year: The year to judge
+            album_tracks: The album's tracks, whose date_added decides
+
+        Returns:
+            True when the year is this year and the earliest track was added in another year or no track carries a usable date
+
+        """
+        this_year = datetime.now(UTC).year
+        if year != str(this_year):
+            return False
+        return YearConsistencyChecker.get_earliest_track_added_year(album_tracks) != this_year
+
+    @staticmethod
+    def _get_consistent_year(tracks: list[TrackDict]) -> str | None:
+        """Get the year the tracks share, as the most common valid year.
 
         Args:
             tracks: List of tracks to analyze

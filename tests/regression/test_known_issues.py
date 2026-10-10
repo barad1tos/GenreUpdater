@@ -9,14 +9,12 @@ are handled correctly. Based on analysis of:
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import TYPE_CHECKING
 
 import pytest
 
 from core.models.metadata_utils import determine_dominant_genre_for_artist
-from core.tracks.year_consistency import YearConsistencyChecker
 
 if TYPE_CHECKING:
     from core.models.track_models import TrackDict
@@ -32,17 +30,6 @@ KNOWN_MISSING_YEAR_ALBUMS: list[tuple[str, str, str]] = [
     ("Anathema", "Eternity", "1996"),
     ("Anathema", "Judgement", "1999"),
     ("Animals As Leaders", "Animals as Leaders", "2009"),
-]
-
-# Albums with year discrepancies: (artist, album, existing_year, expected_correct_year)
-YEAR_DISCREPANCY_ALBUMS: list[tuple[str, str, str, str]] = [
-    ("Aggressive Sound Painters", "The Path of Least Resistance", "2004", "2011"),
-]
-
-# Albums flagged as suspicious: (artist, album, year, year_gap)
-# year_gap > 10 triggers API verification
-SUSPICIOUS_YEAR_ALBUMS: list[tuple[str, str, str, int]] = [
-    ("Parkway Drive", "Deep Blue", "2009", 13),
 ]
 
 
@@ -84,137 +71,6 @@ class TestKnownMissingYearAlbums:
         # These albums SHOULD have years in tracks even if API fails
         assert not albums_without_years, f"Albums missing year data in tracks: {albums_without_years}"
 
-    def test_known_albums_flagged_for_api_verification(
-        self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        console_logger: logging.Logger,
-    ) -> None:
-        """Known problematic albums should be flagged for API verification.
-
-        These albums have old release years but were added recently (year gap > 10).
-        The system correctly returns None to trigger API verification.
-        This documents EXPECTED behavior, not a bug.
-
-        Skips if none of the known albums are present in the snapshot (CI fixtures).
-        """
-        # Count how many known albums are in the snapshot
-        albums_in_snapshot = sum(1 for artist, album, _ in KNOWN_MISSING_YEAR_ALBUMS if (artist, album) in albums_with_tracks)
-        if albums_in_snapshot == 0:
-            pytest.skip(f"None of {len(KNOWN_MISSING_YEAR_ALBUMS)} known albums present in snapshot. This is expected in CI with test fixtures.")
-
-        checker = YearConsistencyChecker(console_logger=console_logger)
-        correctly_flagged: list[tuple[str, str, str]] = []
-        incorrectly_returned: list[tuple[str, str, str, str]] = []
-
-        for artist, album, expected_year in KNOWN_MISSING_YEAR_ALBUMS:
-            if (artist, album) not in albums_with_tracks:
-                continue
-
-            tracks = albums_with_tracks[(artist, album)]
-            dominant_year = checker.get_dominant_year(tracks)
-
-            if dominant_year is None:
-                # Correct: flagged for API verification
-                correctly_flagged.append((artist, album, expected_year))
-            else:
-                # Unexpected: returned year without API check
-                incorrectly_returned.append((artist, album, expected_year, dominant_year))
-
-        # Most albums SHOULD return None (flagged for API verification)
-        # because they have old years but recent dateAdded
-        flagged_ratio = len(correctly_flagged) / len(KNOWN_MISSING_YEAR_ALBUMS) if KNOWN_MISSING_YEAR_ALBUMS else 0
-
-        # At least 70% should be flagged (year gap > 10 triggers suspicion)
-        assert flagged_ratio >= 0.7, (
-            f"Too few albums flagged for API verification: {len(correctly_flagged)}/{len(KNOWN_MISSING_YEAR_ALBUMS)}\n"
-            f"Incorrectly returned years: {incorrectly_returned}"
-        )
-
-
-@pytest.mark.regression
-class TestYearDiscrepancies:
-    """Test albums with known year discrepancies."""
-
-    def test_year_discrepancy_triggers_api_verification(
-        self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        console_logger: logging.Logger,
-    ) -> None:
-        """Albums with year discrepancies should trigger API verification.
-
-        When an album has a wrong year (e.g., 2004 instead of 2011), the system
-        may detect it as suspicious due to the year gap between release and
-        dateAdded. Returning None is CORRECT - it triggers API verification.
-        """
-        checker = YearConsistencyChecker(console_logger=console_logger)
-
-        for artist, album, existing_year, correct_year in YEAR_DISCREPANCY_ALBUMS:
-            if (artist, album) not in albums_with_tracks:
-                pytest.skip(f"Album not in snapshot: {artist} - {album}")
-
-            tracks = albums_with_tracks[(artist, album)]
-            track_years = {t.year for t in tracks if t.year and t.year != "0"}
-
-            if existing_year in track_years:
-                dominant = checker.get_dominant_year(tracks)
-
-                # Either:
-                # 1. Returns None (flagged for API verification) - CORRECT
-                # 2. Returns the wrong year (will be corrected by API) - ACCEPTABLE
-                # The key is: it should NOT crash or return garbage
-                assert dominant is None or dominant.isdigit(), f"{artist} - {album}: unexpected result {dominant}"
-
-                # Document what happened
-                if dominant is None:
-                    # Best case: flagged for API check
-                    pass
-                elif dominant == existing_year:
-                    # Wrong year returned, but API will fix it
-                    pytest.xfail(f"{artist} - {album}: returns wrong year {existing_year}, should be {correct_year}. API verification needed.")
-
-
-@pytest.mark.regression
-class TestSuspiciousYearDetection:
-    """Test that suspiciously old years trigger verification."""
-
-    def test_suspicious_years_return_none_for_api_check(
-        self,
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        console_logger: logging.Logger,
-    ) -> None:
-        """Albums with suspicious years should return None to trigger API."""
-        checker = YearConsistencyChecker(console_logger=console_logger)
-        not_flagged: list[tuple[str, str, str, int]] = []
-
-        for artist, album, year, expected_gap in SUSPICIOUS_YEAR_ALBUMS:
-            if (artist, album) not in albums_with_tracks:
-                continue
-
-            tracks = albums_with_tracks[(artist, album)]
-
-            # Force all tracks to have the suspicious year
-            for track in tracks:
-                if track.year != year:
-                    continue  # Skip if year doesn't match
-
-            dominant = checker.get_dominant_year(tracks)
-
-            # If year gap > 10, dominant should be None (trigger API verification)
-            # But if tracks already have consistent year, it may return that year
-            # This test documents the expected behavior
-            if dominant is not None and expected_gap > 10:
-                # Check if dateAdded indicates suspicion
-                with contextlib.suppress(ValueError, TypeError):
-                    if added_years := [int(str(t.date_added or "")[:4]) for t in tracks if t.date_added]:
-                        earliest_added = min(added_years)
-                        actual_gap = earliest_added - int(year)
-                        if actual_gap > 10:
-                            not_flagged.append((artist, album, year, actual_gap))
-        # Some suspicious albums should be flagged
-        # This is informational - documents current behavior
-        if not_flagged:
-            pytest.xfail(f"Albums with suspicious years not flagged: {not_flagged}")
-
 
 @pytest.mark.regression
 class TestGenreEdgeCases:
@@ -229,7 +85,7 @@ class TestGenreEdgeCases:
         inconsistent_artists: list[tuple[str, set[str], str]] = []
 
         for artist, tracks in artists_with_tracks.items():
-            genres = {t.genre for t in tracks if t.genre}
+            genres = {genre for t in tracks if (genre := t.genre)}
 
             # Only test artists with multiple different genres
             if len(genres) < 2:

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The year most of an album's tracks carry, and the release date Apple stores on them, are no longer applied as the album's year on their own: an album whose tracks disagree asks the providers, which get both as hints (the fallback rules that side with Apple's release date when the providers are not sure are unchanged), and only when no provider knows the album does the majority of its tracks fill in the others, and never when that majority is this year but the album's earliest track was added in an earlier year or carries no date, Apple's placeholder for a date it lacks. `year_retrieval.logic.suspicion_threshold_years` is no longer read and can be removed from `config.yaml`
+
+- A single-track album with a year is treated like any album whose tracks agree and is skipped; the old rule sent such a single to the providers when its year was much older than the day it was added. A single from this year or last without a release date still asks the providers
+- A year the fallback rules kept over the providers' answer (the library's, or Apple's release date) is no longer cached under the providers' confidence, so a later lookup starts from the providers again
+
+### Fixed
+
+- A year lookup that failed with an error counted as an answer; it now leaves the album for the next run, like a lookup no provider could be reached for
+- When no provider knew an album, the lookup handed the library's own year back as if a provider had answered it. An album whose tracks split evenly then got its most common year written to the other half, while the log said nothing changed. No provider answer is now no answer
+- A year the tool wrote was never recorded in `track_list.csv`: the snapshot got a copy taken before the record was written, and the sync kept the row's own (empty) `year_set_by_mgu`. The record now reaches both the snapshot and the row, so an album the tool set is skipped (as already processed while the record is in memory, as consistent after a fresh read), and a later release can tell its own writes from changes made outside the tool
+- Apple's catalog put 2019 on 13 of 14 tracks of In Flames "Battles", and the tool moved the last track to 2019 as well; providers say 2016. Royal Crown Revue "Mugzy's Move" got 1991 from the release date Apple stores on the track while the providers say 1996. Both rules are gone (see Changed)
+
 ## [3.1.0] - 2026-10-10
 
 ### Changed

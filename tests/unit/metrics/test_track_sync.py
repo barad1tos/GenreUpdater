@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.models.protocols import CacheServiceProtocol
 from core.models.types import TrackDict
 from metrics.track_sync import (
     FIELD_COUNT_WITH_ALBUM_ARTIST,
@@ -21,7 +19,6 @@ from metrics.track_sync import (
     create_normalized_track_dict,
     create_track_from_row,
     get_musicapp_syncable_fields,
-    get_processed_albums_from_csv,
     handle_osascript_error,
     load_track_list,
     merge_musicapp_into_csv,
@@ -64,16 +61,6 @@ def _create_test_track(
         year_before_mgu=year_before_mgu,
         year_set_by_mgu=year_set_by_mgu,
     )
-
-
-@pytest.fixture
-def mock_cache_service() -> CacheServiceProtocol:
-    """Create mock cache service."""
-    service = MagicMock()
-    service.generate_album_key = MagicMock(side_effect=lambda a, b: f"{a}|{b}")
-    service.get_album_year_from_cache = AsyncMock(return_value=None)
-    service.store_album_year_in_cache = AsyncMock()
-    return cast(CacheServiceProtocol, cast(object, service))
 
 
 class TestFieldCountConstants:
@@ -252,35 +239,6 @@ class TestLoadTrackList:
         assert result == {}
 
 
-class TestGetProcessedAlbumsFromCsv:
-    """Tests for get_processed_albums_from_csv function."""
-
-    def test_returns_empty_when_no_tracks(self, mock_cache_service: CacheServiceProtocol) -> None:
-        """Should return empty dict when no tracks."""
-        result = get_processed_albums_from_csv({}, mock_cache_service)
-
-        assert result == {}
-
-    def test_returns_processed_albums(self, mock_cache_service: CacheServiceProtocol) -> None:
-        """Should return mapping of album keys to new years."""
-        track = _create_test_track("100", year_set_by_mgu="2022")
-        csv_map = {"100": track}
-
-        result = get_processed_albums_from_csv(csv_map, mock_cache_service)
-
-        assert "Artist|Album" in result
-        assert result["Artist|Album"] == "2022"
-
-    def test_skips_tracks_without_year_set_by_mgu(self, mock_cache_service: CacheServiceProtocol) -> None:
-        """Should skip tracks without year_set_by_mgu value."""
-        track = _create_test_track("101", year_set_by_mgu=None)
-        csv_map = {"101": track}
-
-        result = get_processed_albums_from_csv(csv_map, mock_cache_service)
-
-        assert result == {}
-
-
 class TestNormalizeTrackYearFields:
     """Tests for normalize_track_year_fields function."""
 
@@ -452,6 +410,68 @@ class TestMergeMusicappIntoCsv:
         updated = merge_musicapp_into_csv(musicapp_tracks, csv_tracks)
 
         assert updated == 0
+
+    def test_copies_the_years_the_tool_wrote(self) -> None:
+        """A year the tool wrote this run must reach the row: no later fetch carries year_set_by_mgu."""
+        csv_track = _create_test_track("7", year="2019", year_before_mgu="2019", year_set_by_mgu="")
+        musicapp_track = _create_test_track("7", year="2016", year_before_mgu="2019", year_set_by_mgu="2016")
+
+        merge_musicapp_into_csv({"7": musicapp_track}, {"7": csv_track})
+
+        assert (csv_track.year, csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2016", "2019", "2016")
+
+    def test_keeps_the_rows_history_when_the_tool_wrote_nothing(self) -> None:
+        csv_track = _create_test_track("8", year="2016", year_before_mgu="2015", year_set_by_mgu="2016")
+        musicapp_track = _create_test_track("8", year="2016", year_before_mgu="", year_set_by_mgu="")
+
+        merge_musicapp_into_csv({"8": musicapp_track}, {"8": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2015", "2016")
+
+    def test_a_first_write_records_the_old_year_not_the_new_one(self) -> None:
+        """A row without history takes the year the track had before the write, which the track carries."""
+        csv_track = _create_test_track("9", year="2026", year_before_mgu="", year_set_by_mgu="")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="2026", year_set_by_mgu="2017")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2026", "2017")
+
+    def test_a_first_write_onto_an_empty_year_records_no_old_year(self) -> None:
+        """A track that had no year before the tool wrote one keeps an empty history, not the year just written."""
+        csv_track = _create_test_track("9", year="", year_before_mgu="", year_set_by_mgu="")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="2017")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("", "2017")
+
+    def test_a_fresh_read_keeps_a_first_writes_empty_history(self) -> None:
+        """A track read from Music.app carries its current year as year_before_mgu; the empty history a first write left stays."""
+        csv_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="2017")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="2017", year_set_by_mgu="")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("", "2017")
+
+    def test_a_row_the_tool_never_wrote_takes_the_current_year(self) -> None:
+        """Issue #126: a row without any record starts its history from the track's year."""
+        csv_track = _create_test_track("9", year="", year_before_mgu="", year_set_by_mgu="")
+        musicapp_track = _create_test_track("9", year="2017", year_before_mgu="", year_set_by_mgu="")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2017", "")
+
+    def test_a_second_write_keeps_the_first_old_year(self) -> None:
+        """The year before the tool's first write stays through later writes."""
+        csv_track = _create_test_track("9", year="2017", year_before_mgu="2026", year_set_by_mgu="2017")
+        musicapp_track = _create_test_track("9", year="2018", year_before_mgu="2026", year_set_by_mgu="2018")
+
+        merge_musicapp_into_csv({"9": musicapp_track}, {"9": csv_track})
+
+        assert (csv_track.year, csv_track.year_before_mgu, csv_track.year_set_by_mgu) == ("2018", "2026", "2018")
 
     def test_initializes_empty_year_before_mgu_from_musicapp(self) -> None:
         """Should initialize empty year_before_mgu from Music.app year.
@@ -926,9 +946,21 @@ class TestUpdateTrackWithCachedFieldsForSync:
     This gets mapped to track.year_before_mgu (for new tracks) and track.year (for delta detection).
     """
 
+    def test_a_track_the_tool_wrote_onto_keeps_no_old_year(self) -> None:
+        """The re-fetched current year is the tool's own write, not the year before it."""
+        track = _create_test_track("6", date_added=None, year="2017", year_before_mgu=None, year_set_by_mgu="2017")
+        tracks_cache: dict[str, ParsedTrackFields] = {
+            "6": {"date_added": "2024-06-01", "last_modified": "2024-06-02", "track_status": "Playing", "year": "2017"}
+        }
+
+        update_track_with_cached_fields_for_sync(track, tracks_cache)
+
+        assert track.date_added == "2024-06-01"
+        assert not track.year_before_mgu
+
     def test_updates_empty_fields_from_cache(self) -> None:
         """Should update empty fields from cache."""
-        track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None)
+        track = _create_test_track("6", date_added=None, track_status=None, year=None, year_before_mgu=None, year_set_by_mgu=None)
         tracks_cache: dict[str, ParsedTrackFields] = {
             "6": {
                 "date_added": "2024-06-01",
@@ -1062,139 +1094,24 @@ class TestSaveTrackMapToCsv:
 
 
 class TestBuildMusicappTrackMap:
-    """Tests for build_musicapp_track_map async function."""
+    """Tests for build_musicapp_track_map."""
 
-    @pytest.mark.asyncio
-    async def test_builds_map_from_tracks(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-    ) -> None:
+    def test_builds_map_from_tracks(self) -> None:
         """Should build map from track list."""
         from metrics.track_sync import build_musicapp_track_map
 
-        tracks = [_create_test_track("11", artist="Test Artist", album="Test Album")]
-        processed_albums: dict[str, str] = {}
-
-        result = await build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
+        result = build_musicapp_track_map([_create_test_track("11", artist="Test Artist", album="Test Album")])
 
         assert "11" in result
         assert result["11"].artist == "Test Artist"
 
-    @pytest.mark.asyncio
-    async def test_skips_tracks_without_id(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-    ) -> None:
+    def test_skips_tracks_without_id(self) -> None:
         """Should skip tracks without id."""
         from metrics.track_sync import build_musicapp_track_map
 
-        track = TrackDict(id="", name="No ID", artist="Artist", album="Album")
-        tracks = [track]
-        processed_albums: dict[str, str] = {}
-
-        result = await build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=False, error_logger=error_logger)
+        result = build_musicapp_track_map([TrackDict(id="", name="No ID", artist="Artist", album="Album")])
 
         assert len(result) == 0
-
-    @pytest.mark.asyncio
-    async def test_handles_partial_sync(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-    ) -> None:
-        """Should handle partial sync with processed albums."""
-        from metrics.track_sync import build_musicapp_track_map
-
-        tracks = [_create_test_track("12", artist="Test", album="Album2", year_set_by_mgu=None)]
-        processed_albums = {"Test|Album2": "2023"}
-
-        result = await build_musicapp_track_map(tracks, processed_albums, mock_cache_service, partial_sync=True, error_logger=error_logger)
-
-        assert "12" in result
-        assert result["12"].year_set_by_mgu == "2023"
-
-
-class TestHandlePartialSyncCache:
-    """Tests for handle_partial_sync_cache async function."""
-
-    @pytest.mark.asyncio
-    async def test_skips_when_album_not_processed(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-    ) -> None:
-        """Should skip when album not in processed albums."""
-        from metrics.track_sync import handle_partial_sync_cache
-
-        track = _create_test_track("13", year_set_by_mgu=None)
-        processed_albums: dict[str, str] = {}
-
-        await handle_partial_sync_cache(
-            track,
-            processed_albums=processed_albums,
-            cache_service=mock_cache_service,
-            album_key="Artist|Album",
-            artist="Artist",
-            album="Album",
-            error_logger=error_logger,
-        )
-
-        assert track.year_set_by_mgu is None
-
-    @pytest.mark.asyncio
-    async def test_updates_year_from_processed_albums(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-    ) -> None:
-        """Should update year_set_by_mgu from processed albums."""
-        from metrics.track_sync import handle_partial_sync_cache
-
-        track = _create_test_track("14", year_set_by_mgu=None)
-        processed_albums = {"Artist|Album": "2023"}
-
-        await handle_partial_sync_cache(
-            track,
-            processed_albums=processed_albums,
-            cache_service=mock_cache_service,
-            album_key="Artist|Album",
-            artist="Artist",
-            album="Album",
-            error_logger=error_logger,
-        )
-
-        assert track.year_set_by_mgu == "2023"
-        cast(AsyncMock, mock_cache_service.store_album_year_in_cache).assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_handles_cache_error(
-        self,
-        mock_cache_service: CacheServiceProtocol,
-        error_logger: logging.Logger,
-        caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Should handle cache errors gracefully."""
-        from metrics.track_sync import handle_partial_sync_cache
-
-        track = _create_test_track("15", year_set_by_mgu=None)
-        processed_albums = {"Artist|Album": "2023"}
-        monkeypatch.setattr(mock_cache_service, "get_album_year_from_cache", AsyncMock(side_effect=OSError("Cache error")))
-
-        with caplog.at_level(logging.ERROR):
-            await handle_partial_sync_cache(
-                track,
-                processed_albums=processed_albums,
-                cache_service=mock_cache_service,
-                album_key="Artist|Album",
-                artist="Artist",
-                album="Album",
-                error_logger=error_logger,
-            )
-
-        assert track.year_set_by_mgu == "2023"
 
 
 class TestExecuteOsascriptProcess:
@@ -1266,6 +1183,18 @@ class TestFetchMissingTrackFieldsForSync:
         assert result == {}
 
     @pytest.mark.asyncio
+    async def test_does_not_fetch_for_a_first_writes_empty_history(self, console_logger: logging.Logger) -> None:
+        """A row whose empty year_before_mgu is the tool's own record is complete; no full fetch for it."""
+        from metrics.track_sync import fetch_missing_track_fields_for_sync
+
+        tracks = [_create_test_track("1", year_before_mgu="", year_set_by_mgu="2017")]
+        applescript_client = MagicMock()
+
+        result = await fetch_missing_track_fields_for_sync(tracks, applescript_client, console_logger)
+
+        assert result == {}
+        assert applescript_client.mock_calls == []
+
     async def test_fetches_when_fields_missing(
         self,
         console_logger: logging.Logger,
@@ -1293,7 +1222,6 @@ class TestSyncTrackListWithCurrent:
     async def test_syncs_tracks_to_csv(
         self,
         tmp_path: Path,
-        mock_cache_service: CacheServiceProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -1304,16 +1232,13 @@ class TestSyncTrackListWithCurrent:
         csv_path = str(tmp_path / "sync_test.csv")
 
         with patch("metrics.track_sync.save_csv") as mock_save:
-            await sync_track_list_with_current(
-                tracks, csv_path, cache_service=mock_cache_service, console_logger=console_logger, error_logger=error_logger
-            )
+            await sync_track_list_with_current(tracks, csv_path, console_logger=console_logger, error_logger=error_logger)
             mock_save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_removes_deleted_tracks(
         self,
         tmp_path: Path,
-        mock_cache_service: CacheServiceProtocol,
         console_logger: logging.Logger,
         error_logger: logging.Logger,
     ) -> None:
@@ -1328,7 +1253,5 @@ class TestSyncTrackListWithCurrent:
         tracks = [_create_test_track("19", artist="New Artist")]
 
         with patch("metrics.track_sync.save_csv") as mock_save:
-            await sync_track_list_with_current(
-                tracks, str(csv_file), cache_service=mock_cache_service, console_logger=console_logger, error_logger=error_logger
-            )
+            await sync_track_list_with_current(tracks, str(csv_file), console_logger=console_logger, error_logger=error_logger)
             mock_save.assert_called_once()

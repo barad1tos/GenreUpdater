@@ -18,7 +18,7 @@ Music Genre Updater fetches album release years from multiple external APIs and 
 
 ```mermaid
 flowchart TD
-    A[Album without Year] --> B[Query MusicBrainz]
+    A[Album without a year, or whose tracks disagree] --> B[Query MusicBrainz]
     A --> C[Query Discogs]
     A --> D[Query iTunes]
     B --> E[Score Results]
@@ -28,6 +28,14 @@ flowchart TD
     F -->|High Confidence| G[Apply Year]
     F -->|Low Confidence| H[Mark for Verification]
 ```
+
+## What decides an album's year
+
+1. A fresh, confident entry in the album-year cache.
+2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints rather than applied on their own, since Apple rewrites both without notice. Two fallback rules still side with Apple when the providers are not sure of their answer: an album whose release date is this year keeps Apple's date over an older provider year, and, for an album that already has a year, a provider year more than `year_difference_threshold` years from Apple's release date is rejected and the album marked for verification.
+3. When no provider knows the album, the year most of its tracks carry (at least 60% of them) fills in the others, unless that year is this year and the album's earliest track was added in an earlier year or no track carries a date (Apple's placeholder for a date it lacks): then the album is left alone.
+
+A lookup that fails, or that no provider could be reached for, leaves the album for the next run. An album whose tracks all agree is skipped (a single track agrees with itself), unless the cache holds another year (a confident entry is applied, a weaker one sends the album to the providers), or the shared year is this year or last and no track carries Apple's release date, a reissue sign that sends it to the providers too. A year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`); telling a later outside change from the tool's own write is the next release's job.
 
 ## Running Year Updates
 

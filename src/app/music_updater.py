@@ -16,7 +16,7 @@ from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
 from core.logger import LogFormat, get_full_log_path
 from core.models.metadata_utils import is_music_app_running
-from core.models.protocols import YearLookupUnavailableError
+from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
@@ -288,10 +288,8 @@ class MusicUpdater:
         await sync_track_list_with_current(
             all_current_tracks,
             csv_path,
-            cache_service=self.deps.cache_service,
             console_logger=self.console_logger,
             error_logger=self.error_logger,
-            partial_sync=True,  # Incremental sync - only process new/changed tracks
         )
 
         # Save changes report
@@ -406,6 +404,10 @@ class MusicUpdater:
         for entry in albums_to_verify:
             try:
                 year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+            except YearLookupFailedError:
+                # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
+                failed_count += 1
+                continue
             except YearLookupUnavailableError:
                 # No provider answered: the entry stays as it was and is checked again on the next run
                 unavailable_count += 1
@@ -904,15 +906,11 @@ class MusicUpdater:
             # Only sync CSV in non-dry-run mode to prevent divergence between CSV and Apple Music
             if not self.deps.dry_run:
                 # Use sync function instead of save_to_csv for bidirectional sync
-                # In test mode: syncs only test artist tracks (partial_sync handles this)
-                # In normal mode: syncs all tracks
                 await sync_track_list_with_current(
                     all_current_tracks,
                     csv_path,
-                    cache_service=self.deps.cache_service,
                     console_logger=self.console_logger,
                     error_logger=self.error_logger,
-                    partial_sync=True,  # Incremental sync - only process new/changed tracks
                 )
 
     async def _compute_incremental_scope(self, tracks: list[TrackDict], force: bool) -> tuple[list[TrackDict], bool]:

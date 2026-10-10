@@ -12,6 +12,7 @@ Also tests the pre-check pipeline added in Issue #75:
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -56,7 +57,8 @@ def _create_mock_pending_verification() -> MagicMock:
 def _create_mock_consistency_checker() -> MagicMock:
     """Create a mock consistency checker."""
     checker = MagicMock()
-    checker.get_dominant_year = MagicMock(return_value=None)
+    checker.get_majority_year = MagicMock(return_value=None)
+    checker.get_most_common_year = MagicMock(return_value=None)
     checker.get_consensus_release_year = MagicMock(return_value=None)
     return checker
 
@@ -105,44 +107,34 @@ class TestShouldSkipAlbumNewYearLogic:
         assert should_skip is True
         assert reason == "already_processed"
 
+    def test_does_not_skip_when_year_set_by_mgu_differs_from_current(self) -> None:
+        """The own-write check does not claim an album whose year moved since the tool set it."""
+        determinator = _create_year_determinator()
+
+        assert determinator._check_already_processed([create_test_track(year="2018", year_set_by_mgu="2020")], "Artist", "Album") is None
+
     @pytest.mark.asyncio
-    async def test_does_not_skip_when_year_set_by_mgu_differs_from_current(self) -> None:
-        """Should NOT skip when year_set_by_mgu differs from current year (user changed)."""
+    async def test_a_single_track_changed_outside_the_tool_is_skipped_as_consistent(self) -> None:
+        """One track agrees with itself after an outside change too; telling the change apart is the next release's job."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2018", year_set_by_mgu="2020")]
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        should_skip, reason = await determinator.should_skip_album([create_test_track(year="2018", year_set_by_mgu="2020")], "Artist", "Album")
 
-        assert should_skip is False
-        assert reason == ""
+        assert (should_skip, reason) == (True, "year_consistent")
 
-    @pytest.mark.asyncio
-    async def test_does_not_skip_when_year_set_by_mgu_not_set(self) -> None:
-        """Should NOT skip when year_set_by_mgu is not set (not yet processed)."""
-        cache_service = _create_mock_cache_service()
-        cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2020")]
+    def test_does_not_skip_when_year_set_by_mgu_not_set(self) -> None:
+        """The own-write check does not claim an album the tool never wrote."""
+        determinator = _create_year_determinator()
 
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+        assert determinator._check_already_processed([create_test_track(year="2020")], "Artist", "Album") is None
 
-        assert should_skip is False
-        assert reason == ""
+    def test_does_not_skip_when_year_set_by_mgu_empty_string(self) -> None:
+        """An empty record is no record."""
+        determinator = _create_year_determinator()
 
-    @pytest.mark.asyncio
-    async def test_does_not_skip_when_year_set_by_mgu_empty_string(self) -> None:
-        """Should NOT skip when year_set_by_mgu is empty string."""
-        cache_service = _create_mock_cache_service()
-        cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-        determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2020", year_set_by_mgu="")]
-
-        should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
-
-        assert should_skip is False
-        assert reason == ""
+        assert determinator._check_already_processed([create_test_track(year="2020", year_set_by_mgu="")], "Artist", "Album") is None
 
     @pytest.mark.asyncio
     async def test_does_not_skip_when_current_year_empty(self) -> None:
@@ -411,6 +403,26 @@ class TestShouldSkipAlbumConsistentYear:
         assert reason == "year_consistent"
 
     @pytest.mark.asyncio
+    async def test_a_single_track_at_this_year_without_a_release_date_asks_the_providers(self) -> None:
+        """The reissue sign applies to a single track as to any album."""
+        determinator = _create_year_determinator()
+        this_year = str(datetime.now(UTC).year)
+
+        should_skip, reason = await determinator.should_skip_album([create_test_track(year=this_year)], "Artist", "Album")
+
+        assert (should_skip, reason) == (False, "needs_api_verification")
+
+    @pytest.mark.asyncio
+    async def test_skips_a_single_track_album_with_a_valid_year(self) -> None:
+        """One track agrees with itself; the providers are not asked for it."""
+        determinator = _create_year_determinator()
+
+        should_skip, reason = await determinator.should_skip_album([create_test_track(year="2004")], "Artist", "Album")
+
+        assert should_skip is True
+        assert reason == "year_consistent"
+
+    @pytest.mark.asyncio
     async def test_does_not_skip_when_tracks_have_different_years(self) -> None:
         """Should NOT skip when tracks have different years."""
         cache_service = _create_mock_cache_service()
@@ -462,17 +474,15 @@ class TestPreCheckUnparseableYear:
     @pytest.mark.asyncio
     async def test_unparseable_dominant_year_forces_api_verification(self) -> None:
         """Should force API verification when dominant year is not a valid integer."""
-        consistency_checker = _create_mock_consistency_checker()
-        consistency_checker.get_dominant_year.return_value = "not_a_year"
-        determinator = _create_year_determinator(consistency_checker=consistency_checker)
+        determinator = _create_year_determinator()
 
         tracks = [create_test_track(year="2020")]
 
         # Mock _has_consistent_year to return True so we reach the int(dominant) path
-        # and mock _get_dominant_year to return unparseable value
+        # and mock _get_consistent_year to return unparseable value
         with (
             patch.object(determinator, "_has_consistent_year", return_value=True),
-            patch.object(determinator, "_get_dominant_year", return_value="not_a_year"),
+            patch.object(determinator, "_get_consistent_year", return_value="not_a_year"),
         ):
             should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 

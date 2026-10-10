@@ -13,10 +13,21 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from core.models.validators import is_valid_year
 from core.tracks.year_consistency import YearConsistencyChecker
 
 if TYPE_CHECKING:
     from core.models.track_models import TrackDict
+
+
+def _numeric_years(tracks: list[TrackDict]) -> list[int]:
+    """Collect the set four-digit years of the tracks as numbers."""
+    years: list[int] = []
+    for track in tracks:
+        year = track.year
+        if year and year.isdigit() and year != "0":
+            years.append(int(year))
+    return years
 
 
 @pytest.mark.regression
@@ -72,106 +83,60 @@ class TestYearDataValidity:
 
 
 @pytest.mark.regression
-class TestDominantYearCalculation:
-    """Test dominant year calculation with real data."""
+class TestMajorityYearCalculation:
+    """Test the majority year, the last resort for albums no provider knows, with real data."""
 
-    def test_dominant_year_returns_string_or_none(
+    def test_majority_year_returns_string_or_none(
         self,
         albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
         console_logger: logging.Logger,
     ) -> None:
-        """get_dominant_year should return string or None for all albums."""
+        """get_majority_year should return string or None for all albums."""
         checker = YearConsistencyChecker(console_logger=console_logger)
 
         for (artist, album), tracks in albums_with_tracks.items():
-            result = checker.get_dominant_year(tracks)
+            result = checker.get_majority_year(tracks)
             assert result is None or isinstance(result, str), f"Album {artist} - {album}: expected str|None, got {type(result)}"
 
-    def test_dominant_year_format_valid(
+    def test_majority_year_format_valid(
         self,
         albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
         console_logger: logging.Logger,
     ) -> None:
-        """Dominant years should be valid 4-digit strings."""
+        """Majority years should be valid 4-digit strings."""
         checker = YearConsistencyChecker(console_logger=console_logger)
         invalid: list[tuple[str, str, str]] = []
 
         for (artist, album), tracks in albums_with_tracks.items():
-            result = checker.get_dominant_year(tracks)
+            result = checker.get_majority_year(tracks)
             if result is not None and not (result.isdigit() and len(result) == 4):
                 invalid.append((artist, album, result))
 
-        assert not invalid, f"Found {len(invalid)} invalid dominant years:\n" + "\n".join(f"  {v[0]} - {v[1]} = '{v[2]}'" for v in invalid[:10])
+        assert not invalid, f"Found {len(invalid)} invalid majority years:\n" + "\n".join(f"  {v[0]} - {v[1]} = '{v[2]}'" for v in invalid[:10])
 
-    def test_albums_with_consistent_years_get_dominant(
+    def test_albums_with_consistent_years_get_their_year(
         self,
         albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
         console_logger: logging.Logger,
     ) -> None:
-        """Albums where all tracks have same year should return that year.
-
-        Note: Albums with "suspiciously old" years (release year much older than
-        dateAdded) are expected to return None to trigger API verification.
-        This test only checks albums where the year gap is reasonable.
-        """
+        """An album whose every track carries the same year gets that year, however old it is."""
         checker = YearConsistencyChecker(console_logger=console_logger)
         failures: list[tuple[str, str, str, str | None]] = []
-        suspicion_threshold = 10  # Same as DEFAULT_SUSPICION_THRESHOLD_YEARS
 
         for (artist, album), tracks in albums_with_tracks.items():
-            years = {t.year for t in tracks if t.year and t.year != "0"}
-
-            # Only test albums with single consistent non-empty year
+            years = {t.year or "" for t in tracks}
             if len(years) != 1:
                 continue
-
             expected = years.pop()
-
-            # Skip albums that would be flagged as "suspicious"
-            if self._is_suspicious_album(tracks, expected, suspicion_threshold):
+            if not is_valid_year(expected):
                 continue
-
-            result = checker.get_dominant_year(tracks)
+            result = checker.get_majority_year(tracks)
             if result != expected:
                 failures.append((artist, album, expected, result))
 
-        total_testable = self._count_testable_albums(albums_with_tracks, suspicion_threshold)
-        failure_ratio = len(failures) / total_testable if total_testable > 0 else 0
-
-        assert failure_ratio < 0.05, (
-            f"Too many failures for consistent albums: "
-            f"{len(failures)}/{total_testable} ({failure_ratio:.1%})\n"
-            f"First 10:\n" + "\n".join(f"  {f[0]} - {f[1]}: expected {f[2]}, got {f[3]}" for f in failures[:10])
+        assert not failures, f"Consistent albums without their year: {len(failures)}\n" + "\n".join(
+            f"  {f[0]} - {f[1]}: expected {f[2]}, got {f[3]}" for f in failures[:10]
         )
-
-    @staticmethod
-    def _is_suspicious_album(tracks: list[TrackDict], expected_year: str, threshold: int) -> bool:
-        """Check if album has suspiciously old year relative to dateAdded."""
-        try:
-            expected_int = int(expected_year)
-            added_years = [int(str(t.date_added or "")[:4]) for t in tracks if t.date_added]
-            if not added_years:
-                return False
-            earliest_added = min(added_years)
-            return earliest_added - expected_int > threshold
-        except (ValueError, TypeError):
-            return False
-
-    @staticmethod
-    def _count_testable_albums(
-        albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
-        threshold: int,
-    ) -> int:
-        """Count albums that are testable (consistent year, not suspicious)."""
-        count = 0
-        for tracks in albums_with_tracks.values():
-            years = {t.year for t in tracks if t.year and t.year != "0"}
-            if len(years) != 1:
-                continue
-            expected_year = years.pop()
-            if not TestDominantYearCalculation._is_suspicious_album(tracks, expected_year, threshold):
-                count += 1
-        return count
 
 
 @pytest.mark.regression
@@ -196,7 +161,7 @@ class TestYearDistribution:
         library_tracks: list[TrackDict],
     ) -> None:
         """Years should cluster around recent decades (basic sanity check)."""
-        years = [int(t.year) for t in library_tracks if t.year and t.year.isdigit() and t.year != "0"]
+        years = _numeric_years(library_tracks)
 
         if not years:
             pytest.skip("No valid years in library")

@@ -39,6 +39,21 @@ def create_test_track(
     )
 
 
+def create_cache_service() -> MagicMock:
+    """Create a cache service that misses on read and records writes."""
+    cache_service = MagicMock()
+    cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=None)
+    cache_service.store_album_year_in_cache = AsyncMock()
+    return cache_service
+
+
+def create_external_api(answer: tuple[str | None, bool, int, dict[str, int]]) -> AsyncMock:
+    """Create an external API whose single album lookup returns `answer`."""
+    external_api = AsyncMock()
+    external_api.get_album_year = AsyncMock(return_value=answer)
+    return external_api
+
+
 def create_year_determinator(
     mock_cache_service: MagicMock,
     mock_external_api: AsyncMock,
@@ -51,6 +66,8 @@ def create_year_determinator(
     mock_pending = MockPendingVerificationService()
     mock_consistency = MagicMock(spec=YearConsistencyChecker)
     mock_consistency.get_consensus_release_year = MagicMock(return_value=None)
+    mock_consistency.get_most_common_year = MagicMock(return_value=None)
+    mock_consistency.get_majority_year = MagicMock(return_value=None)
 
     if mock_fallback_handler is None:
         mock_fallback_handler = AsyncMock(spec=YearFallbackHandler)
@@ -80,52 +97,27 @@ class TestConfidenceThresholdCaching:
 
         Regression test for BRITPOP bug where confidence=19 result was cached.
         """
-        # Arrange
-        mock_cache_service = MagicMock()
-        mock_cache_service.store_album_year_in_cache = AsyncMock()
-
-        mock_external_api = AsyncMock()
-        # Return year with LOW confidence (19 < 50)
-        mock_external_api.get_album_year = AsyncMock(return_value=("1987", False, 19, {"1987": 19}))
-
+        mock_cache_service = create_cache_service()
+        mock_external_api = create_external_api(("1987", False, 19, {"1987": 19}))
         determinator = create_year_determinator(mock_cache_service, mock_external_api)
         tracks = [create_test_track(artist="Robbie Williams", album="BRITPOP")]
 
-        # Act
-        result = await determinator._fetch_from_api(
-            artist="Robbie Williams",
-            album="BRITPOP",
-            album_tracks=tracks,
-            dominant_year=None,
-        )
+        result = await determinator.determine_album_year("Robbie Williams", "BRITPOP", tracks)
 
-        # Assert: Result is returned but NOT cached
-        assert result == "1987"  # API result is still returned
+        # The API result is still applied, only its caching is refused
+        assert result == "1987"
         mock_cache_service.store_album_year_in_cache.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_high_confidence_year_is_cached(self) -> None:
         """Year with confidence >= 50 should be cached."""
-        # Arrange
-        mock_cache_service = MagicMock()
-        mock_cache_service.store_album_year_in_cache = AsyncMock()
-
-        mock_external_api = AsyncMock()
-        # Return year with HIGH confidence (77 >= 50)
-        mock_external_api.get_album_year = AsyncMock(return_value=("2019", True, 77, {"2019": 77}))
-
+        mock_cache_service = create_cache_service()
+        mock_external_api = create_external_api(("2019", True, 77, {"2019": 77}))
         determinator = create_year_determinator(mock_cache_service, mock_external_api)
         tracks = [create_test_track(artist="Robbie Williams", album="The Christmas Present")]
 
-        # Act
-        result = await determinator._fetch_from_api(
-            artist="Robbie Williams",
-            album="The Christmas Present",
-            album_tracks=tracks,
-            dominant_year=None,
-        )
+        result = await determinator.determine_album_year("Robbie Williams", "The Christmas Present", tracks)
 
-        # Assert: Result is returned AND cached
         assert result == "2019"
         mock_cache_service.store_album_year_in_cache.assert_called_once_with(
             "Robbie Williams",
@@ -137,80 +129,40 @@ class TestConfidenceThresholdCaching:
     @pytest.mark.asyncio
     async def test_boundary_confidence_50_is_cached(self) -> None:
         """Year with confidence exactly 50 should be cached (boundary test)."""
-        # Arrange
-        mock_cache_service = MagicMock()
-        mock_cache_service.store_album_year_in_cache = AsyncMock()
-
-        mock_external_api = AsyncMock()
-        # Return year with BOUNDARY confidence (50 == 50)
-        mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 50, {"2020": 50}))
-
+        mock_cache_service = create_cache_service()
+        mock_external_api = create_external_api(("2020", True, 50, {"2020": 50}))
         determinator = create_year_determinator(mock_cache_service, mock_external_api)
         tracks = [create_test_track()]
 
-        # Act
-        result = await determinator._fetch_from_api(
-            artist="Test Artist",
-            album="Test Album",
-            album_tracks=tracks,
-            dominant_year=None,
-        )
+        result = await determinator.determine_album_year("Test Artist", "Test Album", tracks)
 
-        # Assert: Result is cached at boundary confidence
         assert result == "2020"
         mock_cache_service.store_album_year_in_cache.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_boundary_confidence_49_not_cached(self) -> None:
         """Year with confidence 49 should NOT be cached (boundary test)."""
-        # Arrange
-        mock_cache_service = MagicMock()
-        mock_cache_service.store_album_year_in_cache = AsyncMock()
-
-        mock_external_api = AsyncMock()
-        # Return year with confidence just below threshold (49 < 50)
-        mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 49, {"2020": 49}))
-
+        mock_cache_service = create_cache_service()
+        mock_external_api = create_external_api(("2020", True, 49, {"2020": 49}))
         determinator = create_year_determinator(mock_cache_service, mock_external_api)
         tracks = [create_test_track()]
 
-        # Act
-        result = await determinator._fetch_from_api(
-            artist="Test Artist",
-            album="Test Album",
-            album_tracks=tracks,
-            dominant_year=None,
-        )
+        result = await determinator.determine_album_year("Test Artist", "Test Album", tracks)
 
-        # Assert: Result returned but NOT cached (49 < 50)
         assert result == "2020"
         mock_cache_service.store_album_year_in_cache.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_none_result_not_cached_regardless_of_confidence(self) -> None:
         """When fallback returns None, nothing should be cached."""
-        # Arrange
-        mock_cache_service = MagicMock()
-        mock_cache_service.store_album_year_in_cache = AsyncMock()
-
-        mock_external_api = AsyncMock()
-        mock_external_api.get_album_year = AsyncMock(return_value=("2020", True, 85, {"2020": 85}))
-
-        # Fallback handler rejects the year
+        mock_cache_service = create_cache_service()
+        mock_external_api = create_external_api(("2020", True, 85, {"2020": 85}))
         mock_fallback = AsyncMock()
         mock_fallback.apply_year_fallback = AsyncMock(return_value=None)
-
         determinator = create_year_determinator(mock_cache_service, mock_external_api, mock_fallback)
         tracks = [create_test_track()]
 
-        # Act
-        result = await determinator._fetch_from_api(
-            artist="Test Artist",
-            album="Test Album",
-            album_tracks=tracks,
-            dominant_year=None,
-        )
+        result = await determinator.determine_album_year("Test Artist", "Test Album", tracks)
 
-        # Assert: No result, nothing cached
         assert result is None
         mock_cache_service.store_album_year_in_cache.assert_not_called()

@@ -23,7 +23,7 @@ import random
 import ssl
 from datetime import UTC
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import aiohttp
 import certifi
@@ -31,8 +31,8 @@ import certifi
 from core.debug_utils import debug
 from core.logger import PLAIN_TEXT, LogFormat
 from core.models.normalization import search_names
+from core.models.protocols import YearLookupFailedError
 from core.models.script_detection import ScriptType, detect_primary_script
-from core.models.validators import is_valid_year
 from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from services.api.api_base import ApiRateLimiter, ScoredRelease
 from services.api.applemusic import AppleMusicClient
@@ -92,9 +92,6 @@ class ExternalApiOrchestrator:
         pending_verification_service: Service for managing verification queue
 
     """
-
-    # Class constants
-    _SUSPICIOUS_CURRENT_YEAR_MSG = "Rejecting suspicious current_library_year=%s (matches system year) for '%s - %s'"
 
     @staticmethod
     def _normalize_api_name(api_name: Any) -> str:
@@ -772,7 +769,6 @@ class ExternalApiOrchestrator:
         artist: str,
         album: str,
         current_library_year: str | None = None,
-        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Determine the original release year for an album using optimized API calls and revised scoring.
 
@@ -783,11 +779,13 @@ class ExternalApiOrchestrator:
             artist: Artist name
             album: Album name
             current_library_year: Year currently stored in the library for this album
-            earliest_track_added_year: Year the earliest track of the album was added to the library
 
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
             year_scores: dict mapping each year found by APIs to its max score
+
+        Raises:
+            YearLookupFailedError: The search could not be set up or failed with an error, so the album waits for the next run
         """
         # Initialize and prepare inputs
         try:
@@ -795,12 +793,13 @@ class ExternalApiOrchestrator:
             if not inputs:
                 return None, False, 0, {}
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-            # Logged whatever the debug flags: the caller only sees an album without a year
+            # Logged whatever the debug flags; the caller leaves the album for the next run
             self.error_logger.exception("Year search setup failed for '%s - %s'", artist, album)
             self.console_logger.warning(
                 "Year search setup failed for '%s - %s' (%s); traceback in the error log", artist, album, type(error).__name__, extra=PLAIN_TEXT
             )
-            return None, False, 0, {}
+            message = f"Year search setup failed for '{artist} - {album}' ({type(error).__name__})"
+            raise YearLookupFailedError(message) from error
 
         artist_norm, album_norm, log_artist, log_album, artist_context = inputs
 
@@ -810,14 +809,7 @@ class ExternalApiOrchestrator:
             all_releases = await self._fetch_all_api_results(artist_norm, album_norm, artist_context, log_artist, log_album)
 
             if not all_releases:
-                return await self._handle_no_results(
-                    artist,
-                    album,
-                    log_artist=log_artist,
-                    log_album=log_album,
-                    current_library_year=current_library_year,
-                    earliest_track_added_year=earliest_track_added_year,
-                )
+                return await self._handle_no_results(artist, album, log_artist=log_artist, log_album=log_album)
 
             return await self._process_api_results(
                 all_releases,
@@ -826,15 +818,13 @@ class ExternalApiOrchestrator:
                 log_artist=log_artist,
                 log_album=log_album,
                 current_library_year=current_library_year,
-                earliest_track_added_year=earliest_track_added_year,
             )
 
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, RuntimeError) as error:
-            # The fallback below reaches the caller as an ordinary result, so the console hears about the failure here
             self.console_logger.warning(
                 "Year lookup failed for '%s - %s' (%s); traceback in the error log", log_artist, log_album, type(error).__name__, extra=PLAIN_TEXT
             )
-            return self._handle_year_search_error(log_artist, log_album, current_library_year, earliest_track_added_year)
+            self._handle_year_search_error(log_artist, log_album, error)
 
     async def _initialize_year_search(
         self, artist: str, album: str, current_library_year: str | None
@@ -900,67 +890,20 @@ class ExternalApiOrchestrator:
             current_library_year or "none",
         )
 
-    def _is_current_year_contamination(
-        self,
-        current_library_year: str | None,
-        earliest_track_added_year: int | None,
-    ) -> bool:
-        """Check if current library year is likely contamination from auto-populated metadata.
-
-        Contamination occurs when:
-        - Library year equals current year AND
-        - Track was NOT added recently (added in previous years or date unknown)
-        - OR track date is in the future (impossible, indicates bad data)
-        """
-        if current_library_year != str(self.current_year):
-            return False
-
-        # Missing track date → can't verify, treat as contamination
-        if earliest_track_added_year is None:
-            return True
-
-        # Future track date → bad data, treat as contamination
-        if earliest_track_added_year > self.current_year:
-            return True
-
-        # Track added in previous year but has current year → contamination
-        return earliest_track_added_year < self.current_year
-
-    def _handle_year_search_error(
-        self,
-        log_artist: str,
-        log_album: str,
-        current_library_year: str | None,
-        earliest_track_added_year: int | None = None,
-    ) -> tuple[str | None, bool, int, dict[str, int]]:
-        """Handle errors during year search and return fallback year.
+    def _handle_year_search_error(self, log_artist: str, log_album: str, error: Exception) -> NoReturn:
+        """Log an unexpected search error and leave the lookup unavailable: a failure is no verdict on the album.
 
         Args:
             log_artist: Artist name formatted for logging
             log_album: Album name formatted for logging
-            current_library_year: Year currently stored in the library for this album
-            earliest_track_added_year: Year the earliest track of the album was added to the library
+            error: The error that ended the search
 
-        Returns:
-            Tuple of (year, is_definitive, confidence_score, year_scores)
+        Raises:
+            YearLookupFailedError: Always, so the caller retries the album on the next run
         """
-        self.error_logger.exception(
-            "Unexpected error in get_album_year for '%s - %s'",
-            log_artist,
-            log_album,
-        )
-        # Apply defensive fix to prevent current year contamination
-        if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
-                self.console_logger.warning(
-                    self._SUSPICIOUS_CURRENT_YEAR_MSG,
-                    current_library_year,
-                    log_artist,
-                    log_album,
-                )
-                return None, False, 0, {}
-            return current_library_year, False, 0, {}
-        return None, False, 0, {}
+        self.error_logger.exception("Unexpected error in get_album_year for '%s - %s'", log_artist, log_album)
+        message = f"Year lookup failed for '{log_artist} - {log_album}' ({type(error).__name__})"
+        raise YearLookupFailedError(message) from error
 
     @staticmethod
     def _prepare_search_inputs(artist: str, album: str) -> tuple[str, str, str, str]:
@@ -1025,44 +968,21 @@ class ExternalApiOrchestrator:
         """Fetch scored releases from all API providers with script-aware logic."""
         return await self.year_search_coordinator.fetch_all_api_results(artist_norm, album_norm, artist_context, log_artist, log_album)
 
-    async def _handle_no_results(
-        self,
-        artist: str,
-        album: str,
-        *,
-        log_artist: str,
-        log_album: str,
-        current_library_year: str | None,
-        earliest_track_added_year: int | None = None,
-    ) -> tuple[str | None, bool, int, dict[str, int]]:
-        """Handle case when no API results are found.
+    async def _handle_no_results(self, artist: str, album: str, *, log_artist: str, log_album: str) -> tuple[str | None, bool, int, dict[str, int]]:
+        """Mark an album no provider has data for and report no answer; the library year is a hint, never the verdict.
 
         Args:
             artist: Artist name
             album: Album name
             log_artist: Artist name formatted for logging
             log_album: Album name formatted for logging
-            current_library_year: Year currently stored in the library for this album
-            earliest_track_added_year: Year the earliest track of the album was added to the library
 
         Returns:
-            Tuple of (year, is_definitive, confidence_score, year_scores)
+            Tuple of (year, is_definitive, confidence_score, year_scores), all empty
         """
         self.console_logger.warning("No release data found from any API for '%s - %s'", log_artist, log_album)
         await self._safe_mark_for_verification(artist, album)
-        # Apply defensive fix to prevent current year contamination
-        if not (current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year)):
-            return None, False, 0, {}
-
-        if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
-            self.console_logger.warning(
-                self._SUSPICIOUS_CURRENT_YEAR_MSG,
-                current_library_year,
-                log_artist,
-                log_album,
-            )
-            return None, False, 0, {}
-        return current_library_year, False, 0, {}
+        return None, False, 0, {}
 
     async def _process_api_results(
         self,
@@ -1073,7 +993,6 @@ class ExternalApiOrchestrator:
         log_artist: str,
         log_album: str,
         current_library_year: str | None,
-        earliest_track_added_year: int | None = None,
     ) -> tuple[str | None, bool, int, dict[str, int]]:
         """Process API results and determine the best release year.
 
@@ -1084,7 +1003,6 @@ class ExternalApiOrchestrator:
             log_artist: Artist name formatted for logging
             log_album: Album name formatted for logging
             current_library_year: Year currently stored in the library for this album
-            earliest_track_added_year: Year the earliest track of the album was added to the library
 
         Returns:
             Tuple of (year, is_definitive, confidence_score, year_scores)
@@ -1101,8 +1019,7 @@ class ExternalApiOrchestrator:
                 len(all_releases) if all_releases else 0,
             )
             await self._safe_mark_for_verification(artist, album)
-            fallback_year = self._get_fallback_year_when_no_api_results(current_library_year, log_artist, log_album, earliest_track_added_year)
-            return fallback_year, False, 0, {}
+            return None, False, 0, {}
 
         # Determine the best year and definitive status using YearScoreResolver
         best_year, is_definitive, confidence_score = self.year_score_resolver.select_best_year(
@@ -1158,26 +1075,6 @@ class ExternalApiOrchestrator:
         # Convert year_scores from list of scores to max score per year
         max_year_scores: dict[str, int] = {year: max(scores) for year, scores in year_scores.items()}
         return best_year, is_definitive, confidence_score, max_year_scores
-
-    def _get_fallback_year_when_no_api_results(
-        self,
-        current_library_year: str | None,
-        log_artist: str,
-        log_album: str,
-        earliest_track_added_year: int | None = None,
-    ) -> str | None:
-        """Apply defensive fix to prevent current year contamination when no API results found."""
-        if current_library_year and is_valid_year(current_library_year, self.min_valid_year, self.current_year):
-            if self._is_current_year_contamination(current_library_year, earliest_track_added_year):
-                self.console_logger.warning(
-                    self._SUSPICIOUS_CURRENT_YEAR_MSG,
-                    current_library_year,
-                    log_artist,
-                    log_album,
-                )
-                return None
-            return current_library_year
-        return None
 
     def _score_release_wrapper(
         self,

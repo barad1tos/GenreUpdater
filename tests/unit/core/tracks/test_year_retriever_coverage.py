@@ -13,12 +13,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core import debug_utils
+from core.models.cache_types import AlbumCacheEntry
 from core.models.track_models import ChangeLogEntry, TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.track_updater import TrackUpdater
-from core.models.protocols import AnalyticsProtocol
+from core.models.protocols import AnalyticsProtocol, YearLookupUnavailableError
 from core.tracks import year_consistency as year_consistency_module
+from core.tracks.year_determination import CACHE_TRUST_THRESHOLD
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
 
@@ -678,7 +680,7 @@ class TestDetermineAlbumYear:
         mock_external_api.get_album_year.return_value = ("2020", True, 85, {"2020": 85})  # 4-tuple with year_scores score
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_fallback_handler, "apply_year_fallback", new_callable=AsyncMock, return_value="2020"),
         ):
@@ -700,7 +702,7 @@ class TestDetermineAlbumYear:
         mock_external_api.get_album_year.return_value = (None, False, 0, {})  # 4-tuple
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
         ):
             result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
@@ -912,7 +914,7 @@ class TestProcessBatchesConcurrently:
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
             unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0, {})),
         ):
@@ -951,7 +953,7 @@ class TestProcessAlbumEntry:
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
             unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0, {})),
         ):
@@ -1266,73 +1268,6 @@ class TestProcessAlbumsInBatches:
             mock_sequential.assert_not_called()
 
 
-class TestProcessDominantYear:
-    """Tests for _process_dominant_year method (now in YearBatchProcessor)."""
-
-    @pytest.mark.asyncio
-    async def test_applies_dominant_year_to_empty_tracks(
-        self,
-        year_retriever: YearRetriever,
-    ) -> None:
-        """Test applies dominant year to tracks with empty years."""
-        mock_update = AsyncMock()
-
-        tracks = [
-            TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year=""),
-            TrackDict(id="2", name="T2", artist="A", album="Al", genre="R", year="2020"),
-        ]
-        updated_tracks: list[TrackDict] = []
-        changes_log: list[Any] = []
-
-        with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
-            result = await year_retriever._batch_processor._process_dominant_year(
-                "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
-            )
-            assert result is True
-            mock_update.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_applies_dominant_year_to_inconsistent_tracks(
-        self,
-        year_retriever: YearRetriever,
-    ) -> None:
-        """Test applies dominant year to tracks with inconsistent years."""
-        mock_update = AsyncMock()
-
-        tracks = [
-            TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="2019"),
-            TrackDict(id="2", name="T2", artist="A", album="Al", genre="R", year="2020"),
-            TrackDict(id="3", name="T3", artist="A", album="Al", genre="R", year="2020"),
-        ]
-        updated_tracks: list[TrackDict] = []
-        changes_log: list[Any] = []
-
-        with unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update):
-            result = await year_retriever._batch_processor._process_dominant_year(
-                "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
-            )
-            assert result is True
-            mock_update.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_no_tracks_need_update(
-        self,
-        year_retriever: YearRetriever,
-    ) -> None:
-        """Test returns False when all tracks already have dominant year."""
-        tracks = [
-            TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="2020"),
-            TrackDict(id="2", name="T2", artist="A", album="Al", genre="R", year="2020"),
-        ]
-        updated_tracks: list[TrackDict] = []
-        changes_log: list[Any] = []
-
-        result = await year_retriever._batch_processor._process_dominant_year(
-            "Artist", "Album", album_tracks=tracks, dominant_year="2020", updated_tracks=updated_tracks, changes_log=changes_log
-        )
-        assert result is False
-
-
 class TestProcessSingleAlbumIntegration:
     """Integration tests for _process_single_album method covering various branches."""
 
@@ -1422,15 +1357,11 @@ class TestProcessSingleAlbumIntegration:
         assert not updated_tracks
 
     @pytest.mark.asyncio
-    async def test_uses_dominant_year_when_available(
+    async def test_updates_tracks_with_the_determined_year(
         self,
         year_retriever: YearRetriever,
     ) -> None:
-        """Test uses dominant year when available.
-
-        When consistency_checker.get_dominant_year returns a year,
-        determine_album_year should return that year directly.
-        """
+        """The year determine_album_year answers goes to update_tracks_for_album."""
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="", track_status="subscription"),
             TrackDict(id="2", name="T2", artist="A", album="Al", genre="R", year="2020", track_status="subscription"),
@@ -1453,11 +1384,11 @@ class TestProcessSingleAlbumIntegration:
             mock_update_tracks.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_determines_year_from_api_when_no_dominant(
+    async def test_determines_year_for_tracks_without_one(
         self,
         year_retriever: YearRetriever,
     ) -> None:
-        """Test determines year from API when no dominant year available."""
+        """A track without a year still gets determine_album_year asked."""
         tracks = [
             TrackDict(id="1", name="T1", artist="A", album="Al", genre="R", year="", track_status="subscription"),
         ]
@@ -1468,7 +1399,6 @@ class TestProcessSingleAlbumIntegration:
         changes_log: list[Any] = []
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
             unittest.mock.patch.object(year_retriever._year_determinator, "determine_album_year", mock_determine_year),
             unittest.mock.patch.object(year_retriever._batch_processor._track_updater, "update_tracks_for_album", mock_update_tracks),
         ):
@@ -1482,76 +1412,36 @@ class TestDetermineAlbumYearBranches:
     """Tests for _determine_album_year method covering all branches."""
 
     @pytest.mark.asyncio
-    async def test_returns_dominant_year_from_checker(
-        self,
-        year_retriever: YearRetriever,
-    ) -> None:
-        """Test returns dominant year from year_consistency_checker."""
-        tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="2020")]
-
-        with unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value="2020"):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-            assert result == "2020"
-
-    @pytest.mark.asyncio
-    async def test_returns_consensus_release_year(
-        self,
-        year_retriever: YearRetriever,
-        mock_cache_service: AsyncMock,
-    ) -> None:
-        """Test returns consensus release year and caches it."""
-        tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
-        # Cache returns None so we proceed to consensus_release_year check
-        mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
-
-        with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value="2020"),
-        ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-            assert result == "2020"
-            mock_cache_service.store_album_year_in_cache.assert_called_once_with(
-                "Artist",
-                "Album",
-                "2020",
-                confidence=80,
-            )
-
-    @pytest.mark.asyncio
     async def test_returns_cached_year(
-        self,
-        year_retriever: YearRetriever,
-        mock_cache_service: AsyncMock,
-    ) -> None:
-        """Test returns year from cache."""
-        tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
-        mock_cache_service.get_album_year_from_cache = AsyncMock(return_value="2020")
-
-        with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-        ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-            assert result == "2020"
-
-    @pytest.mark.asyncio
-    async def test_returns_none_on_api_exception(
         self,
         year_retriever: YearRetriever,
         mock_cache_service: AsyncMock,
         mock_external_api: AsyncMock,
     ) -> None:
-        """Test returns None when API raises exception."""
+        """A fresh, confident cache entry answers without asking the providers."""
+        tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
+        cache_entry = AlbumCacheEntry(artist="Artist", album="Album", year="2020", timestamp=0.0, confidence=CACHE_TRUST_THRESHOLD)
+        mock_cache_service.get_album_year_entry_from_cache = AsyncMock(return_value=cache_entry)
+
+        result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
+
+        assert result == "2020"
+        mock_external_api.get_album_year.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_raises_unavailable_on_api_exception(
+        self,
+        year_retriever: YearRetriever,
+        mock_cache_service: AsyncMock,
+        mock_external_api: AsyncMock,
+    ) -> None:
+        """An API exception leaves the lookup unavailable, so the album waits for the next run."""
         tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
         mock_cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         mock_external_api.get_album_year.side_effect = OSError("API error")
 
-        with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
-        ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
-            assert result is None
+        with pytest.raises(YearLookupUnavailableError):
+            await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
 
 
 class TestIdentifyTracksNeedingUpdateBranches:
@@ -1760,7 +1650,10 @@ class TestDebugLoggingBranches:
         try:
             tracks = [TrackDict(id="1", name="T", artist="A", album="Al", genre="R", year="")]
 
-            with unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value="2020"):
+            with (
+                unittest.mock.patch.object(year_retriever.external_api, "get_album_year", new_callable=AsyncMock, return_value=(None, False, 0, {})),
+                unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value="2020"),
+            ):
                 result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
                 assert result == "2020"
         finally:
@@ -1781,7 +1674,7 @@ class TestDetermineAlbumYearApiFailure:
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """An API failure returns no year and leaves its traceback in the error log, with year debugging off."""
+        """An API failure leaves the lookup unavailable and its traceback in the error log, with year debugging off."""
         # DebugConfig() also reads DEBUG_YEAR and DEBUG_ALL, so switch year debugging off explicitly
         year_debugging_off = debug_utils.DebugConfig()
         year_debugging_off.year = False
@@ -1792,13 +1685,13 @@ class TestDetermineAlbumYearApiFailure:
         mock_external_api.get_album_year.side_effect = api_error
 
         with (
-            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_dominant_year", return_value=None),
+            unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_majority_year", return_value=None),
             unittest.mock.patch.object(year_retriever.year_consistency_checker, "get_consensus_release_year", return_value=None),
             caplog.at_level(logging.ERROR, logger=error_logger.name),
+            pytest.raises(YearLookupUnavailableError),
         ):
-            result = await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
+            await year_retriever._year_determinator.determine_album_year("Artist", "Album", tracks)
 
-        assert result is None
         failures = [record for record in caplog.records if record.name == error_logger.name]
         assert len(failures) == 1
         logged_exception = failures[0].exc_info

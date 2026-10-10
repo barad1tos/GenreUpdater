@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 
     from core.models.types import (
         AppleScriptClientProtocol,
-        CacheServiceProtocol,
     )
 
 
@@ -146,61 +145,16 @@ def load_track_list(csv_path: str) -> dict[str, TrackDict]:
 # Track List Synchronization Helpers
 
 
-def get_processed_albums_from_csv(
-    csv_map: dict[str, TrackDict],
-    cache_service: CacheServiceProtocol,
-) -> dict[str, str]:
-    """Return a mapping album_key -> year_set_by_mgu for albums already processed in CSV."""
-    processed: dict[str, str] = {}
-    for track in csv_map.values():
-        artist = (track.artist or "").strip()
-        album = (track.album or "").strip()
-        year_set_by_mgu = (track.year_set_by_mgu or "").strip()
-        if artist and album and year_set_by_mgu:
-            album_key = cache_service.generate_album_key(artist, album)
-            processed[album_key] = year_set_by_mgu
-    return processed
-
-
-async def build_musicapp_track_map(
-    all_tracks: Sequence[TrackDict],
-    processed_albums: dict[str, str],
-    cache_service: CacheServiceProtocol,
-    partial_sync: bool,
-    error_logger: logging.Logger,
-) -> dict[str, TrackDict]:
-    """Build normalized map {track_id: TrackDict} from Music.app tracks.
-
-    Handles partial_sync logic and ensures year consistency with cache & CSV.
-    """
+def build_musicapp_track_map(all_tracks: Sequence[TrackDict]) -> dict[str, TrackDict]:
+    """Build the normalized map {track_id: TrackDict} of the tracks read from Music.app."""
     track_map: dict[str, TrackDict] = {}
     for track in all_tracks:
-        # Validate track ID
         track_id = (track.id or "").strip()
         if not track_id:
             continue
-
-        # Normalize basic fields
         artist = (track.artist or "").strip()
         album = (track.album or "").strip()
-        album_key = cache_service.generate_album_key(artist, album)
-
-        # Ensure year fields are properly initialized
         normalize_track_year_fields(track)
-
-        # Handle partial sync with cache coordination
-        if partial_sync:
-            await handle_partial_sync_cache(
-                track,
-                processed_albums=processed_albums,
-                cache_service=cache_service,
-                album_key=album_key,
-                artist=artist,
-                album=album,
-                error_logger=error_logger,
-            )
-
-        # Create normalized track dictionary
         track_map[track_id] = create_normalized_track_dict(track, track_id, artist, album)
     return track_map
 
@@ -211,34 +165,6 @@ def normalize_track_year_fields(track: TrackDict) -> None:
         track.year_before_mgu = ""
     if track.year_set_by_mgu is None:
         track.year_set_by_mgu = ""
-
-
-async def handle_partial_sync_cache(
-    track: TrackDict,
-    *,
-    processed_albums: dict[str, str],
-    cache_service: CacheServiceProtocol,
-    album_key: str,
-    artist: str,
-    album: str,
-    error_logger: logging.Logger,
-) -> None:
-    """Handle partial sync logic with cache coordination."""
-    if album_key not in processed_albums:
-        return
-
-    processed_year = processed_albums[album_key]
-    track.year_set_by_mgu = processed_year
-    try:
-        cached_year = await cache_service.get_album_year_from_cache(artist, album)
-        if not cached_year or cached_year != processed_year:
-            await cache_service.store_album_year_in_cache(artist, album, processed_year)
-    except OSError:
-        error_logger.exception(
-            "Error syncing year from CSV to cache for %s - %s",
-            artist,
-            album,
-        )
 
 
 def create_normalized_track_dict(
@@ -265,14 +191,9 @@ def create_normalized_track_dict(
 def get_musicapp_syncable_fields() -> list[str]:
     """Fields that sync FROM Music.app TO CSV during resync.
 
-    Note: year_before_mgu and year_set_by_mgu are EXCLUDED because:
-    - They are tracking fields managed by year_batch.py, not sync
-    - AppleScript doesn't provide them (only Music.app's current year)
-    - During sync, we preserve CSV's historical tracking data
-
-    However, _merge_musicapp_into_csv() will initialize empty year_before_mgu
-    from musicapp_track.year to prevent redundant fetches in sync_track_list_with_current.
-    See Issue #126 for context.
+    year_before_mgu and year_set_by_mgu are not Music.app fields and are not listed: the year step records them on the
+    in-memory track, and merge_musicapp_into_csv copies that record into the row; a row still without year_before_mgu
+    takes the track's recorded one, or the track's current year when the tool never wrote it.
     """
     return [
         "name",
@@ -282,7 +203,7 @@ def get_musicapp_syncable_fields() -> list[str]:
         "year",  # Current year for delta detection
         "date_added",
         "track_status",
-        # year_before_mgu/year_set_by_mgu deliberately excluded - preserved from CSV
+        # year_before_mgu/year_set_by_mgu are not Music.app fields; merge_musicapp_into_csv carries the track's record into the row
     ]
 
 
@@ -331,8 +252,8 @@ def merge_musicapp_into_csv(
 
     - New tracks (in Music.app but not CSV): added to csv_tracks
     - Existing tracks: CSV updated with Music.app values for syncable fields
-    - Tracking fields (year_before_mgu, year_set_by_mgu): preserved from CSV if present,
-      otherwise initialized from Music.app's current year
+    - Tracking fields: year_set_by_mgu comes from the track when the year step set it, else stays;
+      an empty year_before_mgu takes the track's recorded one, else its current year
 
     Returns count of added/updated tracks.
     """
@@ -352,10 +273,17 @@ def merge_musicapp_into_csv(
             update_csv_track_from_musicapp(csv_track, musicapp_track, syncable_fields)
             updated += 1
 
-        # Initialize empty year_before_mgu from Music.app's current year
-        # This prevents a redundant second fetch in sync_track_list_with_current
-        if not csv_track.year_before_mgu and musicapp_track.year:
-            csv_track.year_before_mgu = musicapp_track.year
+        # The year step records the years it wrote on the in-memory track; the row keeps them for whoever reads
+        # track_list.csv (the next run reads them from the library snapshot)
+        if musicapp_track.year_set_by_mgu:
+            csv_track.year_set_by_mgu = musicapp_track.year_set_by_mgu
+        if not csv_track.year_before_mgu:
+            if musicapp_track.year_set_by_mgu:
+                # The year step's own record: the year before its write, or "" when the track had none
+                csv_track.year_before_mgu = musicapp_track.year_before_mgu
+            elif not csv_track.year_set_by_mgu:
+                # A row the tool never wrote starts its history from the track's year (a fresh read carries it as year_before_mgu)
+                csv_track.year_before_mgu = musicapp_track.year_before_mgu or musicapp_track.year
 
     return updated
 
@@ -521,7 +449,11 @@ async def fetch_missing_track_fields_for_sync(
     """Fetch missing track fields via AppleScript if needed for sync operation."""
     tracks_cache: dict[str, ParsedTrackFields] = {}
 
-    has_missing_fields = any(not track.date_added or not track.track_status or not track.year_before_mgu for track in final_list if track.id)
+    has_missing_fields = any(
+        not track.date_added or not track.track_status or (not track.year_before_mgu and not track.year_set_by_mgu)
+        for track in final_list
+        if track.id
+    )
 
     if has_missing_fields and applescript_client is not None:
         try:
@@ -580,8 +512,8 @@ def update_track_with_cached_fields_for_sync(
         # Always update track.year (current state for delta detection)
         if not track.year:
             track.year = cached_year
-        # Set year_before_mgu only if empty (preserve original for rollback/audit)
-        if not track.year_before_mgu:
+        # Set year_before_mgu only if empty (preserve original for rollback/audit); a track the tool wrote onto had none
+        if not track.year_before_mgu and not track.year_set_by_mgu:
             track.year_before_mgu = cached_year
 
 
@@ -602,15 +534,12 @@ def convert_track_to_csv_dict(track: TrackDict) -> dict[str, str]:
     }
 
 
-# noinspection PyUnusedLocal
 async def sync_track_list_with_current(
     all_tracks: Sequence[TrackDict],
     csv_path: str,
     *,
-    cache_service: CacheServiceProtocol,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
-    partial_sync: bool = False,
     applescript_client: AppleScriptClientProtocol | None = None,
 ) -> None:
     """Synchronize the current track list with the data in a CSV file.
@@ -618,10 +547,8 @@ async def sync_track_list_with_current(
     Args:
         all_tracks: List of track dictionaries to sync.
         csv_path: Path to the CSV file.
-        cache_service: Cache service protocol for album year caching.
         console_logger: Logger for console output.
         error_logger: Logger for error output.
-        partial_sync: Whether to perform a partial sync (only update year_set_by_mgu if missing).
         applescript_client: AppleScript client for fetching missing track fields.
 
     """
@@ -634,23 +561,14 @@ async def sync_track_list_with_current(
     # 1. Load existing CSV as dict
     csv_map = load_track_list(csv_path)
 
-    # 2. Determine albums already processed (for partial sync logic)
-    processed_albums = get_processed_albums_from_csv(csv_map, cache_service)
+    # 2. Build map of tracks fetched from Music.app
+    musicapp_tracks = build_musicapp_track_map(all_tracks)
 
-    # 3. Build map of tracks fetched from Music.app
-    musicapp_tracks = await build_musicapp_track_map(
-        all_tracks,
-        processed_albums,
-        cache_service,
-        partial_sync,
-        error_logger,
-    )
-
-    # 4. Merge Music.app tracks into CSV
+    # 3. Merge Music.app tracks into CSV
     added_or_updated = merge_musicapp_into_csv(musicapp_tracks, csv_map)
     console_logger.info("Added/Updated %s tracks in CSV.", added_or_updated)
 
-    # 5. Remove tracks from CSV that no longer exist in Music.app
+    # 4. Remove tracks from CSV that no longer exist in Music.app
     removed_count = len([tid for tid in csv_map if tid not in musicapp_tracks])
     csv_map = {tid: track for tid, track in csv_map.items() if tid in musicapp_tracks}
 
