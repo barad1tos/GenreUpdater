@@ -440,6 +440,9 @@ class PendingVerificationService:
 
             # Check if entry already exists to get previous attempt count
             existing_entry = self.pending_albums.get(key_hash)
+            # The year step marks a pending album on every run; until its recheck is due that is the same attempt
+            if existing_entry and existing_entry.reason == reason_enum and datetime.now(UTC) < self._recheck_time(existing_entry):
+                return
             new_attempt_count = (existing_entry.attempt_count + 1) if existing_entry else 1
 
             # Serialize metadata dict to JSON string to preserve type information
@@ -542,16 +545,8 @@ class PendingVerificationService:
 
             # Get the entry
             entry = self.pending_albums[key_hash]
-            metadata = self._parse_metadata(entry.metadata)
-            interval_days = self.verification_interval_days
 
-            if entry.reason == VerificationReason.PRERELEASE:
-                override = self._normalize_recheck_days(metadata.get("recheck_days"))
-                interval_days = override if override is not None else self.prerelease_recheck_days
-
-            verification_time = entry.timestamp + timedelta(days=interval_days)
-
-            if datetime.now(UTC) >= verification_time:
+            if datetime.now(UTC) >= self._recheck_time(entry):
                 # Verification period has elapsed
                 self.console_logger.info(
                     "Verification period elapsed for '%s - %s'",
@@ -561,6 +556,14 @@ class PendingVerificationService:
                 return True
 
             return False
+
+    def _recheck_time(self, entry: PendingAlbumEntry) -> datetime:
+        """Return when a pending entry is due for its next verification."""
+        interval_days = self.verification_interval_days
+        if entry.reason == VerificationReason.PRERELEASE:
+            override = self._normalize_recheck_days(self._parse_metadata(entry.metadata).get("recheck_days"))
+            interval_days = override if override is not None else self.prerelease_recheck_days
+        return entry.timestamp + timedelta(days=interval_days)
 
     # remove_from_pending is now an async method because it calls async _save_pending_albums
     async def remove_from_pending(self, artist: str, album: str) -> None:

@@ -61,7 +61,6 @@ class TestScoringConfig:
 
         # Check penalties
         assert cfg.album_substring_penalty == -15
-        assert cfg.album_unrelated_penalty == -40
         assert cfg.status_bootleg_penalty == -50
 
         # Check source bonuses
@@ -149,6 +148,35 @@ class TestReleaseScorer:
         release = {"title": "Test Album", "artist": "Test Artist", "year": "2020", "source": "musicbrainz"}
         score = scorer.score_original_release(release, "test artist", "test album", artist_context=ArtistContext(), source="musicbrainz")
         assert score > 0  # Should still get some score
+
+    @pytest.mark.parametrize(
+        ("title", "artist", "album"),
+        [
+            ("Solarikolo", "morj", "Пластилиновая Балерина"),  # another single by the artist
+            ("Drop Dead Years", "Bill Burr", "Walk Your Way Out"),  # the artist's other album, from a lookup fallback
+        ],
+    )
+    def test_a_release_with_an_unrelated_title_cannot_date_the_album(self, scorer: ReleaseScorer, title: str, artist: str, album: str) -> None:
+        """Another release by the artist says nothing about this album's year, however well the rest matches."""
+        release = {"title": title, "artist": artist, "year": "2015", "album_type": "Album", "status": "Official", "source": "musicbrainz"}
+
+        score = scorer.score_original_release(release, artist.lower(), album.lower(), artist_context=ArtistContext(), source="musicbrainz")
+
+        assert score == 0
+
+    @pytest.mark.parametrize(
+        ("title", "album"),
+        [
+            ("Battles", "Battles"),
+            ("Battles (Deluxe)", "Battles"),
+            ("Battles", "Battles (Deluxe Edition)"),
+            ("Battles Live", "Battles"),  # substring: penalized, still a candidate
+        ],
+    )
+    def test_related_titles_stay_candidates(self, scorer: ReleaseScorer, title: str, album: str) -> None:
+        release = {"title": title, "artist": "In Flames", "year": "2016", "album_type": "Album", "status": "Official", "source": "musicbrainz"}
+
+        assert scorer.score_original_release(release, "in flames", album.lower(), artist_context=ArtistContext(), source="musicbrainz") > 0
 
     def test_score_invalid_year(self, scorer: ReleaseScorer) -> None:
         """Test scoring with invalid year."""

@@ -74,7 +74,9 @@ Each API result receives a score based on:
 | Compilation/live album      | -25       |
 | Bootleg status              | -50       |
 | Year far from release group | -5 to -40 |
-| Album name mismatch         | -5 to -40 |
+| Album title partly matches  | -5        |
+
+A release whose title is unrelated to the album (neither title contains the other) is not scored at all: another release by the artist says nothing about this album's year.
 
 ### Confidence Thresholds
 
@@ -152,6 +154,8 @@ uv run python main.py verify_pending
 ```
 
 An album whose lookup reaches no provider (network outage, rate limit, server errors) is neither saved there nor changed: the console prints `Year lookup unavailable for '<artist> - <album>'`, and the next run asks the providers again. When `verify_pending` meets such an album, its summary counts it as unavailable and the run does not postpone the next verification.
+
+Each saved album counts its verification attempts. Runs between rechecks (every `pending_verification_interval_days`) do not add to the count; after three attempts the best year a provider found for the album is accepted.
 
 ## Reverting Changes
 

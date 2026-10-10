@@ -1528,7 +1528,6 @@ def generate_python_config() -> dict[str, Any]:
         "perfectMatchBonus": scoring["perfect_match_bonus"],
         "albumVariationBonus": scoring["album_variation_bonus"],
         "albumSubstringPenalty": scoring["album_substring_penalty"],
-        "albumUnrelatedPenalty": scoring["album_unrelated_penalty"],
         "soundtrackCompensationBonus": scoring.get("soundtrack_compensation_bonus", 75),
         "mbReleaseGroupMatchBonus": scoring["mb_release_group_match_bonus"],
         "typeAlbumBonus": scoring["type_album_bonus"],

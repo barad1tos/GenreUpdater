@@ -117,7 +117,6 @@ class ReleaseScorer:
             perfect_match_bonus=10,
             album_variation_bonus=10,
             album_substring_penalty=-15,
-            album_unrelated_penalty=-40,
             mb_release_group_match_bonus=50,
             type_album_bonus=15,
             type_ep_single_penalty=-10,
@@ -545,13 +544,9 @@ class ReleaseScorer:
             score_components.append(f"Album Variation (Search Suffix): +{bonus}")
             return bonus
 
-        if comp_album_norm in comp_release_title or comp_release_title in comp_album_norm:
-            penalty = cfg.album_substring_penalty
-            score_components.append(f"Album Substring Mismatch: {penalty}")
-            return penalty
-
-        penalty = cfg.album_unrelated_penalty
-        score_components.append(f"Album Unrelated: {penalty}")
+        # score_original_release drops unrelated titles first, so what is left contains the other title
+        penalty = cfg.album_substring_penalty
+        score_components.append(f"Album Substring Mismatch: {penalty}")
         return penalty
 
     @staticmethod
@@ -857,6 +852,11 @@ class ReleaseScorer:
 
         # At this point, validated_year is guaranteed to be int
         year: int = validated_year
+
+        # Another release by the artist says nothing about this album's year, however well the rest matches
+        if not _is_album_substring_match(release_title_norm, self._normalize_name(album_norm)):
+            self.console_logger.debug("Skipping '%s' (%s) [%s]: its title is unrelated to the album", release_title_orig, year_str, source)
+            return 0
 
         # Apply penalties for current and future year releases
         if year > self.current_year:
