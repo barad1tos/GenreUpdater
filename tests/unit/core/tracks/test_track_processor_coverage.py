@@ -668,6 +668,11 @@ class TestUpdateArtistAsync:
         assert result is False
 
 
+def test_missed_tracks_are_read_parsed_for_the_fetcher_to_validate(processor: TrackProcessor) -> None:
+    """The batch fetcher validates missed tracks itself, so it must get them before validation."""
+    assert processor.batch_fetcher._missed_track_fetcher == processor._fetch_parsed_tracks_by_ids
+
+
 @pytest.mark.parametrize(("missed_tracks_read", "full_scan"), [(True, True), (False, False)], ids=["whole-library", "tracks-missing"])
 @pytest.mark.asyncio
 async def test_batch_fetch_counts_as_a_full_scan_only_when_whole(
@@ -681,9 +686,8 @@ async def test_batch_fetch_counts_as_a_full_scan_only_when_whole(
         patch.object(fetcher, "_fetch_tracks_in_batches", AsyncMock(return_value=[sample_track])),
         patch.object(fetcher, "_can_use_snapshot", return_value=True),
         patch.object(fetcher.ap_client, "fetch_all_track_ids", AsyncMock(return_value=[str(sample_track.id), str(missed.id)]), create=True),
-        patch.object(processor, "fetch_tracks_by_ids", AsyncMock(return_value=[missed] if missed_tracks_read else [])),
+        patch.object(fetcher, "_missed_track_fetcher", AsyncMock(return_value=[missed] if missed_tracks_read else [])),
     ):
-        fetcher._missed_track_fetcher = processor.fetch_tracks_by_ids
         await processor.fetch_tracks_in_batches(1000, skip_snapshot_check=True)
 
     assert update.call_args.kwargs["full_scan"] is full_scan
