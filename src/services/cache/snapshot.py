@@ -315,6 +315,10 @@ class LibrarySnapshotService:
         """Return whether delta caching is enabled."""
         return self.enabled and self.delta_enabled
 
+    def clear_delta(self) -> None:
+        """Delete the delta state, which records track ids."""
+        self._delta_path.unlink(missing_ok=True)
+
     def clear_snapshot(self) -> bool:
         """Delete the snapshot file to force fresh data fetch from Music.app.
 

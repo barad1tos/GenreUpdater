@@ -1261,3 +1261,15 @@ class TestComputeSnapshotHash:
         hash1 = LibrarySnapshotService.compute_snapshot_hash(payload1)
         hash2 = LibrarySnapshotService.compute_snapshot_hash(payload2)
         assert hash1 != hash2
+
+
+def test_clear_delta_removes_the_delta_file(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """The delta state records track ids, so a change of id format clears it."""
+    service = LibrarySnapshotService(_make_config(tmp_path_factory), logging.getLogger("test"))
+    service._delta_path.parent.mkdir(parents=True, exist_ok=True)
+    service._delta_path.write_text("{}", encoding="utf-8")
+
+    service.clear_delta()
+    service.clear_delta()  # a second call finds nothing and does not fail
+
+    assert not service._delta_path.exists()

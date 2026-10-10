@@ -1,0 +1,151 @@
+"""Tests for the one-time move of the saved track list to Music.app persistent IDs."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from app.id_migration import BACKUP_NAME, carry_year_history, is_persistent_id, migrate_to_persistent_ids, needs_migration
+from core.logger import get_full_log_path
+from core.models.track_models import AppConfig, TrackDict
+from metrics.track_sync import load_track_list, save_track_map_to_csv
+from tests.factories import create_test_app_config
+
+_LOGGER = logging.getLogger("test.id_migration")
+_PERSISTENT_ID = "6342D31846D0E960"
+
+
+def _old_row(track_id: str, *, before: str = "1999", set_by_mgu: str = "2001") -> TrackDict:
+    """A track list row keyed by an old Music.app id."""
+    return TrackDict(id=track_id, name="Song", artist="A", album="B", year_before_mgu=before, year_set_by_mgu=set_by_mgu)
+
+
+def _fresh_track() -> TrackDict:
+    """The same track as Music.app reports it now, keyed by its persistent ID."""
+    return TrackDict(id=_PERSISTENT_ID, name="Song", artist="A", album="B")
+
+
+class TestIdFormat:
+    """Only the 16-hex persistent ID format counts as migrated."""
+
+    def test_persistent_ids_are_recognised(self) -> None:
+        assert is_persistent_id(_PERSISTENT_ID)
+        assert is_persistent_id("0000123456789012")  # some persistent IDs are all digits
+
+    def test_other_ids_are_not(self) -> None:
+        assert not is_persistent_id("111701")
+        assert not is_persistent_id(_PERSISTENT_ID.lower())
+
+    def test_decimal_ids_need_migration(self) -> None:
+        assert needs_migration({"111701": _old_row("111701")})
+
+    def test_an_empty_list_needs_none(self) -> None:
+        assert not needs_migration({})
+
+    def test_persistent_ids_are_not_migrated_again(self) -> None:
+        assert not needs_migration({"0000123456789012": _old_row("0000123456789012")})
+
+
+class TestCarryYearHistory:
+    """Year history moves to the track a row describes, matched by artist, album and name."""
+
+    def test_unique_match_carries_history(self) -> None:
+        tracks = [_fresh_track()]
+
+        assert carry_year_history([_old_row("1")], tracks) == 1
+        assert (tracks[0].year_before_mgu, tracks[0].year_set_by_mgu) == ("1999", "2001")
+
+    def test_equal_duplicates_carry_history(self) -> None:
+        tracks = [_fresh_track()]
+
+        assert carry_year_history([_old_row("1"), _old_row("2")], tracks) == 1
+
+    def test_conflicting_duplicates_get_no_history(self) -> None:
+        tracks = [_fresh_track()]
+
+        assert carry_year_history([_old_row("1"), _old_row("2", before="1990", set_by_mgu="1991")], tracks) == 0
+        assert (tracks[0].year_before_mgu, tracks[0].year_set_by_mgu) == (None, None)
+
+    def test_unmatched_track_gets_no_history(self) -> None:
+        tracks = [TrackDict(id=_PERSISTENT_ID, name="Other", artist="A", album="B")]
+
+        assert carry_year_history([_old_row("1")], tracks) == 0
+
+
+class TestMigrate:
+    """The migration rewrites the track list once, and changes nothing unless the library fetch worked."""
+
+    @staticmethod
+    def _write_old_list(tmp_path: Path) -> tuple[AppConfig, Path]:
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
+        csv_path = Path(get_full_log_path(config, "csv_output_file", "csv/track_list.csv"))
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        save_track_map_to_csv({"111701": _old_row("111701")}, str(csv_path), _LOGGER, _LOGGER)
+        return config, csv_path
+
+    @pytest.mark.asyncio
+    async def test_migration_backs_up_and_rewrites_the_track_list(self, tmp_path: Path) -> None:
+        config, csv_path = self._write_old_list(tmp_path)
+        processor = MagicMock()
+        processor.fetch_tracks_in_batches = AsyncMock(return_value=[_fresh_track()])
+        snapshot_service = MagicMock()
+
+        migrated = await migrate_to_persistent_ids(
+            config=config, track_processor=processor, snapshot_service=snapshot_service, console_logger=_LOGGER, error_logger=_LOGGER
+        )
+
+        assert migrated
+        assert (csv_path.parent / BACKUP_NAME).exists()
+        rows = load_track_list(str(csv_path))
+        assert list(rows) == [_PERSISTENT_ID]
+        assert rows[_PERSISTENT_ID].year_set_by_mgu == "2001"
+        snapshot_service.clear_delta.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_failed_fetch_changes_nothing(self, tmp_path: Path) -> None:
+        config, csv_path = self._write_old_list(tmp_path)
+        processor = MagicMock()
+        processor.fetch_tracks_in_batches = AsyncMock(return_value=[])
+        snapshot_service = MagicMock()
+
+        migrated = await migrate_to_persistent_ids(
+            config=config, track_processor=processor, snapshot_service=snapshot_service, console_logger=_LOGGER, error_logger=_LOGGER
+        )
+
+        assert not migrated
+        assert not (csv_path.parent / BACKUP_NAME).exists()
+        assert list(load_track_list(str(csv_path))) == ["111701"]
+        snapshot_service.clear_delta.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_old_ids_changes_nothing(self, tmp_path: Path) -> None:
+        """Scripts that still emit old ids must not be mistaken for a migrated library."""
+        config, csv_path = self._write_old_list(tmp_path)
+        processor = MagicMock()
+        processor.fetch_tracks_in_batches = AsyncMock(return_value=[TrackDict(id="111701", name="Song", artist="A", album="B")])
+
+        migrated = await migrate_to_persistent_ids(
+            config=config, track_processor=processor, snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
+        )
+
+        assert not migrated
+        assert not (csv_path.parent / BACKUP_NAME).exists()
+
+    @pytest.mark.asyncio
+    async def test_migrated_list_is_left_alone(self, tmp_path: Path) -> None:
+        config = create_test_app_config(logs_base_dir=str(tmp_path))
+        csv_path = Path(get_full_log_path(config, "csv_output_file", "csv/track_list.csv"))
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        save_track_map_to_csv({_PERSISTENT_ID: _fresh_track()}, str(csv_path), _LOGGER, _LOGGER)
+        processor = MagicMock()
+        processor.fetch_tracks_in_batches = AsyncMock()
+
+        migrated = await migrate_to_persistent_ids(
+            config=config, track_processor=processor, snapshot_service=MagicMock(), console_logger=_LOGGER, error_logger=_LOGGER
+        )
+
+        assert not migrated
+        processor.fetch_tracks_in_batches.assert_not_awaited()
