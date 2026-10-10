@@ -405,25 +405,30 @@ async def test_attempt_count_persisted_to_csv(service: PendingVerificationServic
     await service.mark_for_verification("Artist", "Album")
 
     with Path(service.pending_file_path).open(encoding="utf-8") as pending_file:
-        assert [row["attempt_count"] for row in csv.DictReader(pending_file)] == ["1"]
+        assert [row["verification_attempts"] for row in csv.DictReader(pending_file)] == ["1"]
 
 
+@pytest.mark.parametrize(
+    ("column", "saved", "loaded"),
+    [
+        ("verification_attempts", "6", 6),  # counted per recheck: kept
+        ("attempt_count", "2", 2),  # the old per-run column, within the limit
+        ("attempt_count", "6920", 1),  # the old per-run column, past the limit: restarts
+    ],
+)
 @pytest.mark.asyncio
-async def test_attempt_count_loaded_from_csv(
-    service: PendingVerificationService,
-) -> None:
-    """attempt_count should be loaded correctly from existing CSV."""
+async def test_attempt_count_loaded_from_csv(service: PendingVerificationService, column: str, saved: str, loaded: int) -> None:
+    """The old attempt_count column counted runs, so a count above the limit there restarts at one."""
     pending_file = Path(service.pending_file_path)
     pending_file.parent.mkdir(parents=True, exist_ok=True)
     pending_file.write_text(
-        "artist,album,timestamp,reason,metadata,attempt_count\nArtist,Album,2024-01-01 00:00:00,no_year_found,,5\n",
+        f"artist,album,timestamp,reason,metadata,{column}\nArtist,Album,2024-01-01 00:00:00,no_year_found,,{saved}\n",
         encoding="utf-8",
     )
 
     await service.initialize()
 
-    count = await service.get_attempt_count("Artist", "Album")
-    assert count == 5
+    assert await service.get_attempt_count("Artist", "Album") == loaded
 
 
 @pytest.mark.asyncio

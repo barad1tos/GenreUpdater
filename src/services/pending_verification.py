@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Any
 from core.logger import LogFormat, get_full_log_path
 from core.models.cache_types import PendingAlbumEntry, VerificationReason
 from core.models.metadata_utils import clean_names
+from core.tracks.year_fallback import MAX_VERIFICATION_ATTEMPTS
 from services.cache.hash_service import UnifiedHashService
 
 if TYPE_CHECKING:
@@ -225,7 +226,10 @@ class PendingVerificationService:
         timestamp_str = row.get("timestamp", "").strip()
         reason_str = row.get("reason", "").strip()
         metadata = row.get("metadata", "").strip()
-        attempt_count_str = row.get("attempt_count", "0").strip()
+        # verification_attempts counts rechecks; the attempt_count column it replaced counted every run
+        per_recheck = "verification_attempts" in row
+        attempt_count_str = (row.get("verification_attempts") if per_recheck else row.get("attempt_count")) or ""
+        attempt_count_str = attempt_count_str.strip()
 
         if not (artist and album and timestamp_str):
             self._error_callback(f"WARNING: Skipping malformed row in pending file: {row}")
@@ -240,6 +244,9 @@ class PendingVerificationService:
             attempt_count = int(attempt_count_str) if attempt_count_str else 0
         except ValueError:
             attempt_count = 0
+        # A per-run count past the limit says nothing about how often the album was rechecked, so it restarts
+        if not per_recheck and attempt_count > MAX_VERIFICATION_ATTEMPTS:
+            attempt_count = 1
 
         try:
             key_hash = self.generate_album_key(artist, album)
@@ -338,7 +345,7 @@ class PendingVerificationService:
             Path(self.pending_file_path).parent.mkdir(parents=True, exist_ok=True)
 
             with Path(temp_file).open("w", newline="", encoding="utf-8") as f:
-                fieldnames = ["artist", "album", "timestamp", "reason", "metadata", "attempt_count"]
+                fieldnames = ["artist", "album", "timestamp", "reason", "metadata", "verification_attempts"]
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
 
@@ -350,7 +357,7 @@ class PendingVerificationService:
                             "timestamp": entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                             "reason": entry.reason.value,
                             "metadata": entry.metadata,
-                            "attempt_count": str(entry.attempt_count),
+                            "verification_attempts": str(entry.attempt_count),
                         }
                     )
 
