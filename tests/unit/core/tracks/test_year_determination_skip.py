@@ -108,11 +108,11 @@ class TestShouldSkipAlbumNewYearLogic:
 
     @pytest.mark.asyncio
     async def test_does_not_skip_when_year_set_by_mgu_differs_from_current(self) -> None:
-        """Should NOT skip when year_set_by_mgu differs from current year (user changed)."""
+        """Should NOT skip when year_set_by_mgu differs from current year (changed outside the tool)."""
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2018", year_set_by_mgu="2020")]
+        tracks = [create_test_track(year="2018", year_set_by_mgu="2020"), create_test_track("2", year="2017", year_set_by_mgu="2020")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -125,7 +125,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2020")]
+        tracks = [create_test_track(year="2020"), create_test_track("2", year="2019")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -138,7 +138,7 @@ class TestShouldSkipAlbumNewYearLogic:
         cache_service = _create_mock_cache_service()
         cache_service.get_album_year_from_cache = AsyncMock(return_value=None)
         determinator = _create_year_determinator(cache_service=cache_service)
-        tracks = [create_test_track(year="2020", year_set_by_mgu="")]
+        tracks = [create_test_track(year="2020", year_set_by_mgu=""), create_test_track("2", year="2019", year_set_by_mgu="")]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
 
@@ -407,6 +407,16 @@ class TestShouldSkipAlbumConsistentYear:
         ]
 
         should_skip, reason = await determinator.should_skip_album(tracks, "Artist", "Album")
+
+        assert should_skip is True
+        assert reason == "year_consistent"
+
+    @pytest.mark.asyncio
+    async def test_skips_a_single_track_album_with_a_valid_year(self) -> None:
+        """One track agrees with itself; the providers are not asked for it."""
+        determinator = _create_year_determinator()
+
+        should_skip, reason = await determinator.should_skip_album([create_test_track(year="2004")], "Artist", "Album")
 
         assert should_skip is True
         assert reason == "year_consistent"

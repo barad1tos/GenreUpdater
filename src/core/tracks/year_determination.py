@@ -451,8 +451,7 @@ class YearDeterminator:
     def _has_consistent_year(tracks: list[TrackDict]) -> bool:
         """Check if all tracks have the same non-empty valid year.
 
-        Requires at least 2 tracks to avoid skipping single-track albums
-        that need API validation.
+        A single track agrees with itself, so a single-track album with a valid year is consistent too.
 
         Args:
             tracks: List of tracks to check
@@ -461,10 +460,6 @@ class YearDeterminator:
             True if all tracks have the same valid year, False otherwise.
 
         """
-        # Single-track albums need API validation, don't skip
-        if len(tracks) < 2:
-            return False
-
         years = [str(track_year or "") for t in tracks if (track_year := t.year) and is_valid_year(track_year)]
         return len(years) == len(tracks) and len(set(years)) == 1 if years else False
 

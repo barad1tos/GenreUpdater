@@ -162,20 +162,16 @@ class TestPrerealeaseHandling:
 class TestYearConsistencyEdgeCases:
     """Test edge cases in year consistency checking."""
 
-    def test_single_track_albums_not_skipped(
+    def test_single_track_albums_count_as_consistent(
         self,
         albums_with_tracks: dict[tuple[str, str], list[TrackDict]],
     ) -> None:
-        """Single-track albums should not be skipped based on year consistency.
-
-        The _has_consistent_year method requires 2+ tracks to avoid skipping
-        single-track albums that need API validation.
-        """
-        single_track_albums = [(k, v) for k, v in albums_with_tracks.items() if len(v) == 1]
-
-        for (artist, album), tracks in single_track_albums:
-            result = YearDeterminator._has_consistent_year(tracks)
-            assert result is False, f"Single-track album '{artist} - {album}' should not be marked as consistent"
+        """A single track with a valid year agrees with itself and skips like any consistent album."""
+        for (artist, album), tracks in albums_with_tracks.items():
+            if len(tracks) != 1:
+                continue
+            expected = bool(tracks[0].year and is_valid_year(tracks[0].year))
+            assert YearDeterminator._has_consistent_year(tracks) is expected, f"'{artist} - {album}': consistency should follow its one year"
 
     def test_empty_year_handling(
         self,
