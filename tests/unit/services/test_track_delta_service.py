@@ -9,7 +9,18 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.tracks.track_delta import TrackDelta, compute_track_delta, has_identity_changed
+from core.tracks.track_delta import (
+    FIELD_SEPARATOR,
+    LINE_SEPARATOR,
+    TrackDelta,
+    carry_tool_record,
+    compute_track_delta,
+    find_changed_years,
+    has_identity_changed,
+    has_track_changed,
+    parse_id_year_records,
+    year_text,
+)
 from core.models.track_models import TrackDict
 
 
@@ -393,3 +404,72 @@ def test_album_artist_change_is_an_identity_change() -> None:
     current = TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist="Some Band")
 
     assert has_identity_changed(current, stored)
+
+
+def test_id_year_records_parse_into_a_map() -> None:
+    raw = LINE_SEPARATOR.join([f"A1{FIELD_SEPARATOR}2016", f"B2{FIELD_SEPARATOR}", f"C3{FIELD_SEPARATOR}0", f"{FIELD_SEPARATOR}1999", ""])
+
+    assert parse_id_year_records(raw) == {"A1": "2016", "B2": "", "C3": ""}
+
+
+def test_year_text_normalizes_unset_years() -> None:
+    assert [year_text(v) for v in (None, "", "0", 0, " 2016 ", 2016)] == ["", "", "", "", "2016", "2016"]
+
+
+def test_changed_years_are_the_tracks_in_both_maps_with_another_year() -> None:
+    previous = {"1": "2016", "2": None, "3": "2010", "4": "2016", "gone": "1999"}
+    current = {"1": "2019", "2": "0", "3": "2010", "4": "", "new": "2026"}
+
+    assert find_changed_years(previous, current) == {"1": "2016", "4": "2016"}
+
+
+def test_a_re_fetched_track_inherits_the_tool_record() -> None:
+    previous = TrackDict(id="1", name="T", artist="A", album="B", year="2016", year_before_mgu="2019", year_set_by_mgu="2016")
+    fresh = TrackDict(id="1", name="T", artist="A", album="B", year="2019")
+
+    carried = carry_tool_record(fresh, previous)
+
+    assert (carried.year, carried.year_before_mgu, carried.year_set_by_mgu) == ("2019", "2019", "2016")
+
+
+def test_a_track_with_its_own_record_keeps_it() -> None:
+    previous = TrackDict(id="1", name="T", artist="A", album="B", year_set_by_mgu="2010")
+    fresh = TrackDict(id="1", name="T", artist="A", album="B", year="2016", year_set_by_mgu="2016")
+
+    assert carry_tool_record(fresh, previous) is fresh
+
+
+def test_a_delta_without_changed_years_is_still_a_delta() -> None:
+    assert TrackDelta(new_ids=[], updated_ids=[], removed_ids=[]).changed_years == {}
+
+
+def test_a_cleared_year_is_a_change_against_the_track_list() -> None:
+    """A year Apple emptied must open the incremental gate, or the clear becomes the baseline unjudged."""
+    stored = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre="Rock")
+    current = TrackDict(id="1", name="T", artist="A", album="B", year=None, genre="Rock")
+
+    assert has_track_changed(current, stored) is True
+
+
+def test_an_empty_current_genre_is_still_not_a_change() -> None:
+    stored = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre="Rock")
+    current = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre=None)
+
+    assert has_track_changed(current, stored) is False
+
+
+def test_the_csv_delta_records_the_changed_years_too() -> None:
+    """Every producer of a TrackDelta fills changed_years, so a consumer can rely on it."""
+    stored = {
+        "1": TrackDict(id="1", name="T", artist="A", album="B", year="2016"),
+        "2": TrackDict(id="2", name="U", artist="A", album="B", year="2016", genre="Rock"),
+    }
+    current = [
+        TrackDict(id="1", name="T", artist="A", album="B", year="2019"),
+        TrackDict(id="2", name="U", artist="A", album="B", year="2016", genre="Metal"),
+    ]
+
+    delta = compute_track_delta(current, stored)
+
+    assert delta.updated_ids == ["1", "2"]
+    assert delta.changed_years == {"1": "2016"}

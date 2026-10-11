@@ -6,15 +6,15 @@ Complete reference for all available command-line options.
 
 These options work with any command:
 
-| Option | Description |
-|--------|-------------|
-| `--fresh` | Clear all caches and snapshots before running |
-| `--force` | Bypass incremental checks and cache |
-| `--dry-run` | Simulate changes without applying them |
-| `--test-mode` | Run only on artists from `development.test_artists` |
-| `--verbose`, `-v` | Enable verbose logging |
-| `--quiet`, `-q` | Suppress non-critical output |
-| `--config PATH` | Path to configuration file |
+| Option            | Description                                         |
+|-------------------|-----------------------------------------------------|
+| `--fresh`         | Clear all caches and snapshots before running       |
+| `--force`         | Bypass incremental checks and cache                 |
+| `--dry-run`       | Simulate changes without applying them              |
+| `--test-mode`     | Run only on artists from `development.test_artists` |
+| `--verbose`, `-v` | Enable verbose logging                              |
+| `--quiet`, `-q`   | Suppress non-critical output                        |
+| `--config PATH`   | Path to configuration file                          |
 
 ## Commands
 
@@ -46,10 +46,10 @@ Update album release years from external APIs (MusicBrainz, Discogs, iTunes).
 uv run python main.py update_years [--artist NAME] [--force]
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--artist` | Process specific artist only |
-| `--force` | Bypass cache and re-fetch all years |
+| Option     | Description                         |
+|------------|-------------------------------------|
+| `--artist` | Process specific artist only        |
+| `--force`  | Bypass cache and re-fetch all years |
 
 Aliases: `years`
 
@@ -61,8 +61,8 @@ Update track genres from the dominant genre database.
 uv run python main.py update_genres [--artist NAME]
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option     | Description                  |
+|------------|------------------------------|
 | `--artist` | Process specific artist only |
 
 Aliases: `genres`
@@ -75,9 +75,9 @@ Remove promotional text from track and album names.
 uv run python main.py clean_artist --artist "Artist Name"
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--artist` | Yes | Artist name to process |
+| Option     | Required | Description            |
+|------------|----------|------------------------|
+| `--artist` | Yes      | Artist name to process |
 
 Aliases: `clean`
 
@@ -89,11 +89,11 @@ Revert previously applied year changes.
 uv run python main.py revert_years --artist "Artist Name" [--album "Album"] [--backup-csv PATH]
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--artist` | Yes | Artist name to revert |
-| `--album` | No | Specific album (default: all albums) |
-| `--backup-csv` | No | Path to backup CSV with original years |
+| Option         | Required | Description                            |
+|----------------|----------|----------------------------------------|
+| `--artist`     | Yes      | Artist name to revert                  |
+| `--album`      | No       | Specific album (default: all albums)   |
+| `--backup-csv` | No       | Path to backup CSV with original years |
 
 Aliases: `revert`
 
@@ -105,17 +105,43 @@ Restore years from Apple Music's read-only `release_year` field.
 uv run python main.py restore_release_years [--artist NAME] [--album NAME] [--threshold N]
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--artist` | Process specific artist only |
-| `--album` | Process specific album (requires `--artist`) |
-| `--threshold` | Year difference threshold (default: 5) |
+| Option        | Description                                  |
+|---------------|----------------------------------------------|
+| `--artist`    | Process specific artist only                 |
+| `--album`     | Process specific album (requires `--artist`) |
+| `--threshold` | Year difference threshold (default: 5)       |
 
 Aliases: `restore`
 
 !!! tip "When to use"
     Use this command when albums received incorrect reissue years from APIs.
     It compares the writable `year` field with Apple's immutable `release_year`.
+
+### lock_year
+
+Write a year to an album and keep it: the year step never changes it again.
+
+```bash test="skip"
+uv run python main.py lock_year --artist "Artist Name" --album "Album" --year 2019
+```
+
+| Option     | Required | Description                                                               |
+|------------|----------|---------------------------------------------------------------------------|
+| `--artist` | Yes      | Album artist or track artist; the lock is recorded under the album artist |
+| `--album`  | Yes      | Album name (its cleaned name matches too)                                 |
+| `--year`   | Yes      | Four-digit year to write and keep                                         |
+
+The lock is a row in `csv/year_locks.csv`; the write is reported in `csv/changes_lock.csv`.
+
+### unlock_year
+
+Remove an album's year lock. Music.app is not touched.
+
+```bash test="skip"
+uv run python main.py unlock_year --artist "Artist Name" --album "Album"
+```
+
+The album name is tried as typed and cleaned. Locks are keyed by the album artist: when you type a track artist (for a collaboration album, say) and the lock sits under the album artist, the command names the locked key so you can retry with it.
 
 ### verify_database
 
@@ -145,9 +171,9 @@ Process multiple artists from a file.
 uv run python main.py batch --file artists.txt
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--file` | Yes | Path to file with artist names (one per line) |
+| Option   | Required | Description                                   |
+|----------|----------|-----------------------------------------------|
+| `--file` | Yes      | Path to file with artist names (one per line) |
 
 ### rotate_keys
 
@@ -162,18 +188,18 @@ uv run python main.py rotate_keys
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Error occurred |
-| 2 | Invalid arguments |
+| Code | Meaning           |
+|------|-------------------|
+| 0    | Success           |
+| 1    | Error occurred    |
+| 2    | Invalid arguments |
 
 ## Environment Variables
 
 The application uses these environment variables:
 
-| Variable | Description |
-|----------|-------------|
+| Variable        | Description                      |
+|-----------------|----------------------------------|
 | `DISCOGS_TOKEN` | Discogs API authentication token |
 | `CONTACT_EMAIL` | Email for API user-agent headers |
 

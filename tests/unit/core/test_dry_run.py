@@ -193,3 +193,11 @@ class TestDryRunClientGetActions:
         assert len(actions) == 2
         assert actions[0]["script"] == "update1.scpt"
         assert actions[1]["script"] == "update2.scpt"
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_track_years_delegates_to_the_real_client(dry_run_client: DryRunAppleScriptClient, mock_real_client: Any) -> None:
+    mock_real_client.fetch_all_track_years = AsyncMock(return_value={"1": "2016"})
+
+    assert await dry_run_client.fetch_all_track_years(timeout=5.0) == {"1": "2016"}
+    mock_real_client.fetch_all_track_years.assert_awaited_once_with(timeout=5.0)

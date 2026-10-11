@@ -76,6 +76,7 @@ class Key:
     OLD_ALBUM_NAME = "old_album_name"
     NEW_ALBUM_NAME = "new_album_name"
     TIMESTAMP = "timestamp"
+    REASON = "reason"
 
 
 class Format:
@@ -430,6 +431,7 @@ def _get_csv_fieldnames() -> list[str]:
         Key.OLD_ALBUM_NAME,
         Key.NEW_ALBUM_NAME,
         Key.TIMESTAMP,
+        Key.REASON,
     ]
 
 

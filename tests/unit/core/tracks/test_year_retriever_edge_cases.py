@@ -16,10 +16,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.models.validators import is_empty_year
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
-from core.models.protocols import AnalyticsProtocol
 from core.tracks.track_updater import TrackUpdater
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
@@ -33,6 +33,14 @@ from tests.mocks.track_data import DummyTrackData
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
+
+
+def _year_locks_mock() -> MagicMock:
+    """No album is locked."""
+    locks = MagicMock()
+    locks.get_locked_year = MagicMock(return_value=None)
+    locks.lock = AsyncMock()
+    return locks
 
 
 def _build_config_with_year_overrides(**year_sub_overrides: Any) -> AppConfig:
@@ -112,6 +120,7 @@ class TestYearRetrieverEdgeCases:
             analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
+            year_locks=_year_locks_mock(),
         )
 
     @pytest.mark.asyncio

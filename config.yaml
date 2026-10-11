@@ -111,6 +111,7 @@ logging:
   last_incremental_run_file: last_incremental_run.log
   pending_verification_file: csv/pending_year_verification.csv
   last_db_verify_log: main/last_db_verify.log
+  year_locks_file: csv/year_locks.csv
   levels:
     console: INFO
     main_file: DEBUG
@@ -155,6 +156,12 @@ year_retrieval:
     #   - skip_all: Skip entire album if any track is prerelease
     #   - mark_only: Don't process, just mark for future verification
     prerelease_handling: process_editable
+    # Years changed outside the tool (Apple's catalog or a person): the providers decide; when they disagree
+    # and someone is at the Mac (console user, input within presence_idle_seconds), a dialog asks, at most
+    # drift_dialog_max_per_run times per run, giving up after drift_dialog_timeout_seconds
+    presence_idle_seconds: 600
+    drift_dialog_timeout_seconds: 120
+    drift_dialog_max_per_run: 3
 
   logic:
     min_valid_year: 1900

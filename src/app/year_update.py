@@ -5,16 +5,22 @@ Handles year update operations for tracks including revert, update, and pipeline
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from core.logger import get_full_log_path
+from core.logger import PLAIN_TEXT, get_full_log_path
 from core.models import year_repair as repair_utils
+from core.models.cache_types import LockSource, is_lock_year
+from core.models.metadata_utils import clean_names
 from core.models.track_models import ChangeLogEntry
+from core.tracks.track_delta import year_text
+from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
     import logging
+    from collections.abc import Mapping, Sequence
 
     from app.pipeline_snapshot import PipelineSnapshotManager
     from app.track_cleaning import TrackCleaningService
@@ -22,6 +28,7 @@ if TYPE_CHECKING:
     from core.tracks.artist_renamer import ArtistRenamer
     from core.tracks.track_processor import TrackProcessor
     from core.tracks.year_retriever import YearRetriever
+    from services.year_locks import YearLockService
 
 
 class YearUpdateService:
@@ -38,6 +45,8 @@ class YearUpdateService:
         error_logger: Logger for error output.
         cleaning_service: Optional service for cleaning track metadata.
         artist_renamer: Optional service for renaming artists.
+        year_locks: Albums whose year a person chose; commands that write a year lock the album.
+        dry_run: True when nothing is written, locks included.
 
     """
 
@@ -52,8 +61,12 @@ class YearUpdateService:
         error_logger: logging.Logger,
         cleaning_service: TrackCleaningService | None = None,
         artist_renamer: ArtistRenamer | None = None,
+        year_locks: YearLockService,
+        dry_run: bool,
     ) -> None:
         self._track_processor = track_processor
+        self._year_locks = year_locks
+        self._dry_run = dry_run
         self._year_retriever = year_retriever
         self._snapshot_manager = snapshot_manager
         self._config = config
@@ -139,6 +152,9 @@ class YearUpdateService:
 
         if success:
             self._console_logger.info("Year update operation completed successfully")
+            # The pipeline never saw these writes; without them in the snapshot the next cycle judges them as outside changes
+            if not self._dry_run and (written := self._year_retriever.get_last_updated_tracks()):
+                await self._snapshot_manager.persist_updates(written)
         else:
             self._error_logger.error(
                 "Year update operation failed (artist=%s, force=%s, fresh=%s, tracks_count=%d)",
@@ -188,9 +204,11 @@ class YearUpdateService:
         self._console_logger.info("Revert complete: %d tracks updated, %d not found", updated, missing)
 
         if changes_log:
+            # The report of what reached Music.app goes to disk before the lock, whose write can fail
             revert_path = get_full_log_path(self._config, "changes_report_file", "csv/changes_revert.csv")
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
+            await self._lock_written_albums(changes_log)
 
     @staticmethod
     def _format_restore_target(artist: str | None, album: str | None) -> str:
@@ -242,7 +260,7 @@ class YearUpdateService:
             if not should_restore or release_year is None:
                 continue
 
-            artist_name = str(track.get("artist", ""))
+            artist_name = album_group_artist(track)
             album_name = str(track.get("album", ""))
             key = (artist_name, album_name)
             if key not in albums_to_restore:
@@ -284,6 +302,7 @@ class YearUpdateService:
             track_id=track_id,
             artist=artist,
             album_name=album,
+            album_artist=artist,
             track_name=track_name,
             year_before_mgu=old_year,
             year_set_by_mgu=consensus_release_year,
@@ -332,7 +351,9 @@ class YearUpdateService:
             failed_count,
         )
 
+        # The report of what reached Music.app goes to disk before the lock, whose write can fail
         self._save_restore_changes_report(changes_log)
+        await self._lock_written_albums(changes_log)
 
     async def _get_filtered_tracks_for_restore(
         self,
@@ -419,13 +440,126 @@ class YearUpdateService:
             )
             self._console_logger.info("Restore changes report saved to %s", restore_path)
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
+    async def run_lock_year(self, artist: str, album: str, year: str) -> None:
+        """Write `year` to the album's tracks and lock the album so the year step defends it.
+
+        Args:
+            artist: Album artist, as the year step groups albums
+            album: Album name (its cleaned form is matched too)
+            year: Four-digit year
+
+        Raises:
+            OSError: The lock file could not be written; nothing was written to Music.app
+        """
+        year = year.strip()
+        if not is_lock_year(year):
+            self._console_logger.error("lock_year needs a four-digit year, got '%s'", year, extra=PLAIN_TEXT)
+            return
+        album_tracks = await self._album_tracks(artist, album)
+        if not album_tracks:
+            self._console_logger.warning("No tracks found for '%s - %s'; nothing locked", artist, album, extra=PLAIN_TEXT)
+            return
+        # The lock goes first: a write that fails after it is repaired by the next run's lock restore, and a lock that fails writes nothing.
+        # It is read under the key the year step groups by: the album artist and the album's name in the library
+        for group_artist, group_album in sorted({(album_group_artist(track), (track.album or "").strip()) for track in album_tracks}):
+            if (group_artist, group_album) != (artist, album):
+                self._console_logger.info(
+                    "Locking '%s - %s' (the album artist) for the typed '%s - %s'", group_artist, group_album, artist, album, extra=PLAIN_TEXT
+                )
+            try:
+                await self._lock_album(group_artist, group_album, year)
+            except OSError:
+                self._console_logger.warning(
+                    "The lock on '%s - %s' could not be written; nothing written to Music.app", group_artist, group_album, extra=PLAIN_TEXT
+                )
+                raise
+        _, changes = await self._year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="lock_restore")
+        self._console_logger.info(
+            "%s'%s - %s' locked at %s; %d tracks written", "DRY-RUN: " if self._dry_run else "", artist, album, year, len(changes), extra=PLAIN_TEXT
+        )
+        if changes:
+            lock_report_path = get_full_log_path(self._config, "changes_lock_file", "csv/changes_lock.csv")
+            save_changes_report(changes=changes, file_path=lock_report_path, console_logger=self._console_logger, error_logger=self._error_logger)
+
+    async def run_unlock_year(self, artist: str, album: str) -> None:
+        """Remove the album's lock; Music.app is not touched.
+
+        The typed name is tried as given and cleaned; when neither is locked, the locks on an album of that name under
+        another artist are named, since locks are keyed by the album artist.
+        """
+        _, cleaned_album = clean_names(artist, "", album, config=self._config, console_logger=self._console_logger, error_logger=self._error_logger)
+        for candidate in dict.fromkeys((album, cleaned_album)):
+            if await self._year_locks.unlock(artist, candidate):
+                self._console_logger.info("'%s - %s' unlocked; the year step may change it again", artist, candidate, extra=PLAIN_TEXT)
+                return
+        wanted = {album.strip().casefold(), cleaned_album.strip().casefold()}
+        elsewhere = [lock for lock in self._year_locks.all_locks() if lock.album.casefold() in wanted]
+        for lock in elsewhere:
+            self._console_logger.warning(
+                "'%s - %s' is not locked; locks are keyed by the album artist: locked under '%s - %s'",
+                artist,
+                album,
+                lock.artist,
+                lock.album,
+                extra=PLAIN_TEXT,
+            )
+        if not elsewhere:
+            self._console_logger.warning("'%s - %s' is not locked", artist, album, extra=PLAIN_TEXT)
+
+    async def _album_tracks(self, artist: str, album: str) -> list[TrackDict]:
+        """Return the artist's tracks whose album is `album`, by its given or cleaned name."""
+        _, cleaned_album = clean_names(artist, "", album, config=self._config, console_logger=self._console_logger, error_logger=self._error_logger)
+        wanted = {album.strip(), cleaned_album.strip()}
+        tracks = await self._track_processor.fetch_tracks_async(artist=artist, ignore_test_filter=True)
+        return [
+            track
+            for track in tracks or []
+            if (album_group_artist(track) == artist or track.artist == artist) and (track.album or "").strip() in wanted
+        ]
+
+    async def _lock_written_albums(self, entries: Sequence[Mapping[str, str] | ChangeLogEntry]) -> None:
+        """Lock every album a command wrote, at the year it wrote: a person's command is a decision the daemon must not undo."""
+        years: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+        for entry in entries:
+            record = entry.model_dump() if isinstance(entry, ChangeLogEntry) else dict(entry)
+            # The key the year step reads: the album artist when the entry carries it, else the artist as written
+            artist = str(record.get("album_artist") or record.get("artist") or "")
+            album = str(record.get("album_name") or record.get("album") or "")
+            year = year_text(record.get("year_set_by_mgu"))
+            if artist and album and year:
+                years[(artist, album)][year] += 1
+        albums = list(years.items())
+        for index, ((artist, album), counter) in enumerate(albums):
+            try:
+                await self._lock_album(artist, album, counter.most_common(1)[0][0])
+            except OSError:
+                # The error itself goes to the error log through main; the person at the terminal hears every album it leaves
+                # unlocked, this one and the rest, since the file that refused this lock refuses the next ones too
+                unlocked = ", ".join(f"'{a} - {b}'" for (a, b), _ in albums[index:])
+                self._console_logger.warning(
+                    "Written but not locked; the next run may change them back: %s. Run lock_year for each once the lock file can be written",
+                    unlocked,
+                    extra=PLAIN_TEXT,
+                )
+                raise
+
+    async def _lock_album(self, artist: str, album: str, year: str) -> None:
+        """Record a command's lock, or in a dry run only say what would be locked."""
+        if self._dry_run:
+            self._console_logger.info("DRY-RUN: would lock '%s - %s' at %s", artist, album, year, extra=PLAIN_TEXT)
+            return
+        await self._year_locks.lock(artist, album, year, source=LockSource.COMMAND)
+
+    async def update_all_years_with_logs(
+        self, tracks: list[TrackDict], force: bool, fresh: bool = False, *, previous_years: Mapping[str, str] | None = None
+    ) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
             force: Force update - bypass cache/skip checks and re-query API for all albums.
             fresh: Fresh mode - invalidate cache before processing, implies force.
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since (outside changes).
 
         Returns:
             List of change log entries.
@@ -440,10 +574,13 @@ class YearUpdateService:
             await self._track_processor.cache_service.invalidate_all_albums()
 
         try:
-            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
+            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force, previous_years=previous_years)
             self._year_retriever.set_last_updated_tracks(updated_tracks)
 
             self._snapshot_manager.update_tracks(updated_tracks)
+            if held_back := self._year_retriever.held_back_tracks:
+                # Outside changes the providers could not judge keep the snapshot's year, so the next run sees them again
+                self._snapshot_manager.update_tracks(held_back)
             changes_log = year_changes
             self._console_logger.info("Step 4 completed successfully with %d changes", len(changes_log))
         except (OSError, ValueError, RuntimeError) as e:
@@ -453,6 +590,11 @@ class YearUpdateService:
             )
             # The error log is a file the console never shows, so the console hears that the year update stopped
             self._console_logger.warning("Album year update stopped (%s); traceback in the error log", type(e).__name__)
+            if previous_years:
+                # No album was judged: the snapshot keeps every changed track's old year, so the next run sees the changes again
+                self._snapshot_manager.update_tracks(
+                    [track.copy(year=previous_years[str(track.id)]) for track in tracks if str(track.id) in previous_years]
+                )
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
             changes_log.append(

@@ -153,6 +153,19 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         self.console_logger.info("DRY-RUN: Fetching all track IDs (delegating to real client)")
         return await self._real_client.fetch_all_track_ids(timeout=timeout)
 
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Fetch every editable track's id and year - delegates to real client in dry-run mode.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            Persistent ID → year text
+
+        """
+        self.console_logger.info("DRY-RUN: Fetching all track IDs and years (delegating to real client)")
+        return await self._real_client.fetch_all_track_years(timeout=timeout)
+
     def get_actions(self) -> list[dict[str, Any]]:
         """Get the list of actions recorded during the dry run.
 

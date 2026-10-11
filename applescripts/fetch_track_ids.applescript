@@ -1,7 +1,17 @@
 -- fetch_track_ids.applescript
--- Lightweight script that returns only the persistent IDs of editable tracks (about 30 s for 33K tracks, mostly the status filter)
+-- Returns the persistent ID and year of every editable track (ASCII 30 between the two, ASCII 29 between tracks)
+-- About 2 s for 33K tracks with the big lists as script-object properties (below); as plain variables the loop took
+-- 32 s for ids alone and 44.5 s with years (measured 2026-10-11)
 -- Persistent IDs survive Music.app renumbering its track ids, so the tool keys every track by them
--- Used by Smart Delta to detect new/removed tracks without fetching full metadata
+-- Used by Smart Delta (new, removed and year-changed tracks) and by every fetch_all_track_ids caller
+
+-- The big lists live here: `item idx of` on a script-object property stays fast where a plain-variable list made the loop O(n²)
+script o
+	property ids : {}
+	property statuses : {}
+	property years : {}
+	property rows : {}
+end script
 
 on run argv
 	tell application "Music"
@@ -9,26 +19,34 @@ on run argv
 			set trackObjects to every track of library playlist 1
 			set trackCount to count of trackObjects
 
-			-- Bulk fetch IDs and cloud status
-			set idList to persistent ID of every track of library playlist 1
-			set statusList to cloud status of every track of library playlist 1
+			-- Bulk fetch IDs, cloud status and years (one read each; the year list is what Smart Delta compares with its snapshot)
+			set o's ids to persistent ID of every track of library playlist 1
+			set o's statuses to cloud status of every track of library playlist 1
+			set o's years to year of every track of library playlist 1
+			set fieldSeparator to ASCII character 30
+			set lineSeparator to ASCII character 29
 
 			-- Filter by valid cloud status (same as fetch_tracks.scpt)
-			set filteredIds to {}
+			set o's rows to {}
 			repeat with idx from 1 to trackCount
-				set statusValue to item idx of statusList
+				set statusValue to item idx of o's statuses
 				set statusText to my normalize_cloud_status(statusValue)
 				if my is_valid_cloud_status(statusText) then
-					set end of filteredIds to item idx of idList
+					set yearValue to item idx of o's years
+					if yearValue is missing value or yearValue is 0 then
+						set yearText to ""
+					else
+						set yearText to yearValue as text
+					end if
+					set end of o's rows to (item idx of o's ids) & fieldSeparator & yearText
 				end if
 			end repeat
 
-			-- Convert list to comma-separated string
-			set AppleScript's text item delimiters to ","
-			set idString to filteredIds as text
+			set AppleScript's text item delimiters to lineSeparator
+			set output to o's rows as text
 			set AppleScript's text item delimiters to ""
 
-			return idString
+			return output
 		on error errMsg
 			return "ERROR:" & errMsg
 		end try

@@ -14,23 +14,31 @@ import pytest
 
 from core import debug_utils
 from core.models.cache_types import AlbumCacheEntry
+from core.models.protocols import AnalyticsProtocol, YearLookupUnavailableError
 from core.models.track_models import ChangeLogEntry, TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
-from core.tracks.year_batch import YearBatchProcessor
-from core.tracks.track_updater import TrackUpdater
-from core.models.protocols import AnalyticsProtocol, YearLookupUnavailableError
 from core.tracks import year_consistency as year_consistency_module
+from core.tracks.track_updater import TrackUpdater
+from core.tracks.year_batch import YearBatchProcessor
 from core.tracks.year_determination import CACHE_TRUST_THRESHOLD
 from core.tracks.year_retriever import YearRetriever
 from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
-    from core.models.track_models import AppConfig
     from core.models.protocols import (
         CacheServiceProtocol,
         ExternalApiServiceProtocol,
         PendingVerificationServiceProtocol,
     )
+    from core.models.track_models import AppConfig
+
+
+def _year_locks_mock() -> MagicMock:
+    """No album is locked."""
+    locks = MagicMock()
+    locks.get_locked_year = MagicMock(return_value=None)
+    locks.lock = AsyncMock()
+    return locks
 
 
 @pytest.fixture
@@ -114,6 +122,7 @@ def year_retriever(
         error_logger=error_logger,
         analytics=cast(AnalyticsProtocol, cast(object, MagicMock())),
         config=config,
+        year_locks=_year_locks_mock(),
     )
 
 
@@ -992,6 +1001,7 @@ class TestUpdateTracksForAlbum:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
         # No tracks should be updated since they already have the year
         assert not updated_tracks
@@ -1016,6 +1026,7 @@ class TestUpdateTracksForAlbum:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
         assert len(updated_tracks) == 2
         assert len(changes_log) == 2
@@ -1767,6 +1778,7 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
 
         # The change entry should have year_set_by_mgu set correctly

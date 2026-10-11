@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -594,7 +595,7 @@ class TestGetCsvFieldnames:
     def test_field_count(self) -> None:
         """Test correct number of fields."""
         result = _get_csv_fieldnames()
-        assert len(result) == 13
+        assert len(result) == 14  # the reason column joined the twelve fields and the timestamp
 
 
 class TestSaveUnifiedChangesReport:
@@ -934,3 +935,25 @@ class TestIntegration:
             reader = csv.DictReader(f)
             rows = list(reader)
         assert len(rows) == 3
+
+
+def test_the_report_keeps_the_reason_of_a_change(tmp_path: Path) -> None:
+    """A later reader can tell a pipeline write from an outside change the tool corrected."""
+    report = tmp_path / "changes.csv"
+    entry = ChangeLogEntry(
+        timestamp="2026-10-11 12:00:00",
+        change_type="year_update",
+        track_id="1",
+        artist="In Flames",
+        album_name="Battles",
+        track_name="Wallflower",
+        year_before_mgu="2019",
+        year_set_by_mgu="2016",
+        reason="outside_change",
+    )
+
+    save_changes_report(changes=[entry], file_path=str(report), console_logger=logging.getLogger("t"), error_logger=logging.getLogger("t"))
+
+    with report.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["reason"] == "outside_change"

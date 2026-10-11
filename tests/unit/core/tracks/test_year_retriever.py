@@ -7,6 +7,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.models.protocols import AnalyticsProtocol
@@ -26,6 +27,14 @@ from tests.mocks.protocol_mocks import (
 
 if TYPE_CHECKING:
     from core.models.track_models import AppConfig
+
+
+def _year_locks_mock() -> MagicMock:
+    """No album is locked."""
+    locks = MagicMock()
+    locks.get_locked_year = MagicMock(return_value=None)
+    locks.lock = AsyncMock()
+    return locks
 
 
 class _MockLogger:
@@ -142,6 +151,7 @@ class TestYearRetrieverAllure:
             analytics=cast(AnalyticsProtocol, cast(object, mock_analytics)),
             config=test_config,
             dry_run=dry_run,
+            year_locks=_year_locks_mock(),
         )
 
     @pytest.mark.parametrize(
@@ -208,6 +218,7 @@ class TestYearRetrieverAllure:
             analytics=cast(AnalyticsProtocol, cast(object, _MockAnalytics())),
             config=config,
             dry_run=True,
+            year_locks=_year_locks_mock(),
         )
         assert retriever.track_processor is mock_track_processor
         assert retriever.cache_service is mock_cache_service
@@ -485,6 +496,7 @@ class TestYearRetrieverAllure:
             year="2000",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
 
         assert [track.id for track in updated_tracks] == ["success_001"]

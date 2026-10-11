@@ -9,7 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.year_update import YearUpdateService
+from core.models.cache_types import LockSource
 from core.models.track_models import ChangeLogEntry, TrackDict
+from core.models.year_repair import _build_year_change_entry
 from tests.factories import create_test_app_config
 
 if TYPE_CHECKING:
@@ -25,7 +27,10 @@ def mock_track_processor() -> MagicMock:
 @pytest.fixture
 def mock_year_retriever() -> MagicMock:
     """Create mock year retriever."""
-    return MagicMock()
+    retriever = MagicMock()
+    retriever.held_back_tracks = []
+    retriever.get_last_updated_tracks = MagicMock(return_value=[])
+    return retriever
 
 
 @pytest.fixture
@@ -41,12 +46,23 @@ def mock_config() -> AppConfig:
 
 
 @pytest.fixture
+def mock_year_locks() -> MagicMock:
+    """Create mock year lock service."""
+    locks = MagicMock()
+    locks.lock = AsyncMock()
+    locks.unlock = AsyncMock(return_value=True)
+    locks.get_locked_year = MagicMock(return_value=None)
+    return locks
+
+
+@pytest.fixture
 def service(
     *,
     mock_track_processor: MagicMock,
     mock_year_retriever: MagicMock,
     mock_snapshot_manager: MagicMock,
     mock_config: AppConfig,
+    mock_year_locks: MagicMock,
     console_logger: logging.Logger,
     error_logger: logging.Logger,
 ) -> YearUpdateService:
@@ -58,6 +74,8 @@ def service(
         config=mock_config,
         console_logger=console_logger,
         error_logger=error_logger,
+        year_locks=mock_year_locks,
+        dry_run=False,
     )
 
 
@@ -131,6 +149,8 @@ class TestYearUpdateServiceInit:
             console_logger=console_logger,
             error_logger=error_logger,
             cleaning_service=mock_cleaning,
+            year_locks=MagicMock(),
+            dry_run=False,
         )
         assert service._cleaning_service is mock_cleaning
 
@@ -153,6 +173,8 @@ class TestYearUpdateServiceInit:
             config=mock_config,
             console_logger=console_logger,
             error_logger=error_logger,
+            year_locks=MagicMock(),
+            dry_run=False,
             artist_renamer=mock_renamer,
         )
         assert service._artist_renamer is mock_renamer
@@ -546,7 +568,7 @@ class TestUpdateAllYearsWithLogs:
 
         await service.update_all_years_with_logs(tracks=sample_tracks, force=True)
 
-        mock_year_retriever.get_album_years_with_logs.assert_called_once_with(sample_tracks, force=True)
+        mock_year_retriever.get_album_years_with_logs.assert_called_once_with(sample_tracks, force=True, previous_years=None)
 
 
 class TestFormatRestoreTarget:
@@ -874,3 +896,399 @@ class TestRunRestoreReleaseYears:
             await service.run_restore_release_years()
 
         assert "0 tracks updated, 1 failed" in caplog.text
+
+
+class TestLockYear:
+    """lock_year writes the year through the pipeline's write path and records the lock."""
+
+    @pytest.mark.asyncio
+    async def test_writes_the_year_and_records_the_lock(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_retriever: MagicMock, mock_year_locks: MagicMock
+    ) -> None:
+        tracks = [
+            TrackDict(id="1", name="T", artist="In Flames", album="Battles", year="2016"),
+            TrackDict(id="2", name="U", artist="In Flames", album="Other", year="2016"),
+        ]
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=tracks)
+        mock_year_retriever.write_album_year = AsyncMock(return_value=([], []))
+
+        await service.run_lock_year("In Flames", "Battles", "2019")
+
+        call = mock_year_retriever.write_album_year.await_args
+        assert call is not None
+        kwargs = call.kwargs
+        assert [t.id for t in kwargs["album_tracks"]] == ["1"]
+        assert (kwargs["year"], kwargs["reason"]) == ("2019", "lock_restore")
+        mock_year_locks.lock.assert_awaited_once_with("In Flames", "Battles", "2019", source=LockSource.COMMAND)
+
+    @pytest.mark.asyncio
+    async def test_a_bad_year_writes_nothing(self, service: YearUpdateService, mock_year_retriever: MagicMock, mock_year_locks: MagicMock) -> None:
+        mock_year_retriever.write_album_year = AsyncMock()
+
+        await service.run_lock_year("A", "B", "19x")
+
+        mock_year_retriever.write_album_year.assert_not_awaited()
+        mock_year_locks.lock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_an_album_without_tracks_writes_nothing(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_locks: MagicMock
+    ) -> None:
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=[])
+
+        await service.run_lock_year("A", "B", "2001")
+
+        mock_year_locks.lock.assert_not_awaited()
+
+
+class TestUnlockYear:
+    """unlock_year removes the lock and says whether there was one."""
+
+    @pytest.mark.asyncio
+    async def test_unlock_reports_the_outcome(self, service: YearUpdateService, mock_year_locks: MagicMock, caplog: pytest.LogCaptureFixture) -> None:
+        mock_year_locks.unlock = AsyncMock(return_value=False)
+        with caplog.at_level(logging.WARNING):
+            await service.run_unlock_year("A", "B")
+        assert any("not locked" in record.message for record in caplog.records)
+
+
+class TestCommandsLockWhatTheyWrite:
+    """A command that writes a year is a person's decision; the next daemon run must not undo it."""
+
+    @pytest.mark.asyncio
+    async def test_revert_locks_the_reverted_albums(self, service: YearUpdateService, mock_year_locks: MagicMock) -> None:
+        entries = [
+            {"artist": "In Flames", "album": "Battles", "album_name": "Battles", "year_before_mgu": "2019", "year_set_by_mgu": "2016"},
+            {"artist": "In Flames", "album": "Battles", "album_name": "Battles", "year_before_mgu": "2019", "year_set_by_mgu": "2016"},
+        ]
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(2, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+        ):
+            await service.run_revert_years("In Flames", "Battles")
+
+        mock_year_locks.lock.assert_awaited_once_with("In Flames", "Battles", "2016", source=LockSource.COMMAND)
+
+    @pytest.mark.asyncio
+    async def test_restore_locks_the_restored_albums(self, service: YearUpdateService, mock_year_locks: MagicMock) -> None:
+        entry = ChangeLogEntry(
+            timestamp="t",
+            change_type="year_restored_from_release_year",
+            track_id="1",
+            artist="A",
+            album_name="B",
+            year_before_mgu="2010",
+            year_set_by_mgu="2004",
+        )
+        service._get_filtered_tracks_for_restore = AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2010")])
+        service._find_albums_needing_restoration = MagicMock(
+            return_value={("A", "B"): [(TrackDict(id="1", name="T", artist="A", album="B", year="2010"), "2004")]}
+        )
+        service._process_album_restorations = AsyncMock(return_value=([entry], 1, 0))
+        service._save_restore_changes_report = MagicMock()
+
+        await service.run_restore_release_years(artist="A", album="B")
+
+        mock_year_locks.lock.assert_awaited_once_with("A", "B", "2004", source=LockSource.COMMAND)
+
+    @pytest.mark.asyncio
+    async def test_revert_saves_the_report_before_locking(self, service: YearUpdateService, mock_year_locks: MagicMock) -> None:
+        """The report says what reached Music.app; a lock that cannot be written must not cost it."""
+        entries = [{"artist": "In Flames", "album": "Battles", "album_name": "Battles", "year_before_mgu": "2019", "year_set_by_mgu": "2016"}]
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(1, 0, entries))),
+            patch("app.year_update.save_changes_report") as mock_save,
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await service.run_revert_years("In Flames", "Battles")
+
+        mock_save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restore_saves_the_report_before_locking(self, service: YearUpdateService, mock_year_locks: MagicMock) -> None:
+        entry = ChangeLogEntry(
+            timestamp="t",
+            change_type="year_restored_from_release_year",
+            track_id="1",
+            artist="A",
+            album_name="B",
+            year_before_mgu="2010",
+            year_set_by_mgu="2004",
+        )
+        track = TrackDict(id="1", name="T", artist="A", album="B", year="2010")
+        service._get_filtered_tracks_for_restore = AsyncMock(return_value=[track])
+        service._find_albums_needing_restoration = MagicMock(return_value={("A", "B"): [(track, "2004")]})
+        service._process_album_restorations = AsyncMock(return_value=([entry], 1, 0))
+        service._save_restore_changes_report = MagicMock()
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+
+        with pytest.raises(OSError, match="disk full"):
+            await service.run_restore_release_years(artist="A", album="B")
+
+        service._save_restore_changes_report.assert_called_once()
+
+
+class TestLockFailuresReachTheConsole:
+    """The OSError goes to main's handler, which logs to the error log only; the person at the terminal must hear it too."""
+
+    @pytest.mark.asyncio
+    async def test_a_revert_whose_lock_failed_says_so(
+        self, service: YearUpdateService, mock_year_locks: MagicMock, console_logger: logging.Logger, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        entries = [{"artist": "In Flames", "album": "Battles", "album_name": "Battles", "year_before_mgu": "2019", "year_set_by_mgu": "2016"}]
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(1, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+            caplog.at_level(logging.WARNING, logger=console_logger.name),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await service.run_revert_years("In Flames", "Battles")
+
+        warnings = [record.getMessage() for record in caplog.records if record.name == console_logger.name and record.levelno == logging.WARNING]
+        assert any("not locked" in message and "In Flames - Battles" in message for message in warnings)
+
+    @pytest.mark.asyncio
+    async def test_every_album_left_unlocked_is_named(
+        self, service: YearUpdateService, mock_year_locks: MagicMock, console_logger: logging.Logger, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A restore over many albums: the person must learn which albums the next run may change back, not just the first."""
+        entries = [
+            {"artist": "A", "album": "B", "album_name": "B", "year_before_mgu": "2019", "year_set_by_mgu": "2016"},
+            {"artist": "C", "album": "D", "album_name": "D", "year_before_mgu": "2019", "year_set_by_mgu": "2004"},
+        ]
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(2, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+            caplog.at_level(logging.WARNING, logger=console_logger.name),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await service.run_revert_years("A", None)
+
+        warnings = [record.getMessage() for record in caplog.records if record.name == console_logger.name and record.levelno == logging.WARNING]
+        assert any("A - B" in message and "C - D" in message for message in warnings)
+
+    @pytest.mark.asyncio
+    async def test_a_lock_year_whose_lock_failed_says_nothing_was_written(
+        self,
+        *,
+        service: YearUpdateService,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_year_locks: MagicMock,
+        console_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2016")])
+        mock_year_retriever.write_album_year = AsyncMock(return_value=([], []))
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+
+        with caplog.at_level(logging.WARNING, logger=console_logger.name), pytest.raises(OSError, match="disk full"):
+            await service.run_lock_year("A", "B", "2019")
+
+        mock_year_retriever.write_album_year.assert_not_awaited()
+        assert any("nothing written" in record.getMessage() for record in caplog.records if record.name == console_logger.name)
+
+
+class TestLockYearLocksFirst:
+    """The lock goes on disk before Music.app is written: a write that fails after the lock is repaired by the next run's restore."""
+
+    @pytest.mark.asyncio
+    async def test_the_lock_is_recorded_before_the_write(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_retriever: MagicMock, mock_year_locks: MagicMock
+    ) -> None:
+        mock_track_processor.fetch_tracks_async = AsyncMock(
+            return_value=[TrackDict(id="1", name="T", artist="In Flames", album="Battles", year="2016")]
+        )
+        mock_year_retriever.write_album_year = AsyncMock(side_effect=OSError("Music.app gone"))
+
+        with pytest.raises(OSError, match=r"Music\.app gone"):
+            await service.run_lock_year("In Flames", "Battles", "2019")
+
+        mock_year_locks.lock.assert_awaited_once_with("In Flames", "Battles", "2019", source=LockSource.COMMAND)
+
+
+def _dry_service(
+    mock_track_processor: MagicMock,
+    mock_year_retriever: MagicMock,
+    mock_snapshot_manager: MagicMock,
+    mock_config: AppConfig,
+    mock_year_locks: MagicMock,
+) -> YearUpdateService:
+    return YearUpdateService(
+        track_processor=mock_track_processor,
+        year_retriever=mock_year_retriever,
+        snapshot_manager=mock_snapshot_manager,
+        config=mock_config,
+        console_logger=logging.getLogger("test.console"),
+        error_logger=logging.getLogger("test.error"),
+        year_locks=mock_year_locks,
+        dry_run=True,
+    )
+
+
+class TestLocksFollowTheYearStepsKey:
+    """A lock is only useful under the key the year step reads: the album artist, not the track artist."""
+
+    @pytest.mark.asyncio
+    async def test_revert_locks_the_album_artist_of_a_collaboration_track(self, service: YearUpdateService, mock_year_locks: MagicMock) -> None:
+        track = TrackDict(id="1", name="T", artist="In Flames feat. Someone", album="Battles", year="2019", album_artist="In Flames")
+        entries = [_build_year_change_entry(track, "2016")]
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(1, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+        ):
+            await service.run_revert_years("In Flames feat. Someone", "Battles")
+
+        mock_year_locks.lock.assert_awaited_once_with("In Flames", "Battles", "2016", source=LockSource.COMMAND)
+
+    @pytest.mark.asyncio
+    async def test_restore_locks_the_album_artist_of_a_collaboration_track(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_locks: MagicMock
+    ) -> None:
+        """Through the real grouping and write chain: the key the lock lands under is the album artist, not the track artist."""
+        track = TrackDict(id="1", name="T", artist="A feat. B", album="X", album_artist="A", year="2010", release_year="2004")
+        service._get_filtered_tracks_for_restore = AsyncMock(return_value=[track])
+        service._save_restore_changes_report = MagicMock()
+        mock_track_processor.update_track_async = AsyncMock(return_value=True)
+
+        await service.run_restore_release_years(artist="A")
+
+        mock_year_locks.lock.assert_awaited_once_with("A", "X", "2004", source=LockSource.COMMAND)
+
+    @pytest.mark.asyncio
+    async def test_lock_year_locks_the_written_tracks_album_artist(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_retriever: MagicMock, mock_year_locks: MagicMock
+    ) -> None:
+        tracks = [TrackDict(id="1", name="T", artist="In Flames feat. Someone", album="Battles", year="2016", album_artist="In Flames")]
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=tracks)
+        mock_year_retriever.write_album_year = AsyncMock(return_value=([], []))
+
+        await service.run_lock_year("In Flames", "Battles", "2019")
+
+        mock_year_locks.lock.assert_awaited_once_with("In Flames", "Battles", "2019", source=LockSource.COMMAND)
+
+
+class TestDryRunWritesNoLock:
+    """A dry run writes nothing, locks included."""
+
+    @pytest.mark.asyncio
+    async def test_lock_year_in_a_dry_run_only_says_what_it_would_lock(
+        self,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_snapshot_manager: MagicMock,
+        mock_config: AppConfig,
+        mock_year_locks: MagicMock,
+    ) -> None:
+        service = _dry_service(mock_track_processor, mock_year_retriever, mock_snapshot_manager, mock_config, mock_year_locks)
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2016")])
+        mock_year_retriever.write_album_year = AsyncMock(return_value=([], []))
+
+        await service.run_lock_year("A", "B", "2019")
+
+        mock_year_locks.lock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_revert_in_a_dry_run_locks_nothing(
+        self,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_snapshot_manager: MagicMock,
+        mock_config: AppConfig,
+        mock_year_locks: MagicMock,
+    ) -> None:
+        service = _dry_service(mock_track_processor, mock_year_retriever, mock_snapshot_manager, mock_config, mock_year_locks)
+        entries = [{"artist": "A", "album": "B", "album_name": "B", "album_artist": "A", "year_before_mgu": "2019", "year_set_by_mgu": "2016"}]
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(1, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+        ):
+            await service.run_revert_years("A", "B")
+
+        mock_year_locks.lock.assert_not_awaited()
+
+
+class TestHeldBackTracksKeepTheBaseline:
+    """Tracks the year step could not judge keep their old year in the snapshot, so the next run sees them again."""
+
+    @pytest.mark.asyncio
+    async def test_held_back_tracks_reach_the_snapshot(
+        self, service: YearUpdateService, mock_year_retriever: MagicMock, mock_snapshot_manager: MagicMock, mock_track_processor: MagicMock
+    ) -> None:
+        held = [TrackDict(id="1", name="T", artist="A", album="B", year="2016")]
+        mock_year_retriever.get_album_years_with_logs = AsyncMock(return_value=([], []))
+        mock_year_retriever.held_back_tracks = held
+        mock_track_processor.cache_service = MagicMock()
+
+        await service.update_all_years_with_logs([], force=False)
+
+        mock_snapshot_manager.update_tracks.assert_any_call(held)
+
+
+class TestUpdateYearsKeepsTheSnapshotInStep:
+    """update_years writes years the pipeline never sees; without the snapshot update the next cycle judges them as outside changes."""
+
+    @pytest.mark.asyncio
+    async def test_written_tracks_are_persisted_into_the_snapshot(
+        self, service: YearUpdateService, mock_track_processor: MagicMock, mock_year_retriever: MagicMock, mock_snapshot_manager: MagicMock
+    ) -> None:
+        tracks = [TrackDict(id="1", name="T", artist="A", album="B", year="2016")]
+        written = [TrackDict(id="1", name="T", artist="A", album="B", year="2019", year_set_by_mgu="2019")]
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=tracks)
+        mock_year_retriever.process_album_years = AsyncMock(return_value=True)
+        mock_year_retriever.get_last_updated_tracks = MagicMock(return_value=written)
+        mock_snapshot_manager.persist_updates = AsyncMock(return_value=True)
+
+        await service.run_update_years("A", force=False)
+
+        mock_snapshot_manager.persist_updates.assert_awaited_once_with(written)
+
+    @pytest.mark.asyncio
+    async def test_a_dry_run_persists_nothing(
+        self,
+        mock_track_processor: MagicMock,
+        mock_year_retriever: MagicMock,
+        mock_snapshot_manager: MagicMock,
+        mock_config: AppConfig,
+        mock_year_locks: MagicMock,
+    ) -> None:
+        service = _dry_service(mock_track_processor, mock_year_retriever, mock_snapshot_manager, mock_config, mock_year_locks)
+        mock_track_processor.fetch_tracks_async = AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2016")])
+        mock_year_retriever.process_album_years = AsyncMock(return_value=True)
+        mock_year_retriever.get_last_updated_tracks = MagicMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2019")])
+        mock_snapshot_manager.persist_updates = AsyncMock(return_value=True)
+
+        await service.run_update_years("A", force=False)
+
+        mock_snapshot_manager.persist_updates.assert_not_awaited()
+
+
+class TestUnlockYearFindsTheLock:
+    """unlock_year is typed by a person; it looks under the cleaned album name too and names the key a lock sits under."""
+
+    @pytest.mark.asyncio
+    async def test_names_the_album_artist_a_lock_sits_under(
+        self, service: YearUpdateService, mock_year_locks: MagicMock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from core.models.cache_types import YearLock
+
+        mock_year_locks.unlock = AsyncMock(return_value=False)
+        mock_year_locks.all_locks = MagicMock(
+            return_value=[YearLock(artist="In Flames", album="Battles", year="2019", locked_at=datetime.now(UTC), source=LockSource.DIALOG)]
+        )
+
+        with caplog.at_level(logging.WARNING):
+            await service.run_unlock_year("In Flames feat. Someone", "Battles")
+
+        assert any("locked under 'In Flames - Battles'" in record.message for record in caplog.records)

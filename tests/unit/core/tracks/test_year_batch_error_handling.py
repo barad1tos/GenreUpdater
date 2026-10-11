@@ -23,6 +23,8 @@ from tests.unit.core.tracks.conftest import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from core.models.track_models import ChangeLogEntry
     from core.models.types import TrackDict
 
@@ -226,9 +228,10 @@ class TestSequentialProcessingErrors:
             updated_tracks: list[TrackDict],
             changes_log: list[ChangeLogEntry],
             force: bool = False,
+            previous_years: Mapping[str, str] | None = None,
         ) -> None:
             """Simulate album processing that fails for 'Failing' album."""
-            _ = artist, album_tracks, updated_tracks, changes_log, force
+            _ = artist, album_tracks, updated_tracks, changes_log, force, previous_years
             if album == "Failing":
                 raise RuntimeError("boom")
             processed_albums.append(album)
@@ -266,9 +269,10 @@ class TestSequentialProcessingErrors:
             updated_tracks: list[TrackDict],
             changes_log: list[ChangeLogEntry],
             force: bool = False,
+            previous_years: Mapping[str, str] | None = None,
         ) -> None:
             """Count calls and raise for 'Failing' album."""
-            _ = artist, album_tracks, updated_tracks, changes_log, force
+            _ = artist, album_tracks, updated_tracks, changes_log, force, previous_years
             nonlocal call_count
             call_count += 1
             if album == "Failing":

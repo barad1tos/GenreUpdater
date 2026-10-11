@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from core.tracks.track_delta import carry_tool_record
+
 if TYPE_CHECKING:
     import logging
     from collections.abc import Iterable
@@ -134,6 +136,29 @@ class PipelineSnapshotManager:
             self._console_logger.warning("Failed to persist snapshot: %s", exc)
             return False
 
+    async def persist_updates(self, updated_tracks: list[TrackDict]) -> bool:
+        """Fold tracks a command wrote into the snapshot on disk, so the next pipeline run does not see them as outside changes.
+
+        Loads the disk snapshot, replaces the written tracks by id and persists; the library mtime is read afresh, since the
+        writes are part of the library now.
+
+        Args:
+            updated_tracks: Tracks as written, carrying their year record
+
+        Returns:
+            True when a snapshot existed and was updated, False when there was none to update
+        """
+        snapshot_service = self._track_processor.cache_manager.snapshot_service
+        on_disk = await snapshot_service.load_snapshot() if snapshot_service is not None else None
+        if not on_disk:
+            self._console_logger.debug("No disk snapshot to fold %d written tracks into", len(updated_tracks))
+            return False
+        self.set_snapshot(on_disk)
+        self.update_tracks(updated_tracks)
+        persisted = await self.persist_to_disk()
+        self.clear()
+        return persisted
+
     async def merge_smart_delta(
         self,
         snapshot_tracks: list[TrackDict],
@@ -185,7 +210,8 @@ class PipelineSnapshotManager:
             track_id = str(track.id)
             if track_id in removed_ids:
                 continue
-            merged_tracks.append(fetched_map.get(track_id, track))
+            fetched = fetched_map.get(track_id)
+            merged_tracks.append(carry_tool_record(fetched, track) if fetched is not None else track)
             seen_ids.add(track_id)
 
         for track_id, track in fetched_map.items():

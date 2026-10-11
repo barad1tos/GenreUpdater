@@ -79,6 +79,32 @@ def _add_revert_years_command(subparsers: _SubParsersAction) -> None:
     )
 
 
+def _add_lock_year_command(subparsers: _SubParsersAction) -> None:
+    """Add lock year command."""
+    parser = subparsers.add_parser(
+        "lock_year",
+        help="Write a year to an album and keep it: the year step never changes it again",
+        description=(
+            "Writes the year to every track of the album in Music.app and records the lock in csv/year_locks.csv. "
+            "Album artist or track artist; the lock is recorded under the album artist. unlock_year removes the lock."
+        ),
+    )
+    parser.add_argument("--artist", required=True, help="Album artist")
+    parser.add_argument("--album", required=True, help="Album name")
+    parser.add_argument("--year", required=True, help="Year to write and keep (four digits)")
+
+
+def _add_unlock_year_command(subparsers: _SubParsersAction) -> None:
+    """Add unlock year command."""
+    parser = subparsers.add_parser(
+        "unlock_year",
+        help="Remove an album's year lock; the year step may change its year again",
+        description="Removes the album's row from csv/year_locks.csv. Music.app is not touched.",
+    )
+    parser.add_argument("--artist", required=True, help="Album artist")
+    parser.add_argument("--album", required=True, help="Album name")
+
+
 def _add_restore_release_years_command(subparsers: _SubParsersAction) -> None:
     """Add restore release years command."""
     parser = subparsers.add_parser(
@@ -203,6 +229,10 @@ Examples:
 
         # Restore release years command
         _add_restore_release_years_command(subparsers)
+
+        # Year locks
+        _add_lock_year_command(subparsers)
+        _add_unlock_year_command(subparsers)
 
         # Verify database command
         CLI._add_verify_database_command(subparsers)

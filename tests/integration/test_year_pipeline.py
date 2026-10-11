@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
-from core.models.protocols import AnalyticsProtocol
 from tests.factories import create_mock_track_processor, create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
@@ -21,6 +21,14 @@ RARE_ALBUM_TRACKS: list[dict[str, Any]] = [
     {"id": "1", "name": "Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 10:00:00"},
     {"id": "2", "name": "Another Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 11:00:00"},
 ]
+
+
+def _year_locks_mock() -> MagicMock:
+    """No album is locked."""
+    locks = MagicMock()
+    locks.get_locked_year = MagicMock(return_value=None)
+    locks.lock = AsyncMock()
+    return locks
 
 
 def _written_years(track_processor: AsyncMock) -> list[tuple[str, str]]:
@@ -159,6 +167,7 @@ class TestYearPipelineIntegration:
             analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
+            year_locks=_year_locks_mock(),
         )
 
     @staticmethod
@@ -497,4 +506,40 @@ class TestYearPipelineNoProviderYear:
 
         assert await year_retriever.process_album_years(tracks) is True
         assert _written_years(track_processor) == sorted((str(i), "2016") for i in range(1, 14))
+        assert _failures_logged(year_retriever) == []
+
+
+async def _nobody_home(_threshold: int) -> bool | None:
+    """Stand in for the presence check: nobody is at the Mac, so a disputed change is applied without a dialog."""
+    return False
+
+
+class TestOutsideChangeEndToEnd:
+    """From the baseline the pipeline hands over to the row in the changes report: every hop of previous_years must carry."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sequential", [True, False])
+    async def test_a_disputed_outside_change_is_written_back_with_its_reason(self, sequential: bool) -> None:
+        tracks = TestYearPipelineIntegration.create_test_tracks(
+            [
+                {"id": "1", "name": "Song 1", "artist": "In Flames", "album": "Battles", "year": "2019"},
+                {"id": "2", "name": "Song 2", "artist": "In Flames", "album": "Battles", "year": "2019"},
+            ]
+        )
+        external_api = MockExternalApiService()
+        external_api.get_album_year_response = ("2016", True, 90, {"2016": 90})
+        track_processor = create_mock_track_processor()
+        year_retriever = TestYearPipelineIntegration.create_year_retriever(mock_track_processor=track_processor, mock_external_api=external_api)
+        year_retriever._drift_decider._is_present = _nobody_home
+        if sequential:
+            year_retriever.config.year_retrieval.rate_limits.concurrent_api_calls = 1
+
+        _, changes = await year_retriever.get_album_years_with_logs(tracks, previous_years={"1": "2016", "2": "2016"})
+
+        assert external_api.get_album_year_calls == [("In Flames", "Battles", None)]
+        assert _written_years(track_processor) == [("1", "2016"), ("2", "2016")]
+        assert [(change.track_id, change.year_before_mgu, change.year_set_by_mgu, change.reason) for change in changes] == [
+            ("1", "2019", "2016", "outside_change"),
+            ("2", "2019", "2016", "outside_change"),
+        ]
         assert _failures_logged(year_retriever) == []

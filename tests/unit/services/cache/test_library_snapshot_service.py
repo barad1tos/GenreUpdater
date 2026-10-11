@@ -40,6 +40,7 @@ class MockAppleScriptClient:
         """Initialize mock client."""
         self.apple_scripts_dir: str | None = "/mock/scripts"
         self._fetch_all_track_ids_result: list[str] | None = []
+        self._fetch_all_track_years_result: dict[str, str] = {}
         self._run_script_result: str | None = None
 
     async def initialize(self) -> None:
@@ -76,8 +77,19 @@ class MockAppleScriptClient:
         return self._fetch_all_track_ids_result or []
 
     def set_fetch_all_track_ids_result(self, result: list[str] | None) -> None:
-        """Set result for fetch_all_track_ids."""
+        """Set result for fetch_all_track_ids (the ids read as tracks without a year)."""
         self._fetch_all_track_ids_result = result
+        self._fetch_all_track_years_result = dict.fromkeys(result or [], "")
+
+    def set_fetch_all_track_years_result(self, result: dict[str, str]) -> None:
+        """Set result for fetch_all_track_years; the ids are its keys."""
+        self._fetch_all_track_years_result = result
+        self._fetch_all_track_ids_result = list(result)
+
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Fetch every editable track's id and year mock."""
+        _ = timeout
+        return self._fetch_all_track_years_result
 
     def set_run_script_result(self, result: str | None) -> None:
         """Set result for run_script."""
@@ -734,8 +746,8 @@ class TestComputeSmartDelta:
         assert "2" in result.removed_ids
 
     @pytest.mark.asyncio
-    async def test_skips_updated_detection_by_default(self, tmp_path_factory: pytest.TempPathFactory) -> None:
-        """Should skip updated detection when not using force mode."""
+    async def test_unchanged_years_mark_nothing_updated(self, tmp_path_factory: pytest.TempPathFactory) -> None:
+        """Tracks whose library year equals the snapshot's are not updated."""
         config = _make_config(tmp_path_factory)
         service = LibrarySnapshotService(config, logging.getLogger("test"))
         await service.initialize()
@@ -749,6 +761,26 @@ class TestComputeSmartDelta:
         result = await service.compute_smart_delta(mock_client)
         assert result is not None
         assert result.updated_ids == []
+        assert result.changed_years == {}
+
+    @pytest.mark.asyncio
+    async def test_a_year_that_differs_from_the_snapshot_marks_the_track_updated(self, tmp_path_factory: pytest.TempPathFactory) -> None:
+        """Smart Delta's fast mode sees a year Apple or a person changed, and remembers the snapshot's year for the year step."""
+        config = _make_config(tmp_path_factory)
+        service = LibrarySnapshotService(config, logging.getLogger("test"))
+        await service.initialize()
+        await service.save_snapshot(
+            [TrackDict(id="1", name="Alpha", artist="A", album="B", year="2016"), TrackDict(id="2", name="Beta", artist="A", album="B", year="2016")]
+        )
+
+        mock_client = MockAppleScriptClient()
+        mock_client.set_fetch_all_track_years_result({"1": "2019", "2": "2016"})
+
+        result = await service.compute_smart_delta(mock_client)
+
+        assert result is not None
+        assert result.updated_ids == ["1"]
+        assert result.changed_years == {"1": "2016"}
 
     @pytest.mark.asyncio
     async def test_due_full_scan_hands_over_to_the_bulk_fetch(self, tmp_path_factory: pytest.TempPathFactory) -> None:

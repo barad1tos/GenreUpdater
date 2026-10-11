@@ -5,6 +5,7 @@ This is a streamlined version that uses the new modular components.
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,16 +15,18 @@ from app.genre_update import GenreUpdateService
 from app.pipeline_snapshot import PipelineSnapshotManager
 from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
+from core.apple_script_names import NOTIFY_YEAR_CHANGES
 from core.logger import LogFormat, get_full_log_path
+from core.models.cache_types import SNAPSHOT_VERSION
 from core.models.metadata_utils import is_music_app_running
+from core.models.track_status import can_edit_metadata
 from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
 from core.tracks.incremental_filter import IncrementalFilterService
-from core.tracks.track_delta import has_identity_changed
+from core.tracks.track_delta import carry_tool_record, find_changed_years, has_identity_changed, year_text
 from core.tracks.track_processor import TrackProcessor
-from core.models.cache_types import SNAPSHOT_VERSION
 from core.tracks.year_retriever import YearRetriever
 from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import (
@@ -33,11 +36,16 @@ from metrics.change_reports import (
 )
 
 if TYPE_CHECKING:
-    from core.models.track_models import ChangeLogEntry, TrackDict
     from datetime import datetime
+
+    from core.models.cache_types import PendingAlbumEntry
+    from core.models.track_models import ChangeLogEntry, TrackDict
     from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
-    from core.models.cache_types import PendingAlbumEntry
+
+
+NOTIFIED_ALBUMS = 3
+NOTIFY_TIMEOUT_SECONDS = 15
 
 
 class LibraryFetchError(RuntimeError):
@@ -104,6 +112,7 @@ class MusicUpdater:
             analytics=deps.analytics,
             config=deps.app_config,
             dry_run=deps.dry_run,
+            year_locks=deps.year_lock_service,
         )
 
         self.database_verifier = DatabaseVerifier(
@@ -149,6 +158,8 @@ class MusicUpdater:
             error_logger=deps.error_logger,
             cleaning_service=self.cleaning_service,
             artist_renamer=self.artist_renamer,
+            year_locks=deps.year_lock_service,
+            dry_run=deps.dry_run,
         )
 
         # Genre update service
@@ -161,6 +172,9 @@ class MusicUpdater:
             cleaning_service=self.cleaning_service,
             artist_renamer=self.artist_renamer,
         )
+
+        # Track id → the year the last snapshot held, for tracks whose year now differs; the year step reads it
+        self._previous_years: dict[str, str] = {}
 
         # Dry run context
         self.dry_run_mode = ""
@@ -273,6 +287,14 @@ class MusicUpdater:
         """
         await self.year_service.run_restore_release_years(artist, album, threshold)
 
+    async def run_lock_year(self, artist: str, album: str, year: str) -> None:
+        """Write a year to an album and lock it (lock_year command)."""
+        await self.year_service.run_lock_year(artist, album, year)
+
+    async def run_unlock_year(self, artist: str, album: str) -> None:
+        """Remove an album's year lock (unlock_year command)."""
+        await self.year_service.run_unlock_year(artist, album)
+
     async def _save_clean_results(self, changes_log: list[ChangeLogEntry]) -> None:
         """Save cleaning results to CSV and changes report.
 
@@ -322,8 +344,8 @@ class MusicUpdater:
         """
         await self.genre_service.run_update_genres(artist, force)
 
-    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
-        """Verify and update a single pending album.
+    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> list[TrackDict] | None:
+        """Write the providers' year to a pending album and take it off the pending list.
 
         Args:
             artist: Artist name
@@ -331,22 +353,19 @@ class MusicUpdater:
             year: Year string found from API
 
         Returns:
-            True if verification succeeded, False otherwise
+            The tracks written (empty when every editable track already carried the year), or None when the album was not verified
 
         """
         tracks = await self.track_processor.fetch_tracks_async(artist=artist)
         album_tracks = [t for t in tracks if t.get("album", "") == album]
         if not album_tracks:
-            return False
+            return None
 
-        successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
-            tracks=album_tracks,
-            year=year,
-            artist=artist,
-            album=album,
-        )
-        if successful <= 0:
-            return False
+        written, _ = await self.year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="pipeline")
+        # The writer skips prerelease tracks, so only the editable ones say whether the album is done; none means not yet
+        editable = [track for track in album_tracks if can_edit_metadata(track.track_status)]
+        if not written and (not editable or any(year_text(track.year) != year for track in editable)):
+            return None
 
         await self.deps.pending_verification_service.remove_from_pending(artist, album)
         self.console_logger.debug(
@@ -355,7 +374,7 @@ class MusicUpdater:
             artist,
             album,
         )
-        return True
+        return written
 
     async def run_verify_pending(self, _force: bool = False) -> None:
         """Re-verify albums that are pending year verification.
@@ -401,25 +420,34 @@ class MusicUpdater:
         verified_count = 0
         failed_count = 0
         unavailable_count = 0
-        for entry in albums_to_verify:
-            try:
-                year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
-            except YearLookupFailedError:
-                # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
-                failed_count += 1
-                continue
-            except YearLookupUnavailableError:
-                # No provider answered: the entry stays as it was and is checked again on the next run
-                unavailable_count += 1
-                continue
-            if not year_str:
-                failed_count += 1
-                continue
+        written: list[TrackDict] = []
+        try:
+            for entry in albums_to_verify:
+                try:
+                    year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+                except YearLookupFailedError:
+                    # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
+                    failed_count += 1
+                    continue
+                except YearLookupUnavailableError:
+                    # No provider answered: the entry stays as it was and is checked again on the next run
+                    unavailable_count += 1
+                    continue
+                if not year_str:
+                    failed_count += 1
+                    continue
 
-            if await self._verify_single_pending_album(entry.artist, entry.album, year_str):
-                verified_count += 1
-            else:
-                failed_count += 1
+                album_written = await self._verify_single_pending_album(entry.artist, entry.album, year_str)
+                if album_written is None:
+                    failed_count += 1
+                else:
+                    verified_count += 1
+                    written.extend(album_written)
+        finally:
+            # The pipeline never saw these writes; without them in the snapshot the next run judges them as outside changes.
+            # One disk round trip for the run, whatever stopped the loop: the snapshot holds the whole library
+            if written and not self.deps.dry_run:
+                await self.snapshot_manager.persist_updates(written)
 
         # A run that could not check every due album must not postpone the next one
         if unavailable_count == 0:
@@ -486,6 +514,7 @@ class MusicUpdater:
             force = True
         self.console_logger.info("Starting main update pipeline")
         self.snapshot_manager.reset()
+        self._previous_years = {}
 
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
@@ -545,6 +574,8 @@ class MusicUpdater:
             await self.snapshot_manager.persist_to_disk()
 
         self.snapshot_manager.clear()
+        # After the report and the snapshot are safe: a failed notification must not cost the run its state
+        await self._notify_outside_changes(year_changes)
         self.console_logger.info("Main update pipeline completed successfully")
 
     async def _handle_empty_library_fetch(self, *, force: bool, fresh: bool) -> None:
@@ -630,6 +661,7 @@ class MusicUpdater:
             if delta is None:
                 self.console_logger.info("Smart Delta handed over to a full library scan")
                 return None
+            self._previous_years = dict(delta.changed_years)
 
             snapshot_tracks = await snapshot_service.load_snapshot()
             if snapshot_tracks is None:
@@ -682,6 +714,25 @@ class MusicUpdater:
         if metadata is None or metadata.version != SNAPSHOT_VERSION:
             return None
         return await snapshot_service.load_snapshot()
+
+    def _adopt_rescan_baseline(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> list[TrackDict]:
+        """Compare a bulk rescan with the last snapshot: note the years that changed and carry the tool's record onto re-read tracks.
+
+        Args:
+            previous: The last snapshot, or None on a first run or after a format change
+            current: The tracks the rescan read
+
+        Returns:
+            The rescan's tracks, those the tool once wrote carrying their `year_set_by_mgu`/`year_before_mgu`
+
+        """
+        if not previous:
+            return current
+        previous_map = {str(track.id): track for track in previous if track.id}
+        self._previous_years = find_changed_years(
+            {track_id: track.year for track_id, track in previous_map.items()}, {str(track.id): track.year for track in current if track.id}
+        )
+        return [carry_tool_record(track, previous_map[str(track.id)]) if str(track.id) in previous_map else track for track in current]
 
     async def _emit_rescan_events(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> None:
         """Emit cache invalidation for tracks a bulk rescan no longer finds, or finds renamed, since the last snapshot.
@@ -788,6 +839,7 @@ class MusicUpdater:
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Smart Delta already declined the snapshot
             )
+            tracks = self._adopt_rescan_baseline(previous_tracks, tracks)
             await self._emit_rescan_events(previous_tracks, tracks)
             self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)
             return tracks
@@ -863,7 +915,37 @@ class MusicUpdater:
         Returns:
             List of change log entries
         """
-        return await self.year_service.update_all_years_with_logs(tracks, force, fresh)
+        return await self.year_service.update_all_years_with_logs(tracks, force, fresh, previous_years=self._previous_years)
+
+    async def _notify_outside_changes(self, changes: list[ChangeLogEntry]) -> None:
+        """Tell the person at the Mac which years the run changed back after they changed outside the tool, and how to undo.
+
+        One notification per run, through `notify_year_changes.applescript` (the text travels as arguments). The changes report
+        holds every row with reason `outside_change`; `lock_year` with the old year undoes one album and locks it.
+
+        Args:
+            changes: The year step's change log entries
+        """
+        applied = [change for change in changes if change.reason == "outside_change"]
+        if not applied:
+            return
+        albums: dict[tuple[str, str], tuple[str, str]] = {}
+        for change in applied:
+            albums.setdefault((change.artist, change.album_name), (change.year_before_mgu or "none", change.year_set_by_mgu or "none"))
+        named = "; ".join(f"{artist} - {album} ({old} -> {new})" for (artist, album), (old, new) in list(albums.items())[:NOTIFIED_ALBUMS])
+        more = f" and {len(albums) - NOTIFIED_ALBUMS} more" if len(albums) > NOTIFIED_ALBUMS else ""
+        title = f"Genre Updater: {len(albums)} album{'s' if len(albums) != 1 else ''} changed back"
+        message = f"{named}{more}. Undo one with: main.py lock_year --artist … --album … --year <old> (rows in changes_report.csv)"
+        try:
+            shown = await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
+        except (OSError, subprocess.SubprocessError) as error:
+            # The writes and the report are already safe; the person still has the changes report
+            self.error_logger.exception("The notification about %d changed-back albums could not be shown: %s", len(albums), error)
+            self.console_logger.warning("Notification not shown (%s); the changes report has the rows", type(error).__name__)
+            return
+        if shown is None:
+            # The client answers None when it refuses to run a script or its retries are spent; nothing is raised
+            self.console_logger.warning("Notification not shown (the script did not run); the changes report has the rows")
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.

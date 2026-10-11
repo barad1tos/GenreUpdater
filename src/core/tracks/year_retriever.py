@@ -19,11 +19,13 @@ from .year_batch import YearBatchProcessor
 from .year_consistency import DOMINANCE_MIN_SHARE as MAJORITY_SHARE
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
+from .year_drift import YearDriftDecider
 from .year_fallback import YearFallbackHandler
 from .year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
     import logging
+    from collections.abc import Mapping
 
     from core.models.protocols import (
         AnalyticsProtocol,
@@ -33,6 +35,7 @@ if TYPE_CHECKING:
     )
     from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
     from core.retry_handler import DatabaseRetryHandler
+    from services.year_locks import YearLockService
 
     from .track_processor import TrackProcessor
 
@@ -55,6 +58,7 @@ class YearRetriever:
         analytics: Service for performance tracking
         config: Typed application configuration
         dry_run: Whether to run in dry-run mode
+        year_locks: Albums whose year a person chose; restored, never queried
 
     Attributes:
         MIN_VALID_YEAR: Minimum year considered valid
@@ -94,6 +98,7 @@ class YearRetriever:
         analytics: AnalyticsProtocol,
         config: AppConfig,
         dry_run: bool = False,
+        year_locks: YearLockService,
     ) -> None:
         # Store references
         self.track_processor = track_processor
@@ -144,6 +149,11 @@ class YearRetriever:
             config=self.config,
         )
 
+        # A disputed outside change is put to the person at the Mac through the AppleScript client
+        self._drift_decider = YearDriftDecider(
+            ap_client=track_processor.ap_client, config=self.config, console_logger=self.console_logger, dry_run=self.dry_run
+        )
+
         # Initialize batch processor
         self._batch_processor = YearBatchProcessor(
             year_determinator=self._year_determinator,
@@ -154,6 +164,8 @@ class YearRetriever:
             config=self.config,
             analytics=self.analytics,
             dry_run=self.dry_run,
+            year_locks=year_locks,
+            drift_decider=self._drift_decider,
         )
 
     # Public API - Main Entry Points
@@ -241,6 +253,7 @@ class YearRetriever:
         self,
         tracks: list[TrackDict],
         force: bool = False,
+        previous_years: Mapping[str, str] | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Get album year updates with change logs.
 
@@ -249,12 +262,13 @@ class YearRetriever:
         Args:
             tracks: Tracks to process
             force: If True, bypass skip checks and re-query API for all albums
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since (outside changes)
 
         Returns:
             Tuple of (updated_tracks, change_logs)
 
         """
-        return await self._update_album_years_logic(tracks, force=force)
+        return await self._update_album_years_logic(tracks, force=force, previous_years=previous_years)
 
     @track_instance_method("year_discogs_update")
     async def update_years_from_discogs(
@@ -280,6 +294,11 @@ class YearRetriever:
         """Get a list of dry-run actions that would have been performed."""
         return self._batch_processor.get_dry_run_actions()
 
+    @property
+    def held_back_tracks(self) -> list[TrackDict]:
+        """Tracks the last run could not judge, at the snapshot's year, so the baseline does not move."""
+        return self._batch_processor.held_back_tracks
+
     def get_last_updated_tracks(self) -> list[TrackDict]:
         """Get the list of tracks updated in the last run."""
         return self._last_updated_tracks
@@ -299,12 +318,14 @@ class YearRetriever:
         self,
         tracks: list[TrackDict],
         force: bool = False,
+        previous_years: Mapping[str, str] | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Core logic for updating album years.
 
         Args:
             tracks: Tracks to process
             force: If True, bypass skip checks and re-query API for all albums
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since
 
         Returns:
             Tuple of (updated_tracks, change_logs)
@@ -319,7 +340,7 @@ class YearRetriever:
         changes_log: list[ChangeLogEntry] = []
 
         # Process albums in batches
-        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log, force=force)
+        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log, force=force, previous_years=previous_years)
 
         return updated_tracks, changes_log
 
@@ -341,6 +362,23 @@ class YearRetriever:
     def _extract_release_years(album_tracks: list[TrackDict]) -> list[str]:
         """Extract release years. Delegates to YearDeterminator."""
         return YearDeterminator.extract_release_years(album_tracks)
+
+    async def write_album_year(
+        self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
+        """Write `year` to the album's tracks through the pipeline's write path. Delegates to YearBatchProcessor.
+
+        Args:
+            artist: Album artist
+            album: Album name
+            album_tracks: The album's tracks
+            year: The year to write
+            reason: The changes_report.csv reason
+
+        Returns:
+            The tracks as written, carrying their year record, and one change entry per track written
+        """
+        return await self._batch_processor.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason=reason)
 
     async def update_album_tracks_bulk_async(
         self,

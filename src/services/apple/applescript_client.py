@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from core.analytics_decorator import track_instance_method
 from core.logger import LogFormat, spinner
 from core.models.protocols import AppleScriptClientProtocol
-from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR, parse_id_year_records
 from services.apple.applescript_executor import AppleScriptExecutor
 from services.apple.file_validator import AppleScriptFileValidator
 from services.apple.rate_limiter import AppleScriptRateLimiter
@@ -390,10 +390,10 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
     @track_instance_method("applescript_fetch_all_ids")
     async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
-        """Fetch just track IDs from Music.app (lightweight operation).
+        """Fetch just track IDs from Music.app: the key list of the same bulk read as fetch_all_track_years.
 
-        This is used by Smart Delta to detect new/removed tracks without
-        fetching full metadata. Much faster than fetching all track data.
+        Rescans and cache invalidation use it to tell new and removed tracks apart without fetching full metadata;
+        Smart Delta reads fetch_all_track_years itself.
 
         Args:
             timeout: Timeout in seconds for script execution
@@ -402,12 +402,27 @@ class AppleScriptClient(AppleScriptClientProtocol):
             List of track ID strings
 
         """
+        return list(await self.fetch_all_track_years(timeout))
+
+    @track_instance_method("applescript_fetch_all_years")
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Fetch the persistent ID and year of every editable track (one bulk read of about 2 s on 33K tracks).
+
+        Smart Delta compares the years with its snapshot to notice years changed outside the tool.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            Persistent ID → year text ("" when the track has no year), in library order; empty when the read failed
+
+        """
         if timeout is None:
             timeout = self.config.applescript_timeouts.default or self.config.applescript_timeout_seconds
 
         timeout_float = float(timeout) if timeout is not None else DEFAULT_FETCH_IDS_TIMEOUT_SECONDS
 
-        async with spinner("Fetching all track IDs from Music.app..."):
+        async with spinner("Fetching all track IDs and years from Music.app..."):
             raw_output = await self.run_script(
                 FETCH_TRACK_IDS,
                 timeout=timeout_float,
@@ -415,18 +430,16 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
         if not raw_output:
             self.console_logger.warning("No track IDs returned from Music.app")
-            return []
+            return {}
 
         # Check for error from AppleScript
         if raw_output.startswith("ERROR:"):
             self.error_logger.error("AppleScript error: %s", raw_output[6:])
-            return []
+            return {}
 
-        # Parse comma-separated IDs
-        track_ids = [id_str.strip() for id_str in raw_output.split(",") if id_str.strip()]
-
-        self.console_logger.info("Fetched %d track IDs", len(track_ids))
-        return track_ids
+        years = parse_id_year_records(raw_output)
+        self.console_logger.info("Fetched %d track IDs", len(years))
+        return years
 
     @staticmethod
     def _parse_track_output(raw_output: str) -> list[dict[str, str]]:

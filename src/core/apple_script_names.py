@@ -12,6 +12,8 @@ FETCH_TRACK_IDS: str = "fetch_track_ids.applescript"
 FETCH_TRACKS_BY_IDS: str = "fetch_tracks_by_ids.applescript"
 UPDATE_PROPERTY: str = "update_property.applescript"
 BATCH_UPDATE_TRACKS: str = "batch_update_tracks.applescript"
+ASK_YEAR_DRIFT: str = "ask_year_drift.applescript"
+NOTIFY_YEAR_CHANGES: str = "notify_year_changes.applescript"
 
 # Scripts that return track data (used for log formatting in executor)
 TRACK_DATA_SCRIPTS: tuple[str, ...] = (FETCH_TRACKS, FETCH_TRACKS_BY_IDS)

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from core.models.track_models import TrackDict
 
@@ -14,10 +14,14 @@ __all__ = [
     "FIELD_SEPARATOR",
     "LINE_SEPARATOR",
     "TrackDelta",
+    "carry_tool_record",
     "compute_track_delta",
+    "find_changed_years",
     "has_identity_changed",
     "has_track_changed",
+    "parse_id_year_records",
     "split_applescript_rows",
+    "year_text",
 ]
 
 # AppleScript output delimiters (ASCII Record/Unit Separators)
@@ -46,6 +50,25 @@ def split_applescript_rows(raw: str, field_separator: str) -> list[str]:
     return raw.splitlines()
 
 
+def year_text(value: str | int | None) -> str:
+    """Return the year as the library reports it: "" for an unset year (None, "", "0" or 0)."""
+    text = "" if value is None else str(value).strip()
+    return "" if text == "0" else text
+
+
+def parse_id_year_records(raw: str) -> dict[str, str]:
+    """Parse `fetch_track_ids.applescript` output (persistent ID, year per record) into id → year text.
+
+    Records are separated by LINE_SEPARATOR, the two fields by FIELD_SEPARATOR; a record without an id is dropped.
+    """
+    years: dict[str, str] = {}
+    for record in raw.split(LINE_SEPARATOR):
+        raw_id, _, year = record.partition(FIELD_SEPARATOR)
+        if track_id := raw_id.strip():
+            years[track_id] = year_text(year)
+    return years
+
+
 @dataclass(slots=True)
 class TrackDelta:
     """Delta between CSV snapshot and current Music.app library."""
@@ -53,6 +76,8 @@ class TrackDelta:
     new_ids: list[str]
     updated_ids: list[str]
     removed_ids: list[str]
+    changed_years: dict[str, str] = field(default_factory=dict)
+    """Track id → the year the stored side held, for the tracks in `updated_ids` whose current year differs from it (both producers fill it)."""
 
     def has_updates(self) -> bool:
         """Return True when new or modified tracks are present."""
@@ -114,7 +139,8 @@ def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
 
     # Check for changes in metadata fields relevant to genre/year processing
     genre_changed = _field_changed(current_genre, stored_genre)
-    year_changed = _field_changed(current_year, stored_year)
+    # A year Apple emptied is a change too, or the clear would never open the incremental gate
+    year_changed = year_text(current_year) != year_text(stored_year)
 
     return bool(track_status_changed or genre_changed or year_changed)
 
@@ -144,6 +170,26 @@ def has_identity_changed(current: TrackDict, stored: TrackDict) -> bool:
     return any((now or "").strip().lower() != (before or "").strip().lower() for now, before in names)
 
 
+def find_changed_years(previous_years: Mapping[str, str | None], current_years: Mapping[str, str | None]) -> dict[str, str]:
+    """Return id → previous year text for every track in both maps whose year text differs."""
+    return {
+        track_id: year_text(previous)
+        for track_id, previous in previous_years.items()
+        if track_id in current_years and year_text(previous) != year_text(current_years[track_id])
+    }
+
+
+def carry_tool_record(current: TrackDict, previous: TrackDict) -> TrackDict:
+    """Return `current` with the year record of its previous snapshot entry when a fresh read of Music.app lacks it.
+
+    `year_set_by_mgu` and `year_before_mgu` are the tool's own fields; Music.app never returns them, so a re-fetched track
+    would forget that the tool wrote its year.
+    """
+    if current.year_set_by_mgu or not previous.year_set_by_mgu:
+        return current
+    return current.copy(year_set_by_mgu=previous.year_set_by_mgu, year_before_mgu=current.year_before_mgu or previous.year_before_mgu)
+
+
 def compute_track_delta(
     current_tracks: Iterable[TrackDict],
     existing_map: dict[str, TrackDict],
@@ -164,4 +210,7 @@ def compute_track_delta(
         if has_track_changed(current, stored):
             updated_ids.append(track_id)
 
-    return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
+    changed_years = find_changed_years(
+        {track_id: track.year for track_id, track in existing_map.items()}, {track_id: track.year for track_id, track in current_map.items()}
+    )
+    return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids, changed_years=changed_years)
