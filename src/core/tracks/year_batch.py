@@ -270,6 +270,9 @@ class YearBatchProcessor:
             force: If True, bypass skip checks and re-query APIs.
             previous_years: Track id → the year the last snapshot held, for tracks whose year changed since.
 
+        Raises:
+            BaseException: Whatever the album raised, once its outside change is held back for the next run.
+
         """
         album_key, album_tracks = album_entry
         artist_name, album_name = album_key
@@ -286,6 +289,10 @@ class YearBatchProcessor:
                     force=force,
                     previous_years=previous_years,
                 )
+        except BaseException:
+            # The batch carries on without this album; an outside change it had must not be adopted by the snapshot on the way
+            self._hold_back(find_outside_changes(album_tracks, previous_years))
+            raise
         finally:
             progress.update(task_id, advance=1)
 

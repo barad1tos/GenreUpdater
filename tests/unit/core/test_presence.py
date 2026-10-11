@@ -54,3 +54,14 @@ async def test_a_hung_ioreg_is_killed_and_reads_as_unknown() -> None:
         assert await hid_idle_seconds() is None
 
     process.kill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_a_process_that_ended_before_the_kill_still_reads_as_unknown() -> None:
+    process = MagicMock()
+    process.communicate = AsyncMock(side_effect=TimeoutError)
+    process.wait = AsyncMock()
+    process.kill = MagicMock(side_effect=ProcessLookupError)
+
+    with patch("core.presence.asyncio.create_subprocess_exec", AsyncMock(return_value=process)):
+        assert await hid_idle_seconds() is None

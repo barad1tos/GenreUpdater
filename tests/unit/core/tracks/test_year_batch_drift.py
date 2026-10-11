@@ -202,6 +202,20 @@ async def test_an_unavailable_lookup_holds_the_snapshot_at_the_old_year() -> Non
 
 
 @pytest.mark.asyncio
+async def test_an_album_that_raises_while_judged_is_held_back() -> None:
+    """The concurrent path skips an album that raised; its outside change must not be adopted by the snapshot on the way."""
+    processor, _, _, decider, writer = _processor()
+    decider.decide = AsyncMock(side_effect=RuntimeError("boom"))
+    processor.config.year_retrieval.processing.adaptive_delay = True
+    tracks = _album("2019", "2019")
+
+    await processor.process_albums_in_batches({("In Flames", "Battles"): tracks}, [], [], previous_years={"1": "2016", "2": "2016"})
+
+    writer.assert_not_awaited()
+    assert [(t.id, t.year) for t in processor.held_back_tracks] == [("1", "2016"), ("2", "2016")]
+
+
+@pytest.mark.asyncio
 async def test_a_new_batch_forgets_the_held_back_tracks() -> None:
     processor, _, _, _, _ = _processor(provider_error=YearLookupUnavailableError("down"))
     await _run(processor, _album("2019"), previous_years={"1": "2016"})

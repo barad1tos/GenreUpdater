@@ -7,6 +7,7 @@ Music.app writes nothing that tells a manual edit from Apple's own change; prese
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -40,7 +41,9 @@ async def hid_idle_seconds() -> float | None:
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), timeout=IOREG_TIMEOUT_SECONDS)
     except TimeoutError:
-        process.kill()
+        # The process may have ended between the timeout and the kill
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
         await process.wait()
         return None
     return parse_hid_idle_seconds(stdout.decode(errors="replace"))

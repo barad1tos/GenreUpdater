@@ -447,6 +447,9 @@ class YearUpdateService:
             artist: Album artist, as the year step groups albums
             album: Album name (its cleaned form is matched too)
             year: Four-digit year
+
+        Raises:
+            OSError: The lock file could not be written; nothing was written to Music.app
         """
         year = year.strip()
         if not is_lock_year(year):
@@ -463,7 +466,13 @@ class YearUpdateService:
                 self._console_logger.info(
                     "Locking '%s - %s' (the album artist) for the typed '%s - %s'", group_artist, group_album, artist, album, extra=PLAIN_TEXT
                 )
-            await self._lock_album(group_artist, group_album, year)
+            try:
+                await self._lock_album(group_artist, group_album, year)
+            except OSError:
+                self._console_logger.warning(
+                    "The lock on '%s - %s' could not be written; nothing written to Music.app", group_artist, group_album, extra=PLAIN_TEXT
+                )
+                raise
         _, changes = await self._year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="lock_restore")
         self._console_logger.info(
             "%s'%s - %s' locked at %s; %d tracks written", "DRY-RUN: " if self._dry_run else "", artist, album, year, len(changes), extra=PLAIN_TEXT
@@ -520,7 +529,17 @@ class YearUpdateService:
             if artist and album and year:
                 years[(artist, album)][year] += 1
         for (artist, album), counter in years.items():
-            await self._lock_album(artist, album, counter.most_common(1)[0][0])
+            try:
+                await self._lock_album(artist, album, counter.most_common(1)[0][0])
+            except OSError:
+                # The error itself goes to the error log through main; the person at the terminal hears what it means
+                self._console_logger.warning(
+                    "'%s - %s' was written but not locked; the next run may change it back. Run lock_year once the lock file can be written",
+                    artist,
+                    album,
+                    extra=PLAIN_TEXT,
+                )
+                raise
 
     async def _lock_album(self, artist: str, album: str, year: str) -> None:
         """Record a command's lock, or in a dry run only say what would be locked."""

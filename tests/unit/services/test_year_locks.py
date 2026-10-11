@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import csv
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.models.cache_types import LockSource, YearLock
 from services.year_locks import YearLockService
 from tests.factories import create_test_app_config
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 
 @pytest.fixture
@@ -208,8 +213,111 @@ class TestHandEdits:
     @pytest.mark.asyncio
     async def test_the_new_file_reaches_the_disk_before_it_replaces_the_old(self, service: YearLockService) -> None:
         await service.initialize()
+        order: list[str] = []
+        fcntl = MagicMock()
+        fcntl.fcntl = MagicMock(side_effect=lambda *_: order.append("sync"))
 
-        with patch("services.year_locks.os.fsync") as fsync:
+        with (
+            patch("services.year_locks.fcntl", fcntl),
+            patch("services.year_locks.Path.replace", side_effect=lambda *_: order.append("replace")),
+        ):
             await service.lock("A", "B", "2001", source=LockSource.COMMAND)
 
-        fsync.assert_called_once()
+        assert order == ["sync", "replace"]
+
+    @pytest.mark.asyncio
+    async def test_a_header_in_another_case_or_with_spaces_still_reads(self, service: YearLockService) -> None:
+        """A person types the header the docs show, with spaces, or capitalised; the row must not turn unreadable."""
+        _write_file(service, "Artist, Album, Year, Locked_at, Source\nIn Flames, Battles, 2019\n")
+
+        await service.initialize()
+
+        assert service.get_locked_year("In Flames", "Battles") == "2019"
+
+    @pytest.mark.asyncio
+    async def test_a_file_whose_header_lacks_the_key_columns_is_never_rewritten(
+        self, service: YearLockService, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A semicolon-separated export has one column; rewriting it would turn every row into empty fields."""
+        path = _write_file(service, "artist;album;year;locked_at;source\nA;B;2001;;\n")
+        original = path.read_bytes()
+
+        with caplog.at_level(logging.ERROR, logger="test.console"):
+            await service.initialize()
+
+        assert any(str(path) in record.getMessage() for record in caplog.records)
+        with pytest.raises(OSError, match="not rewriting"):
+            await service.lock("C", "D", "2001", source=LockSource.COMMAND)
+        assert path.read_bytes() == original
+
+    @pytest.mark.asyncio
+    async def test_a_row_with_extra_fields_keeps_them_across_a_rewrite(self, service: YearLockService) -> None:
+        """An unquoted comma in a hand-typed album name splits the row; the row still goes back as it was."""
+        row = "Artist,Songs, Vol. 1,1999,2026-10-11 10:00:00,command"
+        path = _write_file(service, f"artist,album,year,locked_at,source\n{row}\n")
+        await service.initialize()
+
+        await service.lock("C", "D", "2001", source=LockSource.COMMAND)
+
+        assert row in path.read_text(encoding="utf-8")
+
+    @pytest.mark.asyncio
+    async def test_a_re_read_that_fails_keeps_the_locks_loaded_at_start(self, service: YearLockService) -> None:
+        await service.initialize()
+        await service.lock("A", "B", "2001", source=LockSource.COMMAND)
+        Path(service.locks_file_path).write_bytes(b"artist,album,year,locked_at,source\nCaf\xe9,B,2004,2026-10-11 12:00:00,command\n")
+
+        with pytest.raises(OSError, match="not rewriting"):
+            await service.lock("C", "D", "2001", source=LockSource.COMMAND)
+
+        assert service.get_locked_year("A", "B") == "2001"
+        assert service.get_locked_year("C", "D") is None
+
+    @pytest.mark.asyncio
+    async def test_unlock_on_a_file_that_cannot_be_read_raises(self, service: YearLockService) -> None:
+        await service.initialize()
+        await service.lock("A", "B", "2001", source=LockSource.COMMAND)
+        Path(service.locks_file_path).write_bytes(b"artist,album,year,locked_at,source\nCaf\xe9,B,2004,2026-10-11 12:00:00,command\n")
+
+        with pytest.raises(OSError, match="not rewriting"):
+            await service.unlock("A", "B")
+
+    @pytest.mark.asyncio
+    async def test_a_lock_whose_write_fails_is_not_remembered(self, service: YearLockService) -> None:
+        await service.initialize()
+
+        with patch("services.year_locks.Path.replace", side_effect=OSError("disk full")), pytest.raises(OSError, match="disk full"):
+            await service.lock("C", "D", "2001", source=LockSource.COMMAND)
+
+        assert service.get_locked_year("C", "D") is None
+
+    @pytest.mark.asyncio
+    async def test_the_locks_stay_readable_while_the_file_is_re_read(self, service: YearLockService) -> None:
+        """Albums are judged concurrently: while one album's lock re-reads the file, another must still see its lock."""
+        await service.initialize()
+        await service.lock("A", "B", "2001", source=LockSource.COMMAND)
+        seen: list[str | None] = []
+        real_reader = csv.reader
+
+        def sampling_reader(csvfile: Iterable[str]) -> Iterator[list[str]]:
+            """Read as csv.reader does, sampling the lock between rows."""
+            for row in real_reader(csvfile):
+                seen.append(service.get_locked_year("A", "B"))
+                yield row
+
+        with patch("services.year_locks.csv.reader", sampling_reader):
+            await service.lock("C", "D", "2001", source=LockSource.COMMAND)
+
+        assert seen
+        assert set(seen) == {"2001"}
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_row_is_said_once_not_on_every_lock(self, service: YearLockService, caplog: pytest.LogCaptureFixture) -> None:
+        _write_file(service, "artist,album,year,locked_at,source\nA,B,,2026-10-11 12:00:00,command\n")
+
+        with caplog.at_level(logging.WARNING, logger="test.console"):
+            await service.initialize()
+            for album in ("C", "D", "E"):
+                await service.lock("X", album, "2001", source=LockSource.COMMAND)
+
+        assert sum("year_locks.csv" in record.getMessage() and record.name == "test.console" for record in caplog.records) == 1

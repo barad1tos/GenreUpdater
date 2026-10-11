@@ -19,6 +19,7 @@ from core.apple_script_names import NOTIFY_YEAR_CHANGES
 from core.logger import LogFormat, get_full_log_path
 from core.models.cache_types import SNAPSHOT_VERSION
 from core.models.metadata_utils import is_music_app_running
+from core.models.track_status import can_edit_metadata
 from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
@@ -343,8 +344,8 @@ class MusicUpdater:
         """
         await self.genre_service.run_update_genres(artist, force)
 
-    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> bool:
-        """Verify and update a single pending album.
+    async def _verify_single_pending_album(self, artist: str, album: str, year: str) -> list[TrackDict] | None:
+        """Write the providers' year to a pending album and take it off the pending list.
 
         Args:
             artist: Artist name
@@ -352,21 +353,18 @@ class MusicUpdater:
             year: Year string found from API
 
         Returns:
-            True if verification succeeded, False otherwise
+            The tracks written (empty when every editable track already carried the year), or None when the album was not verified
 
         """
         tracks = await self.track_processor.fetch_tracks_async(artist=artist)
         album_tracks = [t for t in tracks if t.get("album", "") == album]
         if not album_tracks:
-            return False
+            return None
 
         written, _ = await self.year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="pipeline")
-        if written:
-            if not self.deps.dry_run:
-                # The pipeline never saw this write; without it in the snapshot the next run judges it as an outside change
-                await self.snapshot_manager.persist_updates(written)
-        elif any(year_text(track.year) != year for track in album_tracks):
-            return False
+        # The writer skips prerelease tracks, so only the editable ones say whether the album is done
+        if not written and any(year_text(track.year) != year for track in album_tracks if can_edit_metadata(track.track_status)):
+            return None
 
         await self.deps.pending_verification_service.remove_from_pending(artist, album)
         self.console_logger.debug(
@@ -375,7 +373,7 @@ class MusicUpdater:
             artist,
             album,
         )
-        return True
+        return written
 
     async def run_verify_pending(self, _force: bool = False) -> None:
         """Re-verify albums that are pending year verification.
@@ -421,6 +419,7 @@ class MusicUpdater:
         verified_count = 0
         failed_count = 0
         unavailable_count = 0
+        written: list[TrackDict] = []
         for entry in albums_to_verify:
             try:
                 year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
@@ -436,10 +435,17 @@ class MusicUpdater:
                 failed_count += 1
                 continue
 
-            if await self._verify_single_pending_album(entry.artist, entry.album, year_str):
-                verified_count += 1
-            else:
+            album_written = await self._verify_single_pending_album(entry.artist, entry.album, year_str)
+            if album_written is None:
                 failed_count += 1
+            else:
+                verified_count += 1
+                written.extend(album_written)
+
+        # The pipeline never saw these writes; without them in the snapshot the next run judges them as outside changes.
+        # One disk round trip for the run: the snapshot holds the whole library
+        if written and not self.deps.dry_run:
+            await self.snapshot_manager.persist_updates(written)
 
         # A run that could not check every due album must not postpone the next one
         if unavailable_count == 0:

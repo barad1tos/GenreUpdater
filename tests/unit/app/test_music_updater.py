@@ -506,7 +506,7 @@ class TestVerifyPendingUnavailable:
             side_effect=[YearLookupUnavailableError("no provider"), ("2001", True, 90, {"2001": 90})]
         )
         updater = MusicUpdater(deps)
-        verify_album = AsyncMock(return_value=True)
+        verify_album = AsyncMock(return_value=[])
 
         with patch.object(updater, "_verify_single_pending_album", verify_album):
             await updater.run_verify_pending()
@@ -531,7 +531,7 @@ class TestVerifyPendingUnavailable:
         deps.external_api_service.get_album_year = AsyncMock(side_effect=[YearLookupFailedError("scoring blew up"), ("2001", True, 90, {"2001": 90})])
         updater = MusicUpdater(deps)
 
-        with patch.object(updater, "_verify_single_pending_album", AsyncMock(return_value=True)):
+        with patch.object(updater, "_verify_single_pending_album", AsyncMock(return_value=[])):
             await updater.run_verify_pending()
 
         pending.update_verification_timestamp.assert_awaited_once()
@@ -901,30 +901,90 @@ class TestPendingVerificationWrites:
         deps.pending_verification_service.remove_from_pending = remove
         return updater, persist, remove
 
+    @staticmethod
+    def _due(*albums: tuple[str, str]) -> MagicMock:
+        pending = MagicMock()
+        pending.get_all_pending_albums = AsyncMock(
+            return_value=[
+                PendingAlbumEntry(timestamp=datetime(2026, 1, 1, tzinfo=UTC), artist=artist, album=album, reason=VerificationReason.NO_YEAR_FOUND)
+                for artist, album in albums
+            ]
+        )
+        pending.is_verification_needed = AsyncMock(return_value=True)
+        pending.update_verification_timestamp = AsyncMock()
+        pending.remove_from_pending = AsyncMock()
+        return pending
+
     @pytest.mark.asyncio
-    async def test_a_verified_album_is_folded_into_the_snapshot(self) -> None:
+    async def test_a_verified_album_reports_what_it_wrote(self) -> None:
         track = TrackDict(id="1", name="T", artist="A", album="B", year="")
         written = [track.copy(year="2004", year_set_by_mgu="2004")]
-        updater, persist, remove = self._updater(track, written)
+        updater, _, remove = self._updater(track, written)
 
-        assert await updater._verify_single_pending_album("A", "B", "2004") is True
+        assert await updater._verify_single_pending_album("A", "B", "2004") == written
 
-        persist.assert_awaited_once_with(written)
         remove.assert_awaited_once_with("A", "B")
 
     @pytest.mark.asyncio
-    async def test_an_album_already_at_the_year_counts_as_verified(self) -> None:
-        updater, persist, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year="2004"), [])
+    async def test_the_run_folds_every_write_into_the_snapshot_once(self) -> None:
+        """One disk round trip per run, not one per album: the snapshot holds 33K tracks."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        deps.pending_verification_service = self._due(("A", "B"), ("C", "D"))
+        deps.external_api_service.get_album_year = AsyncMock(side_effect=[("2004", True, 90, {"2004": 90}), ("1999", True, 90, {"1999": 90})])
+        updater = MusicUpdater(deps)
+        first = [TrackDict(id="1", name="T", artist="A", album="B", year="2004", year_set_by_mgu="2004")]
+        second = [TrackDict(id="2", name="U", artist="C", album="D", year="1999", year_set_by_mgu="1999")]
+        persist = AsyncMock(return_value=True)
+        updater.snapshot_manager.persist_updates = persist
 
-        assert await updater._verify_single_pending_album("A", "B", "2004") is True
+        with patch.object(updater, "_verify_single_pending_album", AsyncMock(side_effect=[first, second])):
+            await updater.run_verify_pending()
+
+        persist.assert_awaited_once_with(first + second)
+
+    @pytest.mark.asyncio
+    async def test_a_dry_run_folds_nothing_into_the_snapshot(self) -> None:
+        """Otherwise a simulated year would reach the disk snapshot and the next real run would act on it."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        deps.dry_run = True
+        deps.pending_verification_service = self._due(("A", "B"))
+        deps.external_api_service.get_album_year = AsyncMock(return_value=("2004", True, 90, {"2004": 90}))
+        updater = MusicUpdater(deps)
+        persist = AsyncMock(return_value=True)
+        updater.snapshot_manager.persist_updates = persist
+
+        with patch.object(
+            updater, "_verify_single_pending_album", AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2004")])
+        ):
+            await updater.run_verify_pending()
 
         persist.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_an_album_already_at_the_year_counts_as_verified(self) -> None:
+        updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year="2004"), [])
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") == []
+
+        remove.assert_awaited_once_with("A", "B")
+
+    @pytest.mark.asyncio
+    async def test_a_prerelease_track_does_not_keep_the_album_pending(self) -> None:
+        """The writer never touches a prerelease track, so its year must not count as unfinished work."""
+        updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year="2004"), [])
+        prerelease = TrackDict(id="2", name="U", artist="A", album="B", year="", track_status="prerelease")
+        updater.track_processor.fetch_tracks_async = AsyncMock(
+            return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2004"), prerelease]
+        )
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") == []
+
         remove.assert_awaited_once_with("A", "B")
 
     @pytest.mark.asyncio
     async def test_a_write_that_reached_no_track_keeps_the_album_pending(self) -> None:
         updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year=""), [])
 
-        assert await updater._verify_single_pending_album("A", "B", "2004") is False
+        assert await updater._verify_single_pending_album("A", "B", "2004") is None
 
         remove.assert_not_awaited()
