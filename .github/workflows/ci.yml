@@ -244,15 +244,31 @@ jobs:
     timeout-minutes: 5
     # A tag push skips dependency review (PR-only), and a skipped job anywhere in the needs chain skips its
     # dependants unless the if says !cancelled(); Gate itself maps that skip to success, so ask Gate directly
-    if: ${{ !cancelled() && needs.gate.result == 'success' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '.') }}
+    if: ${{ !cancelled() && needs.gate.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: write
     steps:
+      # Only a stable vX.Y.Z tag is a release: the daemon ignores pre-release tags (v3.1.0-rc1), and a GitHub
+      # release would present one as stable. The tag travels through env, never spliced into the script
+      - name: Accept only stable vX.Y.Z tags
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TAG is not a stable vX.Y.Z tag; no release is published"
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.tag.outputs.stable == 'true'
         with:
           persist-credentials: false
 
       - name: Create Release
+        if: steps.tag.outputs.stable == 'true'
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
