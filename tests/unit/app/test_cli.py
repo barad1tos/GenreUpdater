@@ -424,3 +424,19 @@ class TestParseArgs:
         result = cli.parse_args([])
         assert result.command is None
         assert result.force is False
+
+
+class TestLockYearCommands:
+    """lock_year writes and keeps a year; unlock_year lets the year step change it again."""
+
+    def test_lock_year_needs_artist_album_and_year(self, cli: CLI) -> None:
+        args = cli.parse_args(["lock_year", "--artist", "In Flames", "--album", "Battles", "--year", "2019"])
+        assert (args.command, args.artist, args.album, args.year) == ("lock_year", "In Flames", "Battles", "2019")
+
+    def test_lock_year_without_year_is_an_error(self, cli: CLI) -> None:
+        with pytest.raises(SystemExit):
+            cli.parse_args(["lock_year", "--artist", "A", "--album", "B"])
+
+    def test_unlock_year_needs_artist_and_album(self, cli: CLI) -> None:
+        args = cli.parse_args(["unlock_year", "--artist", "A", "--album", "B"])
+        assert (args.command, args.artist, args.album) == ("unlock_year", "A", "B")

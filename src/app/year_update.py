@@ -5,17 +5,24 @@ Handles year update operations for tracks including revert, update, and pipeline
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from core.logger import get_full_log_path
+from core.logger import PLAIN_TEXT, get_full_log_path
 from core.models import year_repair as repair_utils
+from core.models.cache_types import LockSource
+from core.models.metadata_utils import clean_names
 from core.models.track_models import ChangeLogEntry
+from core.tracks.track_delta import year_text
+from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import save_changes_report
+
+YEAR_LENGTH = 4
 
 if TYPE_CHECKING:
     import logging
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from app.pipeline_snapshot import PipelineSnapshotManager
     from app.track_cleaning import TrackCleaningService
@@ -23,6 +30,7 @@ if TYPE_CHECKING:
     from core.tracks.artist_renamer import ArtistRenamer
     from core.tracks.track_processor import TrackProcessor
     from core.tracks.year_retriever import YearRetriever
+    from services.year_locks import YearLockService
 
 
 class YearUpdateService:
@@ -39,6 +47,7 @@ class YearUpdateService:
         error_logger: Logger for error output.
         cleaning_service: Optional service for cleaning track metadata.
         artist_renamer: Optional service for renaming artists.
+        year_locks: Albums whose year a person chose; commands that write a year lock the album.
 
     """
 
@@ -53,8 +62,10 @@ class YearUpdateService:
         error_logger: logging.Logger,
         cleaning_service: TrackCleaningService | None = None,
         artist_renamer: ArtistRenamer | None = None,
+        year_locks: YearLockService,
     ) -> None:
         self._track_processor = track_processor
+        self._year_locks = year_locks
         self._year_retriever = year_retriever
         self._snapshot_manager = snapshot_manager
         self._config = config
@@ -189,6 +200,7 @@ class YearUpdateService:
         self._console_logger.info("Revert complete: %d tracks updated, %d not found", updated, missing)
 
         if changes_log:
+            await self._lock_written_albums(changes_log)
             revert_path = get_full_log_path(self._config, "changes_report_file", "csv/changes_revert.csv")
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
@@ -326,6 +338,7 @@ class YearUpdateService:
         self._console_logger.info("Found %d albums needing year restoration:", len(albums_to_restore))
 
         changes_log, updated_count, failed_count = await self._process_album_restorations(albums_to_restore)
+        await self._lock_written_albums(changes_log)
 
         self._console_logger.info(
             "Restore complete: %d tracks updated, %d failed",
@@ -419,6 +432,60 @@ class YearUpdateService:
                 error_logger=self._error_logger,
             )
             self._console_logger.info("Restore changes report saved to %s", restore_path)
+
+    async def run_lock_year(self, artist: str, album: str, year: str) -> None:
+        """Write `year` to the album's tracks and lock the album so the year step defends it.
+
+        Args:
+            artist: Album artist, as the year step groups albums
+            album: Album name (its cleaned form is matched too)
+            year: Four-digit year
+        """
+        year = year.strip()
+        if len(year) != YEAR_LENGTH or not year.isdigit():
+            self._console_logger.error("lock_year needs a four-digit year, got '%s'", year, extra=PLAIN_TEXT)
+            return
+        album_tracks = await self._album_tracks(artist, album)
+        if not album_tracks:
+            self._console_logger.warning("No tracks found for '%s - %s'; nothing locked", artist, album, extra=PLAIN_TEXT)
+            return
+        changes = await self._year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="lock_restore")
+        await self._year_locks.lock(artist, album, year, source=LockSource.COMMAND)
+        self._console_logger.info("'%s - %s' locked at %s; %d tracks written", artist, album, year, len(changes), extra=PLAIN_TEXT)
+        if changes:
+            lock_report_path = get_full_log_path(self._config, "changes_lock_file", "csv/changes_lock.csv")
+            save_changes_report(changes=changes, file_path=lock_report_path, console_logger=self._console_logger, error_logger=self._error_logger)
+
+    async def run_unlock_year(self, artist: str, album: str) -> None:
+        """Remove the album's lock; Music.app is not touched."""
+        if await self._year_locks.unlock(artist, album):
+            self._console_logger.info("'%s - %s' unlocked; the year step may change it again", artist, album, extra=PLAIN_TEXT)
+        else:
+            self._console_logger.warning("'%s - %s' is not locked", artist, album, extra=PLAIN_TEXT)
+
+    async def _album_tracks(self, artist: str, album: str) -> list[TrackDict]:
+        """Return the artist's tracks whose album is `album`, by its given or cleaned name."""
+        _, cleaned_album = clean_names(artist, "", album, config=self._config, console_logger=self._console_logger, error_logger=self._error_logger)
+        wanted = {album.strip(), cleaned_album.strip()}
+        tracks = await self._track_processor.fetch_tracks_async(artist=artist, ignore_test_filter=True)
+        return [
+            track
+            for track in tracks or []
+            if (album_group_artist(track) == artist or track.artist == artist) and (track.album or "").strip() in wanted
+        ]
+
+    async def _lock_written_albums(self, entries: Sequence[Mapping[str, object] | ChangeLogEntry]) -> None:
+        """Lock every album a command wrote, at the year it wrote: a person's command is a decision the daemon must not undo."""
+        years: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+        for entry in entries:
+            record = entry.model_dump() if isinstance(entry, ChangeLogEntry) else dict(entry)
+            artist = str(record.get("artist") or "")
+            album = str(record.get("album_name") or record.get("album") or "")
+            year = year_text(record.get("year_set_by_mgu"))
+            if artist and album and year:
+                years[(artist, album)][year] += 1
+        for (artist, album), counter in years.items():
+            await self._year_locks.lock(artist, album, counter.most_common(1)[0][0], source=LockSource.COMMAND)
 
     async def update_all_years_with_logs(
         self, tracks: list[TrackDict], force: bool, fresh: bool = False, *, previous_years: Mapping[str, str] | None = None

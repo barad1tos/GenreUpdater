@@ -46,7 +46,7 @@ class Orchestrator:
 
     """
 
-    COMMANDS_BYPASSING_MUSIC_CHECK: ClassVar[set[str]] = {"rotate_keys", "rotate-keys"}
+    COMMANDS_BYPASSING_MUSIC_CHECK: ClassVar[set[str]] = {"rotate_keys", "rotate-keys", "unlock_year"}
 
     def __init__(self, deps: DependencyContainer) -> None:
         self.deps = deps
@@ -118,6 +118,10 @@ class Orchestrator:
                 await self._run_verify_database(args)
             case "verify_pending" | "pending":
                 await self._run_verify_pending(args)
+            case "lock_year":
+                await self.music_updater.run_lock_year(args.artist, args.album, args.year)
+            case "unlock_year":
+                await self.music_updater.run_unlock_year(args.artist, args.album)
             case "batch":
                 await self._run_batch(args)
             case "rotate_keys" | "rotate-keys":

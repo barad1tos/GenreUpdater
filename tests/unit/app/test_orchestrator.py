@@ -516,3 +516,32 @@ class TestMaybeAutoVerifyPending:
         await orchestrator._maybe_auto_verify_pending()
 
         orchestrator.music_updater.run_verify_pending.assert_not_called()
+
+
+class TestLockYearRouting:
+    """lock_year writes through Music.app; unlock_year only edits the lock file."""
+
+    @pytest.mark.asyncio
+    async def test_lock_year_routes_to_the_music_updater(self) -> None:
+        orchestrator = Orchestrator(TestOrchestratorAllure.create_mock_deps())
+        orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.track_processor = Mock()
+        orchestrator.music_updater.run_lock_year = AsyncMock()
+        args = TestOrchestratorAllure.create_mock_args(command="lock_year", artist="A", album="B", year="2001")
+
+        with patch("app.orchestrator.is_music_app_running", return_value=True):
+            await orchestrator.run_command(args)
+
+        orchestrator.music_updater.run_lock_year.assert_awaited_once_with("A", "B", "2001")
+
+    @pytest.mark.asyncio
+    async def test_unlock_year_does_not_need_music_app(self) -> None:
+        orchestrator = Orchestrator(TestOrchestratorAllure.create_mock_deps())
+        orchestrator.music_updater = Mock(spec=MusicUpdater)
+        orchestrator.music_updater.run_unlock_year = AsyncMock()
+        args = TestOrchestratorAllure.create_mock_args(command="unlock_year", artist="A", album="B")
+
+        with patch("app.orchestrator.is_music_app_running", return_value=False):
+            await orchestrator.run_command(args)
+
+        orchestrator.music_updater.run_unlock_year.assert_awaited_once_with("A", "B")

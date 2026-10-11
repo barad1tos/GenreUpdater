@@ -156,6 +156,7 @@ class MusicUpdater:
             error_logger=deps.error_logger,
             cleaning_service=self.cleaning_service,
             artist_renamer=self.artist_renamer,
+            year_locks=deps.year_lock_service,
         )
 
         # Genre update service
@@ -282,6 +283,14 @@ class MusicUpdater:
 
         """
         await self.year_service.run_restore_release_years(artist, album, threshold)
+
+    async def run_lock_year(self, artist: str, album: str, year: str) -> None:
+        """Write a year to an album and lock it (lock_year command)."""
+        await self.year_service.run_lock_year(artist, album, year)
+
+    async def run_unlock_year(self, artist: str, album: str) -> None:
+        """Remove an album's year lock (unlock_year command)."""
+        await self.year_service.run_unlock_year(artist, album)
 
     async def _save_clean_results(self, changes_log: list[ChangeLogEntry]) -> None:
         """Save cleaning results to CSV and changes report.
