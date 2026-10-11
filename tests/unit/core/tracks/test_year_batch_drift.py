@@ -154,7 +154,7 @@ async def test_write_album_year_returns_the_entries_it_recorded() -> None:
 @pytest.mark.asyncio
 async def test_a_year_cleared_outside_the_tool_is_not_keepable() -> None:
     """A lock at "" could never be read back, so the providers' year is written without asking."""
-    processor, _, locks, decider, writer = _processor(provider="2016", decision=DriftDecision.KEEP)
+    processor, _, locks, decider, writer = _processor(decision=DriftDecision.KEEP)
 
     await _run(processor, _album("", ""), previous_years={"1": "2016", "2": "2016"})
 
