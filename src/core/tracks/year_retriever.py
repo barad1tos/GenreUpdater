@@ -24,6 +24,7 @@ from .year_utils import normalize_collaboration_artist
 
 if TYPE_CHECKING:
     import logging
+    from collections.abc import Mapping
 
     from core.models.protocols import (
         AnalyticsProtocol,
@@ -241,6 +242,7 @@ class YearRetriever:
         self,
         tracks: list[TrackDict],
         force: bool = False,
+        previous_years: Mapping[str, str] | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Get album year updates with change logs.
 
@@ -249,12 +251,13 @@ class YearRetriever:
         Args:
             tracks: Tracks to process
             force: If True, bypass skip checks and re-query API for all albums
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since (outside changes)
 
         Returns:
             Tuple of (updated_tracks, change_logs)
 
         """
-        return await self._update_album_years_logic(tracks, force=force)
+        return await self._update_album_years_logic(tracks, force=force, previous_years=previous_years)
 
     @track_instance_method("year_discogs_update")
     async def update_years_from_discogs(
@@ -299,12 +302,14 @@ class YearRetriever:
         self,
         tracks: list[TrackDict],
         force: bool = False,
+        previous_years: Mapping[str, str] | None = None,
     ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Core logic for updating album years.
 
         Args:
             tracks: Tracks to process
             force: If True, bypass skip checks and re-query API for all albums
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since
 
         Returns:
             Tuple of (updated_tracks, change_logs)
@@ -319,7 +324,7 @@ class YearRetriever:
         changes_log: list[ChangeLogEntry] = []
 
         # Process albums in batches
-        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log, force=force)
+        await self._batch_processor.process_albums_in_batches(albums, updated_tracks, changes_log, force=force, previous_years=previous_years)
 
         return updated_tracks, changes_log
 

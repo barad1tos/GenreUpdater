@@ -15,6 +15,7 @@ from metrics.change_reports import save_changes_report
 
 if TYPE_CHECKING:
     import logging
+    from collections.abc import Mapping
 
     from app.pipeline_snapshot import PipelineSnapshotManager
     from app.track_cleaning import TrackCleaningService
@@ -419,13 +420,16 @@ class YearUpdateService:
             )
             self._console_logger.info("Restore changes report saved to %s", restore_path)
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool, fresh: bool = False) -> list[ChangeLogEntry]:
+    async def update_all_years_with_logs(
+        self, tracks: list[TrackDict], force: bool, fresh: bool = False, *, previous_years: Mapping[str, str] | None = None
+    ) -> list[ChangeLogEntry]:
         """Update years for all tracks and return change logs (Step 4 of pipeline).
 
         Args:
             tracks: List of tracks to process.
             force: Force update - bypass cache/skip checks and re-query API for all albums.
             fresh: Fresh mode - invalidate cache before processing, implies force.
+            previous_years: Track id → the year the last snapshot held, for tracks whose year changed since (outside changes).
 
         Returns:
             List of change log entries.
@@ -440,7 +444,7 @@ class YearUpdateService:
             await self._track_processor.cache_service.invalidate_all_albums()
 
         try:
-            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force)
+            updated_tracks, year_changes = await self._year_retriever.get_album_years_with_logs(tracks, force=force, previous_years=previous_years)
             self._year_retriever.set_last_updated_tracks(updated_tracks)
 
             self._snapshot_manager.update_tracks(updated_tracks)

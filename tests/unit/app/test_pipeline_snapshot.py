@@ -10,6 +10,7 @@ import pytest
 
 from app.pipeline_snapshot import PipelineSnapshotManager
 from core.models.track_models import TrackDict
+from core.tracks.track_delta import TrackDelta
 
 
 @pytest.fixture
@@ -417,3 +418,19 @@ class TestMergeSmartDelta:
             await manager.merge_smart_delta(sample_tracks, mock_delta)
 
         assert "Smart Delta merged" in caplog.text
+
+
+class TestMergeCarriesTheToolRecord:
+    """A re-fetched track comes from Music.app without the tool's fields; the snapshot entry lends them."""
+
+    @pytest.mark.asyncio
+    async def test_a_re_fetched_track_keeps_the_snapshots_tool_record(
+        self, manager: PipelineSnapshotManager, mock_track_processor: MagicMock
+    ) -> None:
+        snapshot = [TrackDict(id="1", name="T", artist="A", album="B", year="2016", year_before_mgu="2019", year_set_by_mgu="2016")]
+        mock_track_processor.fetch_tracks_by_ids = AsyncMock(return_value=[TrackDict(id="1", name="T", artist="A", album="B", year="2019")])
+
+        merged = await manager.merge_smart_delta(snapshot, TrackDelta(new_ids=[], updated_ids=["1"], removed_ids=[], changed_years={"1": "2016"}))
+
+        assert merged is not None
+        assert (merged[0].year, merged[0].year_set_by_mgu, merged[0].year_before_mgu) == ("2019", "2016", "2019")

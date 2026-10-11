@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from core.logger import ensure_directory
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, LibraryDeltaCache
 from core.models.track_models import TrackDict
-from core.tracks.track_delta import TrackDelta
+from core.tracks.track_delta import TrackDelta, find_changed_years
 from services.cache.json_utils import dumps_json, loads_json
 
 JSON_SUFFIX: str = ".json"
@@ -243,8 +243,8 @@ class LibrarySnapshotService:
             force: CLI --force flag
 
         Returns:
-            TrackDelta with new and removed track IDs (updated_ids is always empty), or None when a full scan is due
-            or no snapshot or ids are available
+            TrackDelta with new and removed track IDs, and in updated_ids the tracks whose library year differs from the
+            snapshot (changed_years holds the snapshot's year), or None when a full scan is due or no snapshot or ids are available
 
         """
         is_force, reason = await self.should_force_scan(force)
@@ -268,29 +268,22 @@ class LibrarySnapshotService:
             len(snapshot_ids),
         )
 
-        # Fetch ALL current track IDs from Music.app (lightweight, ~1s)
-        current_ids_list = await applescript_client.fetch_all_track_ids()
-        if not current_ids_list:
+        # One bulk read gives every editable track's id and year (about 2 s)
+        current_years = await applescript_client.fetch_all_track_years()
+        if not current_years:
             self.logger.warning("Failed to fetch track IDs from Music.app")
             return None
 
-        current_ids = set(current_ids_list)
-
-        # Compute ID differences
+        current_ids = set(current_years)
         new_ids = sorted(current_ids - snapshot_ids)
         removed_ids = sorted(snapshot_ids - current_ids)
+        changed_years = find_changed_years({track_id: track.year for track_id, track in snapshot_map.items()}, current_years)
+        updated_ids = sorted(changed_years)
 
         self.logger.info(
-            "ID comparison: %d new, %d removed, %d existing",
-            len(new_ids),
-            len(removed_ids),
-            len(current_ids & snapshot_ids),
+            "Smart Delta (fast): %d new, %d removed, %d with another year than the snapshot", len(new_ids), len(removed_ids), len(updated_ids)
         )
-
-        self.logger.info("Smart Delta (fast): %d new, %d removed", len(new_ids), len(removed_ids))
-
-        # Fast mode trusts the snapshot for existing tracks; the periodic full scan catches edits made in Music.app
-        return TrackDelta(new_ids=new_ids, updated_ids=[], removed_ids=removed_ids)
+        return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids, changed_years=changed_years)
 
     def is_enabled(self) -> bool:
         """Check whether snapshot caching is enabled."""

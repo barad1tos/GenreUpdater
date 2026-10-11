@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from core.tracks.track_delta import carry_tool_record
+
 if TYPE_CHECKING:
     import logging
     from collections.abc import Iterable
@@ -185,7 +187,8 @@ class PipelineSnapshotManager:
             track_id = str(track.id)
             if track_id in removed_ids:
                 continue
-            merged_tracks.append(fetched_map.get(track_id, track))
+            fetched = fetched_map.get(track_id)
+            merged_tracks.append(carry_tool_record(fetched, track) if fetched is not None else track)
             seen_ids.add(track_id)
 
         for track_id, track in fetched_map.items():

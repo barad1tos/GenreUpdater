@@ -257,92 +257,26 @@ class TestRecordSuccessfulUpdatesMultipleTracks:
 
 
 @pytest.mark.unit
-class TestDetectUserYearChanges:
-    """Tests for _detect_user_year_changes conflict detection."""
+class TestOutsideChangeLog:
+    """An outside change the pipeline hands over (previous_years) is logged once per album."""
 
-    @staticmethod
-    def _run_detection(
-        caplog: pytest.LogCaptureFixture,
-        tracks: list[TrackDict],
-    ) -> None:
-        """Run _detect_user_year_changes with logging enabled."""
-        processor = create_year_batch_processor()
-        with caplog.at_level(logging.INFO):
-            processor._detect_user_year_changes("Artist", "Album", tracks)
+    @pytest.mark.asyncio
+    async def test_an_outside_change_is_logged_once_per_album(self, caplog: pytest.LogCaptureFixture) -> None:
+        processor = _create_year_batch_processor(console_logger=logging.getLogger("test.console"))
+        tracks = [create_test_track("1", year="2019"), create_test_track("2", year="2019")]
+        with caplog.at_level(logging.INFO, logger="test.console"):
+            await processor._process_single_album(
+                "Artist", "Album", album_tracks=tracks, updated_tracks=[], changes_log=[], previous_years={"1": "2016", "2": "2016"}
+            )
+        assert sum("changed outside the tool" in record.message for record in caplog.records) == 1
 
-    def test_detects_outside_change(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log when the year changed since the tool set it."""
-        tracks = [create_test_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2020")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" in caplog.text
-        assert "Artist - Album" in caplog.text
-        assert "2015" in caplog.text  # year_before_mgu
-        assert "2020" in caplog.text  # year_set_by_mgu (we set)
-        assert "2018" in caplog.text  # current year
-
-    def test_no_detection_when_years_match(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should NOT log when year_set_by_mgu matches current year."""
-        tracks = [create_test_track("1", year="2020", year_before_mgu="2015", year_set_by_mgu="2020")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" not in caplog.text
-
-    def test_no_detection_when_year_set_by_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should NOT log when year_set_by_mgu is not set."""
-        tracks = [create_test_track("1", year="2018", year_before_mgu="2015")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" not in caplog.text
-
-    def test_no_detection_when_current_year_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should NOT log when current year is not set."""
-        tracks = [create_test_track("1", year_before_mgu="2015", year_set_by_mgu="2020")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" not in caplog.text
-
-    def test_logs_unknown_when_year_before_mgu_not_set(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log 'unknown' when year_before_mgu is not set."""
-        tracks = [create_test_track("1", year="2018", year_set_by_mgu="2020")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "unknown" in caplog.text
-
-    def test_logs_once_per_album(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should log only once even if multiple tracks have conflicts."""
-        tracks = [
-            create_test_track("1", year="2018", year_before_mgu="2015", year_set_by_mgu="2020"),
-            create_test_track("2", year="2017", year_before_mgu="2014", year_set_by_mgu="2019"),
-        ]
-
-        self._run_detection(caplog, tracks)
-
-        # Should only have one log entry
-        log_count = caplog.text.count("changed outside the tool")
-        assert log_count == 1
-
-    def test_empty_tracks_list(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Should handle empty tracks list gracefully."""
-        tracks: list[TrackDict] = []
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" not in caplog.text
-
-    def test_names_the_change_as_outside_the_tool(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Apple rewrites years as often as people do, so the log must not claim a person did it."""
-        tracks = [create_test_track("1", year="2019", year_before_mgu="2016", year_set_by_mgu="2016")]
-
-        self._run_detection(caplog, tracks)
-
-        assert "changed outside the tool" in caplog.text
-        assert "User manually" not in caplog.text
+    @pytest.mark.asyncio
+    async def test_without_a_baseline_nothing_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        processor = _create_year_batch_processor(console_logger=logging.getLogger("test.console"))
+        tracks = [create_test_track("1", year="2019", year_set_by_mgu="2016")]
+        with caplog.at_level(logging.INFO, logger="test.console"):
+            await processor._process_single_album("Artist", "Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
+        assert not any("changed outside the tool" in record.message for record in caplog.records)
 
 
 @pytest.mark.unit

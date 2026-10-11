@@ -15,15 +15,15 @@ from app.pipeline_snapshot import PipelineSnapshotManager
 from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
 from core.logger import LogFormat, get_full_log_path
+from core.models.cache_types import SNAPSHOT_VERSION
 from core.models.metadata_utils import is_music_app_running
 from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
 from core.tracks.incremental_filter import IncrementalFilterService
-from core.tracks.track_delta import has_identity_changed
+from core.tracks.track_delta import carry_tool_record, find_changed_years, has_identity_changed
 from core.tracks.track_processor import TrackProcessor
-from core.models.cache_types import SNAPSHOT_VERSION
 from core.tracks.year_retriever import YearRetriever
 from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import (
@@ -33,11 +33,12 @@ from metrics.change_reports import (
 )
 
 if TYPE_CHECKING:
-    from core.models.track_models import ChangeLogEntry, TrackDict
     from datetime import datetime
+
+    from core.models.cache_types import PendingAlbumEntry
+    from core.models.track_models import ChangeLogEntry, TrackDict
     from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
-    from core.models.cache_types import PendingAlbumEntry
 
 
 class LibraryFetchError(RuntimeError):
@@ -161,6 +162,9 @@ class MusicUpdater:
             cleaning_service=self.cleaning_service,
             artist_renamer=self.artist_renamer,
         )
+
+        # Track id → the year the last snapshot held, for tracks whose year now differs; the year step reads it
+        self._previous_years: dict[str, str] = {}
 
         # Dry run context
         self.dry_run_mode = ""
@@ -486,6 +490,7 @@ class MusicUpdater:
             force = True
         self.console_logger.info("Starting main update pipeline")
         self.snapshot_manager.reset()
+        self._previous_years = {}
 
         # Fetch tracks based on mode (test or normal)
         tracks = await self._fetch_tracks_for_pipeline_mode(force=force)
@@ -630,6 +635,7 @@ class MusicUpdater:
             if delta is None:
                 self.console_logger.info("Smart Delta handed over to a full library scan")
                 return None
+            self._previous_years = dict(delta.changed_years)
 
             snapshot_tracks = await snapshot_service.load_snapshot()
             if snapshot_tracks is None:
@@ -682,6 +688,25 @@ class MusicUpdater:
         if metadata is None or metadata.version != SNAPSHOT_VERSION:
             return None
         return await snapshot_service.load_snapshot()
+
+    def _adopt_rescan_baseline(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> list[TrackDict]:
+        """Compare a bulk rescan with the last snapshot: note the years that changed and carry the tool's record onto re-read tracks.
+
+        Args:
+            previous: The last snapshot, or None on a first run or after a format change
+            current: The tracks the rescan read
+
+        Returns:
+            The rescan's tracks, those the tool once wrote carrying their `year_set_by_mgu`/`year_before_mgu`
+
+        """
+        if not previous:
+            return current
+        previous_map = {str(track.id): track for track in previous if track.id}
+        self._previous_years = find_changed_years(
+            {track_id: track.year for track_id, track in previous_map.items()}, {str(track.id): track.year for track in current if track.id}
+        )
+        return [carry_tool_record(track, previous_map[str(track.id)]) if str(track.id) in previous_map else track for track in current]
 
     async def _emit_rescan_events(self, previous: list[TrackDict] | None, current: list[TrackDict]) -> None:
         """Emit cache invalidation for tracks a bulk rescan no longer finds, or finds renamed, since the last snapshot.
@@ -788,6 +813,7 @@ class MusicUpdater:
                 batch_size=batch_size,
                 skip_snapshot_check=True,  # Smart Delta already declined the snapshot
             )
+            tracks = self._adopt_rescan_baseline(previous_tracks, tracks)
             await self._emit_rescan_events(previous_tracks, tracks)
             self.snapshot_manager.set_snapshot(tracks, library_mtime=pre_fetch_library_mtime)
             return tracks
@@ -863,7 +889,7 @@ class MusicUpdater:
         Returns:
             List of change log entries
         """
-        return await self.year_service.update_all_years_with_logs(tracks, force, fresh)
+        return await self.year_service.update_all_years_with_logs(tracks, force, fresh, previous_years=self._previous_years)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.

@@ -698,3 +698,39 @@ class TestRescanBaseline:
         updater = MusicUpdater(deps)
 
         assert await updater._load_rescan_baseline() == previous
+
+
+class TestOutsideYearBaseline:
+    """The pipeline hands the year step the years the last snapshot held for tracks that now carry another one."""
+
+    def test_a_bulk_rescan_compares_with_its_baseline_and_carries_the_record(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        previous = [
+            TrackDict(id="1", name="T", artist="A", album="B", year="2016", year_set_by_mgu="2016", year_before_mgu="2019"),
+            TrackDict(id="2", name="U", artist="A", album="B", year="2016"),
+        ]
+        current = [TrackDict(id="1", name="T", artist="A", album="B", year="2019"), TrackDict(id="2", name="U", artist="A", album="B", year="2016")]
+
+        tracks = updater._adopt_rescan_baseline(previous, current)
+
+        assert updater._previous_years == {"1": "2016"}
+        assert tracks[0].year_set_by_mgu == "2016"
+
+    def test_a_first_scan_has_no_baseline(self) -> None:
+        updater = MusicUpdater(TestMusicUpdaterAllure.create_mock_dependencies())
+        current = [TrackDict(id="1", name="T", artist="A", album="B", year="2019")]
+
+        assert updater._adopt_rescan_baseline(None, current) is current
+        assert updater._previous_years == {}
+
+    @pytest.mark.asyncio
+    async def test_the_year_step_receives_the_baseline(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        updater._previous_years = {"1": "2016"}
+        updater.year_service.update_all_years_with_logs = AsyncMock(return_value=[])
+
+        await updater._update_all_years_with_logs([], force=False)
+
+        updater.year_service.update_all_years_with_logs.assert_awaited_once_with([], False, False, previous_years={"1": "2016"})

@@ -546,7 +546,7 @@ class TestUpdateAllYearsWithLogs:
 
         await service.update_all_years_with_logs(tracks=sample_tracks, force=True)
 
-        mock_year_retriever.get_album_years_with_logs.assert_called_once_with(sample_tracks, force=True)
+        mock_year_retriever.get_album_years_with_logs.assert_called_once_with(sample_tracks, force=True, previous_years=None)
 
 
 class TestFormatRestoreTarget:
