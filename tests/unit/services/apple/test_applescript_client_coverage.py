@@ -469,7 +469,7 @@ class TestFetchAllTrackIds:
 
     @pytest.mark.asyncio
     async def test_returns_parsed_comma_separated_ids(self, client: AppleScriptClient) -> None:
-        """Test fetch_all_track_ids parses comma-separated IDs from script."""
+        """Test fetch_all_track_ids returns the ids of the id-year records, in order."""
         await client.initialize()
 
         with (
@@ -480,7 +480,7 @@ class TestFetchAllTrackIds:
             mock_spinner.return_value.__aenter__ = AsyncMock()
             mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            mock_run.return_value = "100,200,300"
+            mock_run.return_value = "100\x1e2016\x1d200\x1e\x1d300\x1e2019"
             result = await client.fetch_all_track_ids()
 
         assert result == ["100", "200", "300"]
@@ -531,9 +531,29 @@ class TestFetchAllTrackIds:
             mock_spinner.return_value.__aenter__ = AsyncMock()
             mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            mock_run.return_value = "1,2"
+            mock_run.return_value = "1\x1e2016\x1d2\x1e"
             result = await client.fetch_all_track_ids(timeout=42.0)
 
         assert result == ["1", "2"]
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["timeout"] == 42.0
+
+
+class TestFetchAllTrackYears:
+    """The bulk read gives every editable track's year with its id."""
+
+    @pytest.mark.asyncio
+    async def test_maps_id_to_year(self, client: AppleScriptClient) -> None:
+        await client.initialize()
+
+        with (
+            patch.object(client, "run_script", new_callable=AsyncMock) as mock_run,
+            patch("services.apple.applescript_client.spinner", new_callable=MagicMock) as mock_spinner,
+        ):
+            mock_spinner.return_value.__aenter__ = AsyncMock()
+            mock_spinner.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            mock_run.return_value = "1\x1e2016\x1d2\x1e\x1d3\x1e0"
+            result = await client.fetch_all_track_years()
+
+        assert result == {"1": "2016", "2": "", "3": ""}

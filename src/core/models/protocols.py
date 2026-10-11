@@ -412,6 +412,18 @@ class AppleScriptClientProtocol(Protocol):
         """
         ...
 
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Fetch the persistent ID and year of every editable track in one bulk read.
+
+        Args:
+            timeout: Timeout in seconds for script execution
+
+        Returns:
+            Persistent ID → year text ("" when the track has no year); empty when the read failed
+
+        """
+        ...
+
     async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
         """Fetch just track IDs from Music.app (lightweight operation).
 

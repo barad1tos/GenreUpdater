@@ -9,7 +9,15 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.tracks.track_delta import TrackDelta, compute_track_delta, has_identity_changed
+from core.tracks.track_delta import (
+    FIELD_SEPARATOR,
+    LINE_SEPARATOR,
+    TrackDelta,
+    compute_track_delta,
+    has_identity_changed,
+    parse_id_year_records,
+    year_text,
+)
 from core.models.track_models import TrackDict
 
 
@@ -393,3 +401,13 @@ def test_album_artist_change_is_an_identity_change() -> None:
     current = TrackDict(id="1", name="Song", artist="Some Band", album="Now 47", album_artist="Some Band")
 
     assert has_identity_changed(current, stored)
+
+
+def test_id_year_records_parse_into_a_map() -> None:
+    raw = LINE_SEPARATOR.join([f"A1{FIELD_SEPARATOR}2016", f"B2{FIELD_SEPARATOR}", f"C3{FIELD_SEPARATOR}0", FIELD_SEPARATOR + "1999", ""])
+
+    assert parse_id_year_records(raw) == {"A1": "2016", "B2": "", "C3": ""}
+
+
+def test_year_text_normalizes_unset_years() -> None:
+    assert [year_text(v) for v in (None, "", "0", 0, " 2016 ", 2016)] == ["", "", "", "", "2016", "2016"]

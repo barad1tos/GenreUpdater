@@ -17,7 +17,9 @@ __all__ = [
     "compute_track_delta",
     "has_identity_changed",
     "has_track_changed",
+    "parse_id_year_records",
     "split_applescript_rows",
+    "year_text",
 ]
 
 # AppleScript output delimiters (ASCII Record/Unit Separators)
@@ -44,6 +46,25 @@ def split_applescript_rows(raw: str, field_separator: str) -> list[str]:
     if field_separator == FIELD_SEPARATOR:
         return raw.split(LINE_SEPARATOR)
     return raw.splitlines()
+
+
+def year_text(value: object) -> str:
+    """Return the year as the library reports it: "" for an unset year (None, "", "0" or 0)."""
+    text = "" if value is None else str(value).strip()
+    return "" if text == "0" else text
+
+
+def parse_id_year_records(raw: str) -> dict[str, str]:
+    """Parse `fetch_track_ids.applescript` output (persistent ID, year per record) into id → year text.
+
+    Records are separated by LINE_SEPARATOR, the two fields by FIELD_SEPARATOR; a record without an id is dropped.
+    """
+    years: dict[str, str] = {}
+    for record in raw.split(LINE_SEPARATOR):
+        raw_id, _, year = record.partition(FIELD_SEPARATOR)
+        if track_id := raw_id.strip():
+            years[track_id] = year_text(year)
+    return years
 
 
 @dataclass(slots=True)

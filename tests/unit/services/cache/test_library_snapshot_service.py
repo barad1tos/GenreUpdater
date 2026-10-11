@@ -79,6 +79,11 @@ class MockAppleScriptClient:
         """Set result for fetch_all_track_ids."""
         self._fetch_all_track_ids_result = result
 
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Return the ids as tracks without a year: the id list is the key list of the same bulk read."""
+        _ = timeout
+        return dict.fromkeys(self._fetch_all_track_ids_result or [], "")
+
     def set_run_script_result(self, result: str | None) -> None:
         """Set result for run_script."""
         self._run_script_result = result

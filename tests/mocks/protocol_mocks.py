@@ -43,6 +43,7 @@ class MockAppleScriptClient:
         self.failure_message = "AppleScript Error"
         self.is_initialized = False
         self.library_track_ids: list[str] = []
+        self.library_track_years: dict[str, str] = {}
 
     async def initialize(self) -> None:
         """Initialize the AppleScript client."""
@@ -128,7 +129,12 @@ class MockAppleScriptClient:
     async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
         """Return the persistent IDs the library lists."""
         del timeout
-        return self.library_track_ids
+        return self.library_track_ids or list(self.library_track_years)
+
+    async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
+        """Return the persistent ID and year of every track the library lists."""
+        del timeout
+        return self.library_track_years
 
 
 class MockCacheService:
