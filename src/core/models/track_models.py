@@ -240,6 +240,7 @@ class LoggingConfig(BaseModel):
     last_incremental_run_file: str
     pending_verification_file: str
     last_db_verify_log: str
+    year_locks_file: str = "csv/year_locks.csv"
     levels: LogLevelsConfig
 
 
@@ -296,6 +297,10 @@ class ProcessingConfig(BaseModel):
     future_year_threshold: int = Field(default=1, ge=0)
     prerelease_recheck_days: int = Field(default=30, ge=0)
     prerelease_handling: str = "process_editable"
+    # Years changed outside the tool: who is asked, for how long, how often per run
+    presence_idle_seconds: int = Field(default=600, ge=0)
+    drift_dialog_timeout_seconds: int = Field(default=120, ge=1)
+    drift_dialog_max_per_run: int = Field(default=3, ge=0)
 
 
 class LogicConfig(BaseModel):
@@ -611,6 +616,7 @@ class ChangeLogEntry(BaseModel):
     new_track_name: str | None = None
     old_album_name: str | None = None
     new_album_name: str | None = None
+    reason: str = "pipeline"  # pipeline | outside_change | lock_restore | recheck
 
 
 class CachedApiResult(BaseModel):
