@@ -141,6 +141,8 @@ Remove an album's year lock. Music.app is not touched.
 uv run python main.py unlock_year --artist "Artist Name" --album "Album"
 ```
 
+The album name is tried as typed and cleaned. Locks are keyed by the album artist; when the lock sits under another artist (a collaboration track locked through `revert_years`, say), the command names that key so you can retry with it.
+
 ### verify_database
 
 Verify track database integrity against Music.app.

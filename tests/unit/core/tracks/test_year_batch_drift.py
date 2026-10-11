@@ -184,3 +184,15 @@ async def test_a_new_batch_forgets_the_held_back_tracks() -> None:
     await processor.process_albums_in_batches({}, [], [])
 
     assert processor.held_back_tracks == []
+
+
+@pytest.mark.asyncio
+async def test_a_new_year_that_cannot_be_locked_is_not_keepable() -> None:
+    """A library year like "19" could never be read back from the lock file, so the providers' year is written without asking."""
+    processor, _, locks, decider, writer = _processor(decision=DriftDecision.KEEP)
+
+    await _run(processor, _album("19"), previous_years={"1": "2016"})
+
+    decider.decide.assert_not_awaited()
+    locks.lock.assert_not_awaited()
+    assert _write_kwargs(writer)["year"] == "2016"

@@ -785,3 +785,14 @@ class TestOutsideChangeNotification:
         await updater._notify_outside_changes([self._entry("P", "Q", "1", "2", "pipeline")])
 
         assert deps.ap_client.scripts_run == []
+
+    @pytest.mark.asyncio
+    async def test_a_failed_notification_is_logged_not_raised(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        deps.ap_client.run_script = AsyncMock(side_effect=OSError("osascript missing"))
+        updater.error_logger = MagicMock()
+
+        await updater._notify_outside_changes([self._entry("In Flames", "Battles", "2019", "2016", "outside_change")])
+
+        updater.error_logger.exception.assert_called_once()

@@ -139,7 +139,8 @@ def has_track_changed(current: TrackDict, stored: TrackDict) -> bool:
 
     # Check for changes in metadata fields relevant to genre/year processing
     genre_changed = _field_changed(current_genre, stored_genre)
-    year_changed = _field_changed(current_year, stored_year)
+    # A year Apple emptied is a change too, or the clear would never open the incremental gate
+    year_changed = year_text(current_year) != year_text(stored_year)
 
     return bool(track_status_changed or genre_changed or year_changed)
 

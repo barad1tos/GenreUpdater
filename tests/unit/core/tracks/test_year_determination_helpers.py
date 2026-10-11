@@ -544,3 +544,14 @@ class TestProviderYear:
         await determinator.provider_year("A", "B", [_create_track(year="2019")])
 
         cache.get_album_year_entry_from_cache.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sends_no_library_hint(self) -> None:
+        """The hint would be the changed year itself, and the score resolver sides with a hint that scores within 90% of the best."""
+        external_api = _create_mock_external_api()
+        external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
+        determinator = _create_year_determinator(external_api=external_api, real_checker=_real_checker())
+
+        await determinator.provider_year("A", "B", [_create_track(year="2019")])
+
+        external_api.get_album_year.assert_awaited_once_with("A", "B", current_library_year=None)

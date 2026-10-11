@@ -17,8 +17,7 @@ from core.models.track_models import ChangeLogEntry
 from core.tracks.track_delta import year_text
 from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import save_changes_report
-
-YEAR_LENGTH = 4
+from services.year_locks import is_lock_year
 
 if TYPE_CHECKING:
     import logging
@@ -154,6 +153,9 @@ class YearUpdateService:
 
         if success:
             self._console_logger.info("Year update operation completed successfully")
+            # The pipeline never saw these writes; without them in the snapshot the next cycle judges them as outside changes
+            if not self._dry_run and (written := self._year_retriever.get_last_updated_tracks()):
+                await self._snapshot_manager.persist_updates(written)
         else:
             self._error_logger.error(
                 "Year update operation failed (artist=%s, force=%s, fresh=%s, tracks_count=%d)",
@@ -446,7 +448,7 @@ class YearUpdateService:
             year: Four-digit year
         """
         year = year.strip()
-        if len(year) != YEAR_LENGTH or not year.isdigit():
+        if not is_lock_year(year):
             self._console_logger.error("lock_year needs a four-digit year, got '%s'", year, extra=PLAIN_TEXT)
             return
         album_tracks = await self._album_tracks(artist, album)
@@ -467,10 +469,28 @@ class YearUpdateService:
             save_changes_report(changes=changes, file_path=lock_report_path, console_logger=self._console_logger, error_logger=self._error_logger)
 
     async def run_unlock_year(self, artist: str, album: str) -> None:
-        """Remove the album's lock; Music.app is not touched."""
-        if await self._year_locks.unlock(artist, album):
-            self._console_logger.info("'%s - %s' unlocked; the year step may change it again", artist, album, extra=PLAIN_TEXT)
-        else:
+        """Remove the album's lock; Music.app is not touched.
+
+        The typed name is tried as given and cleaned; when neither is locked, the locks on an album of that name under
+        another artist are named, since locks are keyed by the album artist.
+        """
+        _, cleaned_album = clean_names(artist, "", album, config=self._config, console_logger=self._console_logger, error_logger=self._error_logger)
+        for candidate in dict.fromkeys((album, cleaned_album)):
+            if await self._year_locks.unlock(artist, candidate):
+                self._console_logger.info("'%s - %s' unlocked; the year step may change it again", artist, candidate, extra=PLAIN_TEXT)
+                return
+        wanted = {album.strip().casefold(), cleaned_album.strip().casefold()}
+        elsewhere = [lock for lock in self._year_locks.all_locks() if lock.album.casefold() in wanted]
+        for lock in elsewhere:
+            self._console_logger.warning(
+                "'%s - %s' is not locked; locks are keyed by the album artist: locked under '%s - %s'",
+                artist,
+                album,
+                lock.artist,
+                lock.album,
+                extra=PLAIN_TEXT,
+            )
+        if not elsewhere:
             self._console_logger.warning("'%s - %s' is not locked", artist, album, extra=PLAIN_TEXT)
 
     async def _album_tracks(self, artist: str, album: str) -> list[TrackDict]:

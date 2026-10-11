@@ -5,6 +5,7 @@ This is a streamlined version that uses the new modular components.
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -553,7 +554,6 @@ class MusicUpdater:
         # Step 4: Update years (use ALL tracks - YearBatchProcessor handles internal skip logic)
         year_changes = await self._update_all_years_with_logs(tracks, force, fresh)
         all_changes.extend(year_changes)
-        await self._notify_outside_changes(year_changes)
 
         # Save combined results including all changes
         await self._save_pipeline_results(all_changes)
@@ -567,6 +567,8 @@ class MusicUpdater:
             await self.snapshot_manager.persist_to_disk()
 
         self.snapshot_manager.clear()
+        # After the report and the snapshot are safe: a failed notification must not cost the run its state
+        await self._notify_outside_changes(year_changes)
         self.console_logger.info("Main update pipeline completed successfully")
 
     async def _handle_empty_library_fetch(self, *, force: bool, fresh: bool) -> None:
@@ -927,7 +929,12 @@ class MusicUpdater:
         more = f" and {len(albums) - NOTIFIED_ALBUMS} more" if len(albums) > NOTIFIED_ALBUMS else ""
         title = f"Genre Updater: {len(albums)} album{'s' if len(albums) != 1 else ''} changed back"
         message = f"{named}{more}. Undo one with: main.py lock_year --artist … --album … --year <old> (rows in changes_report.csv)"
-        await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
+        try:
+            await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
+        except (OSError, subprocess.SubprocessError) as error:
+            # The writes and the report are already safe; the person still has the changes report
+            self.error_logger.exception("The notification about %d changed-back albums could not be shown: %s", len(albums), error)
+            self.console_logger.warning("Notification not shown (%s); the changes report has the rows", type(error).__name__)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.

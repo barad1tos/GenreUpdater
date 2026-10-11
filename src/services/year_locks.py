@@ -25,10 +25,15 @@ TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 YEAR_LENGTH = 4
 
 
+def is_lock_year(year: str) -> bool:
+    """Return True when `year` can be written to and read back from the lock file: exactly four digits."""
+    return len(year) == YEAR_LENGTH and year.isdigit()
+
+
 def album_key(artist: str, album: str) -> tuple[str, str]:
     """Return the key a lock is stored under: the album artist and album name, trimmed, as the year step groups albums.
 
-    The pipeline cleans album names before the year step, and the CLI cleans a typed name before it looks a lock up.
+    The pipeline cleans album names before the year step; lock_year and unlock_year try a typed name as given and cleaned.
     """
     return artist.strip(), album.strip()
 
@@ -80,7 +85,7 @@ class YearLockService:
             ValueError: The year is not four digits, so the lock could never be read back
         """
         year = year.strip()
-        if len(year) != YEAR_LENGTH or not year.isdigit():
+        if not is_lock_year(year):
             msg = f"A lock needs a four-digit year, got '{year}'"
             raise ValueError(msg)
         key = album_key(artist, album)
@@ -119,7 +124,7 @@ class YearLockService:
         album = (row.get("album") or "").strip()
         year = (row.get("year") or "").strip()
         source_text = (row.get("source") or LockSource.COMMAND.value).strip()
-        if not artist or not album or len(year) != YEAR_LENGTH or not year.isdigit() or source_text not in LockSource:
+        if not artist or not album or not is_lock_year(year) or source_text not in LockSource:
             self.error_logger.warning("Skipping year_locks.csv line %d: needs artist, album, a four-digit year and a known source", line_number)
             return None
         try:

@@ -434,3 +434,28 @@ class TestMergeCarriesTheToolRecord:
 
         assert merged is not None
         assert (merged[0].year, merged[0].year_set_by_mgu, merged[0].year_before_mgu) == ("2019", "2016", "2019")
+
+
+class TestPersistUpdates:
+    """A command that writes years outside the pipeline folds its writes into the disk snapshot, so the next cycle does not judge them as outside changes."""
+
+    @pytest.mark.asyncio
+    async def test_updates_are_merged_into_the_disk_snapshot(self, manager: PipelineSnapshotManager, mock_track_processor: MagicMock) -> None:
+        on_disk = [
+            TrackDict(id="1", name="T", artist="A", album="B", year="2016", year_set_by_mgu="2016"),
+            TrackDict(id="2", name="U", artist="A", album="B", year="2016"),
+        ]
+        mock_track_processor.cache_manager.snapshot_service.load_snapshot = AsyncMock(return_value=on_disk)
+
+        persisted = await manager.persist_updates([TrackDict(id="1", name="T", artist="A", album="B", year="2019", year_set_by_mgu="2019")])
+
+        assert persisted is True
+        saved = mock_track_processor.cache_manager.update_snapshot.await_args.args[0]
+        assert [(t.id, t.year, t.year_set_by_mgu) for t in saved] == [("1", "2019", "2019"), ("2", "2016", None)]
+
+    @pytest.mark.asyncio
+    async def test_no_disk_snapshot_means_nothing_to_merge_into(self, manager: PipelineSnapshotManager, mock_track_processor: MagicMock) -> None:
+        mock_track_processor.cache_manager.snapshot_service.load_snapshot = AsyncMock(return_value=None)
+
+        assert await manager.persist_updates([TrackDict(id="1", name="T", artist="A", album="B", year="2019")]) is False
+        mock_track_processor.cache_manager.update_snapshot.assert_not_awaited()

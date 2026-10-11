@@ -17,6 +17,7 @@ from core.tracks.track_delta import (
     compute_track_delta,
     find_changed_years,
     has_identity_changed,
+    has_track_changed,
     parse_id_year_records,
     year_text,
 )
@@ -440,3 +441,18 @@ def test_a_track_with_its_own_record_keeps_it() -> None:
 
 def test_a_delta_without_changed_years_is_still_a_delta() -> None:
     assert TrackDelta(new_ids=[], updated_ids=[], removed_ids=[]).changed_years == {}
+
+
+def test_a_cleared_year_is_a_change_against_the_track_list() -> None:
+    """A year Apple emptied must open the incremental gate, or the clear becomes the baseline unjudged."""
+    stored = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre="Rock")
+    current = TrackDict(id="1", name="T", artist="A", album="B", year=None, genre="Rock")
+
+    assert has_track_changed(current, stored) is True
+
+
+def test_an_empty_current_genre_is_still_not_a_change() -> None:
+    stored = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre="Rock")
+    current = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre=None)
+
+    assert has_track_changed(current, stored) is False

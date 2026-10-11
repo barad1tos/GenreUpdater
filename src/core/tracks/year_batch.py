@@ -27,6 +27,7 @@ from core.logger import PLAIN_TEXT, get_shared_console
 from core.models.cache_types import LockSource
 from core.models.protocols import YearLookupUnavailableError
 from core.tracks.track_delta import year_text
+from services.year_locks import is_lock_year
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
@@ -535,10 +536,15 @@ class YearBatchProcessor:
             return
         if provider_year is None:
             return
-        if not new_year:
-            # A year cleared outside the tool cannot be kept: a lock at "" could never be read back
+        if not is_lock_year(new_year):
+            # A year cleared or mangled outside the tool cannot be kept: a lock at it could never be read back
             self.console_logger.info(
-                "The year of '%s - %s' was cleared outside the tool; writing the providers' %s", artist, album, provider_year, extra=PLAIN_TEXT
+                "The year of '%s - %s' became '%s' outside the tool; writing the providers' %s",
+                artist,
+                album,
+                new_year,
+                provider_year,
+                extra=PLAIN_TEXT,
             )
             decision = DriftDecision.APPLY
         else:
