@@ -41,6 +41,10 @@ class TestMusicUpdaterAllure:
         deps.cache_service = MockCacheService()
         deps.external_api_service = MockExternalApiService()
         deps.pending_verification_service = MockPendingVerificationService()
+        deps.year_lock_service = MagicMock()
+        deps.year_lock_service.get_locked_year = MagicMock(return_value=None)
+        deps.year_lock_service.lock = AsyncMock()
+        deps.year_lock_service.unlock = AsyncMock(return_value=True)
 
         # Loggers
         deps.console_logger = MockLogger()

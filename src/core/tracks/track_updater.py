@@ -57,6 +57,7 @@ class TrackUpdater:
         year: str,
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        reason: str = "pipeline",
     ) -> None:
         """Update tracks for a specific album and record changes.
 
@@ -67,6 +68,7 @@ class TrackUpdater:
             year: Year to set
             updated_tracks: List to append updated tracks to
             changes_log: List to append change entries to
+            reason: Why the year is written: pipeline, outside_change, lock_restore or recheck (changes_report.csv column)
 
         """
         track_ids, tracks_needing_update = self._collect_tracks_for_update(album_tracks, year)
@@ -91,6 +93,7 @@ class TrackUpdater:
                 album=album,
                 updated_tracks=updated_tracks,
                 changes_log=changes_log,
+                reason=reason,
             )
 
     def _collect_tracks_for_update(
@@ -188,6 +191,7 @@ class TrackUpdater:
         album: str,
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
+        reason: str = "pipeline",
     ) -> None:
         """Record successful track updates.
 
@@ -198,6 +202,7 @@ class TrackUpdater:
             album: Album name
             updated_tracks: List to append updated tracks to
             changes_log: List to append change entries to
+            reason: Why the year was written (changes_report.csv column)
 
         """
         for track in tracks:
@@ -212,6 +217,7 @@ class TrackUpdater:
                     track_name=str(track.get("name", "")),
                     year_before_mgu=str(old_year_value) if old_year_value is not None else "",
                     year_set_by_mgu=year,
+                    reason=reason,
                 )
             )
 

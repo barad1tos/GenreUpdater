@@ -105,6 +105,7 @@ class MusicUpdater:
             analytics=deps.analytics,
             config=deps.app_config,
             dry_run=deps.dry_run,
+            year_locks=deps.year_lock_service,
         )
 
         self.database_verifier = DatabaseVerifier(

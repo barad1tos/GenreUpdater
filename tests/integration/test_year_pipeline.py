@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.models.protocols import AnalyticsProtocol
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from core.tracks.year_retriever import YearRetriever
-from core.models.protocols import AnalyticsProtocol
 from tests.factories import create_mock_track_processor, create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import MockExternalApiService, MockPendingVerificationService
@@ -21,6 +21,14 @@ RARE_ALBUM_TRACKS: list[dict[str, Any]] = [
     {"id": "1", "name": "Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 10:00:00"},
     {"id": "2", "name": "Another Rare Song", "artist": "Rare Artist", "album": "Rare Album", "year": "", "date_added": "2024-01-01 11:00:00"},
 ]
+
+
+def _year_locks_mock() -> MagicMock:
+    """No album is locked."""
+    locks = MagicMock()
+    locks.get_locked_year = MagicMock(return_value=None)
+    locks.lock = AsyncMock()
+    return locks
 
 
 def _written_years(track_processor: AsyncMock) -> list[tuple[str, str]]:
@@ -159,6 +167,7 @@ class TestYearPipelineIntegration:
             analytics=cast(AnalyticsProtocol, cast(object, MockAnalytics())),
             config=test_config,
             dry_run=dry_run,
+            year_locks=_year_locks_mock(),
         )
 
     @staticmethod

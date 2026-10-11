@@ -11,6 +11,7 @@ import pytest
 from core.models.protocols import AnalyticsProtocol
 from core.models.types import TrackDict
 from core.tracks.year_batch import YearBatchProcessor
+from core.tracks.year_drift import DriftDecision
 from core.tracks.year_fallback import YearFallbackHandler
 from tests.factories import create_test_app_config
 from tests.mocks.protocol_mocks import (
@@ -81,6 +82,7 @@ def create_year_determinator_mock() -> MagicMock:
     determinator = MagicMock()
     determinator.should_skip_album = AsyncMock(return_value=(False, None))
     determinator.determine_album_year = AsyncMock(return_value="2020")
+    determinator.provider_year = AsyncMock(return_value="2016")
     determinator.check_prerelease_status = AsyncMock(return_value=False)
     determinator.check_suspicious_album = AsyncMock(return_value=False)
     determinator.handle_future_years = AsyncMock(return_value=False)
@@ -122,11 +124,20 @@ def create_year_batch_processor(
     error_logger: logging.Logger | None = None,
     config: AppConfig | None = None,
     dry_run: bool = False,
+    year_locks: MagicMock | None = None,
+    drift_decider: MagicMock | None = None,
 ) -> YearBatchProcessor:
     """Create YearBatchProcessor with mock dependencies.
 
-    Any dependency not provided will get a sensible default mock.
+    Any dependency not provided will get a sensible default mock: no album is locked, and a disputed outside change is applied.
     """
+    if year_locks is None:
+        year_locks = MagicMock()
+        year_locks.get_locked_year = MagicMock(return_value=None)
+        year_locks.lock = AsyncMock()
+    if drift_decider is None:
+        drift_decider = MagicMock()
+        drift_decider.decide = AsyncMock(return_value=DriftDecision.APPLY)
     if track_processor is None:
         tp = MagicMock()
         tp.update_tracks_batch_async = AsyncMock(return_value=[])
@@ -145,6 +156,8 @@ def create_year_batch_processor(
         config=config or create_test_app_config(),
         analytics=analytics or cast(AnalyticsProtocol, cast(object, MagicMock())),
         dry_run=dry_run,
+        year_locks=year_locks,
+        drift_decider=drift_decider,
     )
 
 

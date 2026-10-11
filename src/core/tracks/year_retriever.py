@@ -19,6 +19,7 @@ from .year_batch import YearBatchProcessor
 from .year_consistency import DOMINANCE_MIN_SHARE as MAJORITY_SHARE
 from .year_consistency import YearConsistencyChecker
 from .year_determination import YearDeterminator
+from .year_drift import YearDriftDecider
 from .year_fallback import YearFallbackHandler
 from .year_utils import normalize_collaboration_artist
 
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     )
     from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
     from core.retry_handler import DatabaseRetryHandler
+    from services.year_locks import YearLockService
 
     from .track_processor import TrackProcessor
 
@@ -56,6 +58,7 @@ class YearRetriever:
         analytics: Service for performance tracking
         config: Typed application configuration
         dry_run: Whether to run in dry-run mode
+        year_locks: Albums whose year a person chose; restored, never queried
 
     Attributes:
         MIN_VALID_YEAR: Minimum year considered valid
@@ -95,6 +98,7 @@ class YearRetriever:
         analytics: AnalyticsProtocol,
         config: AppConfig,
         dry_run: bool = False,
+        year_locks: YearLockService,
     ) -> None:
         # Store references
         self.track_processor = track_processor
@@ -145,6 +149,11 @@ class YearRetriever:
             config=self.config,
         )
 
+        # A disputed outside change is put to the person at the Mac through the AppleScript client
+        self._drift_decider = YearDriftDecider(
+            ap_client=track_processor.ap_client, config=self.config, console_logger=self.console_logger, dry_run=self.dry_run
+        )
+
         # Initialize batch processor
         self._batch_processor = YearBatchProcessor(
             year_determinator=self._year_determinator,
@@ -155,6 +164,8 @@ class YearRetriever:
             config=self.config,
             analytics=self.analytics,
             dry_run=self.dry_run,
+            year_locks=year_locks,
+            drift_decider=self._drift_decider,
         )
 
     # Public API - Main Entry Points
@@ -346,6 +357,21 @@ class YearRetriever:
     def _extract_release_years(album_tracks: list[TrackDict]) -> list[str]:
         """Extract release years. Delegates to YearDeterminator."""
         return YearDeterminator.extract_release_years(album_tracks)
+
+    async def write_album_year(self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str) -> list[ChangeLogEntry]:
+        """Write `year` to the album's tracks through the pipeline's write path. Delegates to YearBatchProcessor.
+
+        Args:
+            artist: Album artist
+            album: Album name
+            album_tracks: The album's tracks
+            year: The year to write
+            reason: The changes_report.csv reason
+
+        Returns:
+            One entry per track written
+        """
+        return await self._batch_processor.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason=reason)
 
     async def update_album_tracks_bulk_async(
         self,

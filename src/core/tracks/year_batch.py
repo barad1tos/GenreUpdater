@@ -24,7 +24,9 @@ from rich.progress import (
 )
 
 from core.logger import PLAIN_TEXT, get_shared_console
+from core.models.cache_types import LockSource
 from core.models.protocols import YearLookupUnavailableError
+from core.tracks.track_delta import year_text
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
@@ -33,7 +35,7 @@ from core.models.track_status import (
 from .prerelease_handler import PrereleaseHandler
 from .track_updater import TrackUpdater
 from .year_determination import YearDeterminator
-from .year_drift import find_outside_changes, summarize_outside_changes
+from .year_drift import DriftDecision, OutsideYearChange, YearDriftDecider, find_outside_changes, summarize_outside_changes
 from .year_utils import album_group_artist
 
 if TYPE_CHECKING:
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
     from core.models.track_models import AppConfig, ChangeLogEntry, TrackDict
     from core.retry_handler import DatabaseRetryHandler
     from core.tracks.track_processor import TrackProcessor
+    from services.year_locks import YearLockService
 
 
 _PROGRESS_DESCRIPTION = "Processing albums"
@@ -80,6 +83,8 @@ class YearBatchProcessor:
         config: Typed application configuration
         analytics: Service for performance tracking
         dry_run: Whether to run in dry-run mode
+        year_locks: Albums whose year a person chose; restored, never queried
+        drift_decider: Decides a disputed outside change (dialog when someone is at the Mac)
     """
 
     def __init__(
@@ -93,8 +98,12 @@ class YearBatchProcessor:
         config: AppConfig,
         analytics: AnalyticsProtocol,
         dry_run: bool = False,
+        year_locks: YearLockService,
+        drift_decider: YearDriftDecider,
     ) -> None:
         self.year_determinator = year_determinator
+        self._year_locks = year_locks
+        self._drift_decider = drift_decider
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
@@ -400,6 +409,12 @@ class YearBatchProcessor:
 
         self.console_logger.debug("Processing album '%s - %s' with %d tracks", artist, album, len(album_tracks))
 
+        # A person's lock, then a year changed outside the tool, settle the album before any other rule
+        if await self._settle_lock_or_outside_change(
+            artist, album, album_tracks, previous_years=previous_years, updated_tracks=updated_tracks, changes_log=changes_log
+        ):
+            return
+
         # Safety checks (never bypassed by force - these are data integrity guards)
         if await self.year_determinator.check_suspicious_album(artist, album, album_tracks):
             return
@@ -408,20 +423,6 @@ class YearBatchProcessor:
         future_years = YearDeterminator.extract_future_years(album_tracks)
         if future_years and await self.year_determinator.handle_future_years(artist, album, album_tracks, future_years):
             return
-
-        # A year that changed since the last snapshot, other than by the tool's own write (the providers judge it next)
-        if outside_changes := find_outside_changes(album_tracks, previous_years):
-            old_year, new_year = summarize_outside_changes(outside_changes)
-            self.console_logger.info(
-                "Year of '%s - %s' changed outside the tool: %s -> %s on %d of %d tracks",
-                artist,
-                album,
-                old_year or "none",
-                new_year or "none",
-                len(outside_changes),
-                len(album_tracks),
-                extra=PLAIN_TEXT,
-            )
 
         # Check if we should skip this album (force=True bypasses this)
         should_skip, skip_reason = await self.year_determinator.should_skip_album(album_tracks, artist, album, force=force)
@@ -452,7 +453,118 @@ class YearBatchProcessor:
             year=year,
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
+
+    async def _settle_lock_or_outside_change(
+        self,
+        artist: str,
+        album: str,
+        album_tracks: list[TrackDict],
+        *,
+        previous_years: Mapping[str, str] | None,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+    ) -> bool:
+        """Restore a locked album, or judge a year changed outside the tool; return True when the album is settled.
+
+        A person's lock wins over every other rule and never goes to the providers. An outside change bypasses the pre-checks:
+        an album Apple flipped wholesale has agreeing tracks, which the consistent-skip would hide.
+        """
+        if (locked_year := self._year_locks.get_locked_year(artist, album)) is not None:
+            await self._restore_locked_year(artist, album, album_tracks, locked_year, updated_tracks=updated_tracks, changes_log=changes_log)
+            return True
+        if outside_changes := find_outside_changes(album_tracks, previous_years):
+            await self._judge_outside_changes(artist, album, album_tracks, outside_changes, updated_tracks=updated_tracks, changes_log=changes_log)
+            return True
+        return False
+
+    async def _restore_locked_year(
+        self,
+        artist: str,
+        album: str,
+        album_tracks: list[TrackDict],
+        locked_year: str,
+        *,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+    ) -> None:
+        """Write the locked year back to the tracks that lost it (reason `lock_restore`); a locked album never goes to the providers."""
+        if all(year_text(track.year) == locked_year for track in album_tracks):
+            self.console_logger.debug("'%s - %s' is locked at %s and holds it", artist, album, locked_year, extra=PLAIN_TEXT)
+            return
+        self.console_logger.info("'%s - %s' is locked at %s; restoring it", artist, album, locked_year, extra=PLAIN_TEXT)
+        await self._track_updater.update_tracks_for_album(
+            artist, album, album_tracks=album_tracks, year=locked_year, updated_tracks=updated_tracks, changes_log=changes_log, reason="lock_restore"
+        )
+
+    async def _judge_outside_changes(
+        self,
+        artist: str,
+        album: str,
+        album_tracks: list[TrackDict],
+        outside_changes: list[OutsideYearChange],
+        *,
+        updated_tracks: list[TrackDict],
+        changes_log: list[ChangeLogEntry],
+    ) -> None:
+        """Ask the providers about a year that changed outside the tool; when they disagree the person decides, else their year is written."""
+        old_year, new_year = summarize_outside_changes(outside_changes)
+        self.console_logger.info(
+            "Year of '%s - %s' changed outside the tool: %s -> %s on %d of %d tracks",
+            artist,
+            album,
+            old_year or "none",
+            new_year or "none",
+            len(outside_changes),
+            len(album_tracks),
+            extra=PLAIN_TEXT,
+        )
+        try:
+            provider_year = await self.year_determinator.provider_year(artist, album, album_tracks)
+        except YearLookupUnavailableError:
+            self.console_logger.warning(
+                "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
+            )
+            return
+        if provider_year is None:
+            self.console_logger.info("No provider year for '%s - %s'; the outside change stands", artist, album, extra=PLAIN_TEXT)
+            return
+        if provider_year == new_year:
+            self.console_logger.info("Providers agree with the new year %s of '%s - %s'", new_year, artist, album, extra=PLAIN_TEXT)
+            return
+        decision = await self._drift_decider.decide(artist, album, old_year=old_year, new_year=new_year, provider_year=provider_year)
+        if decision is DriftDecision.KEEP:
+            await self._year_locks.lock(artist, album, new_year, source=LockSource.DIALOG)
+            return
+        await self._track_updater.update_tracks_for_album(
+            artist,
+            album,
+            album_tracks=album_tracks,
+            year=provider_year,
+            updated_tracks=updated_tracks,
+            changes_log=changes_log,
+            reason="outside_change",
+        )
+
+    async def write_album_year(self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str) -> list[ChangeLogEntry]:
+        """Write `year` to the album's tracks through the pipeline's write path and return the recorded changes (CLI commands use it).
+
+        Args:
+            artist: Album artist
+            album: Album name
+            album_tracks: The album's tracks
+            year: The year to write
+            reason: The changes_report.csv reason
+
+        Returns:
+            One entry per track written
+        """
+        changes_log: list[ChangeLogEntry] = []
+        await self._track_updater.update_tracks_for_album(
+            artist, album, album_tracks=album_tracks, year=year, updated_tracks=[], changes_log=changes_log, reason=reason
+        )
+        return changes_log
 
     def _handle_no_year_found(self, artist: str, album: str, album_tracks: list[TrackDict]) -> None:
         """Handle case when no year could be determined for the album."""

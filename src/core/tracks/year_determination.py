@@ -107,6 +107,25 @@ class YearDeterminator:
             return cached_entry.year
         return None
 
+    async def provider_year(self, artist: str, album: str, album_tracks: list[TrackDict]) -> str | None:
+        """Return the providers' year for the album, judged by the fallback rules; no cache, no majority of the tracks.
+
+        The year step calls it for an album whose year changed outside the tool: the cache may predate the change and the
+        majority is the changed value itself. A lookup no provider answered, or one that failed, propagates
+        YearLookupUnavailableError from the query, so the caller leaves the album for the next run.
+
+        Args:
+            artist: Artist name
+            album: Album name
+            album_tracks: List of tracks in the album
+
+        Returns:
+            The year to compare the change with, or None when no provider knows the album or the rules rejected the answer
+        """
+        library_year = self.consistency_checker.get_most_common_year(album_tracks)
+        answer = await self._query_providers(artist, album, library_year)
+        return None if answer is None else await self._validate_provider_year(artist, album, album_tracks, answer)
+
     async def _query_providers(self, artist: str, album: str, library_year: str | None) -> ProviderAnswer | None:
         """Ask the providers for the album's year.
 
