@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import Counter
 from enum import StrEnum
 from typing import TYPE_CHECKING, NamedTuple
@@ -13,13 +14,13 @@ from core.presence import is_user_present
 from core.tracks.track_delta import year_text
 
 if TYPE_CHECKING:
-    import logging
     from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from core.models.protocols import AppleScriptClientProtocol
     from core.models.track_models import AppConfig, TrackDict
 
-    PresenceCheck = Callable[[int], Awaitable[bool]]
+    # True: someone is there; False: nobody; None: the idle time could not be read
+    PresenceCheck = Callable[[int], Awaitable[bool | None]]
 
 DIALOG_GRACE_SECONDS = 15
 NO_YEAR_LABEL = "—"
@@ -116,7 +117,9 @@ class YearDriftDecider:
         self._timeout = processing.drift_dialog_timeout_seconds
         self._max_dialogs = processing.drift_dialog_max_per_run
         self._dialogs_shown = 0
-        # Albums are judged concurrently; dialogs are shown one at a time and the cap is counted before any await
+        self._presence_unknown_said = False
+        # Albums are judged concurrently; the lock serialises the cap check, the presence check and the dialog,
+        # so two albums cannot both take the last slot
         self._dialog_lock = asyncio.Lock()
 
     async def decide(self, artist: str, album: str, *, old_year: str, new_year: str, provider_year: str) -> DriftDecision:
@@ -149,7 +152,11 @@ class YearDriftDecider:
                     "Dialog cap (%d) reached this run; applying %s to '%s - %s'", self._max_dialogs, provider_year, artist, album, extra=PLAIN_TEXT
                 )
                 return DriftDecision.APPLY
-            if not await self._is_present(self._idle_threshold):
+            present = await self._is_present(self._idle_threshold)
+            if present is None:
+                self._say_presence_unknown(artist, album, provider_year)
+                return DriftDecision.APPLY
+            if not present:
                 self._console_logger.info("Nobody at the Mac; applying %s to '%s - %s'", provider_year, artist, album, extra=PLAIN_TEXT)
                 return DriftDecision.APPLY
             self._dialogs_shown += 1
@@ -168,3 +175,11 @@ class YearDriftDecider:
             "Dialog for '%s - %s' answered '%s'; applying %s", artist, album, verdict or "nothing", provider_year, extra=PLAIN_TEXT
         )
         return DriftDecision.APPLY
+
+    def _say_presence_unknown(self, artist: str, album: str, provider_year: str) -> None:
+        """Say that the idle time could not be read: a warning the first time, so a broken `ioreg` is noticed once per run."""
+        level = logging.INFO if self._presence_unknown_said else logging.WARNING
+        self._presence_unknown_said = True
+        self._console_logger.log(
+            level, "Presence unknown (the idle time could not be read); applying %s to '%s - %s'", provider_year, artist, album, extra=PLAIN_TEXT
+        )

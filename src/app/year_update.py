@@ -204,10 +204,11 @@ class YearUpdateService:
         self._console_logger.info("Revert complete: %d tracks updated, %d not found", updated, missing)
 
         if changes_log:
-            await self._lock_written_albums(changes_log)
+            # The report of what reached Music.app goes to disk before the lock, whose write can fail
             revert_path = get_full_log_path(self._config, "changes_report_file", "csv/changes_revert.csv")
             save_changes_report(changes=changes_log, file_path=revert_path, console_logger=self._console_logger, error_logger=self._error_logger)
             self._console_logger.info("Revert changes report saved to %s", revert_path)
+            await self._lock_written_albums(changes_log)
 
     @staticmethod
     def _format_restore_target(artist: str | None, album: str | None) -> str:
@@ -343,7 +344,6 @@ class YearUpdateService:
         self._console_logger.info("Found %d albums needing year restoration:", len(albums_to_restore))
 
         changes_log, updated_count, failed_count = await self._process_album_restorations(albums_to_restore)
-        await self._lock_written_albums(changes_log)
 
         self._console_logger.info(
             "Restore complete: %d tracks updated, %d failed",
@@ -351,7 +351,9 @@ class YearUpdateService:
             failed_count,
         )
 
+        # The report of what reached Music.app goes to disk before the lock, whose write can fail
         self._save_restore_changes_report(changes_log)
+        await self._lock_written_albums(changes_log)
 
     async def _get_filtered_tracks_for_restore(
         self,
@@ -454,15 +456,18 @@ class YearUpdateService:
         if not album_tracks:
             self._console_logger.warning("No tracks found for '%s - %s'; nothing locked", artist, album, extra=PLAIN_TEXT)
             return
-        changes = await self._year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="lock_restore")
-        # The lock is read under the key the year step groups by: the album artist and the album's name in the library
+        # The lock goes first: a write that fails after it is repaired by the next run's lock restore, and a lock that fails writes nothing.
+        # It is read under the key the year step groups by: the album artist and the album's name in the library
         for group_artist, group_album in sorted({(album_group_artist(track), (track.album or "").strip()) for track in album_tracks}):
             if (group_artist, group_album) != (artist, album):
                 self._console_logger.info(
                     "Locking '%s - %s' (the album artist) for the typed '%s - %s'", group_artist, group_album, artist, album, extra=PLAIN_TEXT
                 )
             await self._lock_album(group_artist, group_album, year)
-        self._console_logger.info("'%s - %s' locked at %s; %d tracks written", artist, album, year, len(changes), extra=PLAIN_TEXT)
+        _, changes = await self._year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="lock_restore")
+        self._console_logger.info(
+            "%s'%s - %s' locked at %s; %d tracks written", "DRY-RUN: " if self._dry_run else "", artist, album, year, len(changes), extra=PLAIN_TEXT
+        )
         if changes:
             lock_report_path = get_full_log_path(self._config, "changes_lock_file", "csv/changes_lock.csv")
             save_changes_report(changes=changes, file_path=lock_report_path, console_logger=self._console_logger, error_logger=self._error_logger)
@@ -564,6 +569,11 @@ class YearUpdateService:
             )
             # The error log is a file the console never shows, so the console hears that the year update stopped
             self._console_logger.warning("Album year update stopped (%s); traceback in the error log", type(e).__name__)
+            if previous_years:
+                # No album was judged: the snapshot keeps every changed track's old year, so the next run sees the changes again
+                self._snapshot_manager.update_tracks(
+                    [track.copy(year=previous_years[str(track.id)]) for track in tracks if str(track.id) in previous_years]
+                )
             # Add error marker to ensure data consistency
             now = datetime.now(UTC)
             changes_log.append(

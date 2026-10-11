@@ -66,6 +66,19 @@ async def test_a_locked_album_is_restored_and_never_queried() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_locked_album_that_changed_outside_is_restored_not_judged() -> None:
+    """The case the lock exists for: Apple re-flips a locked album. Judging it would overwrite the person's year and flip-flop."""
+    processor, determinator, locks, decider, writer = _processor(locked="1996", provider="1991")
+
+    await _run(processor, _album("1991", "1991"), previous_years={"1": "1996", "2": "1996"})
+
+    assert (_write_kwargs(writer)["year"], _write_kwargs(writer)["reason"]) == ("1996", "lock_restore")
+    determinator.provider_year.assert_not_awaited()
+    decider.decide.assert_not_awaited()
+    locks.lock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_a_locked_album_at_its_year_is_left_alone() -> None:
     processor, determinator, _, _, writer = _processor(locked="2016")
 
@@ -146,9 +159,22 @@ async def test_write_album_year_returns_the_entries_it_recorded() -> None:
     processor = create_year_batch_processor()
     processor._track_updater._apply_year = AsyncMock(return_value=(["1"], 0))
 
-    entries = await processor.write_album_year("A", "B", album_tracks=_album("2019"), year="2016", reason="lock_restore")
+    written, entries = await processor.write_album_year("A", "B", album_tracks=_album("2019"), year="2016", reason="lock_restore")
 
     assert [(e.year_before_mgu, e.year_set_by_mgu, e.reason) for e in entries] == [("2019", "2016", "lock_restore")]
+    assert [(t.id, t.year, t.year_set_by_mgu) for t in written] == [("1", "2016", "2016")]
+
+
+@pytest.mark.asyncio
+async def test_a_lock_that_could_not_be_written_holds_the_album_back() -> None:
+    """The person chose to keep the year; without the lock on disk the choice would be forgotten, so the next run asks again."""
+    processor, _, locks, _, writer = _processor(decision=DriftDecision.KEEP)
+    locks.lock = AsyncMock(side_effect=OSError("disk full"))
+
+    await _run(processor, _album("2019", "2019"), previous_years={"1": "2016", "2": "2016"})
+
+    writer.assert_not_awaited()
+    assert [(t.id, t.year) for t in processor.held_back_tracks] == [("1", "2016"), ("2", "2016")]
 
 
 @pytest.mark.asyncio

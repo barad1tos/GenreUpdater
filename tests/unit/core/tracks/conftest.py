@@ -20,6 +20,7 @@ from tests.mocks.protocol_mocks import (
 )
 
 if TYPE_CHECKING:
+    from services.year_locks import YearLockService
     from core.models.track_models import AppConfig
 
 
@@ -124,7 +125,7 @@ def create_year_batch_processor(
     error_logger: logging.Logger | None = None,
     config: AppConfig | None = None,
     dry_run: bool = False,
-    year_locks: MagicMock | None = None,
+    year_locks: YearLockService | MagicMock | None = None,
     drift_decider: MagicMock | None = None,
 ) -> YearBatchProcessor:
     """Create YearBatchProcessor with mock dependencies.

@@ -30,13 +30,18 @@ def parse_hid_idle_seconds(ioreg_output: str) -> float | None:
 
 
 async def hid_idle_seconds() -> float | None:
-    """Read the idle time from IOKit; None when `ioreg` is missing, fails or times out."""
+    """Read the idle time from IOKit; None when `ioreg` is missing, fails or hangs (a hung `ioreg` is killed)."""
     try:
         process = await asyncio.create_subprocess_exec(
             "ioreg", "-c", "IOHIDSystem", "-d", "4", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
-        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=IOREG_TIMEOUT_SECONDS)
     except OSError:
+        return None
+    try:
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=IOREG_TIMEOUT_SECONDS)
+    except TimeoutError:
+        process.kill()
+        await process.wait()
         return None
     return parse_hid_idle_seconds(stdout.decode(errors="replace"))
 
@@ -54,7 +59,7 @@ async def is_user_present(
     *,
     idle_seconds: Callable[[], Awaitable[float | None]] = hid_idle_seconds,
     console_is_mine: Callable[[], bool] = console_user_is_me,
-) -> bool:
+) -> bool | None:
     """Return True when the console is this user's and input happened within `idle_threshold_seconds`.
 
     Args:
@@ -63,9 +68,9 @@ async def is_user_present(
         console_is_mine: Checks the console owner (injectable for tests)
 
     Returns:
-        Whether a person can answer a dialog right now
+        True when a person can answer a dialog right now, False when nobody can, None when the idle time could not be read
     """
     if not console_is_mine():
         return False
     idle = await idle_seconds()
-    return idle is not None and idle < idle_threshold_seconds
+    return None if idle is None else idle < idle_threshold_seconds

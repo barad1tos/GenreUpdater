@@ -86,7 +86,7 @@ def _add_lock_year_command(subparsers: _SubParsersAction) -> None:
         help="Write a year to an album and keep it: the year step never changes it again",
         description=(
             "Writes the year to every track of the album in Music.app and records the lock in csv/year_locks.csv. "
-            "Use the album artist as the changes report shows it. unlock_year removes the lock."
+            "Album artist or track artist; the lock is recorded under the album artist. unlock_year removes the lock."
         ),
     )
     parser.add_argument("--artist", required=True, help="Album artist")

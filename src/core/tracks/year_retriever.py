@@ -363,7 +363,9 @@ class YearRetriever:
         """Extract release years. Delegates to YearDeterminator."""
         return YearDeterminator.extract_release_years(album_tracks)
 
-    async def write_album_year(self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str) -> list[ChangeLogEntry]:
+    async def write_album_year(
+        self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str
+    ) -> tuple[list[TrackDict], list[ChangeLogEntry]]:
         """Write `year` to the album's tracks through the pipeline's write path. Delegates to YearBatchProcessor.
 
         Args:
@@ -374,7 +376,7 @@ class YearRetriever:
             reason: The changes_report.csv reason
 
         Returns:
-            One entry per track written
+            The tracks as written, carrying their year record, and one change entry per track written
         """
         return await self._batch_processor.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason=reason)
 

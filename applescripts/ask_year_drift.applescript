@@ -1,7 +1,7 @@
 -- ask_year_drift.applescript
 -- Asks the person at the Mac whether a year that changed outside the tool should stay.
 -- Arguments: artist, album, old year, new year, the providers' year, seconds before the dialog gives up.
--- Returns "keep" (keep the new year), "fix" (write the providers' year) or "timeout" (nobody answered).
+-- Returns "keep" (keep the new year), "fix" (write the providers' year) or "timeout" (nobody answered, or the dialog was cancelled).
 -- Values arrive as arguments and are never spliced into the script, so quotes or backslashes in names are safe.
 
 on run argv

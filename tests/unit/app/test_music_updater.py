@@ -14,6 +14,7 @@ from core.logger import LogFormat
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
 from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
 from core.models.track_models import ChangeLogEntry, TrackDict
+from core.tracks.track_delta import TrackDelta
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
@@ -730,6 +731,45 @@ class TestOutsideYearBaseline:
         assert updater._previous_years == {}
 
     @pytest.mark.asyncio
+    async def test_smart_delta_hands_its_changed_years_to_the_year_step(self) -> None:
+        """Dropping this hop turns detection off silently: the snapshot would absorb Apple's change and nobody would be asked."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        snapshot = [TrackDict(id="1", name="T", artist="A", album="B", year="2016")]
+        deps.library_snapshot_service.is_enabled = MagicMock(return_value=True)
+        deps.library_snapshot_service.is_snapshot_valid = AsyncMock(return_value=True)
+        deps.library_snapshot_service.compute_smart_delta = AsyncMock(
+            return_value=TrackDelta(new_ids=[], updated_ids=["1"], removed_ids=[], changed_years={"1": "2016"})
+        )
+        deps.library_snapshot_service.load_snapshot = AsyncMock(return_value=snapshot)
+        deps.cache_service.api_service = MagicMock()
+        updater = MusicUpdater(deps)
+        updater.snapshot_manager.merge_smart_delta = AsyncMock(return_value=[snapshot[0].copy(year="2019")])
+
+        with patch.object(updater, "_emit_identity_change_events"):
+            tracks = await updater._try_smart_delta_fetch()
+
+        assert tracks is not None
+        assert updater._previous_years == {"1": "2016"}
+
+    @pytest.mark.asyncio
+    async def test_a_full_scan_hands_its_baseline_to_the_year_step(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        deps.library_snapshot_service.is_enabled = MagicMock(return_value=True)
+        updater = MusicUpdater(deps)
+        previous = [TrackDict(id="1", name="T", artist="A", album="B", year="2016")]
+        current = [TrackDict(id="1", name="T", artist="A", album="B", year="2019")]
+        updater.track_processor.fetch_tracks_in_batches = AsyncMock(return_value=current)
+
+        with (
+            patch.object(updater, "_load_rescan_baseline", AsyncMock(return_value=previous)),
+            patch.object(updater, "_emit_rescan_events", AsyncMock()),
+        ):
+            tracks = await updater._fetch_tracks_for_pipeline_mode()
+
+        assert tracks == current
+        assert updater._previous_years == {"1": "2016"}
+
+    @pytest.mark.asyncio
     async def test_the_year_step_receives_the_baseline(self) -> None:
         deps = TestMusicUpdaterAllure.create_mock_dependencies()
         updater = MusicUpdater(deps)
@@ -778,6 +818,41 @@ class TestOutsideChangeNotification:
         assert "lock_year" in arguments[1]
 
     @pytest.mark.asyncio
+    async def test_the_pipeline_notifies_after_the_report_and_the_snapshot_are_safe(self) -> None:
+        """A notification that fails must not cost the run its report; the order is the whole point."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        tracks = [TrackDict(id="1", name="T", artist="A", album="B", year="2019")]
+        changes = [self._entry("A", "B", "2019", "2016", "outside_change")]
+        order: list[str] = []
+
+        async def save(_changes: list[ChangeLogEntry]) -> None:
+            """Stand in for the report save."""
+            order.append("report")
+
+        async def persist() -> bool:
+            """Stand in for the snapshot persist."""
+            order.append("snapshot")
+            return True
+
+        async def notify(_changes: list[ChangeLogEntry]) -> None:
+            """Stand in for the notification."""
+            order.append("notification")
+
+        with (
+            patch.object(updater, "_fetch_tracks_for_pipeline_mode", AsyncMock(return_value=tracks)),
+            patch.object(updater, "_compute_incremental_scope", AsyncMock(return_value=(tracks, False))),
+            patch.object(updater, "_update_all_genres", AsyncMock(return_value=[])),
+            patch.object(updater, "_update_all_years_with_logs", AsyncMock(return_value=changes)),
+            patch.object(updater, "_save_pipeline_results", save),
+            patch.object(updater.snapshot_manager, "persist_to_disk", persist),
+            patch.object(updater, "_notify_outside_changes", notify),
+        ):
+            await updater.run_main_pipeline()
+
+        assert order == ["report", "snapshot", "notification"]
+
+    @pytest.mark.asyncio
     async def test_nothing_to_say_sends_nothing(self) -> None:
         deps = TestMusicUpdaterAllure.create_mock_dependencies()
         updater = MusicUpdater(deps)
@@ -787,12 +862,69 @@ class TestOutsideChangeNotification:
         assert deps.ap_client.scripts_run == []
 
     @pytest.mark.asyncio
+    async def test_a_notification_the_client_refused_is_said_on_the_console(self) -> None:
+        """The client answers None when it refuses to run a script; silence would hide that the person was never told."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        deps.ap_client.run_script = AsyncMock(return_value=None)
+
+        await updater._notify_outside_changes([self._entry("In Flames", "Battles", "2019", "2016", "outside_change")])
+
+        assert any("Notification not shown" in message for message in deps.console_logger.warning_messages)
+
+    @pytest.mark.asyncio
     async def test_a_failed_notification_is_logged_not_raised(self) -> None:
         deps = TestMusicUpdaterAllure.create_mock_dependencies()
         updater = MusicUpdater(deps)
         deps.ap_client.run_script = AsyncMock(side_effect=OSError("osascript missing"))
-        updater.error_logger = MagicMock()
+        error_logger = MagicMock()
+        updater.error_logger = error_logger
 
         await updater._notify_outside_changes([self._entry("In Flames", "Battles", "2019", "2016", "outside_change")])
 
-        updater.error_logger.exception.assert_called_once()
+        error_logger.exception.assert_called_once()
+
+
+class TestPendingVerificationWrites:
+    """A year the pending check writes is the tool's own; the snapshot on disk must carry it before the next pipeline run."""
+
+    @staticmethod
+    def _updater(track: TrackDict, written: list[TrackDict]) -> tuple[MusicUpdater, AsyncMock, AsyncMock]:
+        """An updater whose library holds `track`, whose write path reports `written`, with the persist and remove mocks."""
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        persist = AsyncMock(return_value=True)
+        remove = AsyncMock()
+        updater.track_processor.fetch_tracks_async = AsyncMock(return_value=[track])
+        updater.year_retriever.write_album_year = AsyncMock(return_value=(written, []))
+        updater.snapshot_manager.persist_updates = persist
+        deps.pending_verification_service.remove_from_pending = remove
+        return updater, persist, remove
+
+    @pytest.mark.asyncio
+    async def test_a_verified_album_is_folded_into_the_snapshot(self) -> None:
+        track = TrackDict(id="1", name="T", artist="A", album="B", year="")
+        written = [track.copy(year="2004", year_set_by_mgu="2004")]
+        updater, persist, remove = self._updater(track, written)
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") is True
+
+        persist.assert_awaited_once_with(written)
+        remove.assert_awaited_once_with("A", "B")
+
+    @pytest.mark.asyncio
+    async def test_an_album_already_at_the_year_counts_as_verified(self) -> None:
+        updater, persist, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year="2004"), [])
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") is True
+
+        persist.assert_not_awaited()
+        remove.assert_awaited_once_with("A", "B")
+
+    @pytest.mark.asyncio
+    async def test_a_write_that_reached_no_track_keeps_the_album_pending(self) -> None:
+        updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year=""), [])
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") is False
+
+        remove.assert_not_awaited()

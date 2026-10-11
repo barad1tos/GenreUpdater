@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from core.apple_script_names import ASK_YEAR_DRIFT, FETCH_TRACK_IDS, NOTIFY_YEAR_CHANGES
+from core.tracks.track_delta import FIELD_SEPARATOR, LINE_SEPARATOR
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "applescripts"
 OSACOMPILE = shutil.which("osacompile")
@@ -27,6 +29,31 @@ def test_the_dialog_gives_up_and_names_its_answers() -> None:
 
     assert "giving up after" in source
     assert all(answer in source for answer in ('"keep"', '"fix"', '"timeout"'))
+
+
+def test_the_dialog_reads_its_arguments_in_the_order_the_decider_sends_them() -> None:
+    """YearDriftDecider.decide sends [artist, album, old year, new year, providers' year, seconds]; a swap would mislabel the buttons."""
+    source = (SCRIPTS / ASK_YEAR_DRIFT).read_text(encoding="utf-8")
+
+    positions = {name: int(index) for name, index in re.findall(r"set (\w+) to \(?item (\d) of argv", source)}
+
+    assert positions == {"artistName": 1, "albumName": 2, "oldYear": 3, "newYear": 4, "providerYear": 5, "giveUpAfter": 6}
+    assert 'set keepButton to "Зберегти " & newYear' in source
+    assert 'set fixButton to "Виправити на " & providerYear' in source
+
+
+def test_the_notification_takes_the_title_first_and_the_message_second() -> None:
+    source = (SCRIPTS / NOTIFY_YEAR_CHANGES).read_text(encoding="utf-8")
+
+    assert "display notification (item 2 of argv) with title (item 1 of argv)" in source
+    assert 'return "OK"' in source
+
+
+def test_the_id_read_uses_the_separators_the_parser_splits_on() -> None:
+    source = (SCRIPTS / FETCH_TRACK_IDS).read_text(encoding="utf-8")
+
+    assert f"set fieldSeparator to ASCII character {ord(FIELD_SEPARATOR)}" in source
+    assert f"set lineSeparator to ASCII character {ord(LINE_SEPARATOR)}" in source
 
 
 @pytest.mark.skipif(OSACOMPILE is None, reason="osacompile is macOS only")

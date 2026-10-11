@@ -77,7 +77,7 @@ class TrackDelta:
     updated_ids: list[str]
     removed_ids: list[str]
     changed_years: dict[str, str] = field(default_factory=dict)
-    """Track id → the year the stored side held, for the tracks in `updated_ids` whose current year differs from it."""
+    """Track id → the year the stored side held, for the tracks in `updated_ids` whose current year differs from it (both producers fill it)."""
 
     def has_updates(self) -> bool:
         """Return True when new or modified tracks are present."""

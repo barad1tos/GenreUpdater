@@ -1,11 +1,11 @@
 -- fetch_track_ids.applescript
 -- Returns the persistent ID and year of every editable track (ASCII 30 between the two, ASCII 29 between tracks)
--- About 2 s for 33K tracks: the big lists live in the script object below, so `item idx of` stays O(1);
--- as plain variables the same loop took 32 s (measured 2026-10-11)
+-- About 2 s for 33K tracks with the big lists as script-object properties (below); as plain variables the loop took
+-- 32 s for ids alone and 44.5 s with years (measured 2026-10-11)
 -- Persistent IDs survive Music.app renumbering its track ids, so the tool keys every track by them
--- Used by Smart Delta to detect new/removed tracks without fetching full metadata
+-- Used by Smart Delta (new, removed and year-changed tracks) and by every fetch_all_track_ids caller
 
--- Big lists as script-object properties: AppleScript copies a plain list on every `item idx of`, which made the filter loop O(n²)
+-- The big lists live here: `item idx of` on a script-object property stays fast where a plain-variable list made the loop O(n²)
 script o
 	property ids : {}
 	property statuses : {}

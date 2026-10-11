@@ -52,15 +52,16 @@ def test_summary_is_the_most_common_old_and_new_year() -> None:
 
 
 def _decider(
-    *, present: bool = True, dry_run: bool = False, answer: str | None = "fix", max_per_run: int = 3
+    *, present: bool | None = True, dry_run: bool = False, answer: str | None = "fix", max_per_run: int = 3
 ) -> tuple[YearDriftDecider, MockAppleScriptClient]:
     client = MockAppleScriptClient()
     client.set_response(ASK_YEAR_DRIFT, answer)
     config = create_test_app_config()
     config.year_retrieval.processing.drift_dialog_max_per_run = max_per_run
 
-    async def is_present(_threshold: int) -> bool:
-        """Stand in for the presence check."""
+    async def is_present(_threshold: int) -> bool | None:
+        """Stand in for the presence check; it yields, as the real ioreg read does, so concurrent callers interleave."""
+        await asyncio.sleep(0)
         return present
 
     ap_client = cast(AppleScriptClientProtocol, cast(object, client))
@@ -89,6 +90,22 @@ async def test_nobody_at_the_mac_means_apply_without_a_dialog() -> None:
 
     assert await decider.decide("A", "B", old_year="2016", new_year="2019", provider_year="2016") is DriftDecision.APPLY
     assert client.scripts_run == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_presence_applies_and_is_said_once(caplog: pytest.LogCaptureFixture) -> None:
+    """When the idle time cannot be read, the log must not claim nobody is at the Mac; the first time is a warning."""
+    decider, client = _decider(present=None, answer="keep")
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        first = await decider.decide("A", "B", old_year="2016", new_year="2019", provider_year="2016")
+        second = await decider.decide("C", "D", old_year="2016", new_year="2019", provider_year="2016")
+
+    assert (first, second) == (DriftDecision.APPLY, DriftDecision.APPLY)
+    assert client.scripts_run == []
+    unknown = [record for record in caplog.records if "presence unknown" in record.getMessage().lower()]
+    assert [record.levelno for record in unknown] == [logging.WARNING, logging.INFO]
+    assert all("nobody at the mac" not in record.getMessage().lower() for record in caplog.records)
 
 
 @pytest.mark.asyncio

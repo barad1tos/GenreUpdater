@@ -18,7 +18,7 @@ Music Genre Updater fetches album release years from multiple external APIs and 
 
 ```mermaid
 flowchart TD
-    A[Album without a year, or whose tracks disagree] --> B[Query MusicBrainz]
+    A[Album without a year, whose tracks disagree, or whose year changed outside the tool] --> B[Query MusicBrainz]
     A --> C[Query Discogs]
     A --> D[Query iTunes]
     B --> E[Score Results]
@@ -31,6 +31,8 @@ flowchart TD
 
 ## What decides an album's year
 
+A locked album keeps its locked year, and an album whose year changed outside the tool goes to [Years Changed Outside the Tool](#years-changed-outside-the-tool); the rules below decide every other album.
+
 1. A fresh, confident entry in the album-year cache.
 2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints rather than applied on their own, since Apple rewrites both without notice. Two fallback rules still side with Apple when the providers are not sure of their answer: an album whose release date is this year keeps Apple's date over an older provider year, and, for an album that already has a year, a provider year more than `year_difference_threshold` years from Apple's release date is rejected and the album marked for verification.
 3. When no provider knows the album, the year most of its tracks carry (at least 60% of them) fills in the others, unless that year is this year and the album's earliest track was added in an earlier year or no track carries a date (Apple's placeholder for a date it lacks): then the album is left alone.
@@ -41,20 +43,21 @@ A lookup that fails, or that no provider could be reached for, leaves the album 
 
 Apple's catalog rewrites years without notice, and a person edits them in Music.app; nothing in Music.app's data tells the two apart. Every run reads the id and year of every track in one pass (Smart Delta) or compares a full scan with its last snapshot, so a year that differs from the last run is noticed within one daemon cycle, unless it is the year the tool itself wrote.
 
-For such an album the providers are asked directly (no cache, no majority of its tracks), and:
+For such an album the providers are asked directly (no cache, no library hint; the fallback rules still apply and can keep the new year), and:
 
 - When they agree with the new year, nothing changes.
 - When they disagree and someone is at the Mac, a dialog asks, one per album and at most `drift_dialog_max_per_run` per run: `Рік <artist> — <album> змінено <old> → <new> ззовні. Провайдери кажуть <provider>.` with the buttons `Зберегти <new>` and `Виправити на <provider>`. Keeping the new year locks the album (below); fixing it, letting the dialog give up after `drift_dialog_timeout_seconds`, or reaching the cap writes the providers' year.
-- When nobody is at the Mac, the providers' year is written. A year that was cleared outside the tool is written back without asking, since an empty year cannot be kept.
-- When no provider knows the album, the change stands. When none could be reached, the snapshot keeps the old year and the next run looks again.
+- When nobody is at the Mac, the providers' year is written.
+- A year cleared outside the tool (or set to anything but four digits) cannot be kept, so the providers' year is written without a dialog, whoever is at the Mac.
+- When no provider knows the album, the change stands. When none could be reached or the lookup failed, the snapshot keeps the old year and the next run looks again.
 
 Someone is at the Mac when the run is not a dry run, the console belongs to the user running the tool, and the keyboard or mouse was used within `presence_idle_seconds`. A dry run asks nothing and writes nothing; it logs what it would do.
 
-Every write is a row in `changes_report.csv` with a `reason`: `pipeline` (the normal year step), `outside_change`, `lock_restore`, or `recheck` (reserved for the periodic recheck). A run that applied outside changes ends with one notification naming up to three albums and pointing at `lock_year` to undo one.
+Every write the year step makes is a row in `changes_report.csv` with a `reason`: `pipeline` (the normal year step), `outside_change`, `lock_restore`, or `recheck` (reserved for the periodic recheck). A run that applied outside changes ends with one notification naming up to three albums and pointing at `lock_year` to undo one.
 
 ## Locking a Year
 
-A locked album keeps its year: the year step never asks the providers about it, and writes the locked year back when the library shows another one (`lock_restore`). Locks come from the dialog or from the command line, and live in `csv/year_locks.csv` (`artist, album, year, locked_at, source`), which you can edit by hand:
+A locked album keeps its year: the year step never asks the providers about it, and writes the locked year back when the library shows another one (`lock_restore`). Locks come from the dialog or from the command line, and live in `csv/year_locks.csv` (`artist, album, year, locked_at, source`), which you can edit by hand: `locked_at` is `YYYY-MM-DD HH:MM:SS` in UTC and `source` is `dialog` or `command`, and a row you add may leave both out (locked from now, by command); a row the tool cannot read is named on the console and kept in the file as it is. The file is read again before every change, so an edit made while a run is going is not lost.
 
 ```bash
 # Keep 2019 on the album and write it to its tracks

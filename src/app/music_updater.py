@@ -24,7 +24,7 @@ from core.run_tracking import IncrementalRunTracker
 from core.tracks.artist_renamer import ArtistRenamer
 from core.tracks.genre_manager import GenreManager
 from core.tracks.incremental_filter import IncrementalFilterService
-from core.tracks.track_delta import carry_tool_record, find_changed_years, has_identity_changed
+from core.tracks.track_delta import carry_tool_record, find_changed_years, has_identity_changed, year_text
 from core.tracks.track_processor import TrackProcessor
 from core.tracks.year_retriever import YearRetriever
 from core.tracks.year_utils import album_group_artist
@@ -360,13 +360,12 @@ class MusicUpdater:
         if not album_tracks:
             return False
 
-        successful, _ = await self.year_retriever.update_album_tracks_bulk_async(
-            tracks=album_tracks,
-            year=year,
-            artist=artist,
-            album=album,
-        )
-        if successful <= 0:
+        written, _ = await self.year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="pipeline")
+        if written:
+            if not self.deps.dry_run:
+                # The pipeline never saw this write; without it in the snapshot the next run judges it as an outside change
+                await self.snapshot_manager.persist_updates(written)
+        elif any(year_text(track.year) != year for track in album_tracks):
             return False
 
         await self.deps.pending_verification_service.remove_from_pending(artist, album)
@@ -930,11 +929,15 @@ class MusicUpdater:
         title = f"Genre Updater: {len(albums)} album{'s' if len(albums) != 1 else ''} changed back"
         message = f"{named}{more}. Undo one with: main.py lock_year --artist … --album … --year <old> (rows in changes_report.csv)"
         try:
-            await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
+            shown = await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
         except (OSError, subprocess.SubprocessError) as error:
             # The writes and the report are already safe; the person still has the changes report
             self.error_logger.exception("The notification about %d changed-back albums could not be shown: %s", len(albums), error)
             self.console_logger.warning("Notification not shown (%s); the changes report has the rows", type(error).__name__)
+            return
+        if shown is None:
+            # The client answers None when it refuses to run a script or its retries are spent; nothing is raised
+            self.console_logger.warning("Notification not shown (the script did not run); the changes report has the rows")
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.

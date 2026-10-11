@@ -417,10 +417,10 @@ def test_year_text_normalizes_unset_years() -> None:
 
 
 def test_changed_years_are_the_tracks_in_both_maps_with_another_year() -> None:
-    previous = {"1": "2016", "2": None, "3": "2010", "gone": "1999"}
-    current = {"1": "2019", "2": "0", "3": "2010", "new": "2026"}
+    previous = {"1": "2016", "2": None, "3": "2010", "4": "2016", "gone": "1999"}
+    current = {"1": "2019", "2": "0", "3": "2010", "4": "", "new": "2026"}
 
-    assert find_changed_years(previous, current) == {"1": "2016"}
+    assert find_changed_years(previous, current) == {"1": "2016", "4": "2016"}
 
 
 def test_a_re_fetched_track_inherits_the_tool_record() -> None:

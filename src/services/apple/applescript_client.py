@@ -392,8 +392,8 @@ class AppleScriptClient(AppleScriptClientProtocol):
     async def fetch_all_track_ids(self, timeout: float | None = None) -> list[str]:
         """Fetch just track IDs from Music.app: the key list of the same bulk read as fetch_all_track_years.
 
-        This is used by Smart Delta to detect new/removed tracks without
-        fetching full metadata. Much faster than fetching all track data.
+        Rescans and cache invalidation use it to tell new and removed tracks apart without fetching full metadata;
+        Smart Delta reads fetch_all_track_years itself.
 
         Args:
             timeout: Timeout in seconds for script execution
@@ -406,7 +406,7 @@ class AppleScriptClient(AppleScriptClientProtocol):
 
     @track_instance_method("applescript_fetch_all_years")
     async def fetch_all_track_years(self, timeout: float | None = None) -> dict[str, str]:
-        """Fetch the persistent ID and year of every editable track (one bulk read; the years add about 2 s on 33K tracks).
+        """Fetch the persistent ID and year of every editable track (one bulk read of about 2 s on 33K tracks).
 
         Smart Delta compares the years with its snapshot to notice years changed outside the tool.
 

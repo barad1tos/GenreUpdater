@@ -111,8 +111,9 @@ class YearDeterminator:
         """Return the providers' year for the album, judged by the fallback rules; no cache, no majority, no library hint.
 
         The year step calls it for an album whose year changed outside the tool: the cache may predate the change and the
-        majority is the changed value itself, so neither is used. A lookup no provider answered, or one that failed, propagates
-        YearLookupUnavailableError from the query, so the caller leaves the album for the next run.
+        majority is the changed value itself, so neither is used. The fallback rules still read the album's existing year
+        from its tracks, so they can keep the changed year when the providers are not sure. A lookup no provider answered,
+        or one that failed, propagates YearLookupUnavailableError from the query, so the caller leaves the album for the next run.
 
         Args:
             artist: Artist name
