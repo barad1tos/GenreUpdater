@@ -523,7 +523,7 @@ class TestProviderYear:
         fallback.apply_year_fallback = AsyncMock(return_value="2016")
         determinator = _create_year_determinator(external_api=external_api, fallback_handler=fallback, real_checker=_real_checker())
 
-        assert await determinator.provider_year("In Flames", "Battles", [_create_track("1", year="2019"), _create_track("2", year="2019")]) == "2016"
+        assert await determinator.provider_year("In Flames", "Battles", [_create_track(year="2019"), _create_track("2", year="2019")]) == "2016"
 
     @pytest.mark.asyncio
     async def test_returns_none_when_no_provider_knows_the_album(self) -> None:
@@ -531,7 +531,7 @@ class TestProviderYear:
         external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
         determinator = _create_year_determinator(external_api=external_api, real_checker=_real_checker())
 
-        assert await determinator.provider_year("A", "B", [_create_track("1", year="2019")]) is None
+        assert await determinator.provider_year("A", "B", [_create_track(year="2019")]) is None
 
     @pytest.mark.asyncio
     async def test_skips_the_cache(self) -> None:
@@ -541,6 +541,6 @@ class TestProviderYear:
         external_api.get_album_year = AsyncMock(return_value=(None, False, 0, {}))
         determinator = _create_year_determinator(cache_service=cache, external_api=external_api, real_checker=_real_checker())
 
-        await determinator.provider_year("A", "B", [_create_track("1", year="2019")])
+        await determinator.provider_year("A", "B", [_create_track(year="2019")])
 
         cache.get_album_year_entry_from_cache.assert_not_awaited()

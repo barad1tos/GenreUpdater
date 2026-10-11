@@ -406,7 +406,7 @@ def test_album_artist_change_is_an_identity_change() -> None:
 
 
 def test_id_year_records_parse_into_a_map() -> None:
-    raw = LINE_SEPARATOR.join([f"A1{FIELD_SEPARATOR}2016", f"B2{FIELD_SEPARATOR}", f"C3{FIELD_SEPARATOR}0", FIELD_SEPARATOR + "1999", ""])
+    raw = LINE_SEPARATOR.join([f"A1{FIELD_SEPARATOR}2016", f"B2{FIELD_SEPARATOR}", f"C3{FIELD_SEPARATOR}0", f"{FIELD_SEPARATOR}1999", ""])
 
     assert parse_id_year_records(raw) == {"A1": "2016", "B2": "", "C3": ""}
 

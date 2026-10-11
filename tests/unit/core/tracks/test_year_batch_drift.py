@@ -89,7 +89,7 @@ async def test_outside_change_skips_the_pre_checks_and_asks_the_providers() -> N
 
 @pytest.mark.asyncio
 async def test_disagreement_and_apply_writes_the_providers_year_as_an_outside_change() -> None:
-    processor, _, locks, decider, writer = _processor(provider="2016", decision=DriftDecision.APPLY)
+    processor, _, locks, decider, writer = _processor()
 
     await _run(processor, _album("2019", "2019", "2016"), previous_years={"1": "2016", "2": "2016"})
 
@@ -101,7 +101,7 @@ async def test_disagreement_and_apply_writes_the_providers_year_as_an_outside_ch
 
 @pytest.mark.asyncio
 async def test_keep_locks_the_new_year_and_writes_nothing() -> None:
-    processor, _, locks, _, writer = _processor(provider="2016", decision=DriftDecision.KEEP)
+    processor, _, locks, _, writer = _processor(decision=DriftDecision.KEEP)
 
     await _run(processor, _album("2019", "2019"), previous_years={"1": "2016", "2": "2016"})
 

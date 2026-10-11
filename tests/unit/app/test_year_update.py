@@ -981,6 +981,6 @@ class TestCommandsLockWhatTheyWrite:
         service._process_album_restorations = AsyncMock(return_value=([entry], 1, 0))
         service._save_restore_changes_report = MagicMock()
 
-        await service.run_restore_release_years(artist="A", album="B", threshold=5)
+        await service.run_restore_release_years(artist="A", album="B")
 
         mock_year_locks.lock.assert_awaited_once_with("A", "B", "2004", source=LockSource.COMMAND)

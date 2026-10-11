@@ -276,7 +276,7 @@ class TestOutsideChangeLog:
         tracks = [create_test_track("1", year="2019", year_set_by_mgu="2016")]
         with caplog.at_level(logging.INFO, logger="test.console"):
             await processor._process_single_album("Artist", "Album", album_tracks=tracks, updated_tracks=[], changes_log=[])
-        assert not any("changed outside the tool" in record.message for record in caplog.records)
+        assert all("changed outside the tool" not in record.message for record in caplog.records)
 
 
 @pytest.mark.unit

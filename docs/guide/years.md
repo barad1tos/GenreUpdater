@@ -35,7 +35,36 @@ flowchart TD
 2. The providers (MusicBrainz, Discogs, iTunes), judged by the fallback rules. The year most of the album's tracks carry and Apple's release date are handed to them as hints rather than applied on their own, since Apple rewrites both without notice. Two fallback rules still side with Apple when the providers are not sure of their answer: an album whose release date is this year keeps Apple's date over an older provider year, and, for an album that already has a year, a provider year more than `year_difference_threshold` years from Apple's release date is rejected and the album marked for verification.
 3. When no provider knows the album, the year most of its tracks carry (at least 60% of them) fills in the others, unless that year is this year and the album's earliest track was added in an earlier year or no track carries a date (Apple's placeholder for a date it lacks): then the album is left alone.
 
-A lookup that fails, or that no provider could be reached for, leaves the album for the next run. An album whose tracks all agree is skipped (a single track agrees with itself), unless the cache holds another year (a confident entry is applied, a weaker one sends the album to the providers), or the shared year is this year or last and no track carries Apple's release date, a reissue sign that sends it to the providers too. A year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`); telling a later outside change from the tool's own write is the next release's job.
+A lookup that fails, or that no provider could be reached for, leaves the album for the next run. An album whose tracks all agree is skipped (a single track agrees with itself), unless the cache holds another year (a confident entry is applied, a weaker one sends the album to the providers), or the shared year is this year or last and no track carries Apple's release date, a reissue sign that sends it to the providers too. A year the tool wrote is recorded in `track_list.csv` (`year_set_by_mgu`), and a re-read track keeps the record; see [Years Changed Outside the Tool](#years-changed-outside-the-tool) for what happens when a year changes without the tool.
+
+## Years Changed Outside the Tool
+
+Apple's catalog rewrites years without notice, and a person edits them in Music.app; nothing in Music.app's data tells the two apart. Every run reads the id and year of every track in one pass (Smart Delta) or compares a full scan with its last snapshot, so a year that differs from the last run is noticed within one daemon cycle, unless it is the year the tool itself wrote.
+
+For such an album the providers are asked directly (no cache, no majority of its tracks), and:
+
+- When they agree with the new year, nothing changes.
+- When they disagree and someone is at the Mac, a dialog asks, one per album and at most `drift_dialog_max_per_run` per run: `Рік <artist> — <album> змінено <old> → <new> ззовні. Провайдери кажуть <provider>.` with the buttons `Зберегти <new>` and `Виправити на <provider>`. Keeping the new year locks the album (below); fixing it, letting the dialog give up after `drift_dialog_timeout_seconds`, or reaching the cap writes the providers' year.
+- When nobody is at the Mac, the providers' year is written.
+- When no provider knows the album, or none could be reached, the change stands and the next run looks again.
+
+Someone is at the Mac when the run is not a dry run, the console belongs to the user running the tool, and the keyboard or mouse was used within `presence_idle_seconds`. A dry run asks nothing and writes nothing; it logs what it would do.
+
+Every write is a row in `changes_report.csv` with a `reason`: `pipeline` (the normal year step), `outside_change`, `lock_restore`, or `recheck` (reserved for the periodic recheck). A run that applied outside changes ends with one notification naming up to three albums and pointing at `lock_year` to undo one.
+
+## Locking a Year
+
+A locked album keeps its year: the year step never asks the providers about it, and writes the locked year back when the library shows another one (`lock_restore`). Locks come from the dialog or from the command line, and live in `csv/year_locks.csv` (`artist, album, year, locked_at, source`), which you can edit by hand:
+
+```bash
+# Keep 2019 on the album and write it to its tracks
+uv run python main.py lock_year --artist "In Flames" --album "Battles" --year 2019
+
+# Let the year step change the album again
+uv run python main.py unlock_year --artist "In Flames" --album "Battles"
+```
+
+`revert_years` and `restore_release_years` lock the albums they write, so the next run does not undo them.
 
 ## Running Year Updates
 
@@ -125,6 +154,11 @@ year_retrieval:
     min_valid_year: 1900
     definitive_score_threshold: 70
     min_confidence_for_new_year: 30
+
+  processing:
+    presence_idle_seconds: 600          # input within this many seconds means someone is at the Mac
+    drift_dialog_timeout_seconds: 120   # the dialog about an outside change gives up after this
+    drift_dialog_max_per_run: 3         # dialogs per run; the rest apply the providers' year
 ```
 
 ## Special Album Handling
@@ -176,6 +210,8 @@ uv run python main.py revert_years --artist "Artist" --album "Album"
 # Revert all for an artist
 uv run python main.py revert_years --artist "Artist"
 ```
+
+A reverted album is locked at the reverted year, so the next run does not undo it; `unlock_year` lets the year step change it again.
 
 ## Troubleshooting
 

@@ -520,18 +520,7 @@ class YearBatchProcessor:
             len(album_tracks),
             extra=PLAIN_TEXT,
         )
-        try:
-            provider_year = await self.year_determinator.provider_year(artist, album, album_tracks)
-        except YearLookupUnavailableError:
-            self.console_logger.warning(
-                "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
-            )
-            return
-        if provider_year is None:
-            self.console_logger.info("No provider year for '%s - %s'; the outside change stands", artist, album, extra=PLAIN_TEXT)
-            return
-        if provider_year == new_year:
-            self.console_logger.info("Providers agree with the new year %s of '%s - %s'", new_year, artist, album, extra=PLAIN_TEXT)
+        if (provider_year := await self._providers_verdict(artist, album, album_tracks, new_year)) is None:
             return
         decision = await self._drift_decider.decide(artist, album, old_year=old_year, new_year=new_year, provider_year=provider_year)
         if decision is DriftDecision.KEEP:
@@ -546,6 +535,23 @@ class YearBatchProcessor:
             changes_log=changes_log,
             reason="outside_change",
         )
+
+    async def _providers_verdict(self, artist: str, album: str, album_tracks: list[TrackDict], new_year: str) -> str | None:
+        """Return the providers' year when it disputes `new_year`; None when there is nothing to decide (and say why)."""
+        try:
+            provider_year = await self.year_determinator.provider_year(artist, album, album_tracks)
+        except YearLookupUnavailableError:
+            self.console_logger.warning(
+                "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
+            )
+            return None
+        if provider_year is None:
+            self.console_logger.info("No provider year for '%s - %s'; the outside change stands", artist, album, extra=PLAIN_TEXT)
+            return None
+        if provider_year == new_year:
+            self.console_logger.info("Providers agree with the new year %s of '%s - %s'", new_year, artist, album, extra=PLAIN_TEXT)
+            return None
+        return provider_year
 
     async def write_album_year(self, artist: str, album: str, *, album_tracks: list[TrackDict], year: str, reason: str) -> list[ChangeLogEntry]:
         """Write `year` to the album's tracks through the pipeline's write path and return the recorded changes (CLI commands use it).

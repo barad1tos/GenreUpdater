@@ -1,17 +1,20 @@
 """Test for MusicUpdater pipeline snapshot functionality."""
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
-from unittest.mock import MagicMock, seal
+from unittest.mock import AsyncMock, MagicMock, seal
 
 import pytest
+
 from app.music_updater import MusicUpdater
 from core.models.track_models import TrackDict
 from core.retry_handler import DatabaseRetryHandler, RetryPolicy
 from metrics.analytics import Analytics, LoggerContainer
 from services.cache.snapshot import LibrarySnapshotService
 from services.dependency_container import DependencyContainer
+from services.year_locks import YearLockService
 from tests.factories import create_test_app_config
 
 
@@ -128,9 +131,12 @@ class FakeYearService:
         """Initialize fake year service."""
         self._snapshot_manager = snapshot_manager
 
-    async def update_all_years_with_logs(self, tracks: list[TrackDict], force: bool = False, fresh: bool = False) -> list[dict[str, Any]]:
+    async def update_all_years_with_logs(
+        self, tracks: list[TrackDict], force: bool = False, fresh: bool = False, *, previous_years: Mapping[str, str] | None = None
+    ) -> list[dict[str, Any]]:
         """Mock update_all_years_with_logs method."""
         assert force
+        assert previous_years == {}  # a first run has no baseline
         assert not fresh  # Test uses force=True but not fresh mode
         updated_tracks = [track.copy(year="2024") for track in tracks]
         self._snapshot_manager.update_tracks(updated_tracks)
@@ -192,6 +198,10 @@ async def test_main_pipeline_reuses_track_snapshot(
     snapshot_service = MagicMock(spec=LibrarySnapshotService)
     snapshot_service.is_enabled.return_value = False
 
+    year_locks = MagicMock(spec=YearLockService)
+    year_locks.get_locked_year.return_value = None
+    year_locks.lock = AsyncMock()
+
     deps = MagicMock(spec_set=DependencyContainer)
     deps.configure_mock(
         app_config=app_config,
@@ -204,6 +214,7 @@ async def test_main_pipeline_reuses_track_snapshot(
         cache_service=DummyCacheService(),
         library_snapshot_service=snapshot_service,
         pending_verification_service=DummyPendingVerificationService(),
+        year_lock_service=year_locks,
         external_api_service=DummyExternalApiService(),
         retry_handler=retry_handler,
         dry_run=False,

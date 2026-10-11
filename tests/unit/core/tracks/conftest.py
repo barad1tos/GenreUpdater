@@ -154,7 +154,7 @@ def create_year_batch_processor(
         console_logger=console_logger or logging.getLogger("test.console"),
         error_logger=error_logger or logging.getLogger("test.error"),
         config=config or create_test_app_config(),
-        analytics=analytics or cast(AnalyticsProtocol, cast(object, MagicMock())),
+        analytics=cast(AnalyticsProtocol, cast(object, analytics or MagicMock())),
         dry_run=dry_run,
         year_locks=year_locks,
         drift_decider=drift_decider,

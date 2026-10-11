@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A year that changes outside the tool (Apple's catalog or a person) is noticed within one run: Smart Delta reads every track's year with its id, and a full scan compares with the last snapshot. The providers are asked; when they disagree and someone is at the Mac, a dialog asks whether to keep the new year (which locks the album) or fix it; otherwise the providers' year is written. New settings `presence_idle_seconds`, `drift_dialog_timeout_seconds`, `drift_dialog_max_per_run` under `year_retrieval.processing`
+- Year locks: `csv/year_locks.csv`, `lock_year --artist --album --year` writes and keeps a year, `unlock_year --artist --album` releases it; a locked album never goes to the providers and gets its year back when the library shows another one
+- `changes_report.csv` has a `reason` column (`pipeline`, `outside_change`, `lock_restore`); a run that changed years back ends with one notification naming the albums and pointing at `lock_year`
+
+### Changed
+
+- The hourly id read of the library takes 2 s instead of 32 s: `fetch_track_ids.applescript` keeps its lists in a script object, and now returns each track's year as well
+- `revert_years` and `restore_release_years` lock the albums they write, so the next run does not undo them
+- A track re-read from Music.app keeps the `year_set_by_mgu` record of its last snapshot entry
+
 ## [3.1.1] - 2026-10-11
 
 ### Changed

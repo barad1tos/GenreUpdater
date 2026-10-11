@@ -59,6 +59,7 @@ def _decider(
     config.year_retrieval.processing.drift_dialog_max_per_run = max_per_run
 
     async def is_present(_threshold: int) -> bool:
+        """Stand in for the presence check."""
         return present
 
     ap_client = cast(AppleScriptClientProtocol, cast(object, client))
@@ -110,7 +111,7 @@ async def test_the_dialog_cap_holds_per_run() -> None:
 
 @pytest.mark.asyncio
 async def test_dialog_arguments_travel_verbatim() -> None:
-    decider, client = _decider(answer="fix")
+    decider, client = _decider()
 
     await decider.decide('Royal "Crown" Revue', "Mugzy's Move \\ Паліндром", old_year="", new_year="1991", provider_year="1996")
 

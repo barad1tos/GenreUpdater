@@ -57,7 +57,7 @@ class TrackUpdater:
         year: str,
         updated_tracks: list[TrackDict],
         changes_log: list[ChangeLogEntry],
-        reason: str = "pipeline",
+        reason: str,
     ) -> None:
         """Update tracks for a specific album and record changes.
 

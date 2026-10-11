@@ -109,6 +109,10 @@ analytics:
   enabled: false
 ```
 
+### Years changed outside the tool
+
+When a year changed in Music.app since the last run and the providers disagree with it, the daemon shows a dialog only when someone is at the Mac (the console is yours and the keyboard or mouse was used within `presence_idle_seconds`); otherwise it writes the providers' year and ends the run with a notification. See [Years](years.md#years-changed-outside-the-tool).
+
 ## Scheduling Options
 
 ### Fixed Interval

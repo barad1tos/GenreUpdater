@@ -117,6 +117,30 @@ Aliases: `restore`
     Use this command when albums received incorrect reissue years from APIs.
     It compares the writable `year` field with Apple's immutable `release_year`.
 
+### lock_year
+
+Write a year to an album and keep it: the year step never changes it again.
+
+```bash test="skip"
+uv run python main.py lock_year --artist "Artist Name" --album "Album" --year 2019
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--artist` | Yes | Album artist, as the changes report shows it |
+| `--album` | Yes | Album name (its cleaned name matches too) |
+| `--year` | Yes | Four-digit year to write and keep |
+
+The lock is a row in `csv/year_locks.csv`; the write is reported in `csv/changes_lock.csv`.
+
+### unlock_year
+
+Remove an album's year lock. Music.app is not touched.
+
+```bash test="skip"
+uv run python main.py unlock_year --artist "Artist Name" --album "Album"
+```
+
 ### verify_database
 
 Verify track database integrity against Music.app.

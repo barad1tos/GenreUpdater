@@ -50,7 +50,7 @@ def split_applescript_rows(raw: str, field_separator: str) -> list[str]:
     return raw.splitlines()
 
 
-def year_text(value: object) -> str:
+def year_text(value: str | int | None) -> str:
     """Return the year as the library reports it: "" for an unset year (None, "", "0" or 0)."""
     text = "" if value is None else str(value).strip()
     return "" if text == "0" else text

@@ -92,6 +92,8 @@ uv run python main.py            # Apply changes
 | `clean_artist`          | `clean`       | Remove promotional text from metadata |
 | `revert_years`          | `revert`      | Revert year changes for an artist     |
 | `restore_release_years` | `restore`     | Fix albums with wrong reissue years   |
+| `lock_year`             |               | Write a year to an album and keep it  |
+| `unlock_year`           |               | Remove an album's year lock           |
 | `verify_database`       | `verify-db`   | Verify tracks against Music.app       |
 | `verify_pending`        | `pending`     | Retry failed year lookups             |
 | `batch`                 |               | Process multiple artists from a file  |

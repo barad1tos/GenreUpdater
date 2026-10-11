@@ -14,6 +14,7 @@ from tests.factories import create_test_app_config
 
 @pytest.fixture
 def service(tmp_path: Path) -> YearLockService:
+    """A lock service over a scratch logs directory."""
     config = create_test_app_config(logs_base_dir=str(tmp_path))
     return YearLockService(config, logging.getLogger("test.console"), logging.getLogger("test.error"))
 

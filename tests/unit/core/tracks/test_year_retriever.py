@@ -496,6 +496,7 @@ class TestYearRetrieverAllure:
             year="2000",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
 
         assert [track.id for track in updated_tracks] == ["success_001"]

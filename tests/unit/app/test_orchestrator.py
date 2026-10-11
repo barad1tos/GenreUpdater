@@ -233,10 +233,12 @@ class TestOrchestratorAllure:
         calls: list[str] = []
 
         async def migrate(**_kwargs: Any) -> bool:
+            """Stand in for the id migration."""
             calls.append("migrate")
             return False
 
         async def workflow(_args: argparse.Namespace) -> None:
+            """Stand in for the main workflow."""
             calls.append("workflow")
 
         with (

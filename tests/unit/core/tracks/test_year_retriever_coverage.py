@@ -1001,6 +1001,7 @@ class TestUpdateTracksForAlbum:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
         # No tracks should be updated since they already have the year
         assert not updated_tracks
@@ -1025,6 +1026,7 @@ class TestUpdateTracksForAlbum:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
         assert len(updated_tracks) == 2
         assert len(changes_log) == 2
@@ -1776,6 +1778,7 @@ class TestUpdateTracksForAlbumChangeEntryFallback:
             year="2020",
             updated_tracks=updated_tracks,
             changes_log=changes_log,
+            reason="pipeline",
         )
 
         # The change entry should have year_set_by_mgu set correctly

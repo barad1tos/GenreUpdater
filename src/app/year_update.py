@@ -474,7 +474,7 @@ class YearUpdateService:
             if (album_group_artist(track) == artist or track.artist == artist) and (track.album or "").strip() in wanted
         ]
 
-    async def _lock_written_albums(self, entries: Sequence[Mapping[str, object] | ChangeLogEntry]) -> None:
+    async def _lock_written_albums(self, entries: Sequence[Mapping[str, str] | ChangeLogEntry]) -> None:
         """Lock every album a command wrote, at the year it wrote: a person's command is a decision the daemon must not undo."""
         years: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
         for entry in entries:
