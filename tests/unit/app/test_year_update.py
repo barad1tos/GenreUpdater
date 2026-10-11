@@ -1053,6 +1053,28 @@ class TestLockFailuresReachTheConsole:
         assert any("not locked" in message and "In Flames - Battles" in message for message in warnings)
 
     @pytest.mark.asyncio
+    async def test_every_album_left_unlocked_is_named(
+        self, service: YearUpdateService, mock_year_locks: MagicMock, console_logger: logging.Logger, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A restore over many albums: the person must learn which albums the next run may change back, not just the first."""
+        entries = [
+            {"artist": "A", "album": "B", "album_name": "B", "year_before_mgu": "2019", "year_set_by_mgu": "2016"},
+            {"artist": "C", "album": "D", "album_name": "D", "year_before_mgu": "2019", "year_set_by_mgu": "2004"},
+        ]
+        mock_year_locks.lock = AsyncMock(side_effect=OSError("disk full"))
+        with (
+            patch("app.year_update.repair_utils.build_revert_targets", return_value=[object()]),
+            patch("app.year_update.repair_utils.apply_year_reverts", AsyncMock(return_value=(2, 0, entries))),
+            patch("app.year_update.save_changes_report"),
+            caplog.at_level(logging.WARNING, logger=console_logger.name),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await service.run_revert_years("A", None)
+
+        warnings = [record.getMessage() for record in caplog.records if record.name == console_logger.name and record.levelno == logging.WARNING]
+        assert any("A - B" in message and "C - D" in message for message in warnings)
+
+    @pytest.mark.asyncio
     async def test_a_lock_year_whose_lock_failed_says_nothing_was_written(
         self,
         *,

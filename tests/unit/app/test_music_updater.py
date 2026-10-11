@@ -982,6 +982,33 @@ class TestPendingVerificationWrites:
         remove.assert_awaited_once_with("A", "B")
 
     @pytest.mark.asyncio
+    async def test_an_album_with_no_editable_track_stays_pending(self) -> None:
+        """An all-prerelease album has nothing the writer can touch yet; it is checked again when it is released."""
+        updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year="", track_status="prerelease"), [])
+
+        assert await updater._verify_single_pending_album("A", "B", "2004") is None
+
+        remove.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_run_that_stops_halfway_still_folds_what_it_wrote(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        deps.pending_verification_service = self._due(("A", "B"), ("C", "D"))
+        deps.external_api_service.get_album_year = AsyncMock(side_effect=[("2004", True, 90, {"2004": 90}), ("1999", True, 90, {"1999": 90})])
+        updater = MusicUpdater(deps)
+        first = [TrackDict(id="1", name="T", artist="A", album="B", year="2004", year_set_by_mgu="2004")]
+        persist = AsyncMock(return_value=True)
+        updater.snapshot_manager.persist_updates = persist
+
+        with (
+            patch.object(updater, "_verify_single_pending_album", AsyncMock(side_effect=[first, RuntimeError("Music.app gone")])),
+            pytest.raises(RuntimeError, match=r"Music\.app gone"),
+        ):
+            await updater.run_verify_pending()
+
+        persist.assert_awaited_once_with(first)
+
+    @pytest.mark.asyncio
     async def test_a_write_that_reached_no_track_keeps_the_album_pending(self) -> None:
         updater, _, remove = self._updater(TrackDict(id="1", name="T", artist="A", album="B", year=""), [])
 

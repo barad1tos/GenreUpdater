@@ -31,7 +31,7 @@ AlbumKey = tuple[str, str]
 
 
 class UnreadableRow(NamedTuple):
-    """A row the tool could not turn into a lock: written back as it was, and named once."""
+    """A row the tool could not turn into a lock: written back under the tool's columns, and named once."""
 
     line_number: int
     fields: list[str]
@@ -39,10 +39,22 @@ class UnreadableRow(NamedTuple):
 
 
 class LockFile(NamedTuple):
-    """What a read of the file gave: the locks by key and the rows that are not locks."""
+    """What a read of the file gave: the header as the person wrote it, the locks by key and the rows that are not locks."""
 
+    header: list[str]
     locks: dict[AlbumKey, YearLock]
     unreadable: list[UnreadableRow]
+
+    def standard_fields(self, row: UnreadableRow) -> list[str]:
+        """Return the row's fields in the tool's column order, fields past the header kept at the end.
+
+        A row typed under a reordered header must keep its meaning, or the person's later fix of it makes a lock
+        under the wrong artist and album.
+        """
+        if self.header == FIELDNAMES[: len(self.header)]:
+            return row.fields
+        by_name = dict(zip(self.header, row.fields, strict=False))
+        return [by_name.get(name, "") for name in FIELDNAMES] + row.fields[len(self.header) :]
 
 
 def album_key(artist: str, album: str) -> AlbumKey:
@@ -54,9 +66,15 @@ def album_key(artist: str, album: str) -> AlbumKey:
 
 
 def _sync_to_disk(fileno: int) -> None:
-    """Make the file's bytes reach the disk, past the drive's cache where the platform allows (macOS F_FULLFSYNC)."""
+    """Make the file's bytes reach the disk, past the drive's cache where the platform allows (macOS F_FULLFSYNC).
+
+    A volume without F_FULLFSYNC (a network share, some external drives) refuses it; fsync is what it offers.
+    """
     if hasattr(fcntl, "F_FULLFSYNC"):
-        fcntl.fcntl(fileno, fcntl.F_FULLFSYNC)
+        try:
+            fcntl.fcntl(fileno, fcntl.F_FULLFSYNC)
+        except OSError:
+            os.fsync(fileno)
     else:
         os.fsync(fileno)
 
@@ -112,7 +130,7 @@ class YearLockService:
         lock = YearLock(artist=key[0], album=key[1], year=year.strip(), locked_at=datetime.now(UTC), source=source)
         async with self._guard:
             current = await self._reread()
-            await asyncio.to_thread(self._write, LockFile({**current.locks, key: lock}, current.unreadable))
+            await asyncio.to_thread(self._write, LockFile(current.header, {**current.locks, key: lock}, current.unreadable))
         self.console_logger.info("Locked '%s - %s' at %s (%s)", lock.artist, lock.album, lock.year, source.value, extra=PLAIN_TEXT)
         return lock
 
@@ -123,7 +141,7 @@ class YearLockService:
             current = await self._reread()
             if key not in current.locks:
                 return False
-            await asyncio.to_thread(self._write, LockFile({k: v for k, v in current.locks.items() if k != key}, current.unreadable))
+            await asyncio.to_thread(self._write, LockFile(current.header, {k: v for k, v in current.locks.items() if k != key}, current.unreadable))
         self.console_logger.info("Unlocked '%s - %s'", key[0], key[1], extra=PLAIN_TEXT)
         return True
 
@@ -150,17 +168,16 @@ class YearLockService:
         """Read the file; None, said on the console and in the error log, when it cannot be read and so must not be rewritten."""
         path = Path(self.locks_file_path)
         if not path.exists():
-            return LockFile({}, [])
+            return LockFile(FIELDNAMES, {}, [])
         try:
             # utf-8-sig: Numbers and Excel save a byte order mark, which would otherwise hide the first column
             with path.open(newline="", encoding="utf-8-sig") as handle:
                 rows = list(csv.reader(handle))
         except (OSError, UnicodeDecodeError, csv.Error) as error:
-            self.error_logger.exception("Year locks file %s could not be read", path)
             self._say_unreadable(path, str(error))
             return None
         if not rows:
-            return LockFile({}, [])
+            return LockFile(FIELDNAMES, {}, [])
         # A hand-typed header may carry spaces or capitals; a header without the key columns is another format altogether
         header = [name.strip().casefold() for name in rows[0]]
         if not KEY_COLUMNS.issubset(header):
@@ -169,6 +186,8 @@ class YearLockService:
         locks: dict[AlbumKey, YearLock] = {}
         unreadable: list[UnreadableRow] = []
         for line_number, fields in enumerate(rows[1:], start=2):
+            if not any(field.strip() for field in fields):
+                continue
             row = dict(zip(header, fields, strict=False))
             try:
                 lock = self._parse_row(row)
@@ -176,10 +195,13 @@ class YearLockService:
                 unreadable.append(UnreadableRow(line_number, fields, str(error)))
             else:
                 locks[album_key(lock.artist, lock.album)] = lock
-        return LockFile(locks, unreadable)
+        return LockFile(header, locks, unreadable)
 
     def _say_unreadable(self, path: Path, reason: str) -> None:
-        self.console_logger.error("%s could not be read (%s); running without locks and not rewriting it", path, reason, extra=PLAIN_TEXT)
+        """Say on the console and in the error log that the file is unusable; under launchd only the error log is read."""
+        message = "%s could not be read (%s); running without locks and not rewriting it"
+        self.console_logger.error(message, path, reason, extra=PLAIN_TEXT)
+        self.error_logger.error(message, path, reason)
 
     @staticmethod
     def _parse_row(row: dict[str, str]) -> YearLock:
@@ -206,9 +228,10 @@ class YearLockService:
             writer.writerow(FIELDNAMES)
             for lock in content.locks.values():
                 writer.writerow([lock.artist, lock.album, lock.year, lock.locked_at.strftime(TIMESTAMP_FORMAT), lock.source.value])
-            writer.writerows(row.fields for row in content.unreadable)
+            writer.writerows(content.standard_fields(row) for row in content.unreadable)
             # The new file must be on disk before it replaces the old one, or a power loss leaves an empty lock file
             handle.flush()
             _sync_to_disk(handle.fileno())
         temp_path.replace(path)
+        # The file is under the tool's header now
         self._locks, self._unreadable = content.locks, content.unreadable

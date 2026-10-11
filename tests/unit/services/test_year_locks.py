@@ -321,3 +321,52 @@ class TestHandEdits:
                 await service.lock("X", album, "2001", source=LockSource.COMMAND)
 
         assert sum("year_locks.csv" in record.getMessage() and record.name == "test.console" for record in caplog.records) == 1
+
+
+class TestRewritesKeepTheMeaningOfHandTypedRows:
+    """A rewrite puts the file under the tool's header; a row typed under another header must keep its meaning."""
+
+    @pytest.mark.asyncio
+    async def test_a_row_under_a_reordered_header_lands_in_the_right_columns(self, service: YearLockService) -> None:
+        """Otherwise the person's later fix of the bad year makes a lock under the swapped artist and album."""
+        path = _write_file(service, "Album,Artist,Year\nLava,Das Ich,2004\nKind of Blue,Miles Davis,195\n")
+        await service.initialize()
+
+        await service.lock("A", "B", "2001", source=LockSource.COMMAND)
+
+        assert "Miles Davis,Kind of Blue,195,," in path.read_text(encoding="utf-8")
+        reloaded = YearLockService(service.config, logging.getLogger("t"), logging.getLogger("t"))
+        await reloaded.initialize()
+        assert reloaded.get_locked_year("Das Ich", "Lava") == "2004"
+
+    @pytest.mark.asyncio
+    async def test_a_blank_line_is_neither_a_row_nor_a_warning(self, service: YearLockService, caplog: pytest.LogCaptureFixture) -> None:
+        _write_file(service, "artist,album,year,locked_at,source\nA,B,2001,,\n\nC,D,2002,,\n")
+
+        with caplog.at_level(logging.WARNING, logger="test.console"):
+            await service.initialize()
+
+        assert [lock.album for lock in service.all_locks()] == ["B", "D"]
+        assert all("year_locks.csv" not in record.getMessage() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_a_bad_header_reaches_the_error_log_too(self, service: YearLockService, caplog: pytest.LogCaptureFixture) -> None:
+        """Under launchd the console goes to stdout.log; the error log is where a run's problems are looked for."""
+        _write_file(service, "artist;album;year\nA;B;2001\n")
+
+        with caplog.at_level(logging.ERROR, logger="test.error"):
+            await service.initialize()
+
+        assert any(record.name == "test.error" and "year_locks.csv" in record.getMessage() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_a_volume_without_full_fsync_falls_back_to_fsync(self, service: YearLockService) -> None:
+        await service.initialize()
+        fcntl = MagicMock()
+        fcntl.fcntl = MagicMock(side_effect=OSError("not supported"))
+
+        with patch("services.year_locks.fcntl", fcntl), patch("services.year_locks.os.fsync") as fsync:
+            await service.lock("A", "B", "2001", source=LockSource.COMMAND)
+
+        fsync.assert_called_once()
+        assert service.get_locked_year("A", "B") == "2001"

@@ -528,15 +528,17 @@ class YearUpdateService:
             year = year_text(record.get("year_set_by_mgu"))
             if artist and album and year:
                 years[(artist, album)][year] += 1
-        for (artist, album), counter in years.items():
+        albums = list(years.items())
+        for index, ((artist, album), counter) in enumerate(albums):
             try:
                 await self._lock_album(artist, album, counter.most_common(1)[0][0])
             except OSError:
-                # The error itself goes to the error log through main; the person at the terminal hears what it means
+                # The error itself goes to the error log through main; the person at the terminal hears every album it leaves
+                # unlocked, this one and the rest, since the file that refused this lock refuses the next ones too
+                unlocked = ", ".join(f"'{a} - {b}'" for (a, b), _ in albums[index:])
                 self._console_logger.warning(
-                    "'%s - %s' was written but not locked; the next run may change it back. Run lock_year once the lock file can be written",
-                    artist,
-                    album,
+                    "Written but not locked; the next run may change them back: %s. Run lock_year for each once the lock file can be written",
+                    unlocked,
                     extra=PLAIN_TEXT,
                 )
                 raise

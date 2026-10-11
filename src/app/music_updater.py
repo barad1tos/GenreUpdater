@@ -362,8 +362,9 @@ class MusicUpdater:
             return None
 
         written, _ = await self.year_retriever.write_album_year(artist, album, album_tracks=album_tracks, year=year, reason="pipeline")
-        # The writer skips prerelease tracks, so only the editable ones say whether the album is done
-        if not written and any(year_text(track.year) != year for track in album_tracks if can_edit_metadata(track.track_status)):
+        # The writer skips prerelease tracks, so only the editable ones say whether the album is done; none means not yet
+        editable = [track for track in album_tracks if can_edit_metadata(track.track_status)]
+        if not written and (not editable or any(year_text(track.year) != year for track in editable)):
             return None
 
         await self.deps.pending_verification_service.remove_from_pending(artist, album)
@@ -420,32 +421,33 @@ class MusicUpdater:
         failed_count = 0
         unavailable_count = 0
         written: list[TrackDict] = []
-        for entry in albums_to_verify:
-            try:
-                year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
-            except YearLookupFailedError:
-                # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
-                failed_count += 1
-                continue
-            except YearLookupUnavailableError:
-                # No provider answered: the entry stays as it was and is checked again on the next run
-                unavailable_count += 1
-                continue
-            if not year_str:
-                failed_count += 1
-                continue
+        try:
+            for entry in albums_to_verify:
+                try:
+                    year_str, _, _, _ = await self.deps.external_api_service.get_album_year(entry.artist, entry.album)
+                except YearLookupFailedError:
+                    # The lookup failed: a failed check, logged by the orchestrator; the entry waits for its next turn
+                    failed_count += 1
+                    continue
+                except YearLookupUnavailableError:
+                    # No provider answered: the entry stays as it was and is checked again on the next run
+                    unavailable_count += 1
+                    continue
+                if not year_str:
+                    failed_count += 1
+                    continue
 
-            album_written = await self._verify_single_pending_album(entry.artist, entry.album, year_str)
-            if album_written is None:
-                failed_count += 1
-            else:
-                verified_count += 1
-                written.extend(album_written)
-
-        # The pipeline never saw these writes; without them in the snapshot the next run judges them as outside changes.
-        # One disk round trip for the run: the snapshot holds the whole library
-        if written and not self.deps.dry_run:
-            await self.snapshot_manager.persist_updates(written)
+                album_written = await self._verify_single_pending_album(entry.artist, entry.album, year_str)
+                if album_written is None:
+                    failed_count += 1
+                else:
+                    verified_count += 1
+                    written.extend(album_written)
+        finally:
+            # The pipeline never saw these writes; without them in the snapshot the next run judges them as outside changes.
+            # One disk round trip for the run, whatever stopped the loop: the snapshot holds the whole library
+            if written and not self.deps.dry_run:
+                await self.snapshot_manager.persist_updates(written)
 
         # A run that could not check every due album must not postpone the next one
         if unavailable_count == 0:
