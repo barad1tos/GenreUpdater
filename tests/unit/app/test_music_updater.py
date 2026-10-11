@@ -9,10 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.music_updater import LibraryFetchError, MusicUpdater
+from core.apple_script_names import NOTIFY_YEAR_CHANGES
 from core.logger import LogFormat
 from core.models.cache_types import SNAPSHOT_VERSION, LibraryCacheMetadata, PendingAlbumEntry, VerificationReason
 from core.models.protocols import YearLookupFailedError, YearLookupUnavailableError
-from core.models.track_models import TrackDict
+from core.models.track_models import ChangeLogEntry, TrackDict
 from tests.factories import create_test_app_config
 from tests.mocks.csv_mock import MockAnalytics, MockLogger
 from tests.mocks.protocol_mocks import (
@@ -738,3 +739,49 @@ class TestOutsideYearBaseline:
         await updater._update_all_years_with_logs([], force=False)
 
         updater.year_service.update_all_years_with_logs.assert_awaited_once_with([], False, False, previous_years={"1": "2016"})
+
+
+class TestOutsideChangeNotification:
+    """A run that corrected outside changes says so once, naming up to three albums and the way to undo."""
+
+    @staticmethod
+    def _entry(artist: str, album: str, old: str, new: str, reason: str) -> ChangeLogEntry:
+        return ChangeLogEntry(
+            timestamp="t",
+            change_type="year_update",
+            track_id="1",
+            artist=artist,
+            album_name=album,
+            year_before_mgu=old,
+            year_set_by_mgu=new,
+            reason=reason,
+        )
+
+    @pytest.mark.asyncio
+    async def test_notifies_once_with_the_albums_and_the_undo_hint(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+        changes = (
+            [self._entry("In Flames", "Battles", "2019", "2016", "outside_change")] * 2
+            + [self._entry(f"A{i}", f"B{i}", "2000", "2001", "outside_change") for i in range(3)]
+            + [self._entry("P", "Q", "1", "2", "pipeline")]
+        )
+
+        await updater._notify_outside_changes(changes)
+
+        script, arguments = deps.ap_client.scripts_run[-1]
+        assert script == NOTIFY_YEAR_CHANGES
+        assert arguments is not None
+        assert arguments[0] == "Genre Updater: 4 albums changed back"
+        assert "In Flames - Battles (2019 -> 2016)" in arguments[1]
+        assert "and 1 more" in arguments[1]
+        assert "lock_year" in arguments[1]
+
+    @pytest.mark.asyncio
+    async def test_nothing_to_say_sends_nothing(self) -> None:
+        deps = TestMusicUpdaterAllure.create_mock_dependencies()
+        updater = MusicUpdater(deps)
+
+        await updater._notify_outside_changes([self._entry("P", "Q", "1", "2", "pipeline")])
+
+        assert deps.ap_client.scripts_run == []

@@ -14,6 +14,7 @@ from app.genre_update import GenreUpdateService
 from app.pipeline_snapshot import PipelineSnapshotManager
 from app.track_cleaning import TrackCleaningService
 from app.year_update import YearUpdateService
+from core.apple_script_names import NOTIFY_YEAR_CHANGES
 from core.logger import LogFormat, get_full_log_path
 from core.models.cache_types import SNAPSHOT_VERSION
 from core.models.metadata_utils import is_music_app_running
@@ -39,6 +40,10 @@ if TYPE_CHECKING:
     from core.models.track_models import ChangeLogEntry, TrackDict
     from services.cache.api_cache import ApiCacheService
     from services.dependency_container import DependencyContainer
+
+
+NOTIFIED_ALBUMS = 3
+NOTIFY_TIMEOUT_SECONDS = 15
 
 
 class LibraryFetchError(RuntimeError):
@@ -538,6 +543,7 @@ class MusicUpdater:
         # Step 4: Update years (use ALL tracks - YearBatchProcessor handles internal skip logic)
         year_changes = await self._update_all_years_with_logs(tracks, force, fresh)
         all_changes.extend(year_changes)
+        await self._notify_outside_changes(year_changes)
 
         # Save combined results including all changes
         await self._save_pipeline_results(all_changes)
@@ -891,6 +897,27 @@ class MusicUpdater:
             List of change log entries
         """
         return await self.year_service.update_all_years_with_logs(tracks, force, fresh, previous_years=self._previous_years)
+
+    async def _notify_outside_changes(self, changes: list[ChangeLogEntry]) -> None:
+        """Tell the person at the Mac which years the run changed back after they changed outside the tool, and how to undo.
+
+        One notification per run, through `notify_year_changes.applescript` (the text travels as arguments). The changes report
+        holds every row with reason `outside_change`; `lock_year` with the old year undoes one album and locks it.
+
+        Args:
+            changes: The year step's change log entries
+        """
+        applied = [change for change in changes if change.reason == "outside_change"]
+        if not applied:
+            return
+        albums: dict[tuple[str, str], tuple[str, str]] = {}
+        for change in applied:
+            albums.setdefault((change.artist, change.album_name), (change.year_before_mgu or "none", change.year_set_by_mgu or "none"))
+        named = "; ".join(f"{artist} - {album} ({old} -> {new})" for (artist, album), (old, new) in list(albums.items())[:NOTIFIED_ALBUMS])
+        more = f" and {len(albums) - NOTIFIED_ALBUMS} more" if len(albums) > NOTIFIED_ALBUMS else ""
+        title = f"Genre Updater: {len(albums)} album{'s' if len(albums) != 1 else ''} changed back"
+        message = f"{named}{more}. Undo one with: main.py lock_year --artist … --album … --year <old> (rows in changes_report.csv)"
+        await self.deps.ap_client.run_script(NOTIFY_YEAR_CHANGES, [title, message], timeout=NOTIFY_TIMEOUT_SECONDS)
 
     async def _save_pipeline_results(self, changes: list[ChangeLogEntry]) -> None:
         """Save the combined results of the pipeline with full track synchronization and changes report.
