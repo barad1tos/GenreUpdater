@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from core.models.cache_types import LockSource
+from datetime import UTC, datetime
+
+from core.models.cache_types import LockSource, YearLock
 from services.year_locks import YearLockService
 from tests.factories import create_test_app_config
 
@@ -92,5 +94,33 @@ async def test_a_lock_that_could_not_be_read_back_is_refused(service: YearLockSe
 
     with pytest.raises(ValueError, match="four-digit"):
         await service.lock("A", "B", "", source=LockSource.DIALOG)
+
+    assert service.all_locks() == []
+
+
+class TestYearLockInvariants:
+    """A lock that could not be read back is refused at construction, whichever site builds it."""
+
+    def test_empty_artist_or_album_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="artist and album"):
+            YearLock(artist=" ", album="B", year="2001", locked_at=datetime.now(UTC), source=LockSource.DIALOG)
+        with pytest.raises(ValueError, match="artist and album"):
+            YearLock(artist="A", album="", year="2001", locked_at=datetime.now(UTC), source=LockSource.DIALOG)
+
+    def test_a_year_that_is_not_four_digits_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="four-digit"):
+            YearLock(artist="A", album="B", year="19", locked_at=datetime.now(UTC), source=LockSource.COMMAND)
+
+    def test_a_naive_timestamp_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="timezone"):
+            YearLock(artist="A", album="B", year="2001", locked_at=datetime.now(UTC).replace(tzinfo=None), source=LockSource.COMMAND)
+
+
+@pytest.mark.asyncio
+async def test_a_lock_without_an_artist_is_refused(service: YearLockService) -> None:
+    await service.initialize()
+
+    with pytest.raises(ValueError, match="artist and album"):
+        await service.lock("", "B", "2001", source=LockSource.DIALOG)
 
     assert service.all_locks() == []

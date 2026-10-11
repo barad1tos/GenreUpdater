@@ -77,7 +77,7 @@ class TrackDelta:
     updated_ids: list[str]
     removed_ids: list[str]
     changed_years: dict[str, str] = field(default_factory=dict)
-    """Track id → the year the snapshot held, for the tracks in `updated_ids` whose library year differs from it."""
+    """Track id → the year the stored side held, for the tracks in `updated_ids` whose current year differs from it."""
 
     def has_updates(self) -> bool:
         """Return True when new or modified tracks are present."""
@@ -210,4 +210,7 @@ def compute_track_delta(
         if has_track_changed(current, stored):
             updated_ids.append(track_id)
 
-    return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids)
+    changed_years = find_changed_years(
+        {track_id: track.year for track_id, track in existing_map.items()}, {track_id: track.year for track_id, track in current_map.items()}
+    )
+    return TrackDelta(new_ids=new_ids, updated_ids=updated_ids, removed_ids=removed_ids, changed_years=changed_years)

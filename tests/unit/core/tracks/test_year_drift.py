@@ -133,3 +133,8 @@ async def test_the_dialog_cap_holds_under_concurrency() -> None:
 
     assert sorted(results) == [DriftDecision.APPLY, DriftDecision.KEEP]
     assert len(client.scripts_run) == 1
+
+
+def test_a_summary_of_nothing_is_an_error() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        summarize_outside_changes([])

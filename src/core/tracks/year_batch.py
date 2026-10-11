@@ -24,14 +24,13 @@ from rich.progress import (
 )
 
 from core.logger import PLAIN_TEXT, get_shared_console
-from core.models.cache_types import LockSource
+from core.models.cache_types import LockSource, is_lock_year
 from core.models.protocols import YearLookupUnavailableError
-from core.tracks.track_delta import year_text
-from services.year_locks import is_lock_year
 from core.models.track_status import (
     can_edit_metadata,
     filter_available_tracks,
 )
+from core.tracks.track_delta import year_text
 
 from .prerelease_handler import PrereleaseHandler
 from .track_updater import TrackUpdater
@@ -107,7 +106,7 @@ class YearBatchProcessor:
         self._drift_decider = drift_decider
         # Outside changes the run could not judge (providers unreachable): copies at the snapshot's year, so the baseline
         # does not move and the next run sees the change again
-        self.held_back_tracks: list[TrackDict] = []
+        self._held_back_tracks: list[TrackDict] = []
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
@@ -130,6 +129,11 @@ class YearBatchProcessor:
             config=config,
         )
 
+    @property
+    def held_back_tracks(self) -> list[TrackDict]:
+        """Tracks the last run could not judge (providers unreachable), at the snapshot's year; valid right after a run."""
+        return list(self._held_back_tracks)
+
     # Batch strategy
 
     async def process_albums_in_batches(
@@ -151,7 +155,7 @@ class YearBatchProcessor:
 
         """
         processing = self.config.year_retrieval.processing
-        self.held_back_tracks = []
+        self._held_back_tracks = []
 
         batch_size = processing.batch_size
         delay_between_batches = int(processing.delay_between_batches)
@@ -529,7 +533,7 @@ class YearBatchProcessor:
             provider_year = await self._providers_verdict(artist, album, album_tracks, new_year)
         except YearLookupUnavailableError:
             # Keep the snapshot at the old year, or the next run would see no change and accept this one silently
-            self.held_back_tracks.extend(change.track.copy(year=change.old_year) for change in outside_changes)
+            self._held_back_tracks.extend(change.track.copy(year=change.old_year) for change in outside_changes)
             self.console_logger.warning(
                 "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
             )

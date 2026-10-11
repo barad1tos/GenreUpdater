@@ -214,6 +214,7 @@ class TrackUpdater:
                     track_id=str(track.get("id", "")),
                     artist=artist,
                     album_name=album,
+                    album_artist=artist,
                     track_name=str(track.get("name", "")),
                     year_before_mgu=str(old_year_value) if old_year_value is not None else "",
                     year_set_by_mgu=year,

@@ -608,7 +608,7 @@ class ChangeLogEntry(BaseModel):
     artist: str
     track_name: str = ""
     album_name: str = ""
-    album_artist: str | None = None  # the album artist the year step groups by, when it differs from the track artist
+    album_artist: str | None = None  # the album artist the year step groups by; None when the producer did not record it, then `artist` is it
     old_genre: str | None = None
     new_genre: str | None = None
     year_before_mgu: str | None = None

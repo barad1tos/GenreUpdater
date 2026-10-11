@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from core.apple_script_names import ASK_YEAR_DRIFT
 from core.logger import PLAIN_TEXT
+from core.presence import is_user_present
 from core.tracks.track_delta import year_text
-from services.presence import is_user_present
 
 if TYPE_CHECKING:
     import logging
@@ -58,7 +58,20 @@ def find_outside_changes(album_tracks: Sequence[TrackDict], previous_years: Mapp
 
 
 def summarize_outside_changes(changes: Sequence[OutsideYearChange]) -> tuple[str, str]:
-    """Return the most common old year and the most common new year among the changes (a tie goes to the first seen)."""
+    """Return the most common old year and the most common new year among the changes (a tie goes to the first seen).
+
+    Args:
+        changes: The album's outside changes, at least one
+
+    Returns:
+        The old and the new year
+
+    Raises:
+        ValueError: No changes were given
+    """
+    if not changes:
+        msg = "A summary needs at least one change"
+        raise ValueError(msg)
     old_year = Counter(change.old_year for change in changes).most_common(1)[0][0]
     new_year = Counter(change.new_year for change in changes).most_common(1)[0][0]
     return old_year, new_year
@@ -148,7 +161,7 @@ class YearDriftDecider:
                 context_album=album,
             )
         verdict = (answer or "").strip()
-        if verdict == "keep":
+        if verdict == DriftDecision.KEEP.value:
             self._console_logger.info("Kept %s on '%s - %s' at the person's request; locking it", new_year, artist, album, extra=PLAIN_TEXT)
             return DriftDecision.KEEP
         self._console_logger.info(

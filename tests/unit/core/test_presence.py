@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.presence import is_user_present, parse_hid_idle_seconds
+from core.presence import is_user_present, parse_hid_idle_seconds
 
 IOREG_SAMPLE = '    |   "HIDIdleTime" = 2437802500\n    |   "HIDParameters" = {...}\n'
 

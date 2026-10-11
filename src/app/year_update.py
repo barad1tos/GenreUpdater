@@ -11,13 +11,12 @@ from typing import TYPE_CHECKING
 
 from core.logger import PLAIN_TEXT, get_full_log_path
 from core.models import year_repair as repair_utils
-from core.models.cache_types import LockSource
+from core.models.cache_types import LockSource, is_lock_year
 from core.models.metadata_utils import clean_names
 from core.models.track_models import ChangeLogEntry
 from core.tracks.track_delta import year_text
 from core.tracks.year_utils import album_group_artist
 from metrics.change_reports import save_changes_report
-from services.year_locks import is_lock_year
 
 if TYPE_CHECKING:
     import logging

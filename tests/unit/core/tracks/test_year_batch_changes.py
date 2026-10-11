@@ -180,6 +180,7 @@ class TestRecordSuccessfulUpdatesOldYear:
         assert entry.change_type == "year_update"
         assert entry.year_before_mgu == "2015"
         assert entry.year_set_by_mgu == "2020"
+        assert entry.album_artist == "Artist"  # the key the year step groups by, as the revert and restore rows carry it
         assert entry.track_name == "Test Track"
         assert entry.artist == "Artist"
         assert entry.album_name == "Album"

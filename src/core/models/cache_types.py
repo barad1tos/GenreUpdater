@@ -80,6 +80,14 @@ class PendingAlbumEntry:
     attempt_count: int = 0
 
 
+YEAR_LENGTH = 4
+
+
+def is_lock_year(year: str) -> bool:
+    """Return True when `year` can be written to and read back from the lock file: exactly four digits."""
+    return len(year) == YEAR_LENGTH and year.isdigit()
+
+
 class LockSource(StrEnum):
     """How an album's year came to be locked."""
 
@@ -104,6 +112,22 @@ class YearLock:
     year: str
     locked_at: datetime
     source: LockSource
+
+    def __post_init__(self) -> None:
+        """Refuse a lock that could not be read back from the file: blank names, a year that is not four digits, a naive time.
+
+        Raises:
+            ValueError: The lock would be dropped with a warning on the next start
+        """
+        if not self.artist.strip() or not self.album.strip():
+            msg = "A lock needs an artist and album"
+            raise ValueError(msg)
+        if not is_lock_year(self.year):
+            msg = f"A lock needs a four-digit year, got '{self.year}'"
+            raise ValueError(msg)
+        if self.locked_at.tzinfo is None:
+            msg = "A lock's locked_at must be timezone-aware"
+            raise ValueError(msg)
 
 
 @dataclass(slots=True)

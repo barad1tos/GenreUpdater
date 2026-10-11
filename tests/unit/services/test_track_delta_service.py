@@ -456,3 +456,20 @@ def test_an_empty_current_genre_is_still_not_a_change() -> None:
     current = TrackDict(id="1", name="T", artist="A", album="B", year="2016", genre=None)
 
     assert has_track_changed(current, stored) is False
+
+
+def test_the_csv_delta_records_the_changed_years_too() -> None:
+    """Every producer of a TrackDelta fills changed_years, so a consumer can rely on it."""
+    stored = {
+        "1": TrackDict(id="1", name="T", artist="A", album="B", year="2016"),
+        "2": TrackDict(id="2", name="U", artist="A", album="B", year="2016", genre="Rock"),
+    }
+    current = [
+        TrackDict(id="1", name="T", artist="A", album="B", year="2019"),
+        TrackDict(id="2", name="U", artist="A", album="B", year="2016", genre="Metal"),
+    ]
+
+    delta = compute_track_delta(current, stored)
+
+    assert delta.updated_ids == ["1", "2"]
+    assert delta.changed_years == {"1": "2016"}
