@@ -29,6 +29,7 @@ from .apple.applescript_client import AppleScriptClient
 from .cache.orchestrator import CacheOrchestrator
 from .cache.snapshot import LibrarySnapshotService
 from .pending_verification import PendingVerificationService
+from .year_locks import YearLockService
 
 if TYPE_CHECKING:
     import logging
@@ -97,6 +98,7 @@ class DependencyContainer:
         self._cache_service: CacheOrchestrator | None = None
         self._library_snapshot_service: LibrarySnapshotService | None = None
         self._pending_verification_service: PendingVerificationService | None = None
+        self._year_lock_service: YearLockService | None = None
         self._api_orchestrator: ExternalApiOrchestrator | None = None
         self._retry_handler: DatabaseRetryHandler | None = None
         self._dry_run = dry_run
@@ -159,6 +161,14 @@ class DependencyContainer:
             msg = "Pending verification service not initialized"
             raise RuntimeError(msg)
         return self._pending_verification_service
+
+    @property
+    def year_lock_service(self) -> YearLockService:
+        """Initialized year lock service; raises if not yet initialized."""
+        if self._year_lock_service is None:
+            msg = "Year lock service not initialized"
+            raise RuntimeError(msg)
+        return self._year_lock_service
 
     @property
     def external_api_service(self) -> ExternalApiOrchestrator:
@@ -328,6 +338,8 @@ class DependencyContainer:
         if pending_verification is None:
             pending_verification = PendingVerificationService(self.app_config, self._console_logger, self._error_logger)
             self._pending_verification_service = pending_verification
+        if self._year_lock_service is None:
+            self._year_lock_service = YearLockService(self.app_config, self._console_logger, self._error_logger)
         if self._api_orchestrator is None:
             self._api_orchestrator = create_external_api_orchestrator(
                 config=self.app_config,
@@ -367,6 +379,7 @@ class DependencyContainer:
             (self._library_snapshot_service, "Library Snapshot Service"),
             (self._cache_service, "Cache Service"),
             (self._pending_verification_service, "Pending Verification Service"),
+            (self._year_lock_service, "Year Lock Service"),
             (self._api_orchestrator, "API Orchestrator"),
             (self._ap_client, "AppleScript Client"),
         ]

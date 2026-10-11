@@ -80,6 +80,32 @@ class PendingAlbumEntry:
     attempt_count: int = 0
 
 
+class LockSource(StrEnum):
+    """How an album's year came to be locked."""
+
+    DIALOG = "dialog"
+    COMMAND = "command"
+
+
+@dataclass(frozen=True, slots=True)
+class YearLock:
+    """A year a person chose for an album; the year step defends it and never asks the providers about it.
+
+    Attributes:
+        artist: Album artist, as the year step groups albums
+        album: Album name
+        year: The locked year
+        locked_at: When the lock was recorded
+        source: Dialog answer or `lock_year` command
+    """
+
+    artist: str
+    album: str
+    year: str
+    locked_at: datetime
+    source: LockSource
+
+
 @dataclass(slots=True)
 class AlbumCacheEntry:
     """Album cache entry with timestamp for TTL management."""
