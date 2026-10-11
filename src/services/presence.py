@@ -36,7 +36,7 @@ async def hid_idle_seconds() -> float | None:
             "ioreg", "-c", "IOHIDSystem", "-d", "4", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
         stdout, _ = await asyncio.wait_for(process.communicate(), timeout=IOREG_TIMEOUT_SECONDS)
-    except (OSError, TimeoutError):
+    except OSError:
         return None
     return parse_hid_idle_seconds(stdout.decode(errors="replace"))
 
