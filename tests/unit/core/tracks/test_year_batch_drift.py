@@ -149,3 +149,38 @@ async def test_write_album_year_returns_the_entries_it_recorded() -> None:
     entries = await processor.write_album_year("A", "B", album_tracks=_album("2019"), year="2016", reason="lock_restore")
 
     assert [(e.year_before_mgu, e.year_set_by_mgu, e.reason) for e in entries] == [("2019", "2016", "lock_restore")]
+
+
+@pytest.mark.asyncio
+async def test_a_year_cleared_outside_the_tool_is_not_keepable() -> None:
+    """A lock at "" could never be read back, so the providers' year is written without asking."""
+    processor, _, locks, decider, writer = _processor(provider="2016", decision=DriftDecision.KEEP)
+
+    await _run(processor, _album("", ""), previous_years={"1": "2016", "2": "2016"})
+
+    decider.decide.assert_not_awaited()
+    locks.lock.assert_not_awaited()
+    assert (_write_kwargs(writer)["year"], _write_kwargs(writer)["reason"]) == ("2016", "outside_change")
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_lookup_holds_the_snapshot_at_the_old_year() -> None:
+    """The baseline must not move, or the next run sees no change and the outside change is accepted silently."""
+    processor, _, _, _, writer = _processor(provider_error=YearLookupUnavailableError("down"))
+    tracks = _album("2019", "2019")
+
+    await _run(processor, tracks, previous_years={"1": "2016", "2": "2016"})
+
+    writer.assert_not_awaited()
+    assert [(t.id, t.year) for t in processor.held_back_tracks] == [("1", "2016"), ("2", "2016")]
+
+
+@pytest.mark.asyncio
+async def test_a_new_batch_forgets_the_held_back_tracks() -> None:
+    processor, _, _, _, _ = _processor(provider_error=YearLookupUnavailableError("down"))
+    await _run(processor, _album("2019"), previous_years={"1": "2016"})
+    assert processor.held_back_tracks
+
+    await processor.process_albums_in_batches({}, [], [])
+
+    assert processor.held_back_tracks == []

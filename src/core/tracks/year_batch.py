@@ -104,6 +104,9 @@ class YearBatchProcessor:
         self.year_determinator = year_determinator
         self._year_locks = year_locks
         self._drift_decider = drift_decider
+        # Outside changes the run could not judge (providers unreachable): copies at the snapshot's year, so the baseline
+        # does not move and the next run sees the change again
+        self.held_back_tracks: list[TrackDict] = []
         self.console_logger = console_logger
         self.error_logger = error_logger
         self.config = config
@@ -147,6 +150,7 @@ class YearBatchProcessor:
 
         """
         processing = self.config.year_retrieval.processing
+        self.held_back_tracks = []
 
         batch_size = processing.batch_size
         delay_between_batches = int(processing.delay_between_batches)
@@ -520,9 +524,25 @@ class YearBatchProcessor:
             len(album_tracks),
             extra=PLAIN_TEXT,
         )
-        if (provider_year := await self._providers_verdict(artist, album, album_tracks, new_year)) is None:
+        try:
+            provider_year = await self._providers_verdict(artist, album, album_tracks, new_year)
+        except YearLookupUnavailableError:
+            # Keep the snapshot at the old year, or the next run would see no change and accept this one silently
+            self.held_back_tracks.extend(change.track.copy(year=change.old_year) for change in outside_changes)
+            self.console_logger.warning(
+                "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
+            )
             return
-        decision = await self._drift_decider.decide(artist, album, old_year=old_year, new_year=new_year, provider_year=provider_year)
+        if provider_year is None:
+            return
+        if not new_year:
+            # A year cleared outside the tool cannot be kept: a lock at "" could never be read back
+            self.console_logger.info(
+                "The year of '%s - %s' was cleared outside the tool; writing the providers' %s", artist, album, provider_year, extra=PLAIN_TEXT
+            )
+            decision = DriftDecision.APPLY
+        else:
+            decision = await self._drift_decider.decide(artist, album, old_year=old_year, new_year=new_year, provider_year=provider_year)
         if decision is DriftDecision.KEEP:
             await self._year_locks.lock(artist, album, new_year, source=LockSource.DIALOG)
             return
@@ -537,14 +557,11 @@ class YearBatchProcessor:
         )
 
     async def _providers_verdict(self, artist: str, album: str, album_tracks: list[TrackDict], new_year: str) -> str | None:
-        """Return the providers' year when it disputes `new_year`; None when there is nothing to decide (and say why)."""
-        try:
-            provider_year = await self.year_determinator.provider_year(artist, album, album_tracks)
-        except YearLookupUnavailableError:
-            self.console_logger.warning(
-                "Year lookup unavailable for '%s - %s'; the outside change is judged on the next run", artist, album, extra=PLAIN_TEXT
-            )
-            return None
+        """Return the providers' year when it disputes `new_year`; None when there is nothing to decide (and say why).
+
+        A lookup no provider could be reached for propagates YearLookupUnavailableError from provider_year.
+        """
+        provider_year = await self.year_determinator.provider_year(artist, album, album_tracks)
         if provider_year is None:
             self.console_logger.info("No provider year for '%s - %s'; the outside change stands", artist, album, extra=PLAIN_TEXT)
             return None

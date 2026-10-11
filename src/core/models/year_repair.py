@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.logger import get_full_log_path
+from core.tracks.year_utils import album_group_artist
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -226,6 +227,7 @@ def _build_year_change_entry(track: TrackDict, reverted_year: str) -> dict[str, 
         "artist": _normalize_text(track.get("artist")),
         "album": _normalize_text(track.get("album")),
         "album_name": _normalize_text(track.get("album")),
+        "album_artist": album_group_artist(track),
         "track_name": _normalize_text(track.get("name")),
         "year_before_mgu": _normalize_text(track.get("year")),
         "year_set_by_mgu": reverted_year,

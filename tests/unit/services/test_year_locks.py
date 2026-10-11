@@ -84,3 +84,13 @@ async def test_locking_again_replaces_the_year(service: YearLockService) -> None
 
     assert service.get_locked_year("A", "B") == "2002"
     assert len(service.all_locks()) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_lock_that_could_not_be_read_back_is_refused(service: YearLockService) -> None:
+    await service.initialize()
+
+    with pytest.raises(ValueError, match="four-digit"):
+        await service.lock("A", "B", "", source=LockSource.DIALOG)
+
+    assert service.all_locks() == []

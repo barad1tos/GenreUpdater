@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import cast
 
@@ -118,3 +119,17 @@ async def test_dialog_arguments_travel_verbatim() -> None:
     script, arguments = client.scripts_run[0]
     assert script == ASK_YEAR_DRIFT
     assert arguments == ['Royal "Crown" Revue', "Mugzy's Move \\ Паліндром", "—", "1991", "1996", "120"]
+
+
+@pytest.mark.asyncio
+async def test_the_dialog_cap_holds_under_concurrency() -> None:
+    """Two albums judged at once must not both pass the cap check before either dialog is counted."""
+    decider, client = _decider(answer="keep", max_per_run=1)
+
+    results = await asyncio.gather(
+        decider.decide("A", "B", old_year="2016", new_year="2019", provider_year="2016"),
+        decider.decide("C", "D", old_year="2016", new_year="2019", provider_year="2016"),
+    )
+
+    assert sorted(results) == [DriftDecision.APPLY, DriftDecision.KEEP]
+    assert len(client.scripts_run) == 1

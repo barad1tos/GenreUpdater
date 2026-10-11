@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from enum import StrEnum
 from typing import TYPE_CHECKING, NamedTuple
@@ -102,6 +103,8 @@ class YearDriftDecider:
         self._timeout = processing.drift_dialog_timeout_seconds
         self._max_dialogs = processing.drift_dialog_max_per_run
         self._dialogs_shown = 0
+        # Albums are judged concurrently; dialogs are shown one at a time and the cap is counted before any await
+        self._dialog_lock = asyncio.Lock()
 
     async def decide(self, artist: str, album: str, *, old_year: str, new_year: str, provider_year: str) -> DriftDecision:
         """Decide whether the album keeps `new_year` (and gets locked) or takes `provider_year`.
@@ -127,22 +130,23 @@ class YearDriftDecider:
                 extra=PLAIN_TEXT,
             )
             return DriftDecision.APPLY
-        if self._dialogs_shown >= self._max_dialogs:
-            self._console_logger.info(
-                "Dialog cap (%d) reached this run; applying %s to '%s - %s'", self._max_dialogs, provider_year, artist, album, extra=PLAIN_TEXT
+        async with self._dialog_lock:
+            if self._dialogs_shown >= self._max_dialogs:
+                self._console_logger.info(
+                    "Dialog cap (%d) reached this run; applying %s to '%s - %s'", self._max_dialogs, provider_year, artist, album, extra=PLAIN_TEXT
+                )
+                return DriftDecision.APPLY
+            if not await self._is_present(self._idle_threshold):
+                self._console_logger.info("Nobody at the Mac; applying %s to '%s - %s'", provider_year, artist, album, extra=PLAIN_TEXT)
+                return DriftDecision.APPLY
+            self._dialogs_shown += 1
+            answer = await self._ap_client.run_script(
+                ASK_YEAR_DRIFT,
+                [artist, album, old_year or NO_YEAR_LABEL, new_year, provider_year, str(self._timeout)],
+                timeout=self._timeout + DIALOG_GRACE_SECONDS,
+                context_artist=artist,
+                context_album=album,
             )
-            return DriftDecision.APPLY
-        if not await self._is_present(self._idle_threshold):
-            self._console_logger.info("Nobody at the Mac; applying %s to '%s - %s'", provider_year, artist, album, extra=PLAIN_TEXT)
-            return DriftDecision.APPLY
-        self._dialogs_shown += 1
-        answer = await self._ap_client.run_script(
-            ASK_YEAR_DRIFT,
-            [artist, album, old_year or NO_YEAR_LABEL, new_year, provider_year, str(self._timeout)],
-            timeout=self._timeout + DIALOG_GRACE_SECONDS,
-            context_artist=artist,
-            context_album=album,
-        )
         verdict = (answer or "").strip()
         if verdict == "keep":
             self._console_logger.info("Kept %s on '%s - %s' at the person's request; locking it", new_year, artist, album, extra=PLAIN_TEXT)

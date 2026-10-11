@@ -157,6 +157,7 @@ class MusicUpdater:
             cleaning_service=self.cleaning_service,
             artist_renamer=self.artist_renamer,
             year_locks=deps.year_lock_service,
+            dry_run=deps.dry_run,
         )
 
         # Genre update service

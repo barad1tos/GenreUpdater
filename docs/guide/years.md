@@ -46,7 +46,7 @@ For such an album the providers are asked directly (no cache, no majority of its
 - When they agree with the new year, nothing changes.
 - When they disagree and someone is at the Mac, a dialog asks, one per album and at most `drift_dialog_max_per_run` per run: `Рік <artist> — <album> змінено <old> → <new> ззовні. Провайдери кажуть <provider>.` with the buttons `Зберегти <new>` and `Виправити на <provider>`. Keeping the new year locks the album (below); fixing it, letting the dialog give up after `drift_dialog_timeout_seconds`, or reaching the cap writes the providers' year.
 - When nobody is at the Mac, the providers' year is written.
-- When no provider knows the album, or none could be reached, the change stands and the next run looks again.
+- When no provider knows the album, the change stands. When none could be reached, the snapshot keeps the old year and the next run looks again.
 
 Someone is at the Mac when the run is not a dry run, the console belongs to the user running the tool, and the keyboard or mouse was used within `presence_idle_seconds`. A dry run asks nothing and writes nothing; it logs what it would do.
 

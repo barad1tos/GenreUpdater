@@ -294,6 +294,11 @@ class YearRetriever:
         """Get a list of dry-run actions that would have been performed."""
         return self._batch_processor.get_dry_run_actions()
 
+    @property
+    def held_back_tracks(self) -> list[TrackDict]:
+        """Tracks the last run could not judge, at the snapshot's year, so the baseline does not move."""
+        return self._batch_processor.held_back_tracks
+
     def get_last_updated_tracks(self) -> list[TrackDict]:
         """Get the list of tracks updated in the last run."""
         return self._last_updated_tracks

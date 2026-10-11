@@ -75,9 +75,16 @@ class YearLockService:
 
         Returns:
             The lock as recorded
+
+        Raises:
+            ValueError: The year is not four digits, so the lock could never be read back
         """
+        year = year.strip()
+        if len(year) != YEAR_LENGTH or not year.isdigit():
+            msg = f"A lock needs a four-digit year, got '{year}'"
+            raise ValueError(msg)
         key = album_key(artist, album)
-        lock = YearLock(artist=key[0], album=key[1], year=year.strip(), locked_at=datetime.now(UTC), source=source)
+        lock = YearLock(artist=key[0], album=key[1], year=year, locked_at=datetime.now(UTC), source=source)
         async with self._guard:
             self._locks[key] = lock
             await asyncio.to_thread(self._write, list(self._locks.values()))
