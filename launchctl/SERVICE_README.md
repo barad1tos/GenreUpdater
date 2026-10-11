@@ -79,8 +79,7 @@ git tag -a v3.0.1 -m "v3.0.1" origin/main
 git push origin v3.0.1
 ```
 
-CI's Release job publishes the GitHub release for the tag with generated notes. The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pre-release tags
-(`v3.1.0-rc1`) are ignored; deleting a tag on origin rolls the daemon back on its next run.
+CI's Release job publishes the GitHub release for the tag with generated notes. The next daemon run fetches tags and switches to the highest stable `vX.Y.Z`. Pre-release tags (`v3.1.0-rc1`) are ignored; deleting a tag on origin rolls the daemon back on its next run.
 
 ## Daemon flow
 
