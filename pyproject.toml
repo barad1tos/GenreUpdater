@@ -46,7 +46,7 @@ dev = [
     "pydoclint>=0.9.0",
     # Linting & formatting
     "ruff==0.16.10",
-    "ty==0.0.84",
+    "ty==0.0.85",
     "sourcery==1.46.0; sys_platform == 'darwin'", # macOS only
     "bandit==1.9.4",
     "pip-audit==2.10.1",
