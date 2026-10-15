@@ -530,6 +530,47 @@ class TestGenreManager:
                 assert len(change_logs) == 2
 
     @pytest.mark.asyncio
+    async def test_band_track_without_album_artist_gets_band_genre(self) -> None:
+        """A band track without album artist takes the band's genre, though the band name contains "and"."""
+        mock_processor = MagicMock()
+        mock_processor.update_track_async = AsyncMock(return_value=True)
+        manager = TestGenreManager.create_manager(mock_processor)
+        band = "Of Monsters and Men"
+        album_tracks = [
+            TrackDict(
+                id=track_id,
+                name=name,
+                artist=band,
+                album_artist=band,
+                album="My Head Is an Animal",
+                genre="Indie-Folk",
+                date_added="2022-02-07 22:02:43",
+                track_status="subscription",
+            )
+            for track_id, name in (("E9B5BA8402B6C4B2", "Little Talks"), ("C79C6306AD78A274", "Mountain Sound"))
+        ]
+        stray_track = TrackDict(
+            id="4FFBAD9C586B033F",
+            name="Little Talks",
+            artist=band,
+            album="",
+            genre="Unknown",
+            date_added="2025-11-08 20:04:46",
+            track_status="subscription",
+        )
+
+        _, change_logs = await manager.update_genres_by_artist_async([*album_tracks, stray_track])
+
+        assert [(log.track_id, log.old_genre, log.new_genre) for log in change_logs] == [("4FFBAD9C586B033F", "Unknown", "Indie-Folk")]
+        mock_processor.update_track_async.assert_awaited_once_with(
+            track_id="4FFBAD9C586B033F",
+            new_genre="Indie-Folk",
+            original_artist=band,
+            original_album="",
+            original_track="Little Talks",
+        )
+
+    @pytest.mark.asyncio
     async def test_process_single_artist_wrapper(self) -> None:
         """Test single artist wrapper processing."""
         mock_processor = MagicMock()

@@ -206,7 +206,9 @@ def group_tracks_by_artist(
     """Group tracks by album_artist or normalized artist.
 
     Uses album_artist when available to properly handle collaboration tracks.
-    Falls back to normalized artist when album_artist is empty.
+    Falls back to the artist when album_artist is empty: its full name when another
+    track has it as album_artist (a band such as "Of Monsters and Men"), otherwise
+    its main artist (a collaboration such as "Daft Punk & Pharrell").
 
     Args:
         tracks: List of track dictionaries to group.
@@ -215,15 +217,16 @@ def group_tracks_by_artist(
         Dictionary mapping normalized artist names to lists of their tracks.
 
     """
+    album_artist_keys = {normalize_for_matching(str(track.get("album_artist") or "")) for track in tracks}
     artists: defaultdict[str, list[TrackDict]] = defaultdict(list)
     for track in tracks:
         # Prefer album_artist for grouping (handles collaborations correctly)
         album_artist = track.get("album_artist", "")
 
-        # Fallback to normalized artist if album_artist is empty
+        # Fallback to the artist if album_artist is empty; a name another track has as album_artist is a band, not a collaboration
         if not album_artist or not str(album_artist).strip():
             raw_artist = str(track.get("artist", "Unknown"))
-            album_artist = normalize_collaboration_artist(raw_artist)
+            album_artist = raw_artist if normalize_for_matching(raw_artist) in album_artist_keys else normalize_collaboration_artist(raw_artist)
 
         if album_artist and isinstance(album_artist, str) and album_artist.strip():
             artist_key = normalize_for_matching(album_artist)
