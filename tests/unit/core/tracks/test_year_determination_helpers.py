@@ -405,7 +405,7 @@ class TestValidateProviderYear:
         error_records = [record for record in caplog.records if record.name == "test.error"]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
         assert "'Artist - Album'" in error_records[0].getMessage()
