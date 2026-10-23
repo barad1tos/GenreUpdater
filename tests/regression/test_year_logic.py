@@ -6,9 +6,9 @@ with real production data from the library snapshot.
 
 from __future__ import annotations
 
-import datetime
 import logging
 from collections import Counter
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -64,7 +64,7 @@ class TestYearDataValidity:
         library_tracks: list[TrackDict],
     ) -> None:
         """Years should be between 1900 and current year + 1."""
-        current_year = datetime.datetime.now(tz=datetime.UTC).year
+        current_year = datetime.now(tz=UTC).year
         min_year = 1900
         max_year = current_year + 1  # Allow releases announced for next year
 
