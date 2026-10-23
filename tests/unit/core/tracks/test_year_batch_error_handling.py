@@ -366,7 +366,7 @@ class TestCancelledErrorHandling:
         failure_records = [record for record in caplog.records if "Failed to process album" in record.getMessage()]
         assert len(failure_records) == 1
         logged_exception = failure_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is album_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
         # The error log is a file the console never shows, so the console gets its own line
@@ -581,7 +581,7 @@ class TestBulkUpdateMixedResults:
         assert len(failures) == 1
         assert type(error).__name__ in failures[0].getMessage()
         logged_exception = failures[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[0] is type(error)
 
         assert successful == 0

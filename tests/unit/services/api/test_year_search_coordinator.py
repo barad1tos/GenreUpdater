@@ -517,7 +517,7 @@ class TestTrySingleApi:
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is api_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
@@ -680,7 +680,7 @@ class TestExecuteStandardApiSearch:
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is api_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
 

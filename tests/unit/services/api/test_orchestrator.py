@@ -268,7 +268,7 @@ class TestExternalApiOrchestratorAllure:
         assert len(error_records) == 1
         assert "'Artist - Album'" in error_records[0].getMessage()
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is setup_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
         console_logger = orchestrator.console_logger
@@ -299,7 +299,7 @@ class TestExternalApiOrchestratorAllure:
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is search_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
         console_logger = orchestrator.console_logger
@@ -383,7 +383,7 @@ class TestExternalApiOrchestratorAllure:
         error_records = [record for record in caplog.records if record.name == error_logger.name]
         assert len(error_records) == 1
         logged_exception = error_records[0].exc_info
-        assert logged_exception is not None
+        assert isinstance(logged_exception, tuple)
         assert logged_exception[1] is context_error
         assert logged_exception[2] is not None  # the traceback itself, not only the exception
 
