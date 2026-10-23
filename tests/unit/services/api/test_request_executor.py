@@ -51,14 +51,11 @@ def mock_rate_limiter() -> AsyncMock:
 @pytest.fixture
 def mock_rate_limiters(mock_rate_limiter: AsyncMock) -> dict[str, "ApiRateLimiter"]:
     """Create dict of mock rate limiters for all APIs."""
-    return cast(
-        dict[str, "ApiRateLimiter"],
-        {
-            "discogs": mock_rate_limiter,
-            "musicbrainz": mock_rate_limiter,
-            "itunes": mock_rate_limiter,
-        },
-    )
+    return {
+        "discogs": mock_rate_limiter,
+        "musicbrainz": mock_rate_limiter,
+        "itunes": mock_rate_limiter,
+    }
 
 
 @pytest.fixture

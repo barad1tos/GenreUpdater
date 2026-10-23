@@ -44,7 +44,7 @@ class DryRunAppleScriptClient(AppleScriptClientProtocol):
         self.error_logger = error_logger
         self.config = config
         self.actions: list[dict[str, Any]] = []
-        self.apple_scripts_dir: str = config.apple_scripts_dir
+        self.apple_scripts_dir: str | None = config.apple_scripts_dir
 
     async def initialize(self) -> None:
         """Initialize the DryRunAppleScriptClient.

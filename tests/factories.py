@@ -6,7 +6,7 @@ that can be imported by any test module (including xdist workers).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from services.api.year_scoring import ArtistContext
 from unittest.mock import AsyncMock
@@ -156,7 +156,7 @@ def release_record(**fields: Any) -> ReleaseRecord:
         "label": None,
         "source": "musicbrainz",
     }
-    return cast("ReleaseRecord", {**record, **fields})
+    return {**record, **fields}
 
 
 async def fetch_and_score(
