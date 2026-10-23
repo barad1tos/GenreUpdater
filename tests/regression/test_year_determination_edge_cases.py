@@ -6,8 +6,8 @@ logic that are likely to cause bugs in production with real library data.
 
 from __future__ import annotations
 
-import datetime
 from collections import Counter
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
@@ -107,7 +107,7 @@ class TestReissueDetection:
         iTunes often returns catalog/reissue dates instead of original release dates.
         Without release_year validation, these should be flagged for API query.
         """
-        current_year = datetime.datetime.now(tz=datetime.UTC).year
+        current_year = datetime.now(tz=UTC).year
         needs_verification: list[tuple[str, str, str]] = []
 
         for (artist, album), tracks in albums_with_tracks.items():
@@ -147,7 +147,7 @@ class TestPrerealeaseHandling:
         library_tracks: list[TrackDict],
     ) -> None:
         """Tracks with future years should be identified for prerelease handling."""
-        current_year = datetime.datetime.now(tz=datetime.UTC).year
+        current_year = datetime.now(tz=UTC).year
         future_tracks: list[tuple[str, str, str, str]] = []
 
         for track in library_tracks:
@@ -369,7 +369,7 @@ class TestStaticMethodBehavior:
 
     def test_extract_future_years_identifies_future(self) -> None:
         """Should identify years in the future."""
-        current_year = datetime.datetime.now(tz=datetime.UTC).year
+        current_year = datetime.now(tz=UTC).year
         future_year = current_year + 1
 
         def make_dict_track(year: str) -> Any:

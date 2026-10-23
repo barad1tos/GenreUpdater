@@ -6,8 +6,8 @@ that are likely to cause bugs with real production library data.
 
 from __future__ import annotations
 
-import datetime
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -296,8 +296,8 @@ class TestIncrementalUpdateFiltering:
         library_tracks: list[TrackDict],
     ) -> None:
         """Should be able to identify recently added tracks."""
-        now = datetime.datetime.now(tz=datetime.UTC)
-        one_week_ago = now - datetime.timedelta(days=7)
+        now = datetime.now(tz=UTC)
+        one_week_ago = now - timedelta(days=7)
 
         recent_tracks: list[TrackDict] = []
         invalid_dates: list[tuple[str, str]] = []
@@ -310,10 +310,10 @@ class TestIncrementalUpdateFiltering:
             try:
                 # Parse date_added (format: YYYY-MM-DD HH:MM:SS or ISO)
                 if "T" in date_str:
-                    dt = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                 else:
-                    dt = datetime.datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
-                    dt = dt.replace(tzinfo=datetime.UTC)
+                    dt = datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
+                    dt = dt.replace(tzinfo=UTC)
 
                 if dt > one_week_ago:
                     recent_tracks.append(track)
