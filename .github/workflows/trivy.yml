@@ -35,6 +35,7 @@ jobs:
           # Trivy skips the dev dependency group of uv.lock unless told otherwise
           TRIVY_INCLUDE_DEV_DEPS: 'true'
         with:
+          version: 'v0.76.1'
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'HIGH,CRITICAL'
