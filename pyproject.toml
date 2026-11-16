@@ -174,7 +174,7 @@ unfixable = []
 
 [tool.ruff.format]
 quote-style = "double"                 # Like Black, use double quotes for strings.
-indent-style = "space"                 # Like Black, indent with spaces, rather than tabs.
+indent-style = "space"                 # Like Black, use spaces, rather than tabs.
 skip-magic-trailing-comma = false      # Like Black, respect magic trailing commas.
 line-ending = "auto"                   # Like Black, automatically detect the appropriate line ending.
 docstring-code-format = true           # Reformat code blocks in docstrings.
@@ -204,7 +204,7 @@ max-returns = 8  # Allow 8 returns for decision tree patterns (default: 6)
     "B007", # Tests can have unused loop variables
     "DTZ005", # Tests can use datetime.now() without tz
     "ANN001", # Tests can skip argument annotations
-    "ANN202", # Tests can skip return annotations for private funcs
+    "ANN202", # Tests can skip return type annotations for private funcs
     "RUF059", # Tests can have unused unpacked variables
     "E501", # Tests can have longer lines for readability
     "S603", # Tests can run subprocess with resolved tool paths (shutil.which)
@@ -253,9 +253,13 @@ exclude = [
 
 [tool.ty.rules]
 # Warn on unresolved imports but don't fail (external packages may lack stubs)
-unresolved-import = "warn"
+import-not-found = "warn"
 
-# ─────────────────────────────────────────────────────────────────────────────
+[tool.ty.terminal]
+# Warnings should remain visible without failing the CI type-check step.
+error-on-warning = false
+
+# ────────────────────────────────────────────────────────────────
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -290,9 +294,9 @@ markers = [
     "regression: marks tests as regression tests using real library data",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 # Coverage configuration
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 [tool.coverage.run]
 source = ["src"]
 parallel = true  # Required for pytest-xdist + coverage
@@ -322,9 +326,9 @@ exclude_lines = [
 [tool.sourcery]
 python_version = "3.13"
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 # Bandit configuration - Security linting
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 [tool.bandit]
 skips = ["B101", "B105", "B311", "B404", "B603"]
 # B101: Allow assert for type narrowing
@@ -333,9 +337,9 @@ skips = ["B101", "B105", "B311", "B404", "B603"]
 # B404: subprocess module is required for AppleScript
 # B603: shell=False is safe (we control the command)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 # Deadcode configuration - Dead code detection
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 [tool.deadcode]
 exclude = [
     "tests",
